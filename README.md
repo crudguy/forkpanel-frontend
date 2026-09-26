@@ -1,4 +1,4 @@
-# panel-frontend · 轻量 Linux 服务器管理面板 · 前端
+# ForkPanel（叉叉面板）· 轻量 Linux 服务器管理面板 · 前端
 
 **技术栈**：Vue 3 `<script setup>` + TypeScript + Vite 6 + Pinia + vue-router 4
 **形态**：构建期产出 `dist/`（带内容哈希），由后端（`panel-backend`）编译期内嵌进单文件二进制，运行期零 Node 依赖。
@@ -57,7 +57,7 @@ pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 
 ## 契约同步规则
 
-- 后端是契约**事实源**（`panel-backend/docs/api/openapi.yaml`）。
+- 后端是契约**事实源**（`fork-panel-backend/docs/api/openapi.yaml`）。
 - 后端改契约后，需把最新 `openapi.yaml` 同步到本仓库 `src/api/openapi.yaml`。
 - 前端 `types.ts` 中的 TS 类型须与 openapi 的 schema 保持一致（手工同步；接入 openapi-typescript 后可自动生成）。
 
