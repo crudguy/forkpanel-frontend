@@ -175,6 +175,11 @@ async function submitBootstrap() {
       <button type="submit" :disabled="busy">
         {{ busy ? '登录中…' : '登录' }}
       </button>
+
+      <!-- 面板没有注册/找回页：重置口令只能在本机 CLI 完成，这里给出明确出口 -->
+      <p class="tip">
+        忘记口令？在服务器执行 <code>panel passwd &lt;用户名&gt;</code>
+      </p>
     </form>
   </div>
 </template>
@@ -193,4 +198,6 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .warn code { font-size: 12px; }
 .hint { color: var(--c-text-dim); font-size: 12px; margin: -6px 0 0; }
 .hint.ok { color: var(--c-success, #15803d); }
+.tip { color: var(--c-text-dim); font-size: 12px; margin: 4px 0 0; text-align: center; }
+.tip code { font-size: 12px; }
 </style>
