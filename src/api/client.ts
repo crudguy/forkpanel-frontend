@@ -105,6 +105,7 @@ export function errorText(e: unknown): string {
     case 10006: return `操作过于频繁，请 ${(e.detail as { retry_after_secs?: number })?.retry_after_secs ?? 60} 秒后再试`
     case 10007: return '面板处于只读模式，无法执行写操作'
     case 10008: return '页面已过期，请刷新后重试'
+    case 10011: return '引导令牌无效或已过期，请在服务器终端重启 panel serve 重新获取'
     case 40002: return '配置校验未通过，已自动回滚'
     case 50001: return '路径超出允许范围'
     case 80003: return '操作超时'

@@ -18,6 +18,8 @@ export const API = {
   version: () => '/api/v1/version',
 
   auth: {
+    status: () => '/api/v1/auth/status',
+    bootstrap: () => '/api/v1/auth/bootstrap',
     login: () => '/api/v1/auth/login',
     logout: () => '/api/v1/auth/logout',
     me: () => '/api/v1/auth/me',

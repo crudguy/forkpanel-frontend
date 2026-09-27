@@ -94,6 +94,20 @@ components:
         - $ref: '#/components/schemas/Envelope'
       description: 失败时 `data` 为 null，含 `detail`。
 
+    LogRead:
+      type: object
+      properties:
+        source: { type: string }
+        lines:  { type: array, items: { $ref: '#/components/schemas/LogLine' } }
+        capped: { type: boolean, description: 是否因行数上限被截断 }
+
+    LogLine:
+      type: object
+      properties:
+        ts:    { type: [integer, 'null'] }
+        level: { type: ['string', 'null'] }
+        text:  { type: string }
+
     # ───────────── 能力矩阵 ─────────────
     Capability:
       type: object
@@ -119,6 +133,18 @@ components:
         features:   { type: object, additionalProperties: { $ref: '#/components/schemas/Capability' } }
 
     # ───────────── 认证 ─────────────
+    BootstrapRequest:
+      type: object
+      required: [token, username, password]
+      properties:
+        token:    { type: string, description: serve 首启打印的一次性引导令牌（32 位 hex） }
+        username: { type: string, minLength: 1, maxLength: 64 }
+        password: { type: string, minLength: 10, description: ≥10 位且含两类字符 }
+    BootstrapStatusResponse:
+      type: object
+      properties:
+        needs_bootstrap: { type: boolean, description: 数据库尚无 owner 账号 }
+        token_active:    { type: boolean, description: 引导令牌是否仍有效（false 需重启 serve 重新生成） }
     LoginRequest:
       type: object
       required: [username, password]
@@ -247,6 +273,13 @@ components:
         domains: { type: array, items: { type: string } }
         root:    { type: [string, "null"] }
         php:     { type: boolean }
+    SitePatch:
+      type: object
+      properties:
+        domains: { type: array, items: { type: string } }
+        root:    { type: string }
+        enabled: { type: boolean }
+        force_https: { type: boolean }
     SiteApply:
       type: object
       required: [name, domains, root]
@@ -254,13 +287,6 @@ components:
         name:        { type: string }
         domains:     { type: array, items: { type: string } }
         root:        { type: string }
-        force_https: { type: boolean }
-    SitePatch:
-      type: object
-      properties:
-        domains: { type: array, items: { type: string } }
-        root:    { type: string }
-        enabled: { type: boolean }
         force_https: { type: boolean }
     Cert:
       type: object
@@ -524,6 +550,32 @@ paths:
                   api: { type: string, example: "1.0" }
                   app: { type: string, example: "0.4.2" }
                   build: { type: string }
+
+  /api/v1/auth/status:
+    get:
+      tags: [auth]
+      security: []
+      summary: 首启状态（前端据此切换登录页/首启向导）
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope', properties: { data: { $ref: '#/components/schemas/BootstrapStatusResponse' } } }
+
+  /api/v1/auth/bootstrap:
+    post:
+      tags: [auth]
+      security: []
+      summary: 首启创建 owner（需 serve 首启打印的一次性引导令牌）
+      description: |
+        仅当数据库无 owner 且引导令牌有效时成功。令牌由 serve 首启打印到终端，
+        一次性、30 分钟有效、只存内存。不开放常驻注册。
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BootstrapRequest' } } } }
+      responses:
+        '204': { description: 创建成功，令牌即焚 }
+        '401': { description: 令牌无效或已过期（10011） }
+        '409': { description: 已存在 owner（10005） }
 
   /api/v1/auth/login:
     post:
@@ -1143,6 +1195,23 @@ paths:
         - { name: source, in: query, schema: { type: string } }
         - { name: range, in: query, schema: { type: string } }
       responses: { '200': { description: text/plain' } }
+
+  /api/v1/logs/{id}:
+    get:
+      tags: [logs]
+      summary: 读取单个日志源（行数上限 2000，grep 字面量非正则）
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+        - { name: lines, in: query, schema: { type: integer, maximum: 2000, default: 200 } }
+        - { name: grep, in: query, schema: { type: string } }
+        - { name: level, in: query, schema: { type: string, enum: [debug, info, warn, error] } }
+        - { name: since, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope', properties: { data: { $ref: '#/components/schemas/LogRead' } } }
 
   # ───────── 任务中心 ─────────
   /api/v1/tasks:
