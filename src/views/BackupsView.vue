@@ -80,8 +80,56 @@ async function showArtifacts(p: Plan) {
   } catch (e) { error.value = errorText(e) }
 }
 
-function restore() {
-  notice.value = '恢复为高危操作（覆盖当前数据，需二次确认 + 先备份当前态），后端尚未接入'
+/** 选中的产物名（恢复目标）。产物按名称倒序，默认取最新一份。 */
+const selName = ref('')
+
+/**
+ * 从选中产物恢复（**高危**）。
+ *
+ * 后端三道闸门：确认词 + 产物名白名单 + 任务内自动先备份当前态。
+ * 前端这里只负责把"确认"这件事做实：必须手输确认词，不接受一个随手点的 OK。
+ */
+async function restoreFrom() {
+  error.value = ''
+  notice.value = ''
+  if (!curArtifacts.value) return
+  const plan = curArtifacts.value.plan
+
+  // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
+  if (plan.kind === 'panel') {
+    notice.value =
+      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务后手动替换。'
+    return
+  }
+  const name = selName.value || curArtifacts.value.items[0]?.name
+  if (!name) {
+    error.value = '该计划还没有任何产物，请先执行一次备份'
+    return
+  }
+
+  const word = window.prompt(
+    `即将用「${name}」覆盖 ${plan.target} 的当前数据。\n\n` +
+      '任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。\n\n' +
+      '请输入「覆盖恢复」以继续：',
+  )
+  if (word === null) return
+  if (word.trim() !== '覆盖恢复') {
+    error.value = '确认词不匹配，已取消'
+    return
+  }
+
+  busy.value = true
+  try {
+    const r = await api.post<{ task_id: string }>(API.backups.restore(plan.id), {
+      artifact: name,
+      confirm_token: '覆盖恢复',
+    })
+    notice.value = `恢复任务已提交（${r.task_id}）。可在「任务中心」查看进度；如需回滚，任务详情里的 output_path 指向恢复前的快照。`
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 function fmtSize(n: number) {
@@ -169,8 +217,17 @@ function fmtTime(t: number | null) {
         <div class="sec-head">
           <Icon name="disk" :size="16" /> 产物：{{ curArtifacts.plan.kind }}/{{ curArtifacts.plan.target }}
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="!canManage" :title="'恢复为高危操作，后端尚未接入'" @click="restore">
-            <Icon name="restart" :size="13" /> 恢复（高危 · 待接入）
+          <select v-if="curArtifacts.items.length" v-model="selName" class="sel">
+            <option value="" disabled>选择产物…</option>
+            <option v-for="a in curArtifacts.items" :key="a.name" :value="a.name">{{ a.name }}</option>
+          </select>
+          <button
+            class="btn-ghost btn-sm danger"
+            :disabled="!canManage || busy || !curArtifacts.items.length"
+            title="覆盖当前数据：任务内会先自动备份当前态，需手输确认词"
+            @click="restoreFrom"
+          >
+            <Icon name="restart" :size="13" /> 从此产物恢复（高危）
           </button>
           <button class="btn-ghost btn-sm" @click="curArtifacts = null">关闭</button>
         </div>

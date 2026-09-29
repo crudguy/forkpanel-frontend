@@ -24,6 +24,7 @@ export const router = createRouter({
         { path: 'firewall', name: 'firewall', component: () => import('@/views/FirewallView.vue') },
         { path: 'cron', name: 'cron', component: () => import('@/views/CronView.vue') },
         { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue') },
+        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
         { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue') },
         { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },

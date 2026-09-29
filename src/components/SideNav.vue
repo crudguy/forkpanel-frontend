@@ -20,6 +20,8 @@ const collapsed = ref(false)
 const groups = computed(() => [
   { title: '概览', items: [
     { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
+    // 通知：备份失败/恢复失败等"必须让人知道"的事件汇总（perm 与概览同级）
+    { to: '/notifications', label: '通知', icon: 'list', cap: CAP.METRICS_READ, perm: 'system.view' },
   ] },
   { title: '主机', items: [
     { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },

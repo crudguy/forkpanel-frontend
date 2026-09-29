@@ -24,6 +24,9 @@ export const API = {
     logout: () => '/api/v1/auth/logout',
     me: () => '/api/v1/auth/me',
     password: () => '/api/v1/auth/password',
+    mfaEnroll: () => '/api/v1/auth/mfa/enroll',
+    mfaVerify: () => '/api/v1/auth/mfa/verify',
+    mfaDisable: () => '/api/v1/auth/mfa/disable',
   },
 
   system: {
@@ -162,6 +165,14 @@ export const API = {
     get: (id: number) => `/api/v1/tasks/${id}`,
     cancel: (id: number) => `/api/v1/tasks/${id}/cancel`,
     output: (id: number) => `/api/v1/tasks/${id}/output`,
+  },
+
+  notifications: {
+    list: () => '/api/v1/notifications',
+    unreadCount: () => '/api/v1/notifications/unread-count',
+    readAll: () => '/api/v1/notifications/read-all',
+    markRead: (id: number) => `/api/v1/notifications/${id}/read`,
+    remove: (id: number) => `/api/v1/notifications/${id}`,
   },
 
   settings: {
