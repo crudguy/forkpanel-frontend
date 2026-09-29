@@ -139,12 +139,36 @@ async function reloadSite(s: Site) {
 // ── 申请 SSL（自签优先，否则走 ACME；受对应能力门禁）──
 async function applySsl(s: Site) {
   busy.value = true; error.value = ''; notice.value = ''
-  const method = selfSignedSupported.value ? 'self-signed' : 'http-01'
+
+  // 两种方式都可用时让用户选；只有一种则直接用它（不给"选了必然失败"的余地）
+  let method = 'self-signed'
+  if (selfSignedSupported.value && sslSupported.value) {
+    const pick = window.prompt(
+      "选择签发方式：\n\n" +
+      "1 = 面板自签（离线可用、立即可得，但浏览器会提示不受信任）\n" +
+      "2 = ACME http-01（可信证书，需公网 80 端口可达 + certbot）\n\n" +
+      "请输入 1 或 2：", '1')
+    if (pick === null) { busy.value = false; return }
+    method = pick.trim() === '2' ? 'http-01' : 'self-signed'
+  } else {
+    method = selfSignedSupported.value ? 'self-signed' : 'http-01'
+  }
+
+  // ACME 必须有账户邮箱：CA 靠它发到期/异常通知，缺了就明确报错，不代填假地址
+  let email: string | undefined
+  if (method === 'http-01') {
+    const v = window.prompt('ACME 账户邮箱（必填，用于到期与异常通知）：')
+    if (v === null) { busy.value = false; return }
+    email = v.trim()
+    if (!email) { error.value = 'ACME 签发需要账户邮箱'; busy.value = false; return }
+  }
+
   try {
-    await api.post(API.sites.sslApply(s.id), { domains: s.domains, method })
+    const r = await api.post<{ task_id?: string }>(
+      API.sites.sslApply(s.id), { domains: s.domains, method, email })
     notice.value = method === 'self-signed'
       ? `已为 ${s.name} 签发面板自签证书（记得「重载」使配置生效）`
-      : `已提交 ${s.name} 的 SSL 申请`
+      : `已提交 ${s.name} 的 ACME 签发任务${r?.task_id ? `（${r.task_id}）` : ''}，可在任务中心查看进度`
     if (method === 'self-signed') await load()
   } catch (e) {
     if (isUnsupported(e)) notice.value = '当前环境未接入证书签发能力（需 openssl 或 ACME）'
