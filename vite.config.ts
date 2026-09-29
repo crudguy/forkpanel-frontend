@@ -21,6 +21,9 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // xterm 只被懒加载的 TerminalView 引用：返回 undefined 走默认分包，
+            // 跟随视图进懒加载 chunk。若打进 vendor，全站每个页面都会下载终端库。
+            if (id.includes('@xterm')) return undefined
             if (id.includes('vue-router') || id.includes('pinia')) return 'vendor-vue'
             return 'vendor'
           }
@@ -33,6 +36,9 @@ export default defineConfig({
   },
   server: {
     // 开发期代理到 Rust 后端；生产由二进制内嵌提供，无 Node
-    proxy: { '/api': { target: 'http://127.0.0.1:2083', changeOrigin: false } },
+    // ws:true 让 Vite 把 WebSocket 升级（/api/v1/terminal）也转发到后端；
+    // changeOrigin 保持 false：浏览器带的是 localhost:5173 的 Origin/Host，
+    // 后端同源校验需 Origin == scheme://Host 才放行，改 Host 会判跨站 403。
+    proxy: { '/api': { target: 'http://127.0.0.1:2083', changeOrigin: false, ws: true } },
   },
 })

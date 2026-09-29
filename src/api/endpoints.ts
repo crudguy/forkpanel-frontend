@@ -34,6 +34,7 @@ export const API = {
   metrics: {
     realtime: () => '/api/v1/metrics/realtime',
     history: () => '/api/v1/metrics/history',
+    snapshot: () => '/api/v1/metrics/snapshot',
   },
 
   processes: {
@@ -49,6 +50,8 @@ export const API = {
     restart: (unit: string) => `/api/v1/services/${enc(unit)}/restart`,
     setEnabled: (unit: string) => `/api/v1/services/${enc(unit)}/enabled`,
     journal: (unit: string) => `/api/v1/services/${enc(unit)}/journal`,
+    config: (unit: string) => `/api/v1/services/${enc(unit)}/config`,
+    configUpdate: (unit: string) => `/api/v1/services/${enc(unit)}/config`,
   },
 
   packages: {
@@ -99,6 +102,25 @@ export const API = {
     restore: (conn: number) => `/api/v1/db/${conn}/restore`,
   },
 
+  backups: {
+    list: () => '/api/v1/backups',
+    create: () => '/api/v1/backups',
+    patch: (id: number) => `/api/v1/backups/${id}`,
+    remove: (id: number) => `/api/v1/backups/${id}`,
+    run: (id: number) => `/api/v1/backups/${id}/run`,
+    artifacts: (id: number) => `/api/v1/backups/${id}/artifacts`,
+    restore: (id: number) => `/api/v1/backups/${id}/restore`,
+  },
+  containers: {
+    list: () => '/api/v1/containers',
+    images: () => '/api/v1/containers/images',
+    // 生命周期动作；id 为容器 ID 或名称（后端白名单校验）
+    start: (id: string) => `/api/v1/containers/${id}/start`,
+    stop: (id: string) => `/api/v1/containers/${id}/stop`,
+    restart: (id: string) => `/api/v1/containers/${id}/restart`,
+    remove: (id: string) => `/api/v1/containers/${id}`,
+  },
+
   firewall: {
     status: () => '/api/v1/firewall/status',
     setEnabled: () => '/api/v1/firewall/enabled',
@@ -123,7 +145,14 @@ export const API = {
 
   logs: {
     sources: () => '/api/v1/logs/sources',
-    stream: () => '/api/v1/logs/stream',
+    stream: (source?: string, filter?: string, limit?: number) => {
+      const p = new URLSearchParams()
+      if (source) p.set('source', source)
+      if (filter) p.set('filter', filter)
+      if (limit) p.set('limit', String(limit))
+      const q = p.toString()
+      return `/api/v1/logs/stream${q ? '?' + q : ''}`
+    },
     download: () => '/api/v1/logs/download',
     read: (id: string) => `/api/v1/logs/${enc(id)}`,
   },
@@ -148,6 +177,13 @@ export const API = {
   },
 
   audit: () => '/api/v1/audit',
+
+  // 内置 Web 终端（WebSocket 升级，非 REST）。WS 地址由前端按当前 location 构造，
+  // 不走本文件的字面量（避免把 ws(s)://host 写死）；这里的声明仅为契约门禁兜底。
+  terminal: () => '/api/v1/terminal',
+  assistant: {
+    diagnose: () => '/api/v1/assistant/diagnose',
+  },
 
   events: {
     metrics: () => '/api/v1/events/metrics',

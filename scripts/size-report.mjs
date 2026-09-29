@@ -10,7 +10,8 @@ const dist = 'dist/assets'
 let files = []
 try { files = readdirSync(dist) } catch { console.error('未找到 dist，请先构建'); process.exit(1) }
 
-const budgets = JSON.parse(readFileSync('../../ci/budgets.json', 'utf8'))
+// 预算文件随前端仓走（本仓 ci/budgets.json），脚本从仓根目录运行
+const budgets = JSON.parse(readFileSync('ci/budgets.json', 'utf8'))
 let firstScreenGzip = 0
 let totalGzip = 0
 const rows = []

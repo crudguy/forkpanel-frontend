@@ -95,6 +95,15 @@ export const api = {
   del: <T>(u: string, o?: Options) => request<T>(u, { ...o, method: 'DELETE' }),
 }
 
+/**
+ * 判断错误是否为"功能尚未接入"（后端返回 501 / code 10009）。
+ * 用于把占位端点的原始报错降级为友好的"功能即将推出"提示，
+ * 而不是把 `process.list (M2: …)` 这种内部文案甩给用户。
+ */
+export function isUnsupported(e: unknown): boolean {
+  return e instanceof ApiError && e.code === 10009
+}
+
 /** 人类可读的错误文案（按错误码分段，避免把英文原文直接丢给用户） */
 export function errorText(e: unknown): string {
   if (!(e instanceof ApiError)) return '请求失败，请稍后重试'
