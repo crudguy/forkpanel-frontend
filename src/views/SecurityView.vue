@@ -14,8 +14,21 @@ interface BaselineItem {
   current: string; expected: string; advice: string; applicable: boolean
 }
 
+/** 在线会话（后端内存快照；ip 刻意不采集——后端返回 null，界面不展示该列） */
+interface SessionInfo {
+  id: string
+  user: string
+  role: string
+  ip: null
+  created_at: number
+  last_seen: number
+  expires_at: number
+  idle_secs: number
+  current: boolean
+}
+
 const baseline = ref<BaselineItem[]>([])
-const sessions = ref<any[]>([])
+const sessions = ref<SessionInfo[]>([])
 const error = ref('')
 const loading = ref(true)
 
@@ -24,8 +37,8 @@ async function load() {
   try {
     const b = await api.get<BaselineItem[]>(API.security.baseline()).catch(() => null)
     baseline.value = Array.isArray(b) ? b : []
-    const s = await api.get<any>(API.security.sessions()).catch(() => null)
-    sessions.value = Array.isArray(s) ? s : (s?.sessions ?? [])
+    const s = await api.get<{ sessions: SessionInfo[] }>(API.security.sessions()).catch(() => null)
+    sessions.value = s?.sessions ?? []
   } catch (e) { error.value = errorText(e) }
   finally { loading.value = false }
 }
@@ -35,10 +48,16 @@ const passed = computed(() => baseline.value.filter(c => c.applicable && c.ok).l
 const risks = computed(() => baseline.value.filter(c => c.applicable && !c.ok).length)
 const naCount = computed(() => baseline.value.filter(c => !c.applicable).length)
 
-async function revoke(id: string) {
-  if (!window.confirm('确认吊销该会话？其持有者将被强制下线。')) return
-  try { await api.del(API.security.revokeSession(id)); await load() }
+async function revoke(s: SessionInfo) {
+  const tag = s.current ? '这将登出你自己的当前会话。' : '其持有者将被强制下线。'
+  if (!window.confirm(`确认吊销 ${s.user} 的会话？${tag}`)) return
+  try { await api.del(API.security.revokeSession(s.id)); await load() }
   catch (e) { error.value = errorText(e) }
+}
+
+function fmtTime(unix: number): string {
+  if (!unix) return '—'
+  return new Date(unix * 1000).toLocaleString('zh-CN', { hour12: false })
 }
 
 function blClass(c: BaselineItem) {
@@ -82,14 +101,18 @@ function blText(c: BaselineItem) {
       <section class="card">
         <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
         <table v-if="sessions.length">
-          <thead><tr><th>用户</th><th>IP</th><th>创建</th><th /></tr></thead>
+          <thead><tr><th>用户</th><th>角色</th><th>创建于</th><th>空闲</th><th /></tr></thead>
           <tbody>
             <tr v-for="s in sessions" :key="s.id">
-              <td>{{ s.user }}</td>
-              <td class="mono">{{ s.ip }}</td>
-              <td class="muted">{{ s.created_at }}</td>
+              <td>
+                {{ s.user }}
+                <span v-if="s.current" class="cur-badge">当前</span>
+              </td>
+              <td class="muted">{{ s.role }}</td>
+              <td class="muted">{{ fmtTime(s.created_at) }}</td>
+              <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
               <td class="nowrap">
-                <button class="btn-danger btn-sm" @click="revoke(s.id)"><Icon name="logout" :size="14" /> 吊销</button>
+                <button class="btn-danger btn-sm" @click="revoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
               </td>
             </tr>
           </tbody>
@@ -112,4 +135,8 @@ function blText(c: BaselineItem) {
 .s-ok { color: var(--c-ok, #3fb950); }
 .s-risk { color: var(--c-danger, #f85149); }
 .dot.na { background: var(--c-text-dim, #8b949e); opacity: .55; }
+.cur-badge { margin-left: 6px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok, #3fb950); }
+.muted { color: var(--c-text-mute); }
+.mono { font-family: var(--mono); }
+.nowrap { white-space: nowrap; }
 </style>
