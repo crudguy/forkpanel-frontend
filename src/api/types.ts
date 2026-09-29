@@ -180,3 +180,22 @@ export interface AssistantReport {
   findings: AssistantFinding[]
   ctx: AssistantContext
 }
+
+/** 设置：三段诚实模型（runtime 可改即生效 / deployment 只读 / reserved 预留未接线） */
+export interface SettingsReport {
+  runtime: {
+    endpoint: string | null
+    model: string | null
+    api_key_set: boolean
+  }
+  deployment: {
+    read_only: boolean
+    tier: 'nano' | 'small' | 'standard'
+    hint: string
+  }
+  reserved: {
+    wired: false
+    note: string
+    values: Record<string, string>
+  }
+}
