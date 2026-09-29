@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
-interface Task { id: number; kind: string; state: string; percent?: number; created_at?: number }
+/** 与后端 task_runs 实态对齐（契约 Task schema） */
+interface Task {
+  id: number; key: string; kind: string; state: string; progress: number
+  started_at: number | null; finished_at: number | null; exit_code: number | null
+  output_path?: string | null; duration_secs?: number | null; needs_human?: boolean
+}
 
 const tasks = ref<Task[]>([])
 const error = ref('')
@@ -13,45 +18,72 @@ const loading = ref(true)
 const sel = ref<Task | null>(null)
 const output = ref('')
 const outLoading = ref(false)
+let poll: number | undefined
 
 async function load() {
   error.value = ''; loading.value = true
   try {
-    const r = await api.get<any>('/api/v1/tasks')
-    tasks.value = Array.isArray(r) ? r : (r.tasks ?? [])
+    const r = await api.get<Task[]>(API.tasks.list())
+    tasks.value = Array.isArray(r) ? r : []
   } catch (e) { error.value = errorText(e) }
   finally { loading.value = false }
 }
 onMounted(load)
 
+function isLive(t: Task | null) { return !!t && (t.state === 'running' || t.state === 'queued') }
+
+function stopPoll() { if (poll) { clearInterval(poll); poll = undefined } }
+
+/** 运行中任务每 2s 轮询单体详情刷新进度，结束态自动停止并刷新列表 */
+function startPoll() {
+  stopPoll()
+  if (!isLive(sel.value)) return
+  poll = window.setInterval(async () => {
+    if (!sel.value) { stopPoll(); return }
+    try {
+      const d = await api.get<Task>(API.tasks.get(sel.value.id))
+      sel.value = d
+      if (!isLive(d)) { stopPoll(); load() }
+    } catch { /* 瞬时错误忽略，下一轮重试 */ }
+  }, 2000)
+}
+
 async function open(t: Task) {
-  sel.value = t; outLoading.value = true; output.value = ''
+  stopPoll()
+  sel.value = { ...t }; outLoading.value = true; output.value = ''
+  // 详情（拿派生字段 duration_secs 等）；失败则退回列表行数据
+  try { sel.value = await api.get<Task>(API.tasks.get(t.id)) }
+  catch { /* 列表行兜底 */ }
+  // 输出：后端返回 {id, lines[]}（不是 output 字符串——旧代码在这里永远显示"无输出"）
   try {
-    const r = await api.get<{ output?: string }>(API.tasks.output(t.id))
-    output.value = r.output || '(无输出)'
+    const r = await api.get<{ id: number; lines: string[] }>(API.tasks.output(t.id))
+    output.value = r.lines?.length ? r.lines.join('\n') : '(无输出)'
   } catch (e) { output.value = errorText(e) }
   finally { outLoading.value = false }
+  startPoll()
 }
 
 async function cancel(t: Task) {
   try {
     await api.post(API.tasks.cancel(t.id))
     load()
+    if (sel.value?.id === t.id) open(t)
   } catch (e) { error.value = errorText(e) }
 }
 
 function stateClass(s: string) {
   return s === 'running' ? 'badge-primary'
-    : s === 'done' ? 'badge-ok'
-    : s === 'failed' || s === 'cancelled' ? 'badge-danger' : 'badge-warn'
+    : s === 'ok' ? 'badge-ok'
+    : s === 'failed' || s === 'canceled' || s === 'interrupted' ? 'badge-danger' : 'badge-warn'
 }
-function fmtTime(t?: number) { return t ? new Date(t * 1000).toLocaleString() : '—' }
+function fmtTime(t?: number | null) { return t ? new Date(t * 1000).toLocaleString() : '—' }
+onUnmounted(stopPoll)
 </script>
 
 <template>
   <div>
     <div class="page-head">
-      <div><h2 class="page-title">任务中心</h2><p class="page-sub">后台任务与执行进度</p></div>
+      <div><h2 class="page-title">任务中心</h2><p class="page-sub">后台任务与执行进度（运行中每 2 秒自动刷新）</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
@@ -61,22 +93,25 @@ function fmtTime(t?: number) { return t ? new Date(t * 1000).toLocaleString() : 
     <template v-else>
       <div class="card flush">
         <table>
-          <thead><tr><th>#</th><th>类型</th><th>状态</th><th class="num">进度</th><th>创建时间</th><th /></tr></thead>
+          <thead><tr><th>#</th><th>任务</th><th>状态</th><th class="num">进度</th><th>开始时间</th><th /></tr></thead>
           <tbody>
             <tr v-for="t in tasks" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
-              <td>{{ t.kind }}</td>
-              <td><span class="badge" :class="stateClass(t.state)">{{ t.state }}</span></td>
+              <td class="mono dim">{{ t.key || t.kind }}</td>
+              <td>
+                <span class="badge" :class="stateClass(t.state)">{{ t.state }}</span>
+                <span v-if="t.needs_human" class="badge badge-danger" title="任务被中断，需人工确认后续影响">需人工</span>
+              </td>
               <td class="num">
                 <div class="mini">
-                  <div class="progress"><i :style="{ width: (t.percent ?? 0) + '%' }" /></div>
-                  <span>{{ t.percent ?? 0 }}%</span>
+                  <div class="progress"><i :style="{ width: (t.progress ?? 0) + '%' }" /></div>
+                  <span>{{ t.progress ?? 0 }}%</span>
                 </div>
               </td>
-              <td class="muted nowrap">{{ fmtTime(t.created_at) }}</td>
+              <td class="muted nowrap">{{ fmtTime(t.started_at) }}</td>
               <td class="nowrap">
                 <button class="btn-sm" @click.stop="open(t)"><Icon name="terminal" :size="14" /> 输出</button>
-                <button v-if="t.state === 'running'" class="btn-danger btn-sm" @click.stop="cancel(t)">取消</button>
+                <button v-if="isLive(t)" class="btn-danger btn-sm" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
             <tr v-if="!tasks.length"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>
@@ -86,9 +121,17 @@ function fmtTime(t?: number) { return t ? new Date(t * 1000).toLocaleString() : 
 
       <div v-if="sel" class="card">
         <div class="sec-head">
-          <Icon name="terminal" :size="16" /><span>任务 #{{ sel.id }} 输出</span>
-          <span class="spacer" /><button class="btn-sm" @click="sel = null">关闭</button>
+          <Icon name="terminal" :size="16" /><span>任务 #{{ sel.id }} · {{ sel.key || sel.kind }}</span>
+          <span class="badge" :class="stateClass(sel.state)">{{ sel.state }}</span>
+          <span class="spacer" /><button class="btn-sm" @click="stopPoll(); sel = null">关闭</button>
         </div>
+        <p class="meta">
+          类型 <span class="mono">{{ sel.kind }}</span>
+          · 开始 {{ fmtTime(sel.started_at) }}
+          · 结束 {{ fmtTime(sel.finished_at) }}
+          · 耗时 <span class="mono">{{ sel.duration_secs != null ? sel.duration_secs + 's' : '—' }}</span>
+          <template v-if="sel.exit_code != null"> · 退出码 <span class="mono">{{ sel.exit_code }}</span></template>
+        </p>
         <pre v-if="outLoading" class="skeleton" style="height:120px" />
         <pre v-else class="out">{{ output }}</pre>
       </div>
@@ -98,6 +141,7 @@ function fmtTime(t?: number) { return t ? new Date(t * 1000).toLocaleString() : 
 
 <style scoped>
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
+.meta { margin: 0 0 10px; font-size: 12.5px; color: var(--c-text-dim); }
 .page-sub { margin: 2px 0 0; color: var(--c-text-dim); font-size: 13px; }
 .box { height: 320px; border-radius: var(--radius); }
 .mini { display: flex; align-items: center; gap: 8px; min-width: 120px; }

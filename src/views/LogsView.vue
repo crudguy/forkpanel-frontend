@@ -57,6 +57,14 @@ function closeStream() {
   if (es) { es.close(); es = null }
 }
 
+/** 下载当前日志源（沿用当前 grep 过滤——所见即所得；attachment 响应头触发保存，不离开页面） */
+function downloadLog() {
+  if (!cur.value) return
+  const p = new URLSearchParams({ lines: String(count.value) })
+  if (grep.value) p.set('grep', grep.value)
+  window.location.href = `${API.logs.download(cur.value)}?${p.toString()}`
+}
+
 function scrollBottom() {
   nextTick(() => { if (viewEl.value) viewEl.value.scrollTop = viewEl.value.scrollHeight })
 }
@@ -111,6 +119,9 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
       </button>
       <button class="btn-ghost" :disabled="!canView || follow" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="!canView || follow || !cur" title="按当前过滤条件下载（上限 10000 行 / 8MB）" @click="downloadLog">
+        <Icon name="download" :size="15" /> 下载
+      </button>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.LOGS_READ)"

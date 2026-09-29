@@ -153,7 +153,7 @@ export const API = {
       const q = p.toString()
       return `/api/v1/logs/stream${q ? '?' + q : ''}`
     },
-    download: () => '/api/v1/logs/download',
+    download: (id: string) => `/api/v1/logs/${enc(id)}/download`,
     read: (id: string) => `/api/v1/logs/${enc(id)}`,
   },
 

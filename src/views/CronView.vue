@@ -84,6 +84,25 @@ function openEdit(j: Job) {
 }
 function closeEdit() { edit.value = null; editBusy.value = false }
 
+// ── 表达式预览：POST /cron/preview（纯计算零副作用，本地时区语义） ──
+const previewNext = ref<number[]>([])
+const previewExpr = ref('')
+const previewBusy = ref(false)
+
+async function doPreview(expr: string) {
+  if (!expr) return
+  previewBusy.value = true
+  try {
+    const r = await api.post<{ expr: string; next: number[] }>(API.cron.preview(), { expr })
+    previewNext.value = r.next ?? []
+    previewExpr.value = r.expr
+  } catch (e) {
+    previewNext.value = []
+    previewExpr.value = ''
+    error.value = errorText(e)
+  } finally { previewBusy.value = false }
+}
+
 async function saveEdit() {
   if (!edit.value) return
   if (!canManage.value) { editError.value = '无计划任务管理权限'; return }
@@ -131,7 +150,15 @@ function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
         </div>
         <div class="field"><label>命令</label><input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></div>
-        <button class="btn-primary" :disabled="!canManage || !form.name || !form.expr || !form.command" @click="create">创建</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn-primary" :disabled="!canManage || !form.name || !form.expr || !form.command" @click="create">创建</button>
+          <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
+            {{ previewBusy ? '计算中…' : '预览执行时刻' }}
+          </button>
+        </div>
+        <p v-if="previewExpr === form.expr" class="tip">
+          下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmt).join('　') : '一年内无命中（检查日期字段）' }}</span>
+        </p>
         <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
       </section>
 
@@ -192,9 +219,15 @@ function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString
             </span>
           </label>
           <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
+          <p v-if="previewExpr === editForm.expr" class="tip">
+            下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmt).join('　') : '一年内无命中（检查日期字段）' }}</span>
+          </p>
 
           <div class="m-acts">
             <button class="btn-ghost" :disabled="editBusy" @click="closeEdit">取消</button>
+            <button class="btn-ghost" :disabled="!editForm.expr || previewBusy" @click="doPreview(editForm.expr)">
+              {{ previewBusy ? '计算中…' : '预览执行时刻' }}
+            </button>
             <span class="spacer" />
             <button class="btn-primary" :disabled="editBusy || !editForm.expr || !editForm.command"
                     @click="saveEdit">
