@@ -14,6 +14,8 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import Icon from '@/components/Icon.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface Rule {
   id: string; ports: string; protocol: string; action: string
@@ -61,19 +63,40 @@ async function toggleActive() {
   catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
+
+// ── 删除规则 ──
+// 只允许删面板自己创建的（后端同样会拒绝用户自建规则，这里是双保险）：
+// 删掉用户手动加的防火墙规则，等于替用户拆掉他自己的安全措施。
+const delTarget = ref<Rule | null>(null)
+function askDelete(r: Rule) { if (r.panel_managed) delTarget.value = r }
+
+async function doDelete() {
+  const r = delTarget.value
+  if (!r) return
+  busy.value = true
+  try {
+    await api.del(API.firewall.removeRule(r.id))
+    delTarget.value = null
+    await load()
+  } catch (e) { error.value = errorText(e) }
+  finally { busy.value = false }
+}
 </script>
 
 <template>
   <div>
-    <header class="bar">
-      <h2>防火墙与安全</h2>
-      <span class="meta">{{ backend || '—' }}</span>
-      <span class="sp" />
-      <span :class="active ? 'ok' : 'bad'">{{ active ? '已启用' : '未启用' }}</span>
-      <button :disabled="busy || !canManage" @click="toggleActive">
-        {{ active ? '关闭' : '启用' }}
-      </button>
-    </header>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">防火墙与安全</h2>
+        <p class="page-sub">
+          <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
+          后端：{{ backend || '—' }}
+        </p>
+      </div>
+      <span class="spacer" />
+      <button class="btn-ghost" :disabled="busy || !canManage" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
+      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+    </div>
 
     <EmptyState v-if="!auth.supported(CAP.FIREWALL_MANAGE)"
       title="未检测到受支持的防火墙后端"
@@ -83,8 +106,8 @@ async function toggleActive() {
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
 
-      <section class="form">
-        <strong>放行端口</strong>
+      <section class="card">
+        <div class="sec-head"><Icon name="firewall" :size="16" /> 放行端口</div>
         <div class="row">
           <label>端口
             <input v-model="ports" placeholder="80,443 或 8000-8100" />
@@ -95,7 +118,7 @@ async function toggleActive() {
           <label>备注
             <input v-model="comment" placeholder="web" />
           </label>
-          <button :disabled="busy || !ports" @click="apply">应用</button>
+          <button class="btn-primary" :disabled="busy || !ports" @click="apply">应用</button>
         </div>
         <p class="tip">
           仅支持放行（allow）。封禁端口可能导致 SSH 失联，需通过命令行操作。
@@ -103,43 +126,40 @@ async function toggleActive() {
         </p>
       </section>
 
-      <table v-if="rules.length">
-        <thead><tr><th>端口</th><th>协议</th><th>动作</th><th>方向</th><th>来源</th><th>备注</th><th /></tr></thead>
-        <tbody>
-          <tr v-for="r in rules" :key="r.id">
-            <td class="mono">{{ r.ports }}</td>
-            <td>{{ r.protocol }}</td>
-            <td :class="r.action === 'allow' ? 'ok' : 'bad'">{{ r.action }}</td>
-            <td>{{ r.direction === 'in' ? '入站' : '出站' }}</td>
-            <td class="mono">{{ r.source ?? '任意' }}</td>
-            <td class="dim">{{ r.comment ?? '—' }}</td>
-            <td>
-              <span v-if="r.panel_managed" class="tag ok">面板管理</span>
-              <span v-else class="tag" title="面板不会删除用户自建规则">用户自建</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="card flush" v-if="rules.length">
+        <table>
+          <thead><tr><th>端口</th><th>协议</th><th>动作</th><th>方向</th><th>来源</th><th>备注</th><th>归属</th><th /></tr></thead>
+          <tbody>
+            <tr v-for="r in rules" :key="r.id">
+              <td class="mono">{{ r.ports }}</td>
+              <td>{{ r.protocol }}</td>
+              <td><span class="badge" :class="r.action === 'allow' ? 'badge-ok' : 'badge-danger'">{{ r.action }}</span></td>
+              <td>{{ r.direction === 'in' ? '入站' : '出站' }}</td>
+              <td class="mono">{{ r.source ?? '任意' }}</td>
+              <td class="dim">{{ r.comment ?? '—' }}</td>
+              <td class="nowrap">
+                <span v-if="r.panel_managed" class="badge badge-primary">面板管理</span>
+                <span v-else class="badge" title="面板不会删除用户自建规则">用户自建</span>
+              </td>
+              <td class="nowrap">
+                <button class="btn-danger btn-sm" :disabled="busy || !canManage || !r.panel_managed"
+                  :title="r.panel_managed ? '删除此规则' : '用户自建规则不可删除'"
+                  @click="askDelete(r)">
+                  <Icon name="trash" :size="14" /> 删除
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <EmptyState v-else title="暂无规则" />
     </template>
+
+    <ConfirmDialog :open="!!delTarget" danger title="删除防火墙规则"
+      :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"
+      @confirm="doDelete" @cancel="delTarget = null" />
   </div>
 </template>
 
 <style scoped>
-.bar { display: flex; align-items: center; gap: 10px; }
-h2 { margin: 0; font-size: 18px; }
-.meta { font-size: 12px; color: var(--c-text-dim); font-family: var(--mono); }
-.sp { flex: 1; }
-.err { color: var(--c-danger); font-size: 13px; }
-.form { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 12px;
-        display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-label input { width: auto; min-width: 140px; }
-.tip { margin: 0; font-size: 12px; color: var(--c-text-dim); }
-.mono { font-family: var(--mono); }
-.dim { color: var(--c-text-dim); }
-.ok { color: var(--c-ok); }
-.bad { color: var(--c-danger); }
-.tag { font-size: 11px; }
 </style>

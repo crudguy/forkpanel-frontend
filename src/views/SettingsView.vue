@@ -7,6 +7,7 @@
  */
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
 const caps = computed(() => Object.entries(auth.capabilities))
@@ -15,25 +16,32 @@ const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).
 
 <template>
   <div>
-    <h2>设置</h2>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">设置</h2>
+        <p class="page-sub">运行环境与能力矩阵排查</p>
+      </div>
+    </div>
 
-    <section>
-      <h3>运行环境</h3>
-      <p class="row"><span>平台</span><code>{{ auth.platform?.os ?? '—' }} / {{ auth.platform?.arch ?? '—' }}</code></p>
-      <p class="row"><span>发行版</span><code>{{ auth.platform?.distro ?? '—' }}</code></p>
-      <p class="row"><span>内核</span><code>{{ auth.platform?.kernel ?? '—' }}</code></p>
-      <p class="row"><span>资源档位</span><code>{{ auth.me?.tier ?? '—' }}</code></p>
-      <p class="row"><span>当前用户</span><code>{{ auth.me?.user }}（{{ auth.me?.role }}）</code></p>
+    <section class="card">
+      <div class="sec-head"><Icon name="server" :size="16" /> 运行环境</div>
+      <div class="kv">
+        <div class="kv-row"><span class="k">平台</span><code class="mono">{{ auth.platform?.os ?? '—' }} / {{ auth.platform?.arch ?? '—' }}</code></div>
+        <div class="kv-row"><span class="k">发行版</span><code class="mono">{{ auth.platform?.distro ?? '—' }}</code></div>
+        <div class="kv-row"><span class="k">内核</span><code class="mono">{{ auth.platform?.kernel ?? '—' }}</code></div>
+        <div class="kv-row"><span class="k">资源档位</span><code class="mono">{{ auth.me?.tier ?? '—' }}</code></div>
+        <div class="kv-row"><span class="k">当前用户</span><code class="mono">{{ auth.me?.user }}（{{ auth.me?.role }}）</code></div>
+      </div>
     </section>
 
-    <section>
-      <h3>能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</h3>
+    <section class="card">
+      <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
       <table>
         <thead><tr><th>能力</th><th>状态</th><th>后端</th><th>原因</th></tr></thead>
         <tbody>
           <tr v-for="[k, c] in caps" :key="k">
             <td class="mono">{{ k }}</td>
-            <td :class="c.supported ? 'ok' : 'bad'">{{ c.supported ? '可用' : '不可用' }}</td>
+            <td><span class="badge" :class="c.supported ? 'badge-ok' : 'badge-danger'">{{ c.supported ? '可用' : '不可用' }}</span></td>
             <td class="dim">{{ c.backend ?? '—' }}</td>
             <td class="dim">{{ c.reason ?? '—' }}</td>
           </tr>
@@ -42,8 +50,8 @@ const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).
       <p class="tip">不可用项会在对应菜单自动置灰。原因码来自后端能力探测。</p>
     </section>
 
-    <section>
-      <h3>权限</h3>
+    <section class="card">
+      <div class="sec-head"><Icon name="key" :size="16" /> 权限</div>
       <div class="perms">
         <code v-for="p in auth.me?.permissions ?? []" :key="p">{{ p }}</code>
       </div>
@@ -52,16 +60,10 @@ const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).
 </template>
 
 <style scoped>
-h2 { margin: 0 0 12px; font-size: 18px; }
-h3 { margin: 16px 0 8px; font-size: 14px; }
-section { margin-bottom: 8px; }
-.row { display: flex; gap: 12px; font-size: 13px; margin: 4px 0; }
-.row span { width: 90px; color: var(--c-text-dim); }
-.mono { font-family: var(--mono); font-size: 12px; }
-.dim { color: var(--c-text-dim); }
-.ok { color: var(--c-ok); }
-.bad { color: var(--c-danger); }
-.tip { font-size: 12px; color: var(--c-text-dim); }
-.perms { display: flex; flex-wrap: wrap; gap: 6px; }
-.perms code { background: var(--c-hover); padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+.kv { display: flex; flex-direction: column; }
+.kv-row { display: flex; gap: 12px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--c-border); }
+.kv-row:last-child { border-bottom: none; }
+.kv-row > .k { width: 96px; flex: none; color: var(--c-text-dim); }
+.perms { display: flex; flex-wrap: wrap; gap: 8px; }
+.perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono); }
 </style>

@@ -13,6 +13,7 @@ import { api, errorText } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface Entry {
@@ -111,51 +112,57 @@ function fmtSize(n: number) {
 
 <template>
   <div>
-    <header class="bar">
-      <h2>文件</h2>
-      <code class="cwd">{{ path }}</code>
-      <button :disabled="path === '/'" @click="up">上级</button>
-      <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏文件</label>
-      <span class="sp" />
-      <button :disabled="loading" @click="load">刷新</button>
-    </header>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">文件</h2>
+        <p class="page-sub"><code class="cwd">{{ path }}</code></p>
+      </div>
+      <span class="spacer" />
+      <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
+      <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron" :size="14" /> 上级</button>
+      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+    </div>
 
-    <EmptyState v-if="!auth.supported(CAP.METRICS_READ) && !entries.length"
+    <EmptyState v-if="!auth.supported(CAP.FILE_READ) && !entries.length"
       title="当前环境不支持文件管理"
-      :reason="auth.capabilities['file.read']?.reason ?? undefined" />
+      :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
 
-    <table v-if="entries.length">
-      <thead><tr><th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th /></tr></thead>
-      <tbody>
-        <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
-          <td>
-            <a href="#" @click.prevent="enter(e)">
-              {{ e.kind === 'dir' ? '📁' : e.kind === 'symlink' ? '🔗' : '📄' }} {{ e.name }}
-            </a>
-            <span v-if="e.sensitive" class="tag">受保护</span>
-          </td>
-          <td class="num">{{ e.kind === 'dir' ? '—' : fmtSize(e.size) }}</td>
-          <td class="num mono">{{ e.mode ?? '—' }}</td>
-          <td>{{ e.owner ?? '—' }}</td>
-          <td class="num">{{ new Date(e.modified * 1000).toLocaleString() }}</td>
-          <td>
-            <button v-if="canWrite && e.kind === 'file' && !e.sensitive" @click="open(e)">编辑</button>
-            <button v-if="canWrite" class="danger" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-if="entries.length" class="card flush">
+      <table>
+        <thead><tr><th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th /></tr></thead>
+        <tbody>
+          <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
+            <td>
+              <a href="#" class="fname" @click.prevent="enter(e)">
+                <Icon :name="e.kind === 'dir' ? 'folder' : 'file'" :size="15" />
+                {{ e.name }}
+              </a>
+              <span v-if="e.sensitive" class="badge badge-danger">受保护</span>
+            </td>
+            <td class="num">{{ e.kind === 'dir' ? '—' : fmtSize(e.size) }}</td>
+            <td class="num mono">{{ e.mode ?? '—' }}</td>
+            <td>{{ e.owner ?? '—' }}</td>
+            <td class="num">{{ new Date(e.modified * 1000).toLocaleString() }}</td>
+            <td class="nowrap">
+              <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="open(e)">编辑</button>
+              <button v-if="canWrite" class="btn-danger btn-sm" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <EmptyState v-else-if="!loading" title="空目录" />
 
-    <div v-if="editing" class="editor">
+    <div v-if="editing" class="card editor">
       <header>
+        <Icon name="file" :size="16" />
         <strong>{{ editing.name }}</strong>
-        <span class="sp" />
-        <button @click="editing = null">取消</button>
-        <button class="primary" @click="save">保存</button>
+        <span class="spacer" />
+        <button class="btn-ghost" @click="editing = null">取消</button>
+        <button class="btn-primary" @click="save">保存</button>
       </header>
       <textarea v-model="editing.content" spellcheck="false" />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>
@@ -171,21 +178,11 @@ function fmtSize(n: number) {
 </template>
 
 <style scoped>
-.bar { display: flex; align-items: center; gap: 10px; }
-h2 { margin: 0; font-size: 18px; }
-.cwd { font-family: var(--mono); font-size: 12px; color: var(--c-text-dim); }
-.hid { display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; }
-.sp { flex: 1; }
-.err { color: var(--c-danger); font-size: 13px; }
-.warn { color: var(--c-warn); font-size: 13px; }
-.mono { font-family: var(--mono); }
+.cwd { font-family: var(--mono); font-size: 12.5px; color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
+.hid { display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0; color: var(--c-text-dim); }
+.fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
-.tag { font-size: 11px; color: var(--c-warn); margin-left: 6px; }
-.danger { color: var(--c-danger); }
-.editor { margin-top: 16px; border: 1px solid var(--c-border); border-radius: var(--radius); padding: 12px;
-          display: flex; flex-direction: column; gap: 8px; }
+.editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
 .editor textarea { min-height: 320px; font-family: var(--mono); font-size: 13px; }
-.tip { margin: 0; font-size: 12px; color: var(--c-text-dim); }
-.primary { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
 </style>

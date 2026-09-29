@@ -2,8 +2,12 @@
 /**
  * 数据库管理。
  *
- * 范围克制：MVP 只做列表与备份。刻意在 UI 上说明**不提供 Web SQL 终端**，
- * 否则用户会一直找"在哪执行 SQL"。
+ * 能力边界：连接管理 + 备份任务 + **只读浏览**（库→表→行预览，分页）。
+ * 刻意**不提供 Web SQL 终端**（安全与资源隔离考虑），文案在 UI 上说明，
+ * 避免用户一直找"在哪执行 SQL"。
+ *
+ * 引擎差异：SQLite 为面板内建引擎（已实装浏览）；MySQL/PostgreSQL 需外部客户端，
+ * 未实装的连接由后端标记 `available=false`，此处置灰。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -11,16 +15,22 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import Icon from '@/components/Icon.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
-  port: number | null; database: string | null; available: boolean; has_password: boolean
+  port: number | null; default_db: string | null; available: boolean; has_password: boolean
 }
+interface DbTableInfo { name: string; rows: number; engine: string | null }
+interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
+
+const PAGE_SIZE = 50
+
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
 const error = ref('')
 const busy = ref(false)
-const form = ref({ name: '', engine: 'mysql', host: '127.0.0.1', database: '' })
+const form = ref({ name: '', engine: 'sqlite', host: '127.0.0.1', default_db: '' })
 
 async function load() {
   error.value = ''
@@ -36,8 +46,9 @@ async function create() {
   try {
     await api.post(API.db.connections(), {
       name: form.value.name, engine: form.value.engine,
-      host: form.value.host || undefined, database: form.value.database || undefined,
+      host: form.value.host || undefined, default_db: form.value.default_db || undefined,
     })
+    form.value = { name: '', engine: 'sqlite', host: '127.0.0.1', default_db: '' }
     load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
@@ -53,68 +64,150 @@ async function backup(c: Conn) {
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
+
+// ── 只读浏览：连接 → 库 → 表 → 行预览 ──
+const browse = ref<{
+  conn: Conn; dbs: string[]; db: string; tables: DbTableInfo[]; table: string; data: RowsData | null
+} | null>(null)
+
+async function openBrowse(c: Conn) {
+  error.value = ''
+  browse.value = { conn: c, dbs: [], db: '', tables: [], table: '', data: null }
+  try { browse.value.dbs = await api.get<string[]>(API.db.databases(c.id)) }
+  catch (e) { error.value = errorText(e) }
+}
+
+async function pickDb(db: string) {
+  const b = browse.value; if (!b) return
+  b.db = db; b.table = ''; b.data = null; b.tables = []
+  try { b.tables = await api.get<DbTableInfo[]>(API.db.tables(b.conn.id, db)) }
+  catch (e) { error.value = errorText(e) }
+}
+
+async function pickTable(table: string, page = 1) {
+  const b = browse.value; if (!b || !table) { if (b) b.data = null; return }
+  b.table = table
+  const url = `${API.db.rows(b.conn.id, b.db, table)}?page=${page}&page_size=${PAGE_SIZE}`
+  try { b.data = await api.get<RowsData>(url) }
+  catch (e) { error.value = errorText(e); b.data = null }
+}
+
+function closeBrowse() { browse.value = null }
 </script>
 
 <template>
   <div>
-    <header class="bar"><h2>数据库</h2><span class="sp" /><button @click="load">刷新</button></header>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">数据库</h2>
+        <p class="page-sub">连接管理 · 只读浏览 · 备份任务</p>
+      </div>
+      <span class="spacer" />
+      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+    </div>
 
     <EmptyState v-if="!auth.supported(CAP.DBMS_MANAGE)"
-      title="未检测到可用的数据库客户端"
-      hint="备份/恢复需要 mysqldump / pg_dump 等外部工具"
+      title="未检测到可用的数据库引擎"
+      hint="SQLite 为内建引擎；MySQL/PostgreSQL 需外部客户端"
       :reason="auth.capabilities[CAP.DBMS_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
       <p v-if="error" class="note">{{ error }}</p>
 
-      <section class="form">
-        <strong>新增连接</strong>
+      <section class="card">
+        <div class="sec-head"><Icon name="database" :size="16" /> 新增连接</div>
         <div class="row">
           <label>名称<input v-model="form.name" placeholder="myapp" /></label>
           <label>引擎
             <select v-model="form.engine">
+              <option value="sqlite">SQLite</option>
               <option value="mysql">MySQL</option>
               <option value="postgres">PostgreSQL</option>
-              <option value="sqlite">SQLite</option>
             </select>
           </label>
-          <label>主机<input v-model="form.host" /></label>
-          <label>库名<input v-model="form.database" /></label>
-          <button :disabled="!canManage || busy || !form.name" @click="create">添加</button>
+          <label>主机<input v-model="form.host" :disabled="form.engine === 'sqlite'" /></label>
+          <label>{{ form.engine === 'sqlite' ? '数据库文件' : '库名' }}
+            <input v-model="form.default_db" :placeholder="form.engine === 'sqlite' ? '/path/to/app.db' : 'myapp'" />
+          </label>
+          <button class="btn-primary" :disabled="!canManage || busy || !form.name" @click="create">添加</button>
         </div>
-        <p class="tip">MVP 仅提供列表与备份，不提供 Web SQL 终端（安全与资源隔离考虑）。</p>
+        <p class="tip">仅提供列表 / 只读浏览 / 备份，<b>不提供 Web SQL 终端</b>（安全与资源隔离考虑）。</p>
       </section>
 
-      <table v-if="conns.length">
-        <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库名</th><th>可用性</th><th /></tr></thead>
-        <tbody>
-          <tr v-for="c in conns" :key="c.id">
-            <td>{{ c.name }}</td>
-            <td>{{ c.engine }}</td>
-            <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
-            <td class="dim">{{ c.database ?? '—' }}</td>
-            <td :class="c.available ? 'ok' : 'bad'">{{ c.available ? '可用' : '不可用' }}</td>
-            <td><button :disabled="!c.available || !canManage || busy" @click="backup(c)">备份</button></td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="card flush" v-if="conns.length">
+        <table>
+          <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库 / 文件</th><th>可用性</th><th /></tr></thead>
+          <tbody>
+            <tr v-for="c in conns" :key="c.id">
+              <td>{{ c.name }}</td>
+              <td>{{ c.engine }}</td>
+              <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
+              <td class="dim mono">{{ c.default_db ?? '—' }}</td>
+              <td><span class="badge" :class="c.available ? 'badge-ok' : 'badge-danger'">{{ c.available ? '可用' : '不可用' }}</span></td>
+              <td class="nowrap">
+                <button class="btn-ghost btn-sm" :disabled="!c.available || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
+                <button class="btn-ghost btn-sm" :disabled="!c.available || !canManage || busy" @click="backup(c)">备份</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <EmptyState v-else title="暂无连接" />
+
+      <!-- 只读浏览面板 -->
+      <section class="card" v-if="browse">
+        <div class="sec-head">
+          <Icon name="database" :size="16" /> 浏览：{{ browse.conn.name }}
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" @click="closeBrowse">关闭</button>
+        </div>
+
+        <div class="crumbs" v-if="browse.dbs.length">
+          <span class="crumb">库</span>
+          <template v-for="d in browse.dbs" :key="d">
+            <span class="sep">/</span>
+            <span class="crumb" :class="{ active: browse.db === d }" @click="pickDb(d)">{{ d }}</span>
+          </template>
+        </div>
+
+        <div class="row" v-if="browse.db">
+          <label>表
+            <select :value="browse.table" @change="pickTable(($event.target as HTMLSelectElement).value)">
+              <option value="">选择表…</option>
+              <option v-for="t in browse.tables" :key="t.name" :value="t.name">{{ t.name }}（{{ t.rows }} 行）</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="card flush" v-if="browse.data">
+          <table>
+            <thead><tr><th v-for="col in browse.data.columns" :key="col">{{ col }}</th></tr></thead>
+            <tbody>
+              <tr v-for="(r, i) in browse.data.rows" :key="i">
+                <td v-for="(v, j) in r" :key="j" class="mono">{{ v ?? 'NULL' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pager">
+            <button class="btn-ghost btn-sm" :disabled="browse.data.page <= 1" @click="pickTable(browse.table, browse.data.page - 1)">上一页</button>
+            <span class="dim">第 {{ browse.data.page }} 页 · 共 {{ browse.data.total }} 行</span>
+            <button class="btn-ghost btn-sm"
+              :disabled="browse.data.page * PAGE_SIZE >= browse.data.total"
+              @click="pickTable(browse.table, browse.data.page + 1)">下一页</button>
+          </div>
+        </div>
+        <p v-else-if="browse.db && browse.tables.length === 0" class="dim">该库无表</p>
+        <p v-else-if="browse.db" class="dim">请选择要预览的表</p>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.bar { display: flex; align-items: center; gap: 10px; }
-h2 { margin: 0; font-size: 18px; }
-.sp { flex: 1; }
-.note { font-size: 13px; color: var(--c-primary); }
-.form { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 12px;
-        display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
-.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.tip { margin: 0; font-size: 12px; color: var(--c-text-dim); }
-.mono { font-family: var(--mono); }
-.dim { color: var(--c-text-dim); }
-.ok { color: var(--c-ok); }
-.bad { color: var(--c-danger); }
+.crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.crumb { padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--dim, #9aa4b2); }
+.crumb:hover { color: var(--fg, #e6edf3); }
+.crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
+.sep { color: var(--dim, #9aa4b2); }
+.pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 </style>

@@ -1,0 +1,294 @@
+<script setup lang="ts">
+/**
+ * 专业监控页。
+ * 与「主机监控(SystemView)」的分工：SystemView 看时间趋势（实时滚动 + 历史落盘），
+ * 本页看**完整结构快照**——CPU 每核、负载 1/5/15、内存 + 交换明细、每挂载点磁盘、
+ * 每网卡吞吐、进程数 + Top 进程。数据来自后端已采集的 SystemSnapshot，纯按需拉取，
+ * 每 2 秒刷新快照 / 3 秒刷新进程（procfs 读取开销 <0.02ms，轮询极轻）。
+ */
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { api, errorText } from '@/api/client'
+import { API } from '@/api/endpoints'
+import { useAuthStore } from '@/stores/auth'
+import type { SystemSnapshot, ProcessInfo } from '@/api/types'
+import MetricCard from '@/components/MetricCard.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import Icon from '@/components/Icon.vue'
+
+const auth = useAuthStore()
+const snap = ref<SystemSnapshot | null>(null)
+const procs = ref<ProcessInfo[]>([])
+const procSort = ref<'cpu' | 'mem'>('cpu')
+const loading = ref(true)
+const procError = ref('')
+
+// 配色：与主机监控页图例一致，彼此对比鲜明
+const C = {
+  cpu: '#ff6a3d', mem: '#36c5d6', swap: '#ffb454', disk: '#4cd07d',
+  netIn: '#4ea1ff', netOut: '#ffb454', load: '#b48cff', danger: '#ff4d4d', hot: '#ff9a3d',
+}
+
+const cpuPct = computed(() => snap.value?.cpu.total_pct ?? 0)
+const perCore = computed<number[]>(() => snap.value?.cpu.per_core_pct ?? [])
+const cores = computed(() => perCore.value.length)
+const loads = computed<number[]>(() => {
+  const c = snap.value?.cpu
+  return [c?.load1 ?? 0, c?.load5 ?? 0, c?.load15 ?? 0]
+})
+const memPct = computed(() => {
+  const m = snap.value?.mem
+  return m && m.total_kib ? (m.used_kib / m.total_kib) * 100 : 0
+})
+const swapTotalKib = computed(() => snap.value?.mem.swap_total_kib ?? 0)
+const swapUsedKib = computed(() => snap.value?.mem.swap_used_kib ?? 0)
+const swapPct = computed(() => (swapTotalKib.value ? (swapUsedKib.value / swapTotalKib.value) * 100 : 0))
+const swapActive = computed(() => swapTotalKib.value > 0)
+const procCount = computed(() => snap.value?.proc_count ?? 0)
+
+const diskRows = computed(() => (snap.value?.disks ?? []).map(d => ({
+  mount: d.mount_point, device: d.device, fs: d.fs_type,
+  pct: d.total_bytes ? (d.used_bytes / d.total_bytes) * 100 : 0,
+  used: d.used_bytes, total: d.total_bytes, net: d.is_network_fs,
+})))
+const netRows = computed(() => (snap.value?.nets ?? [])
+  .filter(n => n.iface !== 'lo')
+  .map(n => ({ iface: n.iface, rx: n.rx_rate_bps, tx: n.tx_rate_bps })))
+
+// 内存明细（字节格式化后下发，避免模板算术）
+const memUsedStr = computed(() => fmtBytes((snap.value?.mem.used_kib ?? 0) * 1024))
+const memAvailStr = computed(() => fmtBytes((snap.value?.mem.available_kib ?? 0) * 1024))
+const memBufStr = computed(() => fmtBytes((snap.value?.mem.buffers_kib ?? 0) * 1024))
+const memCacheStr = computed(() => fmtBytes((snap.value?.mem.cached_kib ?? 0) * 1024))
+const swapUsedStr = computed(() => fmtBytes(swapUsedKib.value * 1024))
+const swapTotalStr = computed(() => fmtBytes(swapTotalKib.value * 1024))
+
+function fmtBytes(b: number): string {
+  if (!b) return '0 B'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0, n = b
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
+  return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i]
+}
+function fmtMbps(bps: number): string { return (bps / 1e6).toFixed(2) }
+function fmtPct(x: number): string { return x.toFixed(1) }
+function coreColor(p: number): string { return p >= 85 ? C.danger : p >= 60 ? C.hot : C.cpu }
+function loadColor(l: number): string {
+  const r = cores.value ? l / cores.value : 0
+  return r >= 1 ? C.danger : r >= 0.7 ? C.hot : C.load
+}
+function loadRatio(l: number): number {
+  const r = cores.value ? l / cores.value : 0
+  return Math.min(r / 2, 1) * 100 // 以 2×核心数为满刻度
+}
+
+async function loadSnapshot() {
+  try { snap.value = await api.get<SystemSnapshot>(API.metrics.snapshot()) }
+  catch { /* 保留上一帧，避免网络抖动闪空 */ }
+  finally { loading.value = false }
+}
+async function loadProcs() {
+  procError.value = ''
+  try {
+    procs.value = await api.get<ProcessInfo[]>(API.processes.list(),
+      { params: { sort: procSort.value, limit: 15 } })
+  } catch (e) { procError.value = errorText(e) }
+}
+function switchSort(s: 'cpu' | 'mem') { procSort.value = s; loadProcs() }
+
+let rtTimer: number | undefined, procTimer: number | undefined
+onMounted(() => {
+  loadSnapshot(); loadProcs()
+  rtTimer = window.setInterval(loadSnapshot, 2000)
+  procTimer = window.setInterval(loadProcs, 3000)
+})
+onUnmounted(() => {
+  if (rtTimer) clearInterval(rtTimer)
+  if (procTimer) clearInterval(procTimer)
+})
+</script>
+
+<template>
+  <div>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">专业监控 <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span></h2>
+        <p class="page-sub">CPU 每核 / 负载 1·5·15 / 内存交换 / 每挂载点磁盘 / 每网卡吞吐 / 进程的完整快照</p>
+      </div>
+    </div>
+
+    <div v-if="loading && !snap" class="card skeleton" style="height:280px" />
+    <template v-else-if="snap">
+      <!-- 顶部读数 -->
+      <div class="grid cols-4">
+        <MetricCard label="CPU 总体" :value="fmtPct(cpuPct)" unit="%" icon="cpu" tone="primary" :progress="cpuPct" />
+        <MetricCard label="内存" :value="fmtPct(memPct)" unit="%" icon="disk" tone="cyan" :progress="memPct" />
+        <MetricCard label="负载 1m" :value="loads[0].toFixed(2)" unit="" icon="gauge" tone="warn" />
+        <MetricCard label="进程数" :value="String(procCount)" unit="" icon="process" tone="primary" />
+      </div>
+
+      <!-- CPU 详情：每核 + 负载 -->
+      <div class="sec-head"><Icon name="cpu" :size="16" /> CPU 使用率（每核）</div>
+      <div class="card cpu-detail">
+        <div class="cores">
+          <div v-for="(p, i) in perCore" :key="i" class="core"
+               :style="{ height: Math.max(2, p) + '%', background: coreColor(p) }"
+               :title="`核 ${i}: ${fmtPct(p)}%`" />
+        </div>
+        <div class="core-axis"><span>0%</span><span>{{ cores }} 核</span><span>100%</span></div>
+        <div class="load-row">
+          <div class="load-item" v-for="(l, i) in loads" :key="i">
+            <span class="lk">负载 {{ ['1m', '5m', '15m'][i] }}</span>
+            <b :style="{ color: loadColor(l) }">{{ fmtPct(l) }}</b>
+            <div class="prog"><div class="fill" :style="{ width: loadRatio(l) + '%', background: loadColor(l) }" /></div>
+          </div>
+        </div>
+        <p class="sec-note">
+          每核柱状为实时使用率；负载读数以核心数（{{ cores }}）为基准，≥1 表示饱和（红色警示）。
+          每 2 秒刷新快照。
+        </p>
+      </div>
+
+      <!-- 内存与交换 -->
+      <div class="sec-head"><Icon name="disk" :size="16" /> 内存与交换</div>
+      <div class="card mem-detail">
+        <div class="kv">
+          <div class="kvi"><span>已用</span><b>{{ memUsedStr }}</b></div>
+          <div class="kvi"><span>可用</span><b>{{ memAvailStr }}</b></div>
+          <div class="kvi"><span>buffers</span><b>{{ memBufStr }}</b></div>
+          <div class="kvi"><span>cached</span><b>{{ memCacheStr }}</b></div>
+        </div>
+        <template v-if="swapActive">
+          <div class="swap-head">
+            <span>交换分区</span><b>{{ fmtPct(swapPct) }}%</b>
+            <span class="dim">{{ swapUsedStr }} / {{ swapTotalStr }}</span>
+          </div>
+          <div class="prog"><div class="fill" :style="{ width: swapPct + '%', background: C.swap }" /></div>
+        </template>
+        <p v-else class="sec-note">未配置交换分区。</p>
+      </div>
+
+      <!-- 磁盘：每挂载点 -->
+      <div class="sec-head"><Icon name="database" :size="16" /> 磁盘（每挂载点）</div>
+      <div class="cards-2">
+        <div v-for="d in diskRows" :key="d.mount" class="card disk">
+          <div class="disk-top">
+            <span class="mount">{{ d.mount }}</span>
+            <span v-if="d.net" class="badge warn">网络 FS</span>
+          </div>
+          <div class="disk-sub">{{ d.device }} · {{ d.fs }}</div>
+          <div class="prog"><div class="fill" :style="{ width: d.pct + '%', background: d.net ? C.hot : C.disk }" /></div>
+          <div class="disk-foot"><b>{{ fmtPct(d.pct) }}%</b><span class="dim">{{ fmtBytes(d.used) }} / {{ fmtBytes(d.total) }}</span></div>
+        </div>
+        <EmptyState v-if="!diskRows.length" title="无磁盘数据" />
+      </div>
+
+      <!-- 网络：每网卡 -->
+      <div class="sec-head"><Icon name="network" :size="16" /> 网络吞吐（每网卡）</div>
+      <div class="cards-2">
+        <div v-for="n in netRows" :key="n.iface" class="card net">
+          <div class="net-top"><span class="iface">{{ n.iface }}</span></div>
+          <div class="net-row"><span class="lk" :style="{ color: C.netIn }">入站</span><b>{{ fmtMbps(n.rx) }} Mbps</b></div>
+          <div class="prog"><div class="fill" :style="{ width: Math.min(100, (n.rx / 1e8) * 100) + '%', background: C.netIn }" /></div>
+          <div class="net-row"><span class="lk" :style="{ color: C.netOut }">出站</span><b>{{ fmtMbps(n.tx) }} Mbps</b></div>
+          <div class="prog"><div class="fill" :style="{ width: Math.min(100, (n.tx / 1e8) * 100) + '%', background: C.netOut }" /></div>
+        </div>
+        <EmptyState v-if="!netRows.length" title="无网络接口" />
+      </div>
+
+      <!-- 进程 -->
+      <div class="sec-head">
+        <Icon name="process" :size="16" /> 进程（Top {{ procs.length }}）
+        <span class="gran">
+          <button class="chip" :class="{ on: procSort === 'cpu' }" @click="switchSort('cpu')">CPU</button>
+          <button class="chip" :class="{ on: procSort === 'mem' }" @click="switchSort('mem')">内存</button>
+        </span>
+      </div>
+      <p v-if="procError" class="err">{{ procError }}</p>
+      <div class="card flush">
+        <table>
+          <thead><tr><th>PID</th><th>进程</th><th class="num">CPU</th><th class="num">内存</th><th>用户</th></tr></thead>
+          <tbody>
+            <tr v-for="p in procs" :key="p.pid">
+              <td class="mono">{{ p.pid }}</td>
+              <td>{{ p.name }}</td>
+              <td class="num">{{ fmtPct(p.cpu_pct) }}%</td>
+              <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
+              <td>{{ p.user ?? '-' }}</td>
+            </tr>
+            <tr v-if="!procs.length"><td colspan="5"><EmptyState title="无进程数据" /></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+    <EmptyState v-else title="暂无快照数据" hint="采集由内部调度器驱动，稍候自动出现" />
+  </div>
+</template>
+
+<style scoped>
+.card.flush { padding: 0; overflow: hidden; }
+.skeleton { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+.sec-head { display: flex; align-items: center; gap: 8px; margin: 22px 2px 10px;
+  font-size: 15px; font-weight: 600; color: var(--c-text); }
+.sec-note { margin: 8px 2px 4px; font-size: 12.5px; line-height: 1.7; color: var(--c-text-dim); }
+.dim { color: var(--c-text-mute); }
+.err { color: var(--c-danger); font-size: 13px; margin: 0 2px 8px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.tier-chip { font-size: 12px; font-weight: 600; vertical-align: middle; margin-left: 8px;
+  padding: 2px 9px; border-radius: 999px; color: var(--c-ok);
+  background: var(--c-ok-soft); border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent); }
+
+/* CPU 每核 + 负载 */
+.cpu-detail { padding: 14px; }
+.cores { display: flex; align-items: flex-end; gap: 3px; height: 96px; }
+.core { flex: 1; min-width: 5px; border-radius: 3px 3px 0 0;
+  transition: height .4s ease, background .4s; }
+.core-axis { display: flex; justify-content: space-between; font-size: 11px;
+  color: var(--c-text-mute); margin-top: 4px; }
+.load-row { display: flex; gap: 14px; margin-top: 14px; }
+.load-item { flex: 1; }
+.lk { font-size: 12px; color: var(--c-text-dim); }
+.load-item b { font-size: 16px; margin-left: 6px; }
+
+/* 进度条（通用） */
+.prog { height: 7px; border-radius: 999px; background: var(--c-border); overflow: hidden; margin-top: 5px; }
+.prog > .fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
+
+/* 内存明细 */
+.mem-detail { padding: 14px; }
+.kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kvi { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--c-text-dim); }
+.kvi b { font-size: 15px; color: var(--c-text); }
+.swap-head { display: flex; align-items: center; gap: 8px; margin: 12px 0 5px; font-size: 13px; }
+.swap-head .dim { margin-left: auto; }
+
+/* 磁盘 / 网络网格 */
+.cards-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.disk, .net { padding: 13px; }
+.disk-top, .net-top { display: flex; align-items: center; justify-content: space-between; }
+.mount { font-weight: 600; font-size: 14px; word-break: break-all; }
+.disk-sub { font-size: 12px; color: var(--c-text-mute); margin: 3px 0 9px; }
+.disk-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; font-size: 12px; }
+.disk-foot b { font-size: 14px; }
+.net-top .iface { font-weight: 600; font-size: 14px; }
+.net-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; }
+.net-row b { font-size: 14px; }
+.badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; }
+.badge.warn { color: #ffb454; background: rgba(255, 180, 84, .12); border: 1px solid rgba(255, 180, 84, .4); }
+
+/* 进程排序切换 */
+.gran { margin-left: auto; display: inline-flex; gap: 6px; }
+.chip { font: inherit; font-size: 12px; padding: 3px 11px; border-radius: 999px; cursor: pointer;
+  color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
+.chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
+.chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
+
+/* 进程表 */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+th { color: var(--c-text-mute); font-weight: 600; }
+td.num, th.num { text-align: right; }
+tbody tr:hover { background: var(--c-hover); }
+</style>

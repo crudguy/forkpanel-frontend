@@ -48,6 +48,9 @@ export const useAuthStore = defineStore('auth', () => {
       me.value = { user: r.user, role: r.role, permissions: r.permissions,
                    allowed_roots: r.allowed_roots, tier: r.tier }
       capabilities.value = r.capabilities ?? {}
+      // platform（distro/kernel/arch/init）由 /system/capabilities 下发，与 capabilities 同源；
+      // 一并加载，供概览/设置/导航展示平台信息。缺失非致命（UI 降级为 —）。
+      try { await loadCapabilities() } catch { /* platform 缺失不阻断登录 */ }
     } finally {
       loading.value = false
     }
