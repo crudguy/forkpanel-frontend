@@ -49,7 +49,8 @@ async function request<T>(url: string, opts: Options = {}): Promise<T> {
   const headers = new Headers(opts.headers)
   headers.set('Accept', 'application/json')
   if (method !== 'GET' && method !== 'HEAD') {
-    headers.set('Content-Type', 'application/json')
+    // Content-Type 已由调用方设置（如 putRaw 的 octet-stream）则不覆盖
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     const csrf = readCookie('panel_csrf')
     if (csrf) headers.set('X-CSRF-Token', csrf)
   }
@@ -90,6 +91,9 @@ export const api = {
     request<T>(u, { ...o, method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
   put: <T>(u: string, body?: unknown, o?: Options) =>
     request<T>(u, { ...o, method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) }),
+  /** 原始字节上传（octet-stream）：body 原样发送，不 JSON 序列化；仍带 CSRF 与统一错误处理 */
+  putRaw: <T>(u: string, body: BodyInit, o?: Options) =>
+    request<T>(u, { ...o, method: 'PUT', body, headers: new Headers(o?.headers) }),
   patch: <T>(u: string, body?: unknown, o?: Options) =>
     request<T>(u, { ...o, method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
   del: <T>(u: string, o?: Options) => request<T>(u, { ...o, method: 'DELETE' }),

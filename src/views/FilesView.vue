@@ -7,6 +7,10 @@
  *    —— 前端拼路径毫无意义，后端沙箱才是唯一防线，前端只需不误导用户。
  * 2. 敏感文件标红且禁止打开（后端也会拒，但前端先挡一层）。
  * 3. 删除目录必须走带确认词的对话框 —— 面板不提供"一键 rm -rf"。
+ *
+ * 上传/下载（#45 后续闭环）：上传走 putRaw（octet-stream 原始字节，≤100MB）；
+ * 下载用同源 <a href> 直链（GET 带 Cookie，浏览器原生保存）；批量操作走
+ * /files/action 逐项报告。
  */
 import { ref, onMounted, watch, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -22,6 +26,8 @@ interface Entry {
   modified: number; sensitive: boolean
 }
 interface ListResp { path: string; entries: Entry[]; truncated: boolean }
+interface ActionItem { path: string; ok: boolean; error?: string | null }
+interface ActionResp { op: string; results: ActionItem[]; ok_count: number; fail_count: number }
 
 const auth = useAuthStore()
 const path = ref('/')
@@ -34,7 +40,18 @@ const showHidden = ref(false)
 const editing = ref<{ name: string; content: string; mtime: number } | null>(null)
 const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
 
+/** 批量选择：存条目名（当前目录内唯一） */
+const selected = ref<Set<string>>(new Set())
+const uploading = ref(false)
+const batchBusy = ref(false)
+const batchErr = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
+
 const canWrite = computed(() => auth.can('file.write'))
+
+function full(p: string) {
+  return path.value.replace(/\/+$/, '') + '/' + p
+}
 
 async function load() {
   loading.value = true; error.value = ''
@@ -44,6 +61,7 @@ async function load() {
     })
     entries.value = r.entries; truncated.value = r.truncated
     path.value = r.path
+    selected.value = new Set() // 换目录即清空选择
   } catch (e) { error.value = errorText(e); entries.value = [] }
   finally { loading.value = false }
 }
@@ -93,13 +111,82 @@ async function doDelete() {
   if (!confirmDel.value) return
   try {
     await api.post('/api/v1/files/delete', {
-      path: path.value.replace(/\/+$/, '') + '/' + confirmDel.value.name,
+      path: full(confirmDel.value.name),
       // 目录必须显式声明——后端默认拒绝，前端也必须显式确认
       allow_dir: confirmDel.value.isDir,
     })
     confirmDel.value = null
     load()
   } catch (e) { error.value = errorText(e) }
+}
+
+// ── 上传（多选，逐文件 PUT 原始字节）──
+function pickUpload() { fileInput.value?.click() }
+async function onUploadFiles(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // 允许重复选同一文件
+  if (!files.length || !canWrite.value) return
+  uploading.value = true; error.value = ''
+  const failed: string[] = []
+  try {
+    for (const f of files) {
+      try {
+        await api.putRaw<{ path: string; size: number }>(
+          '/api/v1/files/upload', f, { params: { path: full(f.name) } })
+      } catch (err) { failed.push(`${f.name}: ${errorText(err)}`) }
+    }
+    if (failed.length) error.value = `部分上传失败 — ${failed.join('；')}`
+    await load()
+  } finally { uploading.value = false }
+}
+
+// ── 下载（同源直链：GET 带 Cookie，浏览器原生保存）──
+function download(e: Entry) {
+  window.location.href = `/api/v1/files/download?path=${encodeURIComponent(full(e.name))}`
+}
+
+// ── 批量 ──
+const allChecked = computed({
+  get: () => entries.value.filter(e => !e.sensitive).length > 0 &&
+    entries.value.filter(e => !e.sensitive).every(e => selected.value.has(e.name)),
+  set: (v: boolean) => {
+    selected.value = v
+      ? new Set(entries.value.filter(e => !e.sensitive).map(e => e.name))
+      : new Set()
+  },
+})
+function toggle(e: Entry) {
+  if (e.sensitive) return
+  const s = new Set(selected.value)
+  s.has(e.name) ? s.delete(e.name) : s.add(e.name)
+  selected.value = s
+}
+const selectedEntries = computed(() =>
+  entries.value.filter(e => selected.value.has(e.name)))
+
+const confirmBatchDel = ref(false)
+async function runBatch(op: 'delete' | 'move' | 'copy') {
+  const paths = selectedEntries.value.map(e => full(e.name))
+  if (!paths.length || batchBusy.value) return
+  batchErr.value = ''
+  let dest: string | undefined
+  if (op !== 'delete') {
+    const input = window.prompt(`输入目标目录（${op === 'move' ? '移动' : '复制'}到该目录下，同名跳过）：`, path.value)
+    if (!input?.trim()) return
+    dest = input.trim()
+  }
+  batchBusy.value = true
+  try {
+    const r = await api.post<ActionResp>('/api/v1/files/action', { op, paths, dest })
+    if (r.fail_count > 0) {
+      batchErr.value = `${op} 完成：成功 ${r.ok_count}，失败 ${r.fail_count} — ` +
+        r.results.filter(x => !x.ok).slice(0, 3).map(x => `${x.path}: ${x.error}`).join('；')
+    }
+    selected.value = new Set()
+    await load()
+  } catch (e) { batchErr.value = errorText(e) }
+  finally { batchBusy.value = false }
 }
 
 function fmtSize(n: number) {
@@ -120,7 +207,11 @@ function fmtSize(n: number) {
       <span class="spacer" />
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron" :size="14" /> 上级</button>
-      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload">
+        <Icon name="plus" :size="15" /> {{ uploading ? '上传中…' : '上传' }}
+      </button>
+      <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.FILE_READ) && !entries.length"
@@ -128,13 +219,31 @@ function fmtSize(n: number) {
       :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="batchErr" class="warn" role="status">{{ batchErr }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
+
+    <!-- 批量操作条 -->
+    <div v-if="selected.size > 0 && canWrite" class="card batch">
+      <strong>已选 {{ selected.size }} 项</strong>
+      <span class="spacer" />
+      <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('copy')">复制到…</button>
+      <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('move')">移动到…</button>
+      <button class="btn-danger btn-sm" :disabled="batchBusy" @click="confirmBatchDel = true">删除</button>
+      <button class="btn-ghost btn-sm" @click="selected = new Set()">取消选择</button>
+    </div>
 
     <div v-if="entries.length" class="card flush">
       <table>
-        <thead><tr><th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th /></tr></thead>
+        <thead><tr>
+          <th v-if="canWrite" class="chk"><input type="checkbox" :checked="allChecked" @change="allChecked = !allChecked" /></th>
+          <th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th />
+        </tr></thead>
         <tbody>
           <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
+            <td v-if="canWrite" class="chk">
+              <input v-if="!e.sensitive" type="checkbox"
+                :checked="selected.has(e.name)" @change="toggle(e)" />
+            </td>
             <td>
               <a href="#" class="fname" @click.prevent="enter(e)">
                 <Icon :name="e.kind === 'dir' ? 'folder' : 'file'" :size="15" />
@@ -147,6 +256,7 @@ function fmtSize(n: number) {
             <td>{{ e.owner ?? '—' }}</td>
             <td class="num">{{ new Date(e.modified * 1000).toLocaleString() }}</td>
             <td class="nowrap">
+              <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="download(e)">下载</button>
               <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="open(e)">编辑</button>
               <button v-if="canWrite" class="btn-danger btn-sm" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
             </td>
@@ -174,6 +284,13 @@ function fmtSize(n: number) {
       :detail="`即将删除 ${confirmDel?.name}。此操作不可撤销。`"
       :confirm-word="confirmDel?.isDir ? confirmDel.name : undefined"
       @confirm="doDelete" @cancel="confirmDel = null" />
+
+    <ConfirmDialog
+      :open="confirmBatchDel" danger
+      title="批量删除"
+      :detail="`即将递归删除已选的 ${selected.size} 项（含目录全部内容）。此操作不可撤销。`"
+      confirm-word="删除"
+      @confirm="confirmBatchDel = false; runBatch('delete')" @cancel="confirmBatchDel = false" />
   </div>
 </template>
 
@@ -182,6 +299,8 @@ function fmtSize(n: number) {
 .hid { display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0; color: var(--c-text-dim); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
+.batch { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }
+.chk { width: 34px; text-align: center; }
 .editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
 .editor textarea { min-height: 320px; font-family: var(--mono); font-size: 13px; }
