@@ -190,6 +190,9 @@ async function del(p: Plan) {
 
 async function showArtifacts(p: Plan) {
   error.value = ''
+  // 切换计划时必须清空上一次选中的产物名：否则在 A 计划选过产物后打开 B 计划，
+  // 恢复目标是 A 的产物（selName 全局复用），会导致误恢复。
+  selName.value = ''
   try {
     const items = await api.get<Artifact[]>(API.backups.artifacts(p.id))
     curArtifacts.value = { plan: p, items }

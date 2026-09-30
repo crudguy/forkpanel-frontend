@@ -107,6 +107,8 @@ function openEdit(s: Site) {
     wafRate: s.waf_rate_per_sec ?? 0,
     wafBurst: s.waf_burst ?? 0,
   }
+  // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
+  modalOpen.value = true
 }
 
 /** 站点类型的中文名（列表与提示共用一份）。 */

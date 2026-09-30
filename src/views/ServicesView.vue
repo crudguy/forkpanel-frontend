@@ -146,6 +146,13 @@ const modal = ref<ModalState | null>(null)
 
 function openSvc(s: Svc) {
   modal.value = { svc: { ...s }, journal: [], jLoading: true, jError: '' }
+  // 必须先清空上一次服务的配置状态：否则看过 A 的配置再打开 B，「配置」页显示的
+  // 仍是 A 的路径与内容（openConfig 仅 !cfg 才拉取），一保存就把 A 的单元写进 B。
+  cfg.value = null
+  cfgDraft.value = ''
+  cfgError.value = ''
+  cfgSaved.value = false
+  tab.value = 'log'
   loadJournal(s.name)
 }
 function closeModal() { modal.value = null }
