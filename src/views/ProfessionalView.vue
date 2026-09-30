@@ -54,6 +54,11 @@ const netRows = computed(() => (snap.value?.nets ?? [])
   .filter(n => n.iface !== 'lo')
   .map(n => ({ iface: n.iface, rx: n.rx_rate_bps, tx: n.tx_rate_bps })))
 
+// 温度传感器：来自 /sys/class/hwmon；无 hwmon 的机器（多数虚拟机）为空，模板给 EmptyState
+const tempRows = computed(() => (snap.value?.temps ?? []).map(t => ({
+  chip: t.chip, label: t.label, celsius: t.celsius, critical: t.critical,
+})))
+
 // 内存明细（字节格式化后下发，避免模板算术）
 const memUsedStr = computed(() => fmtBytes((snap.value?.mem.used_kib ?? 0) * 1024))
 const memAvailStr = computed(() => fmtBytes((snap.value?.mem.available_kib ?? 0) * 1024))
@@ -195,6 +200,25 @@ onUnmounted(() => {
         <EmptyState v-if="!netRows.length" title="无网络接口" />
       </div>
 
+      <!-- 温度（hwmon） -->
+      <div class="sec-head"><Icon name="cpu" :size="16" /> 温度传感器</div>
+      <div class="cards-2">
+        <div v-for="t in tempRows" :key="t.chip + ':' + t.label" class="card temp">
+          <div class="temp-top">
+            <span class="tlabel">{{ t.label }}</span>
+            <span class="chip-name">{{ t.chip }}</span>
+          </div>
+          <div class="temp-val" :style="{ color: t.critical ? C.danger : C.disk }">
+            <b>{{ t.celsius.toFixed(1) }}</b><span class="unit">°C</span>
+          </div>
+          <div class="prog">
+            <div class="fill" :style="{ width: Math.min(100, t.celsius) + '%', background: t.critical ? C.danger : C.disk }" />
+          </div>
+          <div v-if="t.critical" class="temp-warn">已达临界温度</div>
+        </div>
+        <EmptyState v-if="!tempRows.length" title="无温度传感器（本机无 /sys/class/hwmon）" />
+      </div>
+
       <!-- 进程 -->
       <div class="sec-head">
         <Icon name="process" :size="16" /> 进程（Top {{ procs.length }}）
@@ -275,6 +299,14 @@ onUnmounted(() => {
 .net-top .iface { font-weight: 600; font-size: 14px; }
 .net-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; }
 .net-row b { font-size: 14px; }
+.temp { padding: 13px; }
+.temp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.temp-top .tlabel { font-weight: 600; font-size: 14px; }
+.temp-top .chip-name { font-size: 11px; color: var(--c-text-mute); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.temp-val { margin-top: 8px; display: flex; align-items: baseline; gap: 3px; }
+.temp-val b { font-size: 26px; font-weight: 650; line-height: 1; }
+.temp-val .unit { font-size: 13px; opacity: .75; }
+.temp-warn { margin-top: 6px; font-size: 12px; color: #ff4d4d; }
 .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; }
 .badge.warn { color: #ffb454; background: rgba(255, 180, 84, .12); border: 1px solid rgba(255, 180, 84, .4); }
 

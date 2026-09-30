@@ -94,6 +94,13 @@ export interface NetSample {
   rx_rate_bps: number
   tx_rate_bps: number
 }
+// 温度传感器（对应后端 panel_os::TempSample；无 hwmon 的机器为空数组）
+export interface TempSample {
+  chip: string
+  label: string
+  celsius: number
+  critical: boolean
+}
 export interface SystemSnapshot {
   ts_unix: number
   uptime_sec: number
@@ -103,6 +110,7 @@ export interface SystemSnapshot {
   nets: NetSample[]
   proc_count: number
   tcp_conns: number
+  temps: TempSample[]
 }
 // Top 进程（对应后端 panel_os::ProcessInfo）
 export interface ProcessInfo {

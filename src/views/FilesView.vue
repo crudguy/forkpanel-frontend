@@ -14,11 +14,13 @@
  */
 import { ref, onMounted, watch, computed } from 'vue'
 import { api, errorText } from '@/api/client'
+import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import TrashPanel from '@/components/TrashPanel.vue'
 
 interface Entry {
   name: string; kind: 'dir' | 'file' | 'symlink' | 'other'
@@ -46,6 +48,10 @@ const uploading = ref(false)
 const batchBusy = ref(false)
 const batchErr = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+
+/** 软删除的反馈（"已移入回收站"），与 error 分开：它不是错误 */
+const notice = ref('')
+const showTrash = ref(false)
 
 const canWrite = computed(() => auth.can('file.write'))
 
@@ -109,12 +115,13 @@ async function save() {
 
 async function doDelete() {
   if (!confirmDel.value) return
+  const name = confirmDel.value.name
   try {
-    await api.post('/api/v1/files/delete', {
-      path: full(confirmDel.value.name),
-      // 目录必须显式声明——后端默认拒绝，前端也必须显式确认
-      allow_dir: confirmDel.value.isDir,
-    })
+    // 默认**软删除**：误删是高频事件，走回收站留出恢复窗口。
+    // 回收站里的「彻底删除」才是不可逆的那一步——两步分开，责任清晰。
+    // 也正因如此这里不再需要 allow_dir：软的，可撤销。
+    await api.post(API.files.trash(), { path: full(name) })
+    notice.value = `已移入回收站：${name}`
     confirmDel.value = null
     load()
   } catch (e) { error.value = errorText(e) }
@@ -166,12 +173,13 @@ const selectedEntries = computed(() =>
   entries.value.filter(e => selected.value.has(e.name)))
 
 const confirmBatchDel = ref(false)
-async function runBatch(op: 'delete' | 'move' | 'copy') {
+async function runBatch(op: 'trash' | 'move' | 'copy') {
   const paths = selectedEntries.value.map(e => full(e.name))
   if (!paths.length || batchBusy.value) return
   batchErr.value = ''
+  notice.value = ''
   let dest: string | undefined
-  if (op !== 'delete') {
+  if (op !== 'trash') {
     const input = window.prompt(`输入目标目录（${op === 'move' ? '移动' : '复制'}到该目录下，同名跳过）：`, path.value)
     if (!input?.trim()) return
     dest = input.trim()
@@ -182,6 +190,9 @@ async function runBatch(op: 'delete' | 'move' | 'copy') {
     if (r.fail_count > 0) {
       batchErr.value = `${op} 完成：成功 ${r.ok_count}，失败 ${r.fail_count} — ` +
         r.results.filter(x => !x.ok).slice(0, 3).map(x => `${x.path}: ${x.error}`).join('；')
+    }
+    if (op === 'trash' && r.ok_count > 0) {
+      notice.value = `已移入回收站（${r.ok_count} 项），可在回收站恢复`
     }
     selected.value = new Set()
     await load()
@@ -208,6 +219,9 @@ function fmtSize(n: number) {
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron" :size="14" /> 上级</button>
       <button class="btn-ghost" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
+        <Icon name="trash" :size="15" /> 回收站
+      </button>
       <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload">
         <Icon name="plus" :size="15" /> {{ uploading ? '上传中…' : '上传' }}
       </button>
@@ -219,6 +233,7 @@ function fmtSize(n: number) {
       :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="notice" class="ok-msg" role="status">{{ notice }}</p>
     <p v-if="batchErr" class="warn" role="status">{{ batchErr }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
 
@@ -228,7 +243,7 @@ function fmtSize(n: number) {
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('copy')">复制到…</button>
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('move')">移动到…</button>
-      <button class="btn-danger btn-sm" :disabled="batchBusy" @click="confirmBatchDel = true">删除</button>
+      <button class="btn-danger btn-sm" :disabled="batchBusy" @click="confirmBatchDel = true">移入回收站</button>
       <button class="btn-ghost btn-sm" @click="selected = new Set()">取消选择</button>
     </div>
 
@@ -281,22 +296,24 @@ function fmtSize(n: number) {
     <ConfirmDialog
       :open="!!confirmDel" danger
       :title="confirmDel?.isDir ? '删除目录（含其全部内容）' : '删除文件'"
-      :detail="`即将删除 ${confirmDel?.name}。此操作不可撤销。`"
+      :detail="`即将把 ${confirmDel?.name} 移入回收站（可在回收站恢复）。`"
       :confirm-word="confirmDel?.isDir ? confirmDel.name : undefined"
       @confirm="doDelete" @cancel="confirmDel = null" />
 
     <ConfirmDialog
-      :open="confirmBatchDel" danger
-      title="批量删除"
-      :detail="`即将递归删除已选的 ${selected.size} 项（含目录全部内容）。此操作不可撤销。`"
-      confirm-word="删除"
-      @confirm="confirmBatchDel = false; runBatch('delete')" @cancel="confirmBatchDel = false" />
+      :open="confirmBatchDel"
+      title="批量移入回收站"
+      :detail="`即将把已选的 ${selected.size} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
+      @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
+
+    <TrashPanel v-if="showTrash" @close="showTrash = false" @changed="load()" />
   </div>
 </template>
 
 <style scoped>
 .cwd { font-family: var(--mono); font-size: 12.5px; color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
 .hid { display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0; color: var(--c-text-dim); }
+.ok-msg { color: var(--c-ok, #3fb950); font-size: 12.5px; margin: 6px 0; }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
 .batch { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }

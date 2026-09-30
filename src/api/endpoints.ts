@@ -90,6 +90,9 @@ export const API = {
     write: () => '/api/v1/files/write',
     mkdir: () => '/api/v1/files/mkdir',
     remove: () => '/api/v1/files/delete',
+    trash: () => '/api/v1/files/trash',
+    trashRestore: () => '/api/v1/files/trash/restore',
+    trashPurge: () => '/api/v1/files/trash/purge',
     rename: () => '/api/v1/files/rename',
     chmod: () => '/api/v1/files/chmod',
     action: () => '/api/v1/files/action',
@@ -157,6 +160,7 @@ export const API = {
       return `/api/v1/logs/stream${q ? '?' + q : ''}`
     },
     download: (id: string) => `/api/v1/logs/${enc(id)}/download`,
+    stats: (id: string) => `/api/v1/logs/${enc(id)}/stats`,
     read: (id: string) => `/api/v1/logs/${enc(id)}`,
   },
 

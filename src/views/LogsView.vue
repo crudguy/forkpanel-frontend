@@ -65,6 +65,47 @@ function downloadLog() {
   window.location.href = `${API.logs.download(cur.value)}?${p.toString()}`
 }
 
+interface LogStatsResp {
+  source: string
+  scanned: number
+  capped: boolean
+  buckets: number
+  levels: { error: number; warn: number; info: number; debug: number; other: number }
+  histogram: { start: number; end: number; count: number }[]
+  top_patterns: { pattern: string; count: number }[]
+}
+const stats = ref<LogStatsResp | null>(null)
+const showStats = ref(false)
+const statBusy = ref(false)
+
+/** 聚合统计：服务端单次最多扫 2000 行，结果是**概览**（pattern 归一化为启发式） */
+async function loadStats() {
+  if (!cur.value) return
+  statBusy.value = true
+  error.value = ''
+  try {
+    stats.value = await api.get<LogStatsResp>(API.logs.stats(cur.value), {
+      params: { lines: count.value, grep: grep.value || undefined },
+    })
+  } catch (e) { error.value = errorText(e); stats.value = null }
+  finally { statBusy.value = false }
+}
+
+function toggleStats() {
+  showStats.value = !showStats.value
+  if (showStats.value) loadStats()
+}
+
+// 直方图按当前最大桶归一，避免单一尖峰把其余柱压平
+const histMax = computed(() => Math.max(1, ...(stats.value?.histogram ?? []).map(b => b.count)))
+const levelRows = computed(() => {
+  const lv = stats.value?.levels
+  if (!lv) return [] as { name: string; n: number }[]
+  return ([['error', lv.error], ['warn', lv.warn], ['info', lv.info], ['debug', lv.debug], ['other', lv.other]] as const)
+    .map(([name, n]) => ({ name, n }))
+})
+const levelTotal = computed(() => levelRows.value.reduce((s, r) => s + r.n, 0))
+
 function scrollBottom() {
   nextTick(() => { if (viewEl.value) viewEl.value.scrollTop = viewEl.value.scrollHeight })
 }
@@ -119,6 +160,9 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
       </button>
       <button class="btn-ghost" :disabled="!canView || follow" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :class="{ active: showStats }" :disabled="!canView || follow || !cur" title="聚合统计：level 分布 + 时间直方图 + 高频模式（最多扫 2000 行）" @click="toggleStats">
+        <Icon name="chart" :size="15" /> 统计
+      </button>
       <button class="btn-ghost" :disabled="!canView || follow || !cur" title="按当前过滤条件下载（上限 10000 行 / 8MB）" @click="downloadLog">
         <Icon name="download" :size="15" /> 下载
       </button>
@@ -133,6 +177,38 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       <p v-if="capped" class="warn">已达服务端上限（单次最多 2000 行）</p>
       <p v-if="follow" class="live"><span class="dot live-dot" /> 实时跟随中…（新行自动追加）</p>
 
+      <section v-if="showStats" class="stats">
+        <div v-if="statBusy" class="muted">统计中…</div>
+        <template v-else-if="stats">
+          <div class="stats-head">
+            <span>扫描 <b>{{ stats.scanned }}</b> 行<span v-if="stats.capped">（已触 2000 行上限）</span></span>
+            <span class="muted">来源 {{ stats.source }}</span>
+          </div>
+          <div class="lv-rows">
+            <div v-for="r in levelRows" :key="r.name" class="lv-row" :class="r.name">
+              <span class="lv-name">{{ r.name }}</span>
+              <span class="lv-bar"><i :style="{ width: levelTotal ? (r.n / levelTotal * 100) + '%' : '0%' }" /></span>
+              <span class="lv-n">{{ r.n }}</span>
+            </div>
+          </div>
+          <div v-if="stats.histogram.length" class="hist">
+            <div v-for="(b, i) in stats.histogram" :key="i" class="hist-bar"
+                 :title="`${new Date(b.start * 1000).toLocaleString()} → ${new Date(b.end * 1000).toLocaleString()}：${b.count} 行`">
+              <i :style="{ height: Math.max(2, (b.count / histMax) * 100) + '%' }" />
+            </div>
+          </div>
+          <p v-else class="muted">该日志源无时间戳，无法生成时间分布</p>
+          <div v-if="stats.top_patterns.length" class="pats">
+            <div class="pats-title">高频消息模式（数字/引号内容已归一）</div>
+            <div v-for="(p, i) in stats.top_patterns" :key="i" class="pat">
+              <span class="pat-n">{{ p.count }}×</span>
+              <code class="pat-t">{{ p.pattern }}</code>
+            </div>
+          </div>
+          <p v-else class="muted">无出现 ≥2 次的消息模式</p>
+        </template>
+      </section>
+
       <pre ref="viewEl" class="view"><code v-for="(l, i) in lines" :key="i" :class="l.level?.toLowerCase()">
 <span class="ts">{{ l.ts ? new Date(l.ts * 1000).toLocaleTimeString() : '—' }}</span> {{ l.text }}</code></pre>
       <EmptyState v-if="!lines.length && !error" :title="follow ? '等待新日志…' : '无匹配日志'" />
@@ -143,6 +219,30 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 <style scoped>
 .ctl { width: auto; min-width: 0; }
 .live { display: flex; align-items: center; gap: 7px; color: var(--c-ok, #3fb950); font-size: 12.5px; margin: 0 0 8px; }
+.stats { border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; }
+.stats .muted { color: var(--c-text-mute); font-size: 12.5px; }
+.stats-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 10px; }
+.lv-rows { display: grid; gap: 5px; margin-bottom: 12px; }
+.lv-row { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; font-size: 12px; }
+.lv-name { text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-mute); }
+.lv-bar { height: 6px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
+.lv-bar > i { display: block; height: 100%; border-radius: 999px; background: #4cd07d; }
+.lv-row.error .lv-name { color: #ff6b6b; }
+.lv-row.error .lv-bar > i { background: #ff6b6b; }
+.lv-row.warn .lv-name { color: #ffb454; }
+.lv-row.warn .lv-bar > i { background: #ffb454; }
+.lv-row.info .lv-name { color: #4ea1ff; }
+.lv-row.info .lv-bar > i { background: #4ea1ff; }
+.lv-row.debug .lv-name { color: #b48cff; }
+.lv-row.debug .lv-bar > i { background: #b48cff; }
+.lv-n { text-align: right; font-variant-numeric: tabular-nums; }
+.hist { display: flex; align-items: flex-end; gap: 3px; height: 64px; margin-bottom: 12px; }
+.hist-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.hist-bar > i { display: block; width: 100%; background: linear-gradient(180deg, #4ea1ff, #36c5d6); border-radius: 2px 2px 0 0; }
+.pats-title { font-size: 12px; color: var(--c-text-mute); margin-bottom: 6px; }
+.pat { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 3px 0; }
+.pat-n { flex: 0 0 38px; text-align: right; color: #ffb454; font-variant-numeric: tabular-nums; }
+.pat-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--c-text-mute); }
 .live-dot { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 </style>
