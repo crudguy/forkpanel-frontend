@@ -33,6 +33,10 @@ function openPwdDialog() {
   pwdOpen.value = true
 }
 const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
+
+// 档位 tier 的中文可读标签：原「档位」二字偏术语，改为自解释文案（描述性能资源档）
+const TIER_LABELS: Record<string, string> = { nano: '轻量配置', small: '进阶配置', standard: '标准配置' }
+const tierLabel = computed(() => TIER_LABELS[String(auth.me?.tier)] ?? String(auth.me?.tier ?? ''))
 function logout() {
   userMenu.value = false
   auth.logout()
@@ -70,7 +74,6 @@ function logout() {
         <div class="user" @click="userMenu = !userMenu">
           <span class="avatar">{{ initial }}</span>
           <span class="uname">{{ auth.me?.user }}</span>
-          <span v-if="auth.me" class="role">{{ auth.me.role }}</span>
           <Icon name="chevron" :size="14" class="caret" />
 
           <div v-if="userMenu" class="backdrop" @click.stop="userMenu = false" />
@@ -79,7 +82,7 @@ function logout() {
               <span class="avatar sm">{{ initial }}</span>
               <div>
                 <div class="m-name">{{ auth.me?.user }}</div>
-                <div class="m-sub">{{ auth.me?.role }} · 档位 {{ auth.me?.tier }}</div>
+                <div class="m-sub">{{ auth.me?.role }} · {{ tierLabel }}</div>
               </div>
             </div>
             <button class="mi" @click="openPwdDialog">
@@ -147,14 +150,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .avatar.sm { width: 36px; height: 36px; font-size: 15px; }
 .uname { font-size: 13.5px; font-weight: 500; }
-.role { font-size: 11px; padding: 1px 8px; border-radius: 999px;
-        background: var(--c-primary-soft); color: var(--c-primary); }
 .caret { color: var(--c-text-dim); transition: transform .15s; }
 .user[aria-expanded='true'] .caret, .user:has(.menu) .caret { transform: rotate(90deg); }
 
 .backdrop { position: fixed; inset: 0; z-index: 40; }
 .menu {
-  position: absolute; right: 0; top: 46px; z-index: 41; width: 240px;
+  position: absolute; right: 0; top: 46px; z-index: 41; width: 210px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
