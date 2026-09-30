@@ -17,6 +17,7 @@
  * （后端会以 400 拒绝空值，不会静默把站点改成静态）。
  */
 import { ref, onMounted, computed } from 'vue'
+import { useModal } from '@/composables/useModal'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -80,6 +81,9 @@ function certLevel(d: number | null) {
 
 // ── 新建 / 编辑弹窗 ──
 const modalOpen = ref(false)
+// 站点编辑弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
+const modalBox = ref<HTMLElement | null>(null)
+useModal(() => modalOpen.value, modalBox, closeModal)
 const editing = ref<Site | null>(null)
 /** 空表单。`wafRate: 0` / `wafBurst: 0` 与后端的"不限速 / 自动"语义一一对应。 */
 function emptyForm() {
@@ -414,7 +418,7 @@ async function doDeleteCert() {
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">
-      <div class="modal" role="dialog" aria-modal="true">
+      <div ref="modalBox" class="modal" role="dialog" aria-modal="true">
         <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
         <label class="blk">名称
           <input v-model="form.name" :disabled="!!editing" placeholder="my-site" />

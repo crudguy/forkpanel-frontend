@@ -11,6 +11,7 @@
  *   保存时原子替换 + daemon-reload，可选保存后重启；发行版文件会提示改用 drop-in。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useModal } from '@/composables/useModal'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { CAP, PackageInfo, ServiceConfig, ServiceJournal, TaskRun, TASK_FINISHED, taskStateBadge, taskStateLabel } from '@/api/types'
@@ -150,6 +151,10 @@ function openSvc(s: Svc) {
   loadJournal(s.name)
 }
 function closeModal() { modal.value = null }
+
+// 服务弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
+const modalBox = ref<HTMLElement | null>(null)
+useModal(() => !!modal.value, modalBox, closeModal)
 
 async function loadJournal(name: string) {
   if (!modal.value) return
@@ -370,7 +375,7 @@ async function doConfirmed() {
 
     <!-- 服务管理弹窗 -->
     <div v-if="modal" class="mask" @click.self="closeModal">
-      <div class="box" role="dialog" aria-modal="true">
+      <div ref="modalBox" class="box" role="dialog" aria-modal="true">
         <header class="m-head">
           <div style="flex:1;min-width:0">
             <h3 class="mono">

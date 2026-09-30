@@ -6,6 +6,7 @@
  * 不可逆操作）。单纯点"确定"挡不住误触——人在批量清理时手速远快于思考。
  */
 import { ref, computed } from 'vue'
+import { useModal } from '@/composables/useModal'
 
 const props = defineProps<{
   open: boolean
@@ -28,11 +29,16 @@ function confirm() {
   typed.value = ''
 }
 function cancel() { typed.value = ''; emit('cancel') }
+
+// Esc 关闭 + Tab 焦点陷阱 + 打开时聚焦（审计 U1）：本组件被全项目危险操作复用，
+// 一处接入全部确认框受益
+const box = ref<HTMLElement | null>(null)
+useModal(() => props.open, box, cancel)
 </script>
 
 <template>
   <div v-if="open" class="mask" @click.self="cancel">
-    <div class="box" role="dialog" aria-modal="true">
+    <div ref="box" class="box" role="dialog" aria-modal="true">
       <h3 :class="{ danger }">{{ title }}</h3>
       <p v-if="detail" class="detail">{{ detail }}</p>
 

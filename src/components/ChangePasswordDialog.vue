@@ -13,9 +13,14 @@ import { ref, computed, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { api, errorText, ApiError } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { useModal } from '@/composables/useModal'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
+
+// 弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
+const box = ref<HTMLElement | null>(null)
+useModal(() => props.open, box, () => { if (!busy.value && !done.value) emit('close') })
 
 const old = ref('')
 const nw = ref('')
@@ -65,7 +70,7 @@ async function submit() {
 
 <template>
   <div v-if="open" class="mask" @click.self="emit('close')">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pwd-title">
+    <div ref="box" class="modal" role="dialog" aria-modal="true" aria-labelledby="pwd-title">
       <h3 id="pwd-title">
         <Icon name="key" :size="16" /> 修改密码
       </h3>

@@ -16,6 +16,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { useModal } from '@/composables/useModal'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -94,6 +95,10 @@ function openRestore(c: Conn) {
   restoreForm.value = { file: '', confirm: '' }
   restoreTarget.value = c
 }
+
+// 恢复弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
+const restoreBox = ref<HTMLElement | null>(null)
+useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = null })
 
 async function doRestore() {
   const c = restoreTarget.value; if (!c) return
@@ -267,7 +272,7 @@ function closeBrowse() { browse.value = null }
 
     <!-- 恢复弹窗（高危）：确认词与备份恢复同源（「覆盖恢复」） -->
     <div v-if="restoreTarget" class="mask" @click.self="restoreTarget = null">
-      <div class="modal" role="dialog" aria-modal="true">
+      <div ref="restoreBox" class="modal" role="dialog" aria-modal="true">
         <h3>恢复「{{ restoreTarget.name }}」</h3>
         <p class="restore-warn">
           将用指定备份文件<b>覆盖当前库</b>，恢复过程中库不可用。仅支持
