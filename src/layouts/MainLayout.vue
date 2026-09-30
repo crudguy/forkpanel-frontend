@@ -16,8 +16,10 @@ const router = useRouter()
 const TITLES: Record<string, string> = {
   dashboard: '概览', system: '主机监控', 'system-pro': '专业快照', 'system-procs': '进程管理',
   services: '软件与服务', sites: '网站与 SSL', databases: '数据库', files: '文件',
-  firewall: '防火墙规则', 'firewall-baseline': '安全基线', security: '安全',
-  cron: '计划任务', 'cron-tasks': '任务中心', tasks: '任务中心', users: '用户', 'logs-audit': '审计日志', settings: '设置',
+  logs: '日志', 'logs-audit': '审计日志',
+  firewall: '防火墙规则', 'firewall-baseline': '安全基线',
+  cron: '计划任务', 'cron-tasks': '任务中心',
+  users: '用户', settings: '设置',
 }
 const title = computed(() => TITLES[String(route.name)] ?? 'ForkPanel')
 

@@ -39,8 +39,7 @@ const auth = useAuthStore()
 const groups = computed(() => [
   { title: '概览', items: [
     { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
-    // 通知：备份失败/恢复失败等"必须让人知道"的事件汇总（perm 与概览同级）
-    { to: '/notifications', label: '通知', icon: 'bell', cap: CAP.METRICS_READ, perm: 'system.view' },
+    // 「通知」不再占菜单位：topbar 常驻铃铛 + 未读徽标即入口（未读信号从"翻菜单"变为常驻可见）
   ] },
   { title: '主机', items: [
     { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
@@ -60,8 +59,8 @@ const groups = computed(() => [
     { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
   ] },
   { title: '运维', items: [
-    { to: '/cron', label: '计划任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
-    { to: '/tasks', label: '任务中心', icon: 'tasks', cap: CAP.METRICS_READ, perm: 'task.view' },
+    { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
+    // 原「任务中心」已并入任务页的第二个 Tab（/cron/tasks）
     { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage' },
     { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view' },
   ] },

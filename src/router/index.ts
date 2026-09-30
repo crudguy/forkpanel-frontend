@@ -37,7 +37,14 @@ export const router = createRouter({
             { path: 'baseline', name: 'firewall-baseline', component: () => import('@/views/SecurityView.vue'), meta: { title: '安全基线' } },
           ],
         },
-        { path: 'cron', name: 'cron', component: () => import('@/views/CronView.vue'), meta: { title: '计划任务' } },
+        {
+          path: 'cron',
+          component: () => import('@/views/TaskCenterView.vue'),
+          children: [
+            { path: '', name: 'cron', component: () => import('@/views/CronView.vue'), meta: { title: '计划任务' } },
+            { path: 'tasks', name: 'cron-tasks', component: () => import('@/views/TasksView.vue'), meta: { title: '任务中心' } },
+          ],
+        },
         {
           path: 'logs',
           component: () => import('@/views/LogCenterView.vue'),
@@ -53,7 +60,7 @@ export const router = createRouter({
         { path: 'processes', redirect: '/system/procs' },
         { path: 'professional', redirect: '/system/pro' },
         { path: 'security', redirect: '/firewall/baseline' },
-        { path: 'tasks', name: 'tasks', component: () => import('@/views/TasksView.vue'), meta: { title: '任务中心' } },
+        { path: 'tasks', redirect: '/cron/tasks' },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: '用户' } },
         { path: 'audit', redirect: '/logs/audit' },
       ],
