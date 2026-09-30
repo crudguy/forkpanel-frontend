@@ -56,9 +56,9 @@ const shortcuts = [
   { to: '/sites', label: '网站与 SSL', icon: 'globe' },
   { to: '/databases', label: '数据库', icon: 'database' },
   { to: '/files', label: '文件', icon: 'folder' },
-  { to: '/firewall', label: '防火墙', icon: 'firewall' },
-  { to: '/cron', label: '计划任务', icon: 'clock' },
-  { to: '/tasks', label: '任务中心', icon: 'terminal' },
+  { to: '/firewall', label: '安全', icon: 'shield' },
+  { to: '/cron', label: '任务', icon: 'clock' },
+  { to: '/cron/tasks', label: '任务中心', icon: 'tasks' },
   { to: '/users', label: '用户', icon: 'users' },
 ]
 
