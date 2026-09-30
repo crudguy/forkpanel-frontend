@@ -14,7 +14,15 @@ export const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', name: 'dashboard', component: DashboardView, meta: { title: '概览' } },
-        { path: 'system', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '主机监控' } },
+        {
+          path: 'system',
+          component: () => import('@/views/MonitorView.vue'),
+          children: [
+            { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '主机监控' } },
+            { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
+            { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
+          ],
+        },
         { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件与服务' } },
         { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue'), meta: { title: '网站与 SSL' } },
         { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue'), meta: { title: '文件' } },
@@ -28,8 +36,8 @@ export const router = createRouter({
         { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue'), meta: { title: '终端' } },
         { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 助手' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
-        { path: 'processes', name: 'processes', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程' } },
-        { path: 'professional', name: 'professional', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业监控' } },
+        { path: 'processes', redirect: '/system/procs' },
+        { path: 'professional', redirect: '/system/pro' },
         { path: 'security', name: 'security', component: () => import('@/views/SecurityView.vue'), meta: { title: '安全中心' } },
         { path: 'tasks', name: 'tasks', component: () => import('@/views/TasksView.vue'), meta: { title: '任务中心' } },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: '用户' } },

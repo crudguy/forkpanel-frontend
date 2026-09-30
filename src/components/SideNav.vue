@@ -25,6 +25,7 @@
  * 现统一放到 MainLayout 的 topbar 右侧状态簇，侧边栏底部只留折叠开关。
  */
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import { navCollapsed, toggleNav } from '@/composables/nav'
@@ -43,8 +44,7 @@ const groups = computed(() => [
   ] },
   { title: '主机', items: [
     { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
-    { to: '/professional', label: '专业监控', icon: 'chart', cap: CAP.METRICS_READ, perm: 'system.view' },
-    { to: '/processes', label: '进程', icon: 'process', cap: CAP.METRICS_READ, perm: 'system.view' },
+    // 原「专业监控 / 进程」已并入主机监控页的页内 Tab（/system/pro、/system/procs）
   ] },
   { title: '应用', items: [
     { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
@@ -75,6 +75,13 @@ const groups = computed(() => [
 function why(it: Item): string | null {
   return auth.whyDisabled(it.cap, it.perm)
 }
+
+const route = useRoute()
+// 「主机监控」含页内子 Tab（/system、/system/pro、/system/procs），高亮按前缀匹配；
+// 其余菜单仍精确匹配——概览 '/' 是所有路径的前缀，绝不能改前缀，否则全页常亮。
+function isOn(it: Item): boolean {
+  return it.to === '/system' ? route.path.startsWith('/system') : route.path === it.to
+}
 </script>
 
 <template>
@@ -92,7 +99,7 @@ function why(it: Item): string | null {
           :key="it.to"
           :to="it.to"
           class="item"
-          :class="{ disabled: !!why(it) }"
+          :class="{ disabled: !!why(it), on: isOn(it) }"
           :title="why(it) ?? it.label"
         >
           <Icon :name="it.icon" :size="19" class="ico" />
@@ -164,10 +171,12 @@ function why(it: Item): string | null {
 .collapsed .label { display: none; }
 .collapsed .item { justify-content: center; padding: 10px; }
 
-.item.router-link-exact-active {
+.item.router-link-exact-active,
+.item.on {
   color: var(--c-primary); background: var(--c-active); font-weight: 600;
 }
-.item.router-link-exact-active::before {
+.item.router-link-exact-active::before,
+.item.on::before {
   content: ''; position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
   width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--gradient);
   box-shadow: 0 0 10px var(--c-primary);
