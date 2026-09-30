@@ -1,19 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="ForkPanel">
   <defs>
-    <linearGradient id="fp-g" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="fp-bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ff8a4c"/>
       <stop offset="1" stop-color="#ff5a36"/>
     </linearGradient>
+    <linearGradient id="fp-fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFDC7E"/>
+      <stop offset=".48" stop-color="#F6B93C"/>
+      <stop offset="1" stop-color="#E8971B"/>
+    </linearGradient>
+    <clipPath id="fp-head">
+      <path d="M4.3 8.9 6.1 4.5 8.3 7.1C9.8 7.7 14.2 7.7 15.7 7.1L17.9 4.5 19.7 8.9C20.6 11 18.6 17.6 12 19.6 5.4 17.6 3.4 11 4.3 8.9Z"/>
+    </clipPath>
   </defs>
-  <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#fp-g)"/>
-  <g fill="#ffffff" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 4)">
-    <path d="M8.4 7 7.3 3 11.3 5.5Z" fill="none"/>
-    <path d="M15.6 7 16.7 3 12.7 5.5Z" fill="none"/>
-    <circle cx="12" cy="10.6" r="5.6" fill="none"/>
-    <circle cx="9.7" cy="9.6" r=".85" stroke="none"/>
-    <circle cx="14.3" cy="9.6" r=".85" stroke="none"/>
-    <ellipse cx="12" cy="13.4" rx="2.5" ry="2" fill="none"/>
-    <circle cx="12" cy="12.7" r=".95" stroke="none"/>
-    <path d="M11.4 14.9h1.2v1.1a.6.6 0 0 1-1.2 0z" stroke="none"/>
+  <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#fp-bg)"/>
+  <g transform="translate(1 0.95) scale(1.25)">
+    <path d="M4.3 8.9 6.1 4.5 8.3 7.1C9.8 7.7 14.2 7.7 15.7 7.1L17.9 4.5 19.7 8.9C20.6 11 18.6 17.6 12 19.6 5.4 17.6 3.4 11 4.3 8.9Z" fill="url(#fp-fur)" stroke="#D98A14" stroke-width=".45"/>
+    <g clip-path="url(#fp-head)">
+      <path d="M2.8 10.2C6.5 14.3 10 13.4 12 13.2 14 13.4 17.5 14.3 21.2 10.2L21.2 22H2.8Z" fill="#fff"/>
+      <path d="M5.9 5.4 7.6 7.2 5.4 7.9Z" fill="#E28E17"/>
+      <path d="M18.1 5.4 16.4 7.2 18.6 7.9Z" fill="#E28E17"/>
+    </g>
+    <rect x="4.9" y="9.8" width="4.3" height="1.8" rx=".9" fill="#fff" stroke="#5A3A1E" stroke-width=".4"/>
+    <circle cx="7.8" cy="10.7" r=".82" fill="#1A1A1A"/>
+    <rect x="14.8" y="9.8" width="4.3" height="1.8" rx=".9" fill="#fff" stroke="#5A3A1E" stroke-width=".4"/>
+    <circle cx="17.6" cy="10.7" r=".82" fill="#1A1A1A"/>
+    <ellipse cx="12" cy="13.8" rx="1.2" ry="1" fill="#6B4226"/>
+    <path d="M12 14.8v1.1M12 15.9c-.6 1.5-2.9 1.6-3.3.2M12 15.9c.6 1.5 2.9 1.6 3.3.2" fill="none" stroke="#6B4226" stroke-width=".8" stroke-linecap="round"/>
   </g>
 </svg>
