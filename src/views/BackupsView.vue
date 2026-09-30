@@ -18,6 +18,8 @@ interface Plan {
   id: number; kind: string; target: string; cron_expr: string | null
   keep_count: number; dest_dir: string; enabled: boolean
   last_run_at: number | null; last_result: string | null
+  /** 产物是否静态加密（AES-256-GCM；主密钥不落库，丢了就解不开） */
+  encrypt: boolean
 }
 interface Artifact { name: string; size: number; mtime: number }
 
@@ -26,7 +28,7 @@ const plans = ref<Plan[]>([])
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
-const form = ref({ kind: 'panel', target: 'panel', dest_dir: 'plans', cron_expr: '', keep_count: 7 })
+const form = ref({ kind: 'panel', target: 'panel', dest_dir: 'plans', cron_expr: '', keep_count: 7, encrypt: false })
 
 const curArtifacts = ref<{ plan: Plan; items: Artifact[] } | null>(null)
 
@@ -48,8 +50,9 @@ async function create() {
       dest_dir: form.value.dest_dir.trim() || 'plans',
       cron_expr: form.value.cron_expr.trim() || undefined,
       keep_count: form.value.keep_count,
+      encrypt: form.value.encrypt,
     })
-    form.value = { kind: 'panel', target: 'panel', dest_dir: 'plans', cron_expr: '', keep_count: 7 }
+    form.value = { kind: 'panel', target: 'panel', dest_dir: 'plans', cron_expr: '', keep_count: 7, encrypt: false }
     await load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
@@ -178,17 +181,20 @@ function fmtTime(t: number | null) {
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
+          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /etc/panel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥">
+            <input v-model="form.encrypt" type="checkbox" /> 静态加密
+          </label>
           <label>cron（可空）
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind === 'site' && !form.target.trim())" @click="create">添加</button>
         </div>
-        <p class="tip">产物落在面板备份根目录之下（相对路径，防越界）。<b>不提供远端存储</b>（S3/WebDAV 后续）。</p>
+        <p class="tip">产物落在面板备份根目录之下（相对路径，防越界）。可选<b>静态加密</b>（AES-256-GCM，主密钥不落库——丢了就解不开，请先单独备份主密钥）。<b>不提供远端存储</b>（S3/WebDAV 后续）。</p>
       </section>
 
       <div class="card flush" v-if="plans.length">
         <table>
-          <thead><tr><th>#</th><th>类型</th><th>目标</th><th>产物目录</th><th>保留</th><th>上次执行</th><th /></tr></thead>
+          <thead><tr><th>#</th><th>类型</th><th>目标</th><th>产物目录</th><th>保留</th><th>加密</th><th>上次执行</th><th /></tr></thead>
           <tbody>
             <tr v-for="p in plans" :key="p.id">
               <td>{{ p.id }}</td>
@@ -196,6 +202,7 @@ function fmtTime(t: number | null) {
               <td class="mono">{{ p.target }}</td>
               <td class="dim mono">{{ p.dest_dir }}</td>
               <td>{{ p.keep_count }}</td>
+              <td :class="p.encrypt ? '' : 'dim'">{{ p.encrypt ? '已加密' : '未加密' }}</td>
               <td class="dim">
                 {{ fmtTime(p.last_run_at) }}
                 <span class="badge" :class="p.last_result === 'ok' ? 'badge-ok' : 'badge-danger'" v-if="p.last_result">
@@ -249,4 +256,7 @@ function fmtTime(t: number | null) {
 
 <style scoped>
 .ok-note { color: var(--c-ok, #3fb950); font-size: 13px; margin: 0 0 12px; }
+/* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行 */
+.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; }
+.chk input { width: auto; }
 </style>
