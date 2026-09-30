@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
+import { api } from '@/api/client'
+import { API } from '@/api/endpoints'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -32,6 +34,24 @@ function openPwdDialog() {
   pwdOpen.value = true
 }
 const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
+
+// 通知未读数：原先只有「通知」页内部才显示，备份失败/恢复失败这类"必须知道"的事件
+// 在其余任意页面都完全静默。这里在 topbar 常驻铃铛把信号放出来：轮询 60s
+// （非关键路径，失败静默）+ 路由变化补一次（看完通知回来立刻更新）。
+const unread = ref(0)
+let unreadTimer: number | undefined
+async function loadUnread() {
+  try {
+    const r = await api.get<{ count: number }>(API.notifications.unreadCount())
+    unread.value = r.count
+  } catch { /* 静默重试：未读数取不到不影响任何操作 */ }
+}
+watch(() => route.path, loadUnread)
+onMounted(() => {
+  loadUnread()
+  unreadTimer = window.setInterval(loadUnread, 60_000)
+})
+onUnmounted(() => { if (unreadTimer) clearInterval(unreadTimer) })
 
 // 档位 tier 的中文可读标签：原「档位」二字偏术语，改为自解释文案（描述性能资源档）
 const TIER_LABELS: Record<string, string> = { nano: '轻量配置', small: '进阶配置', standard: '标准配置' }
@@ -60,6 +80,12 @@ function logout() {
           <Icon name="monitor" :size="15" />
           <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
         </div>
+
+        <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
+          :title="unread ? `未读通知 ${unread} 条` : '通知'">
+          <Icon name="bell" :size="18" />
+          <span v-if="unread" class="badge-dot">{{ unread > 99 ? '99+' : unread }}</span>
+        </RouterLink>
 
         <button class="btn-icon ghost" :title="theme === 'dark' ? '切换到亮色' : '切换到暗色'" @click="toggleTheme">
           <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
@@ -114,6 +140,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .title { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
 
 /* 系统基础信息胶囊：右侧状态簇的一员，紧凑、不可点击、hover 出详情 */
+.bell { position: relative; color: var(--c-text-dim); }
+.bell:hover { color: var(--c-text); }
+.badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
+             padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: #fff;
+             font-size: 11px; line-height: 17px; text-align: center; font-weight: 500;
+             box-shadow: 0 0 0 2px var(--c-surface); }
 .sysinfo {
   display: flex; align-items: center; gap: 7px; flex: none;
   height: 34px; padding: 0 12px;
