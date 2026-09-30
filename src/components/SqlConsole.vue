@@ -137,7 +137,7 @@ function useSample(s: string) {
 }
 .sql-panel {
   width: min(920px, 100%); max-height: 86vh; display: flex; flex-direction: column;
-  background: var(--c-card, #1b1d22); border: 1px solid var(--c-border);
+  background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 16px 18px;
 }
 .sp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }

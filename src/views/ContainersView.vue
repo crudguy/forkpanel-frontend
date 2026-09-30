@@ -130,7 +130,7 @@ function canStop(c: Container) { return c.state === 'running' }
       :reason="auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="note" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}</p>
       <p v-if="notice" class="ok-note">{{ notice }}</p>
 
       <div class="tabs">

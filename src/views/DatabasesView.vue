@@ -156,7 +156,7 @@ function closeBrowse() { browse.value = null }
       :reason="auth.capabilities[CAP.DBMS_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="note">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}</p>
     <p v-if="notice" class="note ok-note">{{ notice }}</p>
 
       <section class="card">
@@ -294,18 +294,18 @@ function closeBrowse() { browse.value = null }
 
 <style scoped>
 .crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
-.crumb { padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--dim, #9aa4b2); }
-.crumb:hover { color: var(--fg, #e6edf3); }
+.crumb { padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--c-text-dim); }
+.crumb:hover { color: var(--c-text); }
 .crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
-.sep { color: var(--dim, #9aa4b2); }
+.sep { color: var(--c-text-dim); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .ok-note { color: var(--c-ok, #3fb950); }
 .mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal { background: var(--bg-card, #161b22); border: 1px solid var(--border, #30363d); border-radius: 12px; padding: 20px 24px; width: min(440px, 92vw); }
+.modal { background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 12px; padding: 20px 24px; width: min(440px, 92vw); }
 .modal h3 { margin: 0 0 10px; font-size: 16px; }
 .modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
 .modal .blk input { margin-top: 6px; }
-.restore-warn { font-size: 13px; color: var(--dim, #9aa4b2); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
+.restore-warn { font-size: 13px; color: var(--c-text-dim); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .danger-btn { background: #C73E1F; }
 </style>

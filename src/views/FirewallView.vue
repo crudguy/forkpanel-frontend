@@ -27,6 +27,8 @@ const rules = ref<Rule[]>([])
 const backend = ref('')
 const active = ref(false)
 const error = ref('')
+/** 警告通道：后端 warnings（部分生效/部分忽略）不是失败，不当错误渲染 */
+const warn = ref('')
 const busy = ref(false)
 const ports = ref('80,443')
 const source = ref('')
@@ -50,7 +52,7 @@ async function apply() {
       API.firewall.rules(),
       { rules: [{ ports: ports.value, protocol: 'tcp', action: 'allow',
                   source: source.value || undefined, comment: comment.value || undefined }] })
-    if (r.warnings?.length) error.value = r.warnings.join('；')
+    warn.value = r.warnings?.length ? r.warnings.join('；') : ''
     ports.value = ''; source.value = ''; comment.value = ''
     load()
   } catch (e) { error.value = errorText(e) }
@@ -108,6 +110,7 @@ async function doDelete() {
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="warn" class="warn" role="status">⚠ {{ warn }}</p>
 
       <section class="card">
         <div class="sec-head"><Icon name="firewall" :size="16" /> 放行端口</div>

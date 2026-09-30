@@ -141,7 +141,7 @@ onMounted(load)
 }
 .trash-panel {
   width: min(760px, 100%); max-height: 82vh; overflow: auto;
-  background: var(--c-card, #1b1d22); border: 1px solid var(--c-border);
+  background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 16px 18px;
 }
 .tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
@@ -162,7 +162,7 @@ onMounted(load)
 }
 .tp-time { grid-column: 1 / -1; font-size: 11.5px; color: var(--c-text-mute); }
 .tp-acts { display: flex; gap: 6px; flex: 0 0 auto; }
-.tp-acts .danger { color: #ff6b6b; }
+.tp-acts .danger { color: var(--c-danger); }
 .tp-confirm {
   margin-top: 12px; border: 1px solid #6b3a3a; background: rgba(255, 107, 107, .07);
   border-radius: 9px; padding: 11px 13px;

@@ -306,9 +306,9 @@ onUnmounted(() => {
 .temp-val { margin-top: 8px; display: flex; align-items: baseline; gap: 3px; }
 .temp-val b { font-size: 26px; font-weight: 650; line-height: 1; }
 .temp-val .unit { font-size: 13px; opacity: .75; }
-.temp-warn { margin-top: 6px; font-size: 12px; color: #ff4d4d; }
+.temp-warn { margin-top: 6px; font-size: 12px; color: var(--c-danger); }
 .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; }
-.badge.warn { color: #ffb454; background: rgba(255, 180, 84, .12); border: 1px solid rgba(255, 180, 84, .4); }
+.badge.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
 
 /* 进程排序切换 */
 .gran { margin-left: auto; display: inline-flex; gap: 6px; }

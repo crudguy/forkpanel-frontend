@@ -240,10 +240,10 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .lv-name { text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-mute); }
 .lv-bar { height: 6px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
 .lv-bar > i { display: block; height: 100%; border-radius: 999px; background: #4cd07d; }
-.lv-row.error .lv-name { color: #ff6b6b; }
-.lv-row.error .lv-bar > i { background: #ff6b6b; }
-.lv-row.warn .lv-name { color: #ffb454; }
-.lv-row.warn .lv-bar > i { background: #ffb454; }
+.lv-row.error .lv-name { color: var(--c-danger); }
+.lv-row.error .lv-bar > i { background: var(--c-danger); }
+.lv-row.warn .lv-name { color: var(--c-warn); }
+.lv-row.warn .lv-bar > i { background: var(--c-warn); }
 .lv-row.info .lv-name { color: #4ea1ff; }
 .lv-row.info .lv-bar > i { background: #4ea1ff; }
 .lv-row.debug .lv-name { color: #b48cff; }
@@ -254,7 +254,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .hist-bar > i { display: block; width: 100%; background: linear-gradient(180deg, #4ea1ff, #36c5d6); border-radius: 2px 2px 0 0; }
 .pats-title { font-size: 12px; color: var(--c-text-mute); margin-bottom: 6px; }
 .pat { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 3px 0; }
-.pat-n { flex: 0 0 38px; text-align: right; color: #ffb454; font-variant-numeric: tabular-nums; }
+.pat-n { flex: 0 0 38px; text-align: right; color: var(--c-warn); font-variant-numeric: tabular-nums; }
 .pat-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--c-text-mute); }
 .live-dot { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }

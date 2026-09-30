@@ -192,12 +192,12 @@ h1 { font-size: 20px; margin: 0; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .error { color: var(--c-danger); font-size: 13px; margin: 0; }
 .warn {
-  color: var(--c-warning, #b45309); background: var(--c-warning-bg, #fef3c7);
+  color: var(--c-warn); background: var(--c-warn-bg);
   border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0;
 }
 .warn code { font-size: 12px; }
 .hint { color: var(--c-text-dim); font-size: 12px; margin: -6px 0 0; }
-.hint.ok { color: var(--c-success, #15803d); }
+.hint.ok { color: var(--c-ok); }
 .tip { color: var(--c-text-dim); font-size: 12px; margin: 4px 0 0; text-align: center; }
 .tip code { font-size: 12px; }
 </style>

@@ -101,10 +101,10 @@ async function submit() {
 
 <style scoped>
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { width: min(400px, 92vw); background: var(--c-card, #1c2128); border: 1px solid var(--c-border, #30363d);
+.modal { width: min(400px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 20px; }
 .modal h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; }
-.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-dim, #9da7b3); }
+.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .ok-note { display: flex; align-items: center; gap: 8px; color: var(--c-ok, #3fb950); font-size: 13.5px; margin: 4px 0 12px; }

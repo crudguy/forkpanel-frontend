@@ -449,8 +449,8 @@ async function doDeleteCert() {
 <style scoped>
 /* WAF 区块：与 .row 同一套排布，用虚线分隔以表明它是站点配置的一部分而非并列项 */
 .waf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px;
-  border-top: 1px dashed var(--c-border, #30363d); padding-top: 10px; }
-.waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-dim, #9da7b3); }
+  border-top: 1px dashed var(--c-border); padding-top: 10px; }
+.waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
 .waf label.inline { flex-direction: row; align-items: center; cursor: help; }
 .waf label.inline input { width: auto; }
 .tiny { font-size: 11.5px; }
@@ -460,11 +460,11 @@ async function doDeleteCert() {
 .card.disabled { opacity: .6; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }
-.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-dim, #9da7b3); }
+.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
 .row-inline { display: flex; align-items: center; gap: 6px; }
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { width: min(460px, 92vw); background: var(--c-card, #1c2128); border: 1px solid var(--c-border, #30363d);
+.modal { width: min(460px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 20px; }
 .modal h3 { margin: 0 0 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
