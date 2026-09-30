@@ -7,7 +7,7 @@
  */
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { api } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { CAP } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import Icon from '@/components/Icon.vue'
@@ -21,8 +21,15 @@ let es: EventSource | undefined
 // 否则 SSE 不含的 disk/net/alerts/uptime 等字段会被覆盖成 undefined（进而显示 0）。
 function apply(d: any) { ov.value = { ...(ov.value || {}), ...d } }
 
+/** 确定性失败（501/403）的显式提示；普通网络抖动静默重试（审计 F19） */
+const ovError = ref('')
+
 async function poll() {
-  try { const r = await api.get<any>('/api/v1/system/overview'); apply(r) } catch { /* 静默重试 */ }
+  try {
+    const r = await api.get<any>('/api/v1/system/overview'); apply(r); ovError.value = ''
+  } catch (e) {
+    if (isUnsupported(e)) ovError.value = errorText(e)
+  }
 }
 
 function fmtGB(b?: number) {
@@ -105,6 +112,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
     </p>
 
     <template v-else>
+      <p v-if="ovError" class="err" role="alert">{{ ovError }}</p>
       <!-- 指标卡 -->
       <div class="grid cols-5">
         <MetricCard label="CPU" :value="cpu" unit="%" icon="cpu" :progress="Number(cpu)" tone="primary" />

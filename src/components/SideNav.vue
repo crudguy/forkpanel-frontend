@@ -47,7 +47,10 @@ const groups = computed(() => [
   ] },
   { title: '应用', items: [
     { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
-    { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.WEBSERVER_MANAGE, perm: 'site.view' },
+    // 门禁用 METRICS_READ 兜底而非 WEBSERVER_MANAGE：站点 CRUD（静态站）不依赖
+    // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
+    // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
+    { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
     { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
     { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
     { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },

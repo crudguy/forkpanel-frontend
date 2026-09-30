@@ -7,7 +7,7 @@
  * 每 2 秒刷新快照 / 3 秒刷新进程（procfs 读取开销 <0.02ms，轮询极轻）。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { SystemSnapshot, ProcessInfo } from '@/api/types'
@@ -86,9 +86,18 @@ function loadRatio(l: number): number {
   return Math.min(r / 2, 1) * 100 // 以 2×核心数为满刻度
 }
 
+/** 确定性失败（501 未实现 / 403 无权限）的显式提示；网络抖动保持静默重试 */
+const snapError = ref('')
+
 async function loadSnapshot() {
-  try { snap.value = await api.get<SystemSnapshot>(API.metrics.snapshot()) }
-  catch { /* 保留上一帧，避免网络抖动闪空 */ }
+  try {
+    snap.value = await api.get<SystemSnapshot>(API.metrics.snapshot())
+    snapError.value = ''
+  } catch (e) {
+    // 保留上一帧避免网络抖动闪空是对的；但 501/403 是确定性失败，
+    // 一直静默会让「暂无数据」变成排障黑洞（审计 F19）
+    if (isUnsupported(e)) snapError.value = errorText(e)
+  }
   finally { loading.value = false }
 }
 async function loadProcs() {
@@ -120,6 +129,8 @@ onUnmounted(() => {
         <p class="page-sub">CPU 每核 / 负载 1·5·15 / 内存交换 / 每挂载点磁盘 / 每网卡吞吐 / 进程的完整快照</p>
       </div>
     </div>
+
+    <p v-if="snapError" class="err" role="alert">{{ snapError }}</p>
 
     <div v-if="loading && !snap" class="card skeleton" style="height:280px" />
     <template v-else-if="snap">

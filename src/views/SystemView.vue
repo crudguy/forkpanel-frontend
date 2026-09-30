@@ -9,7 +9,7 @@
  * 故历史趋势模块不含磁盘/网络（见页面说明）。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { api } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import MetricCard from '@/components/MetricCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -52,19 +52,26 @@ function mergeRealtime(samples: Sample[]) {
   }
 }
 
+/** 确定性失败（501/403）的显式提示；网络抖动保持静默，轮询自动重试（审计 F19） */
+const rtError = ref('')
+
 async function loadRealtime() {
   try {
     const r = await api.get<{ interval_ms: number; samples: Sample[] }>(
       '/api/v1/metrics/realtime', { params: { since: 60 } })
     interval.value = r.interval_ms
     mergeRealtime(r.samples)
-  } catch { /* 保留上一帧，避免网络抖动闪空 */ }
+    rtError.value = ''
+  } catch (e) {
+    // 保留上一帧防抖动；501/403 属确定性失败，须提示否则「暂无数据」无法排障
+    if (isUnsupported(e)) rtError.value = errorText(e)
+  }
 }
 
 async function loadHistory() {
   if (auth.me?.tier === 'nano') { history.value = null; return }
   try { history.value = await api.get('/api/v1/metrics/history', { params: { gran: gran.value } }) }
-  catch { /* 保留上一帧 */ }
+  catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
 }
 
 onMounted(() => {
@@ -153,6 +160,8 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
         <Icon name="tasks" :size="15" /> 进程管理
       </RouterLink>
     </div>
+
+    <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
     <!-- 当前快照读数（本页实时读数头，差异化在下方趋势） -->
     <div class="grid cols-4">
