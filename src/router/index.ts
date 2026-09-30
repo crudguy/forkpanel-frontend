@@ -7,36 +7,43 @@ import DashboardView from '@/views/DashboardView.vue'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', name: 'login', component: LoginView },
+    { path: '/login', name: 'login', component: LoginView, meta: { title: '登录' } },
     {
       path: '/',
       component: () => import('@/layouts/MainLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', name: 'dashboard', component: DashboardView },
-        { path: 'system', name: 'system', component: () => import('@/views/SystemView.vue') },
-        { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue') },
-        { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue') },
-        { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue') },
-        { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue') },
-        { path: 'containers', name: 'containers', component: () => import('@/views/ContainersView.vue') },
-        { path: 'backups', name: 'backups', component: () => import('@/views/BackupsView.vue') },
-        { path: 'firewall', name: 'firewall', component: () => import('@/views/FirewallView.vue') },
-        { path: 'cron', name: 'cron', component: () => import('@/views/CronView.vue') },
-        { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue') },
-        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
-        { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue') },
-        { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue') },
-        { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
-        { path: 'processes', name: 'processes', component: () => import('@/views/ProcessesView.vue') },
-        { path: 'professional', name: 'professional', component: () => import('@/views/ProfessionalView.vue') },
-        { path: 'security', name: 'security', component: () => import('@/views/SecurityView.vue') },
-        { path: 'tasks', name: 'tasks', component: () => import('@/views/TasksView.vue') },
-        { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue') },
-        { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue') },
+        { path: '', name: 'dashboard', component: DashboardView, meta: { title: '概览' } },
+        { path: 'system', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '主机监控' } },
+        { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件与服务' } },
+        { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue'), meta: { title: '网站与 SSL' } },
+        { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue'), meta: { title: '文件' } },
+        { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: '数据库' } },
+        { path: 'containers', name: 'containers', component: () => import('@/views/ContainersView.vue'), meta: { title: '容器' } },
+        { path: 'backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { title: '备份' } },
+        { path: 'firewall', name: 'firewall', component: () => import('@/views/FirewallView.vue'), meta: { title: '防火墙' } },
+        { path: 'cron', name: 'cron', component: () => import('@/views/CronView.vue'), meta: { title: '计划任务' } },
+        { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: '日志' } },
+        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: '通知' } },
+        { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue'), meta: { title: '终端' } },
+        { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 助手' } },
+        { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
+        { path: 'processes', name: 'processes', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程' } },
+        { path: 'professional', name: 'professional', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业监控' } },
+        { path: 'security', name: 'security', component: () => import('@/views/SecurityView.vue'), meta: { title: '安全中心' } },
+        { path: 'tasks', name: 'tasks', component: () => import('@/views/TasksView.vue'), meta: { title: '任务中心' } },
+        { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: '用户' } },
+        { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志' } },
       ],
     },
   ],
+})
+
+// 页面标题统一格式：`<页面> - 叉叉面板 - ForkPanel`（见 index.html 兜底文案）。
+const APP_TITLE = '叉叉面板 - ForkPanel'
+router.afterEach((to) => {
+  const page = typeof to.meta.title === 'string' ? to.meta.title : ''
+  document.title = page ? `${page} - ${APP_TITLE}` : APP_TITLE
 })
 
 router.beforeEach(async (to) => {
