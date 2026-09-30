@@ -57,7 +57,7 @@ pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 
 ## 契约同步规则
 
-- 后端是契约**事实源**（`fork-panel-backend/docs/api/openapi.yaml`）。
+- 后端是契约**事实源**（`forkpanel-backend/docs/api/openapi.yaml`）。
 - 后端改契约后，需把最新 `openapi.yaml` 同步到本仓库 `src/api/openapi.yaml`。
 - 前端 `types.ts` 中的 TS 类型须与 openapi 的 schema 保持一致（手工同步；接入 openapi-typescript 后可自动生成）。
 
