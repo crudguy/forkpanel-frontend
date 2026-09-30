@@ -35,6 +35,10 @@ interface Site {
   /** CC 限速（次/秒）；null = 不限速 */
   waf_rate_per_sec: number | null
   waf_burst: number | null
+  /** 反代后端列表（kind=proxy 时存在）；static/php 为 null */
+  upstreams: string[] | null
+  /** php-fpm 目标（kind=php 时存在）；其余为 null */
+  fpm: string | null
 }
 interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string }
 
@@ -100,8 +104,10 @@ function openEdit(s: Site) {
     // 类型**从站点真实值预填**。此前写死 'static'，于是「编辑反代站 → 应用」
     // 会把它静默改写成静态站（后端当时也没存真实类型，两侧一起错）。
     kind: s.kind === 'proxy' || s.kind === 'php' ? s.kind : 'static',
-    // upstreams / fpm 不落库 → 无法回填。留空是诚实的：后端会以 400 提示重填，
-    // 而不是把站点悄悄改成静态。
+    // 后端已把 upstreams/fpm 落库（migration 009），编辑时回填真实值：
+    // 否则编辑反代/PHP 站再应用，后端配置会被静默清空。
+    upstreams: (s.upstreams ?? []).join(', '),
+    fpm: s.fpm ?? '',
     wafOn: s.waf_enabled,
     wafProfile: s.waf_profile ?? 'basic',
     wafRate: s.waf_rate_per_sec ?? 0,
