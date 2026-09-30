@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "size": "node scripts/size-report.mjs"
+    "size": "node scripts/size-report.mjs",
+    "check:ui": "node scripts/check-sidenav.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

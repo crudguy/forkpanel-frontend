@@ -5,16 +5,26 @@
  * ⚠️ 纪律（同前）：菜单可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，
  * **禁止**出现 isLinux / navigator.platform / target_os 之类的平台判断。
  * 新模块的 cap 复用既有常量兜底（如明细类用 METRICS_READ），仅 perm 区分可见性。
+ *
+ * ── 折叠态的两个约定（都踩过坑，别再改回去）──
+ * 1. 折叠后品牌区**只留应用图标**：栏宽 76px 装不下 logo(32) + 文字 + 按钮(26)，
+ *    三者并存的结果是文字被挤成 "Fo"、按钮被挤出可视区。
+ *    现在折叠态隐藏文字、去掉品牌行的按钮，只居中一个图标。
+ * 2. 折叠开关**固定在底部**且两种状态都不换位置（VS Code / Supabase / 宝塔同款）。
+ *    曾经的实现把它放在品牌行右侧，用的是 `margin-left:auto`——折叠后那行已被
+ *    logo 占满，按钮被推到可视区之外，于是**收起来就再也展不开**。
+ *    也刻意**不做**"点 logo 展开"：logo 在展开态点击没有语义（既非链接也不是开关），
+ *    同一个元素在不同状态下做不同事，用户只会更犹豫该点哪里。
  */
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
+import { navCollapsed, toggleNav } from '@/composables/nav'
 import Icon from '@/components/Icon.vue'
 
 interface Item { to: string; label: string; icon: string; cap: string; perm: string }
 
 const auth = useAuthStore()
-const collapsed = ref(false)
 
 // 分组结构：参考主流面板（概览 / 主机 / 应用 / 安全 / 运维 / 系统）
 const groups = computed(() => [
@@ -60,13 +70,10 @@ function why(it: Item): string | null {
 </script>
 
 <template>
-  <aside class="side" :class="{ collapsed }">
+  <aside class="side" :class="{ collapsed: navCollapsed }">
     <div class="brand">
       <div class="logo"><Icon name="bolt" :size="18" /></div>
       <span class="brand-name">ForkPanel</span>
-      <button class="collapse-btn" :title="collapsed ? '展开' : '收起'" @click="collapsed = !collapsed">
-        <Icon name="chevron" :size="16" class="chev" />
-      </button>
     </div>
 
     <nav class="nav">
@@ -86,9 +93,18 @@ function why(it: Item): string | null {
       </div>
     </nav>
 
-    <div v-if="auth.platform" class="meta">
-      <Icon name="server" :size="14" />
-      <span class="meta-txt">{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
+    <!-- 底部固定区：折叠开关 + 平台信息。位置在两种状态下都不变，用户学一次就够。 -->
+    <div class="bottom">
+      <button class="toggle" :title="navCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        :aria-expanded="!navCollapsed" @click="toggleNav">
+        <Icon name="chevron" :size="16" class="chev" />
+        <span class="toggle-label">收起侧边栏</span>
+      </button>
+
+      <div v-if="auth.platform" class="meta">
+        <Icon name="server" :size="14" />
+        <span class="meta-txt">{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
+      </div>
     </div>
   </aside>
 </template>
@@ -106,7 +122,7 @@ function why(it: Item): string | null {
 
 .brand {
   display: flex; align-items: center; gap: 10px;
-  padding: 16px 16px 14px; position: relative;
+  padding: 16px 16px 14px;
 }
 .logo {
   width: 32px; height: 32px; border-radius: 9px; flex: none;
@@ -114,13 +130,10 @@ function why(it: Item): string | null {
   background: var(--gradient); box-shadow: var(--glow);
 }
 .brand-name { font-weight: 700; font-size: 16px; letter-spacing: .3px; }
-.collapse-btn {
-  margin-left: auto; width: 26px; height: 26px; padding: 0; border: none; background: transparent;
-  color: var(--c-text-dim); border-radius: 7px;
-}
-.collapse-btn:hover { background: var(--c-hover); color: var(--c-text); }
-.chev { transition: transform .2s ease; }
-.collapsed .chev { transform: rotate(180deg); }
+/* 折叠态：只留图标。文字必须 display:none 而不是靠容器裁切——
+   76px 的栏宽装不下 logo+文字+按钮，靠挤只会得到 "Fo" 这种半截文本。 */
+.collapsed .brand { justify-content: center; gap: 0; padding: 16px 0 14px; }
+.collapsed .brand-name { display: none; }
 
 .nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 14px; }
 .group { display: flex; flex-direction: column; gap: 2px; }
@@ -128,7 +141,12 @@ function why(it: Item): string | null {
   font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
   color: var(--c-text-mute); padding: 4px 10px; margin-bottom: 2px;
 }
-.collapsed .group-title { opacity: 0; height: 14px; margin: 0; }
+/* 折叠态：分组标题无处安放，改成分隔细线——比留一段空白更能说明"这里是另一组"。
+   （旧实现是 opacity:0 + 保留 14px 高度：线没有、空间占着，看着像排版出错。） */
+.collapsed .group-title {
+  font-size: 0; line-height: 0; color: transparent;
+  height: 1px; padding: 0; margin: 8px 10px 7px; background: var(--c-border);
+}
 
 .item {
   position: relative;
@@ -152,11 +170,28 @@ function why(it: Item): string | null {
 }
 .item.disabled { opacity: .4; pointer-events: none; }
 
+.bottom {
+  flex: none; border-top: 1px solid var(--c-border);
+  padding: 6px 8px 8px;
+}
+.toggle {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border: none; background: transparent; cursor: pointer;
+  color: var(--c-text-dim); border-radius: 10px; font-size: 13px; font-family: inherit;
+  transition: background .14s ease, color .14s ease;
+}
+.toggle:hover { background: var(--c-hover); color: var(--c-text); }
+.chev { flex: none; transition: transform .2s ease; }
+/* 展开态箭头指向左（收起），折叠态翻转指向右（展开）——箭头方向即"点了会往哪走" */
+.collapsed .chev { transform: rotate(180deg); }
+.collapsed .toggle { justify-content: center; padding: 8px; }
+.collapsed .toggle-label { display: none; }
+
 .meta {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; border-top: 1px solid var(--c-border);
+  padding: 6px 10px 0;
   font-size: 12px; color: var(--c-text-mute); white-space: nowrap; overflow: hidden;
 }
-.collapsed .meta { justify-content: center; padding: 12px 0; }
+.collapsed .meta { justify-content: center; padding: 6px 0 0; }
 .collapsed .meta-txt { display: none; }
 </style>
