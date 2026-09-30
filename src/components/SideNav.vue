@@ -80,7 +80,7 @@ function why(it: Item): string | null {
 <template>
   <aside class="side" :class="{ collapsed: navCollapsed }">
     <div class="brand">
-      <div class="logo"><Icon name="dog" :size="21" /></div>
+      <div class="logo"><Icon name="dog" :size="25" /></div>
       <span class="brand-name">ForkPanel</span>
     </div>
 
