@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import TaskDrawer from '@/components/TaskDrawer.vue'
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
@@ -26,6 +27,11 @@ function toggleTheme() {
 }
 
 const userMenu = ref(false)
+const pwdOpen = ref(false)
+function openPwdDialog() {
+  userMenu.value = false
+  pwdOpen.value = true
+}
 const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
 function logout() {
   userMenu.value = false
@@ -76,9 +82,9 @@ function logout() {
                 <div class="m-sub">{{ auth.me?.role }} · 档位 {{ auth.me?.tier }}</div>
               </div>
             </div>
-            <RouterLink :to="{ name: 'settings' }" class="mi" @click="userMenu = false">
+            <button class="mi" @click="openPwdDialog">
               <Icon name="key" :size="16" /> 修改密码
-            </RouterLink>
+            </button>
             <button class="mi" @click="logout">
               <Icon name="logout" :size="16" /> 退出登录
             </button>
@@ -91,6 +97,7 @@ function logout() {
       </div>
     </main>
     <TaskDrawer />
+    <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
   </div>
 </template>
 
