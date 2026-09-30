@@ -102,7 +102,7 @@ async function submitBootstrap() {
   <div class="login">
     <!-- 首启：检测中 -->
     <form v-if="mode === 'checking'" class="card" @submit.prevent>
-      <h1>叉叉面板</h1>
+      <h1>叉叉面板 Forkpanel</h1>
       <p class="sub">正在检查初始化状态…</p>
     </form>
 
@@ -152,7 +152,7 @@ async function submitBootstrap() {
 
     <!-- 常规登录 -->
     <form v-else class="card" @submit.prevent="submit">
-      <h1>叉叉面板</h1>
+      <h1>叉叉面板 Forkpanel</h1>
       <p class="sub">请登录以继续</p>
 
       <label>
