@@ -9,7 +9,7 @@
  * 通知一旦变成噪音，用户会整体忽略它。
  */
 import { onMounted, ref } from 'vue'
-import { api } from '@/api/client'
+import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 
 interface NotificationItem {
@@ -41,7 +41,7 @@ async function load() {
     const r = await api.get<{ count: number }>(API.notifications.unreadCount())
     unread.value = r.count
   } catch (e) {
-    error.value = (e as Error).message || String(e)
+    error.value = errorText(e)
   } finally {
     loading.value = false
   }
@@ -53,7 +53,7 @@ async function markRead(n: NotificationItem) {
     n.read = true
     unread.value = Math.max(0, unread.value - 1)
   } catch (e) {
-    error.value = (e as Error).message || String(e)
+    error.value = errorText(e)
   }
 }
 
@@ -62,7 +62,7 @@ async function readAll() {
     await api.post(API.notifications.readAll())
     await load()
   } catch (e) {
-    error.value = (e as Error).message || String(e)
+    error.value = errorText(e)
   }
 }
 
@@ -71,7 +71,7 @@ async function remove(n: NotificationItem) {
     await api.del(API.notifications.remove(n.id))
     await load()
   } catch (e) {
-    error.value = (e as Error).message || String(e)
+    error.value = errorText(e)
   }
 }
 

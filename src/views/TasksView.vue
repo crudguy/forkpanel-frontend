@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { taskStateBadge, taskStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -71,11 +72,10 @@ async function cancel(t: Task) {
   } catch (e) { error.value = errorText(e) }
 }
 
-function stateClass(s: string) {
-  return s === 'running' ? 'badge-primary'
-    : s === 'ok' ? 'badge-ok'
-    : s === 'failed' || s === 'canceled' || s === 'interrupted' ? 'badge-danger' : 'badge-warn'
-}
+// 状态徽标/文案统一走共享词表（src/api/types.ts）：此前只认 'ok'，
+// 且把英文 state 直接甩给用户；服务页判的却是 'done'——同一任务两处颜色不同
+function stateClass(s: string) { return taskStateBadge(s) }
+const stateText = taskStateLabel
 function fmtTime(t?: number | null) { return t ? new Date(t * 1000).toLocaleString() : '—' }
 onUnmounted(stopPoll)
 </script>
@@ -99,7 +99,7 @@ onUnmounted(stopPoll)
               <td class="mono">{{ t.id }}</td>
               <td class="mono dim">{{ t.key || t.kind }}</td>
               <td>
-                <span class="badge" :class="stateClass(t.state)">{{ t.state }}</span>
+                <span class="badge" :class="stateClass(t.state)">{{ stateText(t.state) }}</span>
                 <span v-if="t.needs_human" class="badge badge-danger" title="任务被中断，需人工确认后续影响">需人工</span>
               </td>
               <td class="num">
@@ -122,7 +122,7 @@ onUnmounted(stopPoll)
       <div v-if="sel" class="card">
         <div class="sec-head">
           <Icon name="terminal" :size="16" /><span>任务 #{{ sel.id }} · {{ sel.key || sel.kind }}</span>
-          <span class="badge" :class="stateClass(sel.state)">{{ sel.state }}</span>
+          <span class="badge" :class="stateClass(sel.state)">{{ stateText(sel.state) }}</span>
           <span class="spacer" /><button class="btn-sm" @click="stopPoll(); sel = null">关闭</button>
         </div>
         <p class="meta">

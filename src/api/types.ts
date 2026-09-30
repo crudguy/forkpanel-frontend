@@ -231,3 +231,39 @@ export interface RemoteConfig {
 export function emptyRemote(): RemoteConfig {
   return { kind: '', url: '', bucket: '', prefix: '', region: '', user: '', secret: '' }
 }
+
+// ── 任务状态词表（唯一事实源：后端 crates/panel-task/src/lib.rs `TaskState`）──
+//
+// 历史教训：TasksView 判终态 'ok'、ServicesView 判 'done'——而后者根本不是
+// 后端会发的值，导致安装任务实际完成后轮询永不停止，且同一任务两处颜色不同。
+// 所以下面的映射**同时兼容**历史脏数据（done/cancelled），但判定后端口径为准。
+//
+// 后端枚举：queued / running / ok / failed / canceled / interrupted（美式拼写）。
+
+/** 终态集合：轮询停止判定。含 done/cancelled 是为兼容历史库里的旧值。 */
+export const TASK_FINISHED = new Set<string>([
+  'ok', 'failed', 'canceled', 'interrupted', 'done', 'cancelled',
+])
+
+/** 状态中文映射；未知值原样返回（后端加新状态时前端不至显示空白）。 */
+export function taskStateLabel(s: string): string {
+  const m: Record<string, string> = {
+    queued: '排队中',
+    running: '进行中',
+    ok: '完成',
+    done: '完成',
+    failed: '失败',
+    canceled: '已取消',
+    cancelled: '已取消',
+    interrupted: '已中断',
+  }
+  return m[s] ?? s
+}
+
+/** 状态徽标 class（与 main.css 的 badge-* 对应）。 */
+export function taskStateBadge(s: string): string {
+  if (s === 'running') return 'badge-primary'
+  if (s === 'ok' || s === 'done') return 'badge-ok'
+  if (s === 'failed' || s === 'canceled' || s === 'cancelled' || s === 'interrupted') return 'badge-danger'
+  return 'badge-warn'
+}

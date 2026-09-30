@@ -58,6 +58,9 @@ async function apply() {
 }
 
 async function toggleActive() {
+  // 一键关闭 = 整机对所有端口裸奔（除面板外无任何过滤），必须过一道确认
+  if (active.value
+    && !window.confirm('确认关闭防火墙？\n\n关闭后本机所有端口将直接对外暴露，不再有任何过滤。')) return
   busy.value = true
   try { await api.put(API.firewall.setEnabled(), { enabled: !active.value }); load() }
   catch (e) { error.value = errorText(e) }

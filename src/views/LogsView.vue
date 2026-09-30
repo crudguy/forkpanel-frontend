@@ -217,6 +217,19 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 </template>
 
 <style scoped>
+/* 日志视图主体：此前无任何规则，2000 行直接撑开整页，scrollBottom() 对
+   不可滚动元素无效（实时跟随失效）。限定高度 + 自身滚动后跟随才生效。 */
+.view {
+  max-height: 58vh;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
 .ctl { width: auto; min-width: 0; }
 .live { display: flex; align-items: center; gap: 7px; color: var(--c-ok, #3fb950); font-size: 12.5px; margin: 0 0 8px; }
 .stats { border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; }

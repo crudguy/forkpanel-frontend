@@ -13,7 +13,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, PackageInfo, ServiceConfig, ServiceJournal, TaskRun } from '@/api/types'
+import { CAP, PackageInfo, ServiceConfig, ServiceJournal, TaskRun, TASK_FINISHED, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -71,7 +71,9 @@ onUnmounted(stopWatch)
 
 // ─────────────── 安装/卸载任务进度 ───────────────
 
-const FINISHED = new Set(['done', 'failed', 'cancelled', 'interrupted'])
+// 终态判定改用共享词表：此前写死 ['done','failed','cancelled','interrupted']，
+// 而后端成功终态是 'ok'（'done' 根本不会出现）→ 任务完成后轮询永不停止。
+const FINISHED = TASK_FINISHED
 const task = ref<TaskWatch | null>(null)
 let pollTimer: number | undefined
 
@@ -105,17 +107,9 @@ async function pollTask() {
   } catch { /* 轮询瞬时失败忽略，下个周期重试 */ }
 }
 
-function taskBadge(s: string) {
-  return s === 'running' ? 'badge-primary' : s === 'done' ? 'badge-ok'
-    : FINISHED.has(s) ? 'badge-danger' : 'badge-warn'
-}
-function taskStateText(s: string) {
-  const m: Record<string, string> = {
-    queued: '排队中', running: '进行中', done: '完成',
-    failed: '失败', cancelled: '已取消', interrupted: '已中断',
-  }
-  return m[s] ?? s
-}
+// 徽标与文案统一走共享词表（src/api/types.ts），与任务中心口径一致
+function taskBadge(s: string) { return taskStateBadge(s) }
+function taskStateText(s: string) { return taskStateLabel(s) }
 
 // ─────────────── 软件安装 / 卸载 ───────────────
 

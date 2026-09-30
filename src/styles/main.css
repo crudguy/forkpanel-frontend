@@ -158,7 +158,9 @@ button:focus-visible { outline: none; border-color: var(--c-primary); box-shadow
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 .card.interactive:hover { transform: translateY(-2px); border-color: var(--c-border-strong); box-shadow: var(--shadow-lg); }
-.card.flush { padding: 0; overflow: hidden; }
+/* overflow:auto 兼任圆角裁切（hidden 的作用）与窄屏横向滚动：备份(9 列)/
+   站点(8 列)/防火墙(8 列) 表格在小屏不再被裁死，操作列始终可达。 */
+.card.flush { padding: 0; overflow: auto; }
 
 /* ── 页面头部 / 工具条 ── */
 .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
