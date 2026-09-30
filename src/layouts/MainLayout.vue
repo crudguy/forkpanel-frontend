@@ -51,11 +51,6 @@ function logout() {
       <header class="topbar">
         <h1 class="title">{{ title }}</h1>
 
-        <div class="search">
-          <Icon name="search" :size="16" />
-          <input placeholder="搜索服务、站点、日志…" />
-        </div>
-
         <span class="spacer" />
 
         <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
@@ -120,15 +115,6 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .title { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
 
-.search {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--c-bg); border: 1px solid var(--c-border);
-  border-radius: 10px; padding: 0 11px; height: 36px; width: 280px;
-  color: var(--c-text-dim);
-}
-.search input { border: none; background: transparent; padding: 0; height: 34px; color: var(--c-text); }
-.search input:focus-visible { outline: none; box-shadow: none; }
-
 /* 系统基础信息胶囊：右侧状态簇的一员，紧凑、不可点击、hover 出详情 */
 .sysinfo {
   display: flex; align-items: center; gap: 7px; flex: none;
@@ -173,7 +159,6 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .wrap { max-width: 1360px; margin: 0 auto; }
 
 @media (max-width: 720px) {
-  .search { display: none; }
   .sysinfo { display: none; }
   .content { padding: 16px; }
 }
