@@ -9,11 +9,10 @@
  *   whyDisabled，避免两处规则漂移）；无权限者不会看到该 Tab。
  */
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
+import TabBar from '@/components/TabBar.vue'
 
-const route = useRoute()
 const auth = useAuthStore()
 
 const tabs = computed(() => {
@@ -28,22 +27,11 @@ const tabs = computed(() => {
 
 <template>
   <div class="log-center">
-    <div class="tabs" role="tablist" aria-label="日志视图切换">
-      <RouterLink v-for="t in tabs" :key="t.to" :to="t.to" class="tab"
-        :class="{ on: route.path === t.to }" role="tab" :aria-selected="route.path === t.to">
-        {{ t.label }}
-      </RouterLink>
-    </div>
+    <TabBar :tabs="tabs" />
     <RouterView />
   </div>
 </template>
 
 <style scoped>
 .log-center { display: flex; flex-direction: column; gap: 16px; }
-.tabs { display: inline-flex; gap: 4px; padding: 4px; align-self: flex-start;
-        border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface-2); }
-.tab { padding: 7px 16px; border-radius: 7px; font-size: 13.5px; color: var(--c-text-dim);
-       text-decoration: none; transition: color .15s ease, background .15s ease; }
-.tab:hover { color: var(--c-text); }
-.tab.on { background: var(--gradient); color: #fff; font-weight: 500; }
 </style>
