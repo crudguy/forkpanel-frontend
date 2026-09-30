@@ -8,6 +8,13 @@
  * - 「应用配置」/「重载」需要 webserver.manage 能力（本机装了 nginx/caddy 才行）；
  *   未检测到时按钮置灰并给出原因，绝不伪造成功。
  * - SSL 的 ACME 签发/续期同理受 ssl.acme 能力门禁；证书「删除」是纯数据操作，随时可用。
+ * - 站点 WAF 与站点配置**同一次 apply** 下发（它本来就是 nginx 配置的一部分）。
+ *   两条与后端严格对齐的语义：`waf` 缺省 = 保留库中现值（不是关闭）、
+ *   `rate_per_sec: 0` = 不限速。
+ *
+ * ⚠️ 已知边界（如实写在界面上，不藏着）：`upstreams` / `fpm` 不落库，
+ * 所以「编辑」一个反代 / PHP 站时那两个输入框是空的，**必须重填**才能再应用
+ * （后端会以 400 拒绝空值，不会静默把站点改成静态）。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
@@ -18,7 +25,17 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-interface Site { id: number; name: string; domains: string[]; root: string; kind: string; enabled: boolean; tls: boolean; created_at?: number }
+interface Site {
+  id: number; name: string; domains: string[]; root: string
+  /** API 口径：static | proxy | php */
+  kind: string
+  enabled: boolean; tls: boolean; created_at?: number
+  waf_enabled: boolean
+  waf_profile: string | null
+  /** CC 限速（次/秒）；null = 不限速 */
+  waf_rate_per_sec: number | null
+  waf_burst: number | null
+}
 interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string }
 
 const auth = useAuthStore()
@@ -60,16 +77,57 @@ function certLevel(d: number | null) {
 // ── 新建 / 编辑弹窗 ──
 const modalOpen = ref(false)
 const editing = ref<Site | null>(null)
-const form = ref({ name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' })
+/** 空表单。`wafRate: 0` / `wafBurst: 0` 与后端的"不限速 / 自动"语义一一对应。 */
+function emptyForm() {
+  return {
+    name: '', domains: '', root: '', enabled: true,
+    kind: 'static', upstreams: '', fpm: '',
+    wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
+  }
+}
+const form = ref(emptyForm())
 
 function openCreate() {
   editing.value = null
-  form.value = { name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' }
+  form.value = emptyForm()
   modalOpen.value = true
 }
 function openEdit(s: Site) {
   editing.value = s
-  form.value = { name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled, kind: 'static', upstreams: '', fpm: '' }
+  form.value = {
+    ...emptyForm(),
+    name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled,
+    // 类型**从站点真实值预填**。此前写死 'static'，于是「编辑反代站 → 应用」
+    // 会把它静默改写成静态站（后端当时也没存真实类型，两侧一起错）。
+    kind: s.kind === 'proxy' || s.kind === 'php' ? s.kind : 'static',
+    // upstreams / fpm 不落库 → 无法回填。留空是诚实的：后端会以 400 提示重填，
+    // 而不是把站点悄悄改成静态。
+    wafOn: s.waf_enabled,
+    wafProfile: s.waf_profile ?? 'basic',
+    wafRate: s.waf_rate_per_sec ?? 0,
+    wafBurst: s.waf_burst ?? 0,
+  }
+}
+
+/** 站点类型的中文名（列表与提示共用一份）。 */
+function kindLabel(k: string) {
+  if (k === 'proxy') return '反向代理'
+  if (k === 'php') return 'PHP'
+  return '静态'
+}
+
+/** 组装 apply 的 waf 段。 */
+function wafPayload() {
+  if (!form.value.wafOn) return { enabled: false }
+  const p: Record<string, unknown> = {
+    enabled: true,
+    profile: form.value.wafProfile,
+    rate_per_sec: form.value.wafRate,   // 0 = 不限速（后端语义）
+  }
+  // burst 只在限速且有值时下发：不限速却带 burst 会被后端 400（"配了但没生效"
+  // 属于静默失败，后端刻意拒绝）；缺省时让后端按 rate×2 计算。
+  if (form.value.wafRate > 0 && form.value.wafBurst > 0) p.burst = form.value.wafBurst
+  return p
 }
 function closeModal() { modalOpen.value = false; editing.value = null }
 
@@ -124,9 +182,10 @@ async function applyConfig() {
         ? form.value.upstreams.split(/[,\s]+/).filter(Boolean)
         : undefined,
       fpm: kind === 'php' ? form.value.fpm.trim() : undefined,
+      waf: wafPayload(),
     })
-    notice.value = `已应用配置 ${name}`
-    form.value = { name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' }
+    notice.value = `已应用配置 ${name}${form.value.wafOn ? `（WAF ${form.value.wafProfile}）` : ''}`
+    form.value = emptyForm()
     await load()
   } catch (e) {
     if (isUnsupported(e)) notice.value = '当前环境未接入 Web 服务器，无法应用配置'
@@ -253,10 +312,40 @@ async function doDeleteCert() {
           {{ busy ? '应用中…' : '应用' }}
         </button>
       </div>
+
+      <div class="waf">
+        <label class="inline" title="在被管理站点前生成拦截规则；规则集是后端编译期常量，此处只能选档位与数值">
+          <input type="checkbox" v-model="form.wafOn" :disabled="!canApply" /> 启用 WAF
+        </label>
+        <template v-if="form.wafOn">
+          <label>档位
+            <select v-model="form.wafProfile" :disabled="!canApply">
+              <option value="basic">基础（SQLi / XSS / 穿越 / 敏感文件 / 恶意 UA）</option>
+              <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
+            </select>
+          </label>
+          <label>CC 限速（次/秒，0 = 不限）
+            <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!canApply" />
+          </label>
+          <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'">
+            突发桶（0 = 自动）
+            <input v-model.number="form.wafBurst" type="number" min="0" max="10000"
+              :disabled="!canApply || !form.wafRate" />
+          </label>
+        </template>
+      </div>
+
       <p class="tip">
         流程：渲染 → 语法校验 → 原子替换 → reload → 入库。校验失败时旧配置不受影响。
         多个后端由 nginx <code>upstream</code>（least_conn）轮询；后端只接受
         <code>http(s)://host:port</code>，不接受路径或查询串。
+      </p>
+      <p class="tip">
+        WAF 与站点配置**同一次下发**（它本来就是 nginx 配置的一部分）。
+        超限返回 <code>429</code>；<code>/.well-known</code> 始终放行——ACME 挑战文件在那里，
+        一刀切会把证书续期打死。
+        <b>「编辑」不会回填后端 / php-fpm 地址</b>（后端未持久化它们），
+        它会以 400 要求重填，而<b>不会</b>把站点悄悄改成静态。
       </p>
     </section>
 
@@ -264,13 +353,20 @@ async function doDeleteCert() {
     <div class="sec-head"><Icon name="globe" :size="16" /> 站点</div>
     <div v-if="sites.length" class="card flush">
       <table>
-        <thead><tr><th>名称</th><th>域名</th><th>根目录</th><th>类型</th><th>状态</th><th>TLS</th><th>操作</th></tr></thead>
+        <thead><tr><th>名称</th><th>域名</th><th>根目录</th><th>类型</th><th>WAF</th><th>状态</th><th>TLS</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="s in sites" :key="s.id">
             <td>{{ s.name }}</td>
             <td>{{ s.domains.join(', ') }}</td>
             <td class="mono dim">{{ s.root }}</td>
-            <td>{{ s.kind === 'proxy' ? '反向代理' : '静态' }}</td>
+            <td>{{ kindLabel(s.kind) }}</td>
+            <td>
+              <template v-if="s.waf_enabled">
+                <span class="badge badge-ok">{{ s.waf_profile ?? 'basic' }}</span>
+                <span v-if="s.waf_rate_per_sec" class="dim tiny">· {{ s.waf_rate_per_sec }}/s</span>
+              </template>
+              <span v-else class="dim">—</span>
+            </td>
             <td><span class="badge" :class="s.enabled ? 'badge-ok' : 'badge-warn'">{{ s.enabled ? '启用' : '停用' }}</span></td>
             <td><span class="badge" :class="s.tls ? 'badge-ok' : 'badge-danger'">{{ s.tls ? '已配置' : '无' }}</span></td>
             <td class="actions">
@@ -343,6 +439,13 @@ async function doDeleteCert() {
 </template>
 
 <style scoped>
+/* WAF 区块：与 .row 同一套排布，用虚线分隔以表明它是站点配置的一部分而非并列项 */
+.waf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px;
+  border-top: 1px dashed var(--c-border, #30363d); padding-top: 10px; }
+.waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-dim, #9da7b3); }
+.waf label.inline { flex-direction: row; align-items: center; cursor: help; }
+.waf label.inline input { width: auto; }
+.tiny { font-size: 11.5px; }
 .notice { color: var(--c-ok, #3fb950); background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3);
   padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .tip.warn { color: #d29922; background: rgba(210,153,34,.12); border-color: rgba(210,153,34,.3); }
