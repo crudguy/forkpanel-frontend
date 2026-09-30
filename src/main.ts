@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from '@/App.vue'
 import { router } from '@/router'
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import '@/styles/main.css'
 import { applyTheme } from '@/composables/theme'
 
@@ -12,8 +13,10 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 
-// 全局事件：401 → 跳登录；CSRF 失效 → 刷新页面重新取 token
+// 全局事件：401 → 先清会话（丢弃残留的 me/权限，避免返回首页短暂渲染越权菜单）→ 跳登录
 window.addEventListener('panel:unauthorized', () => {
+  const auth = useAuthStore()
+  auth.clearSession()
   router.push({ name: 'login' })
 })
 window.addEventListener('panel:csrf-expired', () => {

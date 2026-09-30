@@ -39,7 +39,7 @@ const loading = ref(false)
 const error = ref('')
 const showHidden = ref(false)
 
-const editing = ref<{ name: string; content: string; mtime: number } | null>(null)
+const editing = ref<{ name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
 const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
 
 /** 批量选择：存条目名（当前目录内唯一） */
@@ -90,17 +90,24 @@ function enter(e: Entry) {
 async function open(e: Entry) {
   if (e.sensitive) { error.value = '该文件受保护，不可通过面板读取'; return }
   try {
-    const r = await api.get<{ content: string | null; binary: boolean; size: number }>(
+    const r = await api.get<{ content: string | null; binary: boolean; size: number; has_more: boolean }>(
       '/api/v1/files/read', {
         params: { path: `${path.value.replace(/\/+$/, '')}/${e.name}` },
       })
     if (r.binary) { error.value = '二进制文件不支持在线编辑'; return }
-    editing.value = { name: e.name, content: r.content ?? '', mtime: e.modified }
+    // has_more 为真说明后端按 2MB 上限截断了：完整文件比这大，编辑框里只有前半截。
+    // 若允许写回，会用截断版覆盖原文件——这是唯一会造成不可逆数据丢失的口子，必须拦死。
+    editing.value = { name: e.name, content: r.content ?? '', mtime: e.modified, hasMore: r.has_more }
   } catch (err) { error.value = errorText(err) }
 }
 
 async function save() {
   if (!editing.value) return
+  // 截断预览严禁写回：否则覆盖原文件即丢失后半截（不可逆）
+  if (editing.value.hasMore) {
+    error.value = '当前文件大于 2MB，编辑器只载入了前半部分；保存会截断原文件，已禁止。请下载后用本地编辑器修改。'
+    return
+  }
   try {
     await api.post('/api/v1/files/write', {
       path: path.value.replace(/\/+$/, '') + '/' + editing.value.name,
@@ -329,8 +336,11 @@ function fmtSize(n: number) {
         <strong>{{ editing.name }}</strong>
         <span class="spacer" />
         <button class="btn-ghost" @click="editing = null">取消</button>
-        <button class="btn-primary" @click="save">保存</button>
+        <button class="btn-primary" :disabled="editing.hasMore" @click="save">保存</button>
       </header>
+      <p v-if="editing.hasMore" class="warn" role="alert">
+        该文件大于 2MB，编辑器仅载入了前半部分内容。保存已禁用，以免覆盖并截断原文件。请用「下载」取到完整文件后在本地编辑。
+      </p>
       <textarea v-model="editing.content" spellcheck="false" />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>
     </div>

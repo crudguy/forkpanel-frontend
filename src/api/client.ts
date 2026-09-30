@@ -44,6 +44,17 @@ function buildUrl(u: string, params?: QueryParams): string {
   return qs ? `${u}${u.includes('?') ? '&' : '?'}${qs}` : u
 }
 
+/** 请求超时（毫秒）。调用方自带 signal 时优先级更高，不挂超时。 */
+const REQUEST_TIMEOUT_MS = 15_000
+/** 限流/瞬时失败的最大重试次数（含首次，即最多额外 2 次）。 */
+const MAX_ATTEMPTS = 3
+
+function delay(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)) }
+/** 指数退避：500ms → 1s → 2s，封顶 8s。 */
+function backoff(attempt: number): number {
+  return Math.min(8000, 500 * 2 ** (attempt - 1))
+}
+
 async function request<T>(url: string, opts: Options = {}): Promise<T> {
   const method = (opts.method || 'GET').toUpperCase()
   const headers = new Headers(opts.headers)
@@ -56,33 +67,53 @@ async function request<T>(url: string, opts: Options = {}): Promise<T> {
   }
 
   const target = buildUrl(url, opts.params)
+  // 幂等方法（GET/HEAD/PUT/DELETE）在网络抖动时可安全重试；POST 可能重复提交，不重试。
+  const idempotent = method === 'GET' || method === 'HEAD' || method === 'PUT' || method === 'DELETE'
 
-  let res: Response
-  try {
-    res = await fetch(target, { ...opts, headers, credentials: 'same-origin' })
-  } catch {
-    throw new ApiError(0, 0, 'network_unreachable')
-  }
-
-  if (res.status === 204) return undefined as T
-
-  let body: { code?: number; message?: string; data?: T; detail?: unknown } = {}
-  const text = await res.text()
-  if (text) {
-    try { body = JSON.parse(text) } catch { /* 非 JSON（如 SSE/HTML） */ }
-  }
-
-  if (!res.ok) {
-    const err = new ApiError(body.code ?? res.status, res.status, body.message ?? res.statusText, body.detail)
-    if (res.status === 401 && !opts.skipAuthRedirect) {
-      window.dispatchEvent(new CustomEvent('panel:unauthorized'))
+  let attempt = 0
+  while (true) {
+    attempt++
+    let res: Response
+    try {
+      const signal = opts.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      res = await fetch(target, { ...opts, headers, credentials: 'same-origin', signal })
+    } catch (e) {
+      // 调用方主动取消（AbortError 且自带 signal）：原样透传，不重试
+      if (e instanceof DOMException && e.name === 'AbortError' && opts.signal) {
+        throw new ApiError(0, 0, 'request_cancelled')
+      }
+      // 仅幂等方法在网络/超时失败时重试，避免写操作被重复提交
+      if (idempotent && attempt < MAX_ATTEMPTS) { await delay(backoff(attempt)); continue }
+      throw new ApiError(80003, 0, '请求超时或网络不可达，请稍后重试')
     }
-    if (body.code === 10008) {
-      window.dispatchEvent(new CustomEvent('panel:csrf-expired'))
+
+    if (res.status === 204) return undefined as T
+
+    let body: { code?: number; message?: string; data?: T; detail?: unknown } = {}
+    const text = await res.text()
+    if (text) {
+      try { body = JSON.parse(text) } catch { /* 非 JSON（如 SSE/HTML） */ }
     }
-    throw err
+
+    // 限流（429）：服务端尚未处理请求，重试安全；按 retry_after 退避（封顶 5s）。
+    if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+      const ra = (body.detail as { retry_after_secs?: number } | undefined)?.retry_after_secs ?? 1
+      await delay(Math.min(ra, 5) * 1000)
+      continue
+    }
+
+    if (!res.ok) {
+      const err = new ApiError(body.code ?? res.status, res.status, body.message ?? res.statusText, body.detail)
+      if (res.status === 401 && !opts.skipAuthRedirect) {
+        window.dispatchEvent(new CustomEvent('panel:unauthorized'))
+      }
+      if (body.code === 10008) {
+        window.dispatchEvent(new CustomEvent('panel:csrf-expired'))
+      }
+      throw err
+    }
+    return body.data as T
   }
-  return body.data as T
 }
 
 export const api = {

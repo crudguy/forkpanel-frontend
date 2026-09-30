@@ -74,6 +74,13 @@ export const useAuthStore = defineStore('auth', () => {
     capabilities.value = {}
   }
 
+  /** 仅清前端会话状态（不请求后端）：会话已失效（如收到 401）时用，避免对已失效会话再发请求 */
+  function clearSession() {
+    me.value = null
+    capabilities.value = {}
+    platform.value = null
+  }
+
   /** nano 档位：SSE 不可用，退化为轮询（实测：低配机器上长连接是负担） */
   const pollingMode = computed(() => me.value?.tier === 'nano')
 
@@ -81,6 +88,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     me, capabilities, platform, loading, loggedIn, pollingMode, metricsAvailable,
-    supported, can, enabled, whyDisabled, loadMe, loadCapabilities, login, logout,
+    supported, can, enabled, whyDisabled, loadMe, loadCapabilities, login, logout, clearSession,
   }
 })
