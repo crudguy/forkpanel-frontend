@@ -46,15 +46,16 @@ function logout() {
           <input placeholder="搜索服务、站点、日志…" />
         </div>
 
+        <span class="spacer" />
+
         <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
-             平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。 -->
+             平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。
+             置于右侧簇、紧邻深色模式按钮（用户偏好：放最右、挨着主题切换）。 -->
         <div v-if="auth.platform" class="sysinfo"
           :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}`">
           <Icon name="server" :size="15" />
           <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
         </div>
-
-        <span class="spacer" />
 
         <button class="btn-icon ghost" :title="theme === 'dark' ? '切换到亮色' : '切换到暗色'" @click="toggleTheme">
           <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
