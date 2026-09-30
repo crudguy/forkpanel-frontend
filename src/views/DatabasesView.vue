@@ -37,7 +37,14 @@ const error = ref('')
 const busy = ref(false)
 /** 打开 SQL 控制台的连接（null = 关闭） */
 const sqlConn = ref<Conn | null>(null)
-const form = ref({ name: '', engine: 'sqlite', host: '127.0.0.1', default_db: '' })
+/** 空表单。port/user/password 仅 mysql/postgres 需要（口令后端 AES 加密、永不回显）。 */
+function emptyForm() {
+  return { name: '', engine: 'sqlite', host: '127.0.0.1', port: '', user: '', password: '', default_db: '' }
+}
+const form = ref(emptyForm())
+
+/** 成功类提示走独立通道（此前备份成功却写 error，被渲染成红色错误条）。 */
+const notice = ref('')
 
 async function load() {
   error.value = ''
@@ -49,25 +56,55 @@ onMounted(load)
 const canManage = computed(() => auth.enabled(CAP.DBMS_MANAGE, 'db.manage'))
 
 async function create() {
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; notice.value = ''
   try {
+    const ext = form.value.engine !== 'sqlite'
     await api.post(API.db.connections(), {
       name: form.value.name, engine: form.value.engine,
       host: form.value.host || undefined, default_db: form.value.default_db || undefined,
+      // 此前漏发 port/user/password：mysql/postgres 连接建出来必然不可用，且无编辑入口无法补救
+      port: ext && form.value.port ? Number(form.value.port) : undefined,
+      user: ext && form.value.user ? form.value.user : undefined,
+      password: ext && form.value.password ? form.value.password : undefined,
     })
-    form.value = { name: '', engine: 'sqlite', host: '127.0.0.1', default_db: '' }
+    form.value = emptyForm()
+    notice.value = '连接已创建'
     load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
 
 async function backup(c: Conn) {
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; notice.value = ''
   try {
     const r = await api.post<{ task_id: number }>(API.db.backup(c.id), {
       id: c.id, out: `backup-${c.name}-${Date.now()}.sql`,
     })
-    error.value = `已提交备份任务 #${r.task_id}（请在任务面板查看）`
+    notice.value = `已提交备份任务 #${r.task_id}（请在任务面板查看）`
+  } catch (e) { error.value = errorText(e) }
+  finally { busy.value = false }
+}
+
+// ── 恢复（高危，覆盖当前库）──
+const restoreTarget = ref<Conn | null>(null)
+const restoreForm = ref({ file: '', confirm: '' })
+
+function openRestore(c: Conn) {
+  error.value = ''
+  restoreForm.value = { file: '', confirm: '' }
+  restoreTarget.value = c
+}
+
+async function doRestore() {
+  const c = restoreTarget.value; if (!c) return
+  busy.value = true; error.value = ''; notice.value = ''
+  try {
+    const r = await api.post<{ task_id?: number }>(API.db.restore(c.id), {
+      file: restoreForm.value.file.trim(),
+      confirm_token: restoreForm.value.confirm,
+    })
+    notice.value = r.task_id ? `已提交恢复任务 #${r.task_id}（请在任务面板查看）` : '恢复完成'
+    restoreTarget.value = null
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
@@ -120,6 +157,7 @@ function closeBrowse() { browse.value = null }
 
     <template v-else>
       <p v-if="error" class="note">{{ error }}</p>
+    <p v-if="notice" class="note ok-note">{{ notice }}</p>
 
       <section class="card">
         <div class="sec-head"><Icon name="database" :size="16" /> 新增连接</div>
@@ -133,6 +171,11 @@ function closeBrowse() { browse.value = null }
             </select>
           </label>
           <label>主机<input v-model="form.host" :disabled="form.engine === 'sqlite'" /></label>
+          <template v-if="form.engine !== 'sqlite'">
+            <label>端口<input v-model="form.port" inputmode="numeric" :placeholder="form.engine === 'mysql' ? '3306' : '5432'" /></label>
+            <label>用户名<input v-model="form.user" autocomplete="off" /></label>
+            <label>口令<input v-model="form.password" type="password" autocomplete="new-password" /></label>
+          </template>
           <label>{{ form.engine === 'sqlite' ? '数据库文件' : '库名' }}
             <input v-model="form.default_db" :placeholder="form.engine === 'sqlite' ? '/path/to/app.db' : 'myapp'" />
           </label>
@@ -160,6 +203,12 @@ function closeBrowse() { browse.value = null }
                   @click="sqlConn = c"
                 ><Icon name="terminal" :size="13" /> SQL</button>
                 <button class="btn-ghost btn-sm" :disabled="!c.available || !canManage || busy" @click="backup(c)">备份</button>
+                <button
+                  class="btn-ghost btn-sm"
+                  :disabled="!c.available || !canManage || busy"
+                  :title="c.engine === 'sqlite' ? '从备份文件恢复（覆盖当前库）' : 'mysql/postgres 恢复需外部客户端，本环境不可用'"
+                  @click="openRestore(c)"
+                >恢复</button>
               </td>
             </tr>
           </tbody>
@@ -215,6 +264,31 @@ function closeBrowse() { browse.value = null }
     </template>
 
     <SqlConsole v-if="sqlConn" :conn="sqlConn" @close="sqlConn = null" />
+
+    <!-- 恢复弹窗（高危）：确认词与备份恢复同源（「覆盖恢复」） -->
+    <div v-if="restoreTarget" class="mask" @click.self="restoreTarget = null">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>恢复「{{ restoreTarget.name }}」</h3>
+        <p class="restore-warn">
+          将用指定备份文件<b>覆盖当前库</b>，恢复过程中库不可用。仅支持
+          SQLite 立即恢复；文件必须位于文件管理允许根内。
+        </p>
+        <label class="blk">备份文件路径
+          <input v-model="restoreForm.file" placeholder="/backups/myapp-2026.sql" />
+        </label>
+        <label class="blk">输入「覆盖恢复」以确认
+          <input v-model="restoreForm.confirm" autocomplete="off" placeholder="覆盖恢复" />
+        </label>
+        <div class="modal-actions">
+          <button class="btn-ghost" :disabled="busy" @click="restoreTarget = null">取消</button>
+          <button
+            class="btn-primary danger-btn"
+            :disabled="busy || !restoreForm.file.trim() || restoreForm.confirm.trim() !== '覆盖恢复'"
+            @click="doRestore"
+          >{{ busy ? '恢复中…' : '开始恢复' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -225,4 +299,13 @@ function closeBrowse() { browse.value = null }
 .crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
 .sep { color: var(--dim, #9aa4b2); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.ok-note { color: var(--c-ok, #3fb950); }
+.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
+.modal { background: var(--bg-card, #161b22); border: 1px solid var(--border, #30363d); border-radius: 12px; padding: 20px 24px; width: min(440px, 92vw); }
+.modal h3 { margin: 0 0 10px; font-size: 16px; }
+.modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
+.modal .blk input { margin-top: 6px; }
+.restore-warn { font-size: 13px; color: var(--dim, #9aa4b2); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.danger-btn { background: #C73E1F; }
 </style>
