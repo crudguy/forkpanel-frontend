@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
-import TaskDrawer from '@/components/TaskDrawer.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -94,7 +93,6 @@ function logout() {
         <div class="wrap"><RouterView /></div>
       </div>
     </main>
-    <TaskDrawer />
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
   </div>
 </template>
