@@ -122,6 +122,8 @@ export const API = {
     patch: (id: number) => `/api/v1/backups/${id}`,
     remove: (id: number) => `/api/v1/backups/${id}`,
     run: (id: number) => `/api/v1/backups/${id}/run`,
+    // 远端连接自检：真的 PUT 一个探针对象再删掉（用备份实际要用的操作验证）
+    testRemote: () => '/api/v1/backups/test-remote',
     artifacts: (id: number) => `/api/v1/backups/${id}/artifacts`,
     restore: (id: number) => `/api/v1/backups/${id}/restore`,
   },

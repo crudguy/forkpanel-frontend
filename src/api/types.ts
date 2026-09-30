@@ -207,3 +207,27 @@ export interface SettingsReport {
     values: Record<string, string>
   }
 }
+
+// ── 备份远端副本（对应 openapi `RemoteConfig`）──
+//
+// 这张表在**两处**使用（新建计划、给已有计划改远端），所以定义放在共享模块里：
+// 复制一份必然漂移，而漂移的那份会让人按错误的字段名提交，然后收到一个看不懂的 400。
+//
+// ⚠️ 与后端严格对齐的语义：**凭据永不回显**（列表只回 `remote_has_secret`），
+// 因此 `secret` 永远是空初值，空值 = "不改动"。想清空凭据请改为匿名访问
+// （清空用户名），而不是把密码框留空——留空不会清掉任何东西。
+export interface RemoteConfig {
+  /** '' = 只用本地；'webdav' | 's3' = 启用远端副本 */
+  kind: '' | 'webdav' | 's3'
+  url: string
+  bucket: string
+  prefix: string
+  region: string
+  user: string
+  secret: string
+}
+
+/** 空配置：新建计划的初始值，也用于"关闭远端"。 */
+export function emptyRemote(): RemoteConfig {
+  return { kind: '', url: '', bucket: '', prefix: '', region: '', user: '', secret: '' }
+}
