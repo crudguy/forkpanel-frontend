@@ -59,14 +59,15 @@ async function apply() {
   finally { busy.value = false }
 }
 
+/** 待确认的关闭动作（审计 U5：window.confirm → ConfirmDialog）。开启无风险不需确认。 */
+const confirmOff = ref(false)
+
 async function toggleActive() {
-  // 一键关闭 = 整机对所有端口裸奔（除面板外无任何过滤），必须过一道确认
-  if (active.value
-    && !window.confirm('确认关闭防火墙？\n\n关闭后本机所有端口将直接对外暴露，不再有任何过滤。')) return
+  if (active.value) { confirmOff.value = true; return }
   busy.value = true
-  try { await api.put(API.firewall.setEnabled(), { enabled: !active.value }); load() }
+  try { await api.put(API.firewall.setEnabled(), { enabled: false }); load() }
   catch (e) { error.value = errorText(e) }
-  finally { busy.value = false }
+  finally { busy.value = false; confirmOff.value = false }
 }
 
 // ── 删除规则 ──
@@ -164,6 +165,10 @@ async function doDelete() {
     <ConfirmDialog :open="!!delTarget" danger title="删除防火墙规则"
       :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"
       @confirm="doDelete" @cancel="delTarget = null" />
+
+    <ConfirmDialog :open="confirmOff" danger title="关闭防火墙"
+      detail="关闭后本机所有端口将直接对外暴露，不再有任何过滤。确认继续？"
+      @confirm="toggleActive" @cancel="confirmOff = false" />
   </div>
 </template>
 

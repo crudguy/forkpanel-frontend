@@ -218,38 +218,34 @@ async function reloadSite(s: Site) {
 }
 
 // ── 申请 SSL（自签优先，否则走 ACME；受对应能力门禁）──
-async function applySsl(s: Site) {
+/** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。 */
+const sslModal = ref<{ site: Site; method: 'self-signed' | 'http-01'; email: string } | null>(null)
+
+function applySsl(s: Site) {
+  error.value = ''; notice.value = ''
+  // 只有**一种**渠道可用时直接执行，不给"选了必然失败"的余地
+  if (!(selfSignedSupported.value && sslSupported.value)) {
+    execSsl(s, selfSignedSupported.value ? 'self-signed' : 'http-01', '')
+    return
+  }
+  sslModal.value = { site: s, method: 'self-signed', email: '' }
+}
+
+async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string) {
   busy.value = true; error.value = ''; notice.value = ''
-
-  // 两种方式都可用时让用户选；只有一种则直接用它（不给"选了必然失败"的余地）
-  let method = 'self-signed'
-  if (selfSignedSupported.value && sslSupported.value) {
-    const pick = window.prompt(
-      "选择签发方式：\n\n" +
-      "1 = 面板自签（离线可用、立即可得，但浏览器会提示不受信任）\n" +
-      "2 = ACME http-01（可信证书，需公网 80 端口可达 + certbot）\n\n" +
-      "请输入 1 或 2：", '1')
-    if (pick === null) { busy.value = false; return }
-    method = pick.trim() === '2' ? 'http-01' : 'self-signed'
-  } else {
-    method = selfSignedSupported.value ? 'self-signed' : 'http-01'
-  }
-
   // ACME 必须有账户邮箱：CA 靠它发到期/异常通知，缺了就明确报错，不代填假地址
-  let email: string | undefined
-  if (method === 'http-01') {
-    const v = window.prompt('ACME 账户邮箱（必填，用于到期与异常通知）：')
-    if (v === null) { busy.value = false; return }
-    email = v.trim()
-    if (!email) { error.value = 'ACME 签发需要账户邮箱'; busy.value = false; return }
+  if (method === 'http-01' && !email.trim()) {
+    error.value = 'ACME 签发需要账户邮箱'
+    busy.value = false
+    return
   }
-
   try {
     const r = await api.post<{ task_id?: string }>(
-      API.sites.sslApply(s.id), { domains: s.domains, method, email })
+      API.sites.sslApply(s.id), { domains: s.domains, method, email: method === 'http-01' ? email.trim() : undefined })
     notice.value = method === 'self-signed'
       ? `已为 ${s.name} 签发面板自签证书（记得「重载」使配置生效）`
       : `已提交 ${s.name} 的 ACME 签发任务${r?.task_id ? `（${r.task_id}）` : ''}，可在任务中心查看进度`
+    sslModal.value = null
     if (method === 'self-signed') await load()
   } catch (e) {
     if (isUnsupported(e)) notice.value = '当前环境未接入证书签发能力（需 openssl 或 ACME）'
@@ -447,6 +443,31 @@ async function doDeleteCert() {
     <ConfirmDialog :open="!!delCert" danger title="删除证书"
       :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
       confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
+
+    <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱 -->
+    <div v-if="sslModal" class="mask" @click.self="sslModal = null">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>为「{{ sslModal.site.name }}」申请证书</h3>
+        <label class="ssl-opt">
+          <input type="radio" value="self-signed" v-model="sslModal.method" />
+          <span><b>面板自签</b><br /><span class="dim">离线可用、立即可得，但浏览器会提示不受信任</span></span>
+        </label>
+        <label class="ssl-opt">
+          <input type="radio" value="http-01" v-model="sslModal.method" />
+          <span><b>ACME http-01</b><br /><span class="dim">可信证书，需公网 80 端口可达 + certbot</span></span>
+        </label>
+        <label v-if="sslModal.method === 'http-01'" class="blk">
+          ACME 账户邮箱（必填，用于到期与异常通知）
+          <input v-model="sslModal.email" type="email" placeholder="ops@example.com" autocomplete="email" />
+        </label>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="sslModal = null">取消</button>
+          <button class="btn-primary" :disabled="busy || (sslModal.method === 'http-01' && !sslModal.email.trim())"
+            @click="execSsl(sslModal.site, sslModal.method, sslModal.email)">
+            {{ busy ? '提交中…' : '申请' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -472,5 +493,8 @@ async function doDeleteCert() {
   border-radius: 12px; padding: 20px; }
 .modal h3 { margin: 0 0 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: 13px; line-height: 1.5; }
+.ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
+.ssl-opt input { width: auto; margin-top: 2px; }
 .btn-sm.danger { color: #ff7b72; }
 </style>

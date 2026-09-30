@@ -9,6 +9,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -80,21 +81,20 @@ function canFix(c: BaselineItem): boolean {
   return c.applicable && !c.ok && FIXABLE.includes(c.key)
 }
 
+/** 待确认修复的基线项（审计 U5：window.confirm/prompt → ConfirmDialog 确认词模式） */
+const pendingFix = ref<BaselineItem | null>(null)
+function askFix(c: BaselineItem) { pendingFix.value = c }
+
 async function fix(c: BaselineItem) {
-  if (!window.confirm(
-    `将修改系统配置：${c.title}\n\n` +
-    '后端流程：先备份原文件 → 写入 → sshd -t 校验 → 校验不通过自动回滚。\n' +
-    '若本机没有 sshd，后端会拒绝修改（不会写坏配置把你锁在门外）。\n\n确认继续？')) return
-  const word = window.prompt('请输入「确认修复」以继续：')
-  if (word === null) return
   error.value = ''; notice.value = ''
   acting.value = true
   try {
     const r = await api.post<{ changed: boolean; backup: string | null; validated: boolean }>(
-      API.security.baselineApply(), { key: c.key, confirm_token: word.trim() })
+      API.security.baselineApply(), { key: c.key, confirm_token: '确认修复' })
     notice.value = r.changed
       ? `已修复${r.backup ? `；原文件备份：${r.backup}` : ''}`
       : '该项已符合预期，未做改动'
+    pendingFix.value = null
     await load()
   } catch (e) { error.value = errorText(e) }
   finally { acting.value = false }
@@ -133,17 +133,23 @@ async function doVerify() {
   finally { acting.value = false }
 }
 
+/** 关闭 MFA 需出示第二因子（动态口令/恢复码）——这是真实凭据而非确认词，
+ *  不能用 ConfirmDialog 确认词模式，用专用输入弹窗（审计 U5：替代 window.prompt） */
+const disableMfa = ref(false)
+const mfaDisableCode = ref('')
+
 async function doDisable() {
-  // 关闭必须出示第二因子：否则一个被劫持的会话就能顺手关掉受害者账户的 MFA
-  const code = window.prompt('关闭 MFA 需要出示动态口令或一次性恢复码：')
+  const code = mfaDisableCode.value.trim()
   if (!code) return
   error.value = ''; notice.value = ''
   acting.value = true
   try {
-    await api.post(API.auth.mfaDisable(), { code: code.trim() })
+    await api.post(API.auth.mfaDisable(), { code })
     mfaEnabled.value = false
     if (auth.me) auth.me.mfa_enabled = false
     notice.value = 'MFA 已关闭。'
+    disableMfa.value = false
+    mfaDisableCode.value = ''
   } catch (e) { error.value = errorText(e) }
   finally { acting.value = false }
 }
@@ -179,7 +185,7 @@ async function doDisable() {
               class="btn-ghost btn-sm"
               :disabled="acting"
               title="先备份 → 写 → sshd -t 校验 → 不通过自动回滚"
-              @click="fix(c)"
+              @click="askFix(c)"
             >修复</button>
           </li>
           <li v-if="!baseline.length"><span class="dot warn" /> 安全基线模块尚未接入</li>
@@ -242,10 +248,34 @@ async function doDisable() {
         </div>
 
         <div v-else class="ops-row">
-          <button class="btn-danger btn-sm" :disabled="acting" @click="doDisable">关闭 MFA</button>
+          <button class="btn-danger btn-sm" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
           <span class="muted small">关闭需出示动态口令或恢复码</span>
         </div>
       </section>
+    </div>
+    <!-- 基线修复确认（审计 U5：confirm+prompt → ConfirmDialog 确认词） -->
+    <ConfirmDialog
+      :open="!!pendingFix" danger title="修复安全基线"
+      :detail="pendingFix ? `将修改系统配置：${pendingFix.title}。后端流程：先备份原文件 → 写入 → sshd -t 校验 → 校验不通过自动回滚。若本机没有 sshd，后端会拒绝修改（不会写坏配置把你锁在门外）。` : ''"
+      confirm-word="确认修复" @confirm="pendingFix && fix(pendingFix)" @cancel="pendingFix = null"
+    />
+
+    <!-- 关闭 MFA：出示第二因子（动态口令或恢复码） -->
+    <div v-if="disableMfa" class="mask" @click.self="disableMfa = false">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>关闭 MFA</h3>
+        <p class="muted" style="margin:0 0 12px">
+          关闭需出示第二因子，否则一个被劫持的会话就能顺手关掉账户的 MFA。
+        </p>
+        <label class="blk">动态口令（6 位）或一次性恢复码
+          <input v-model="mfaDisableCode" autocomplete="off" @keyup.enter="doDisable" />
+        </label>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="disableMfa = false">取消</button>
+          <button class="btn-primary" :disabled="acting || !mfaDisableCode.trim()" @click="doDisable">
+            {{ acting ? '提交中…' : '确认关闭' }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -275,4 +305,12 @@ async function doDisable() {
 .warn-tip { margin: 8px 0 4px; font-size: 12.5px; color: var(--c-warn, #d29922); }
 .inp { padding: 4px 8px; border: 1px solid var(--c-border, #444); border-radius: var(--radius, 6px); background: transparent; color: inherit; font-family: var(--mono); }
 .break { word-break: break-all; }
+/* 关闭 MFA 输入弹窗（与其他视图同形态） */
+.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
+.modal { background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: 12px; padding: 20px 24px; width: min(400px, 92vw); }
+.modal h3 { margin: 0 0 10px; font-size: 16px; }
+.modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
+.modal .blk input { margin-top: 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.muted { color: var(--c-text-dim); }
 </style>

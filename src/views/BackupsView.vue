@@ -22,6 +22,7 @@ import { CAP, emptyRemote, type RemoteConfig } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
 import Icon from '@/components/Icon.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface Plan {
   id: number; kind: string; target: string; cron_expr: string | null
@@ -214,12 +215,46 @@ async function runPlan(p: Plan) {
   finally { busy.value = false; await load() }
 }
 
+/** 待删除计划（审计 U5：window.confirm → ConfirmDialog） */
+const delPlan = ref<Plan | null>(null)
 async function del(p: Plan) {
-  if (!window.confirm(`确认删除备份计划 #${p.id}（${p.kind}/${p.target}）？\n\n注意：**不会删除已生成的产物文件**。`)) return
   busy.value = true; error.value = ''
-  try { await api.del(API.backups.remove(p.id)); await load() }
+  try { await api.del(API.backups.remove(p.id)); delPlan.value = null; await load() }
   catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
+}
+
+/** 待确认恢复的产物（审计 U5：window.prompt → ConfirmDialog 确认词模式） */
+const restoreConfirm = ref<{ plan: Plan; name: string } | null>(null)
+function askRestore(plan: Plan, name: string) {
+  error.value = ''; notice.value = ''
+  // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
+  if (plan.kind === 'panel') {
+    notice.value =
+      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务后手动替换。'
+    return
+  }
+  restoreConfirm.value = { plan, name }
+}
+
+async function restoreFrom() {
+  const rc = restoreConfirm.value
+  if (!rc) return
+  const { plan, name } = rc
+
+  busy.value = true
+  try {
+    const r = await api.post<{ task_id: string }>(API.backups.restore(plan.id), {
+      artifact: name,
+      confirm_token: '覆盖恢复',
+    })
+    notice.value = `恢复任务已提交（${r.task_id}）。可在「任务中心」查看进度；如需回滚，任务详情里的 output_path 指向恢复前的快照。`
+    restoreConfirm.value = null
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function showArtifacts(p: Plan) {
@@ -235,55 +270,6 @@ async function showArtifacts(p: Plan) {
 
 /** 选中的产物名（恢复目标）。产物按名称倒序，默认取最新一份。 */
 const selName = ref('')
-
-/**
- * 从选中产物恢复（**高危**）。
- *
- * 后端三道闸门：确认词 + 产物名白名单 + 任务内自动先备份当前态。
- * 前端这里只负责把"确认"这件事做实：必须手输确认词，不接受一个随手点的 OK。
- */
-async function restoreFrom() {
-  error.value = ''
-  notice.value = ''
-  if (!curArtifacts.value) return
-  const plan = curArtifacts.value.plan
-
-  // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
-  if (plan.kind === 'panel') {
-    notice.value =
-      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务后手动替换。'
-    return
-  }
-  const name = selName.value || curArtifacts.value.items[0]?.name
-  if (!name) {
-    error.value = '该计划还没有任何产物，请先执行一次备份'
-    return
-  }
-
-  const word = window.prompt(
-    `即将用「${name}」覆盖 ${plan.target} 的当前数据。\n\n` +
-      '任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。\n\n' +
-      '请输入「覆盖恢复」以继续：',
-  )
-  if (word === null) return
-  if (word.trim() !== '覆盖恢复') {
-    error.value = '确认词不匹配，已取消'
-    return
-  }
-
-  busy.value = true
-  try {
-    const r = await api.post<{ task_id: string }>(API.backups.restore(plan.id), {
-      artifact: name,
-      confirm_token: '覆盖恢复',
-    })
-    notice.value = `恢复任务已提交（${r.task_id}）。可在「任务中心」查看进度；如需回滚，任务详情里的 output_path 指向恢复前的快照。`
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    busy.value = false
-  }
-}
 
 function fmtSize(n: number) {
   if (n < 1024) return `${n} B`
@@ -378,7 +364,7 @@ function fmtTime(t: number | null) {
                 <button class="btn-ghost btn-sm" @click="showArtifacts(p)"><Icon name="list" :size="13" /> 产物</button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="openRemote(p)"><Icon name="globe" :size="13" /> 远端</button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="del(p)"><Icon name="trash" :size="13" /> 删除</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
               </td>
             </tr>
           </tbody>
@@ -450,7 +436,7 @@ function fmtTime(t: number | null) {
             class="btn-ghost btn-sm danger"
             :disabled="!canManage || busy || !curArtifacts.items.length"
             title="覆盖当前数据：任务内会先自动备份当前态，需手输确认词"
-            @click="restoreFrom"
+            @click="askRestore(curArtifacts.plan, selName || curArtifacts.items[0]?.name || '')"
           >
             <Icon name="restart" :size="13" /> 从此产物恢复（高危）
           </button>
@@ -469,6 +455,20 @@ function fmtTime(t: number | null) {
         <p v-else class="dim">该计划暂无产物（点「执行」生成）</p>
       </section>
     </template>
+
+    <!-- 删除计划（审计 U5：window.confirm → ConfirmDialog） -->
+    <ConfirmDialog
+      :open="!!delPlan" danger title="删除备份计划"
+      :detail="delPlan ? `确认删除备份计划 #${delPlan.id}（${delPlan.kind}/${delPlan.target}）？注意：不会删除已生成的产物文件。` : ''"
+      @confirm="delPlan && del(delPlan)" @cancel="delPlan = null"
+    />
+
+    <!-- 从产物恢复（审计 U5：window.prompt → ConfirmDialog 确认词模式） -->
+    <ConfirmDialog
+      :open="!!restoreConfirm" danger title="从产物恢复（高危）"
+      :detail="restoreConfirm ? `即将用「${restoreConfirm.name}」覆盖 ${restoreConfirm.plan.target} 的当前数据。任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。` : ''"
+      confirm-word="覆盖恢复" @confirm="restoreFrom" @cancel="restoreConfirm = null"
+    />
   </div>
 </template>
 

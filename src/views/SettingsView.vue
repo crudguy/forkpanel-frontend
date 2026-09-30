@@ -11,6 +11,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { SettingsReport } from '@/api/types'
 import Icon from '@/components/Icon.vue'
@@ -81,11 +82,13 @@ async function createRole() {
   finally { roleBusy.value = false }
 }
 
+/** 待删除角色（审计 U5：window.confirm → ConfirmDialog） */
+const delRole = ref<string | null>(null)
 async function deleteRole(name: string) {
-  if (!window.confirm(`删除角色「${name}」？此操作不可撤销。`)) return
   roleErr.value = ''
   try {
     await api.del(API.roles.item(name))
+    delRole.value = null
     await loadRoles()
   } catch (e) { roleErr.value = errorText(e) }
 }
@@ -279,7 +282,7 @@ onMounted(async () => {
               </td>
               <td>{{ r.builtin ? '内置' : '自定义' }}</td>
               <td class="nowrap">
-                <button v-if="!r.builtin" class="btn-ghost btn-sm" @click="deleteRole(r.name)">删除</button>
+                <button v-if="!r.builtin" class="btn-ghost btn-sm" @click="delRole = r.name">删除</button>
               </td>
             </tr>
           </tbody>
@@ -307,6 +310,12 @@ onMounted(async () => {
         </div>
       </div>
     </section>
+
+    <ConfirmDialog
+      :open="!!delRole" danger title="删除角色"
+      :detail="delRole ? `删除角色「${delRole}」？此操作不可撤销。` : ''"
+      @confirm="delRole && deleteRole(delRole)" @cancel="delRole = null"
+    />
   </div>
 </template>
 
