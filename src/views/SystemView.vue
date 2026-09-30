@@ -147,6 +147,11 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
         <h2 class="page-title">主机监控 <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span></h2>
         <p class="page-sub">CPU / 内存 / 负载 / 磁盘 / 网络 的实时趋势与历史走向</p>
       </div>
+      <span class="spacer" />
+      <!-- 进程管理是本页的一个 Tab，但"杀失控进程"是救火动作，给常驻直达入口 -->
+      <RouterLink to="/system/procs" class="btn-ghost">
+        <Icon name="tasks" :size="15" /> 进程管理
+      </RouterLink>
     </div>
 
     <!-- 当前快照读数（本页实时读数头，差异化在下方趋势） -->

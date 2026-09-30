@@ -74,6 +74,9 @@ const sysInfo = computed(() => {
   ]
 })
 
+// 救火直达：CPU / 内存冲高时，用户下一个动作几乎必然是"谁在吃资源"。
+// 进程管理已并入主机监控的 Tab（2 击），这里在异常时补一条 1 击捷径。
+const hot = computed(() => Number(cpu.value) >= 85 || memPct.value >= 90)
 const alerts = computed<any[]>(() => ov.value?.alerts ?? [])
 
 onMounted(async () => {
@@ -111,6 +114,13 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
         <MetricCard label="负载" :value="(ov?.load1 ?? 0).toFixed(2)" unit="1m" icon="bolt" :tone="loadTone" />
         <MetricCard label="网络" :value="ov ? fmtNet(ov.net_in_bps) : '0'"
           :unit="'↓ · ' + (ov ? fmtNet(ov.net_out_bps) : '0') + ' ↑'" icon="network" tone="cyan" />
+      </div>
+
+      <!-- 高负载时的救火捷径：只在异常时出现，避免常态占视觉位 -->
+      <div v-if="hot" class="hot-tip">
+        <Icon name="alert" :size="15" />
+        <span>资源占用偏高：CPU {{ cpu }}% · 内存 {{ memPct.toFixed(0) }}%</span>
+        <RouterLink to="/system/procs" class="btn-ghost btn-sm">查看占用进程</RouterLink>
       </div>
 
       <!-- 快捷入口 -->
@@ -152,6 +162,11 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
+
+.hot-tip { display: flex; align-items: center; gap: 9px; padding: 9px 14px;
+           border: 1px solid var(--c-danger); border-radius: 10px;
+           background: var(--c-danger-soft); color: var(--c-danger); font-size: 13.5px; }
+.hot-tip span { flex: 1; }
 
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
