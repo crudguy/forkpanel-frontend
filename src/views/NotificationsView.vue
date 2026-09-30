@@ -11,6 +11,8 @@
 import { onMounted, ref } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import EmptyState from '@/components/EmptyState.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface NotificationItem {
   id: number
@@ -66,9 +68,13 @@ async function readAll() {
   }
 }
 
+/** 待删除通知（经 ConfirmDialog 确认后执行，审计 U10：此前删除无确认） */
+const delTarget = ref<NotificationItem | null>(null)
+
 async function remove(n: NotificationItem) {
   try {
     await api.del(API.notifications.remove(n.id))
+    delTarget.value = null
     await load()
   } catch (e) {
     error.value = errorText(e)
@@ -91,9 +97,9 @@ onMounted(load)
 
     <p v-if="error" class="err">{{ error }}</p>
     <p v-if="loading" class="muted">加载中…</p>
-    <p v-if="!loading && !items.length" class="muted">
-      暂无通知。备份失败、恢复失败等需要人工处置的事件会出现在这里。
-    </p>
+    <EmptyState v-if="!loading && !items.length"
+      title="暂无通知"
+      hint="备份失败、恢复失败等需要人工处置的事件会出现在这里" />
 
     <ul class="list">
       <li v-for="n in items" :key="n.id" class="item" :class="[n.level, { read: n.read }]">
@@ -105,10 +111,19 @@ onMounted(load)
         <p v-if="n.body" class="body">{{ n.body }}</p>
         <div class="ops">
           <button v-if="!n.read" class="btn small" @click="markRead(n)">标记已读</button>
-          <button class="btn small danger" @click="remove(n)">删除</button>
+          <button class="btn small danger" @click="delTarget = n">删除</button>
         </div>
       </li>
     </ul>
+
+    <ConfirmDialog
+      :open="!!delTarget"
+      title="删除这条通知？"
+      detail="删除后不可恢复（通知记录无回收站）。"
+      danger
+      @confirm="delTarget && remove(delTarget)"
+      @cancel="delTarget = null"
+    />
   </section>
 </template>
 
@@ -117,21 +132,22 @@ onMounted(load)
 .head { display: flex; align-items: center; justify-content: space-between; }
 h1 { font-size: 18px; margin: 0; }
 .ops { display: flex; gap: 8px; align-items: center; }
-.badge { background: #c73e1f; color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 12px; }
-.btn { border: 1px solid #555; background: transparent; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+/* 主题变量（审计 U10）：此前硬编码 #c73e1f/#555 等，亮色主题割裂 */
+.badge { background: var(--c-danger); color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 12px; }
+.btn { border: 1px solid var(--c-border-strong); background: transparent; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn.small { padding: 2px 8px; font-size: 12px; }
-.btn.danger { border-color: #c73e1f; color: #c73e1f; }
+.btn.danger { border-color: var(--c-danger); color: var(--c-danger); }
 .list { list-style: none; padding: 0; margin-top: 12px; }
-.item { border-left: 3px solid #666; padding: 10px 12px; margin-bottom: 8px; background: rgba(127,127,127,.08); border-radius: 6px; }
-.item.crit { border-left-color: #e5484d; }
-.item.warn { border-left-color: #f5a524; }
-.item.info { border-left-color: #3b82f6; }
+.item { border-left: 3px solid var(--c-border-strong); padding: 10px 12px; margin-bottom: 8px; background: var(--c-glass); border-radius: 6px; }
+.item.crit { border-left-color: var(--c-danger); }
+.item.warn { border-left-color: var(--c-warn); }
+.item.info { border-left-color: var(--c-cyan); }
 .item.read { opacity: .55; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tag { font-size: 12px; opacity: .7; }
 .time { font-size: 12px; opacity: .6; margin-left: auto; }
 .body { margin: 6px 0; white-space: pre-wrap; font-size: 13px; opacity: .85; }
 .muted { opacity: .6; }
-.err { color: #e5484d; }
+.err { color: var(--c-danger); }
 </style>

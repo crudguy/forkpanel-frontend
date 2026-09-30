@@ -75,6 +75,23 @@ async function loadHistory() {
   catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
 }
 
+let rtTimer: number | undefined
+let histTimer: number | undefined
+
+/** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9）：1-3s 轮询切后台仍打后端，低配机器负担明显 */
+function onVisibility() {
+  if (document.hidden) {
+    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
+    if (histTimer) { clearInterval(histTimer); histTimer = undefined }
+  } else {
+    loadRealtime()
+    loadHistory()
+    const poll = Math.min(Math.max(interval.value || 2000, 1000), 3000)
+    rtTimer = window.setInterval(loadRealtime, poll)
+    histTimer = window.setInterval(loadHistory, 30000)
+  }
+}
+
 onMounted(() => {
   loadRealtime()
   loadHistory()
@@ -82,13 +99,13 @@ onMounted(() => {
   const poll = Math.min(Math.max(interval.value || 2000, 1000), 3000)
   rtTimer = window.setInterval(loadRealtime, poll)
   histTimer = window.setInterval(loadHistory, 30000)
+  document.addEventListener('visibilitychange', onVisibility)
 })
 
-let rtTimer: number | undefined
-let histTimer: number | undefined
 onUnmounted(() => {
   if (rtTimer) clearInterval(rtTimer)
   if (histTimer) clearInterval(histTimer)
+  document.removeEventListener('visibilitychange', onVisibility)
 })
 
 const last = computed(() => buf.value.at(-1))

@@ -114,8 +114,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
     <template v-else>
       <p v-if="ovError" class="err" role="alert">{{ ovError }}</p>
+      <!-- 首屏骨架（审计 U11）：此前 ov=null 时指标卡全显示 0 值，故障与"真的空闲"无法区分 -->
+      <div v-if="!ov" class="grid cols-5">
+        <div v-for="i in 5" :key="i" class="card skeleton" style="height:96px" />
+      </div>
       <!-- 指标卡 -->
-      <div class="grid cols-5">
+      <div v-else class="grid cols-5">
         <MetricCard label="CPU" :value="cpu" unit="%" icon="cpu" :progress="Number(cpu)" tone="primary" />
         <MetricCard label="内存" :value="((ov?.mem_used_kib || 0) / 1024).toFixed(0)"
           :unit="'/ ' + ((ov?.mem_total_kib || 0) / 1024).toFixed(0) + ' MB'" icon="server"

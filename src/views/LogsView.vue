@@ -35,6 +35,9 @@ const follow = ref(false)
 const viewEl = ref<HTMLElement | null>(null)
 
 let es: EventSource | null = null
+/** SSE 重连计数与上限（审计 P7）：EventSource 自动重连，连续失败超限后放弃并明确提示 */
+const esRetries = ref(0)
+const MAX_ES_RETRIES = 5
 
 async function loadSources() {
   try {
@@ -57,6 +60,22 @@ async function load() {
 
 function closeStream() {
   if (es) { es.close(); es = null }
+  esRetries.value = 0
+  if (scrollTimer) { clearTimeout(scrollTimer); scrollTimer = undefined }
+}
+
+/**
+ * 滚动跟随节流（审计 P6）：高频日志下每条 SSE 事件都 nextTick 读
+ * scrollHeight 是每秒数十次强制重排。改为 trailing 节流——100ms 内
+ * 的多次新行只触发一次真实滚动。
+ */
+let scrollTimer: number | undefined
+function scrollBottom() {
+  if (scrollTimer) return
+  scrollTimer = window.setTimeout(() => {
+    scrollTimer = undefined
+    nextTick(() => { if (viewEl.value) viewEl.value.scrollTop = viewEl.value.scrollHeight })
+  }, 100)
 }
 
 /** 下载当前日志源（沿用当前 grep 过滤——所见即所得；attachment 响应头触发保存，不离开页面） */
@@ -108,16 +127,14 @@ const levelRows = computed(() => {
 })
 const levelTotal = computed(() => levelRows.value.reduce((s, r) => s + r.n, 0))
 
-function scrollBottom() {
-  nextTick(() => { if (viewEl.value) viewEl.value.scrollTop = viewEl.value.scrollHeight })
-}
-
 function openStream() {
   closeStream()
   if (!cur.value) return
   lines.value = []
   const url = API.logs.stream(cur.value, grep.value || undefined, count.value)
   es = new EventSource(url)
+  // 连接恢复即清零重连计数（审计 P7）
+  es.onopen = () => { esRetries.value = 0 }
   es.addEventListener('log', (ev: MessageEvent) => {
     try {
       lines.value.push(JSON.parse(ev.data) as Line)
@@ -125,7 +142,17 @@ function openStream() {
       scrollBottom()
     } catch { /* 忽略坏帧 */ }
   })
-  // EventSource 断线会自动重连；此处只在关闭时清理
+  // EventSource 断线会自动重连，但要给失败反馈与重连上限（审计 P7）：
+  // 此前无 onerror，断网/后端重启时 UI 长期停在「实时跟随中…」无任何提示
+  es.onerror = () => {
+    esRetries.value += 1
+    if (esRetries.value > MAX_ES_RETRIES) {
+      const src = cur.value
+      closeStream()
+      follow.value = false
+      error.value = `实时跟随已断开（连续 ${MAX_ES_RETRIES} 次重连失败）。请检查连接后重新点击「实时跟随」${src ? `（来源：${src}）` : ''}`
+    }
+  }
 }
 
 function toggleFollow() {

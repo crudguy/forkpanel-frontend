@@ -95,10 +95,21 @@ function logout() {
           <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
         </button>
 
-        <div class="user" @click="userMenu = !userMenu">
-          <span class="avatar">{{ initial }}</span>
-          <span class="uname">{{ auth.me?.user }}</span>
-          <Icon name="chevron" :size="14" class="caret" />
+        <!-- 真实 button + aria-expanded（审计 U12）：此前 div+click 不可键盘聚焦，
+             CSS 写了 [aria-expanded] 选择器却从不设置，键盘用户打不开菜单。
+             触发器与下拉面板分离（HTML 不允许 button 嵌套 button）。 -->
+        <div class="user-wrap">
+          <button
+            type="button" class="user"
+            :aria-expanded="userMenu" aria-haspopup="menu"
+            :aria-label="`用户菜单（${auth.me?.user ?? ''}）`"
+            @click="userMenu = !userMenu"
+            @keydown.escape="userMenu = false"
+          >
+            <span class="avatar">{{ initial }}</span>
+            <span class="uname">{{ auth.me?.user }}</span>
+            <Icon name="chevron" :size="14" class="caret" />
+          </button>
 
           <div v-if="userMenu" class="backdrop" @click.stop="userMenu = false" />
           <div v-if="userMenu" class="menu">
@@ -162,8 +173,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .spacer { flex: 1; }
 
-.user { position: relative; display: flex; align-items: center; gap: 9px; cursor: pointer;
-        padding: 4px 8px 4px 4px; border-radius: 999px; }
+.user-wrap { position: relative; }
+.user { position: static; display: flex; align-items: center; gap: 9px; cursor: pointer;
+        padding: 4px 8px 4px 4px; border-radius: 999px; border: none; background: none; color: inherit; font: inherit; }
 .user:hover { background: var(--c-hover); }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: none;
@@ -173,7 +185,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .avatar.sm { width: 36px; height: 36px; font-size: 15px; }
 .uname { font-size: 13.5px; font-weight: 500; }
 .caret { color: var(--c-text-dim); transition: transform .15s; }
-.user[aria-expanded='true'] .caret, .user:has(.menu) .caret { transform: rotate(90deg); }
+.user[aria-expanded='true'] .caret { transform: rotate(90deg); }
 
 .backdrop { position: fixed; inset: 0; z-index: 40; }
 .menu {

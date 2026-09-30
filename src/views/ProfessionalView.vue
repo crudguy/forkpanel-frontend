@@ -110,14 +110,29 @@ async function loadProcs() {
 function switchSort(s: 'cpu' | 'mem') { procSort.value = s; loadProcs() }
 
 let rtTimer: number | undefined, procTimer: number | undefined
+
+/** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9） */
+function onVisibility() {
+  if (document.hidden) {
+    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
+    if (procTimer) { clearInterval(procTimer); procTimer = undefined }
+  } else {
+    loadSnapshot(); loadProcs()
+    rtTimer = window.setInterval(loadSnapshot, 2000)
+    procTimer = window.setInterval(loadProcs, 3000)
+  }
+}
+
 onMounted(() => {
   loadSnapshot(); loadProcs()
   rtTimer = window.setInterval(loadSnapshot, 2000)
   procTimer = window.setInterval(loadProcs, 3000)
+  document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
   if (rtTimer) clearInterval(rtTimer)
   if (procTimer) clearInterval(procTimer)
+  document.removeEventListener('visibilitychange', onVisibility)
 })
 </script>
 
@@ -185,7 +200,7 @@ onUnmounted(() => {
 
       <!-- 磁盘：每挂载点 -->
       <div class="sec-head"><Icon name="database" :size="16" /> 磁盘（每挂载点）</div>
-      <div class="cards-2">
+      <div v-if="diskRows.length" class="cards-2">
         <div v-for="d in diskRows" :key="d.mount" class="card disk">
           <div class="disk-top">
             <span class="mount">{{ d.mount }}</span>
@@ -195,12 +210,13 @@ onUnmounted(() => {
           <div class="prog"><div class="fill" :style="{ width: d.pct + '%', background: d.net ? C.hot : C.disk }" /></div>
           <div class="disk-foot"><b>{{ fmtPct(d.pct) }}%</b><span class="dim">{{ fmtBytes(d.used) }} / {{ fmtBytes(d.total) }}</span></div>
         </div>
-        <EmptyState v-if="!diskRows.length" title="无磁盘数据" />
       </div>
+      <!-- 空态放 grid 外（审计 U13）：作为 grid 子元素只占一列，排版破碎 -->
+      <EmptyState v-else title="无磁盘数据" />
 
       <!-- 网络：每网卡 -->
       <div class="sec-head"><Icon name="network" :size="16" /> 网络吞吐（每网卡）</div>
-      <div class="cards-2">
+      <div v-if="netRows.length" class="cards-2">
         <div v-for="n in netRows" :key="n.iface" class="card net">
           <div class="net-top"><span class="iface">{{ n.iface }}</span></div>
           <div class="net-row"><span class="lk" :style="{ color: C.netIn }">入站</span><b>{{ fmtMbps(n.rx) }} Mbps</b></div>
@@ -208,12 +224,12 @@ onUnmounted(() => {
           <div class="net-row"><span class="lk" :style="{ color: C.netOut }">出站</span><b>{{ fmtMbps(n.tx) }} Mbps</b></div>
           <div class="prog"><div class="fill" :style="{ width: Math.min(100, (n.tx / 1e8) * 100) + '%', background: C.netOut }" /></div>
         </div>
-        <EmptyState v-if="!netRows.length" title="无网络接口" />
       </div>
+      <EmptyState v-else title="无网络接口" />
 
       <!-- 温度（hwmon） -->
       <div class="sec-head"><Icon name="cpu" :size="16" /> 温度传感器</div>
-      <div class="cards-2">
+      <div v-if="tempRows.length" class="cards-2">
         <div v-for="t in tempRows" :key="t.chip + ':' + t.label" class="card temp">
           <div class="temp-top">
             <span class="tlabel">{{ t.label }}</span>
@@ -227,8 +243,8 @@ onUnmounted(() => {
           </div>
           <div v-if="t.critical" class="temp-warn">已达临界温度</div>
         </div>
-        <EmptyState v-if="!tempRows.length" title="无温度传感器（本机无 /sys/class/hwmon）" />
       </div>
+      <EmptyState v-else title="无温度传感器（本机无 /sys/class/hwmon）" />
 
       <!-- 进程 -->
       <div class="sec-head">
