@@ -7,6 +7,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
 
 interface BaselineItem {
@@ -28,6 +29,7 @@ interface SessionInfo {
 }
 
 const baseline = ref<BaselineItem[]>([])
+const auth = useAuthStore()
 const sessions = ref<SessionInfo[]>([])
 const error = ref('')
 const loading = ref(true)
@@ -103,7 +105,10 @@ interface MfaEnroll { secret: string; otpauth_uri: string; recovery_codes: strin
 
 const mfaEnrolling = ref<MfaEnroll | null>(null)
 const mfaCode = ref('')
-const mfaEnabled = ref(false)
+// 初值来自 /auth/me 权威下发（审计 F8）。此前初值恒为 false 且挂载时无查询，
+// 已启用 MFA 的用户刷新后显示「未启用」；后来靠「重复 enroll 的 400 文案含
+// 「已启用」」反推——后端改文案即失效。
+const mfaEnabled = ref(auth.me?.mfa_enabled ?? false)
 
 async function doEnroll() {
   error.value = ''; notice.value = ''
@@ -111,12 +116,7 @@ async function doEnroll() {
   try {
     mfaEnrolling.value = await api.post<MfaEnroll>(API.auth.mfaEnroll())
     mfaCode.value = ''
-  } catch (e) {
-    const t = errorText(e)
-    // 已启用时后端返回 400——把它当状态提示用，而不是单纯报错
-    if (t.includes('已启用')) { mfaEnabled.value = true; mfaEnrolling.value = null }
-    error.value = t
-  } finally { acting.value = false }
+  } catch (e) { error.value = errorText(e) } finally { acting.value = false }
 }
 
 async function doVerify() {
@@ -125,6 +125,7 @@ async function doVerify() {
   try {
     await api.post(API.auth.mfaVerify(), { code: mfaCode.value.trim() })
     mfaEnabled.value = true
+    if (auth.me) auth.me.mfa_enabled = true
     mfaEnrolling.value = null
     mfaCode.value = ''
     notice.value = 'MFA 已启用：下次登录需额外输入动态口令。'
@@ -141,6 +142,7 @@ async function doDisable() {
   try {
     await api.post(API.auth.mfaDisable(), { code: code.trim() })
     mfaEnabled.value = false
+    if (auth.me) auth.me.mfa_enabled = false
     notice.value = 'MFA 已关闭。'
   } catch (e) { error.value = errorText(e) }
   finally { acting.value = false }

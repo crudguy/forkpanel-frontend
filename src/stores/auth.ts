@@ -9,6 +9,8 @@ export interface Me {
   permissions: string[]
   allowed_roots: string[]
   tier: 'nano' | 'small' | 'standard'
+  /** MFA 是否已启用（/auth/me 权威下发；旧后端无此字段 → undefined 按未启用） */
+  mfa_enabled?: boolean
 }
 
 /**
@@ -46,7 +48,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const r = await api.get<Me & { capabilities: CapabilityMap }>('/api/v1/auth/me')
       me.value = { user: r.user, role: r.role, permissions: r.permissions,
-                   allowed_roots: r.allowed_roots, tier: r.tier }
+                   allowed_roots: r.allowed_roots, tier: r.tier,
+                   mfa_enabled: r.mfa_enabled }
       capabilities.value = r.capabilities ?? {}
       // platform（distro/kernel/arch/init）由 /system/capabilities 下发，与 capabilities 同源；
       // 一并加载，供概览/设置/导航展示平台信息。缺失非致命（UI 降级为 —）。
