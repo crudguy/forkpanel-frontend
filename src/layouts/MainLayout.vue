@@ -77,11 +77,13 @@ function logout() {
         <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
              平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。
              置于右侧簇、紧邻深色模式按钮（用户偏好：放最右、挨着主题切换）。 -->
-        <div v-if="auth.platform" class="sysinfo"
-          :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}`">
+        <!-- 能力矩阵是排障首选信息（菜单为何置灰、端点为何 501），原先埋在设置页深处，
+             这里把胶囊做成入口一键直达（路由已配 hash 滚动，落到 #caps 锚点）。 -->
+        <RouterLink v-if="auth.platform" to="/settings#caps" class="sysinfo"
+          :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}｜点击查看运行环境与能力矩阵`">
           <Icon name="monitor" :size="15" />
           <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
-        </div>
+        </RouterLink>
 
         <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
           :title="unread ? `未读通知 ${unread} 条` : '通知'">
@@ -141,7 +143,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .title { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
 
-/* 系统基础信息胶囊：右侧状态簇的一员，紧凑、不可点击、hover 出详情 */
+/* 系统基础信息胶囊：右侧状态簇的一员，紧凑、hover 出详情，点击直达能力矩阵 */
 .bell { position: relative; color: var(--c-text-dim); }
 .bell:hover { color: var(--c-text); }
 .badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
@@ -153,8 +155,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   height: 34px; padding: 0 12px;
   border: 1px solid var(--c-border); border-radius: 999px;
   background: var(--c-bg); color: var(--c-text-dim);
-  font-size: 12.5px; white-space: nowrap;
+  font-size: 12.5px; white-space: nowrap; text-decoration: none;
+  transition: color .15s ease, background .15s ease;
 }
+.sysinfo:hover { color: var(--c-text); background: var(--c-hover); }
 
 .spacer { flex: 1; }
 

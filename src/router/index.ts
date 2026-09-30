@@ -6,6 +6,12 @@ import DashboardView from '@/views/DashboardView.vue'
 // 除仪表盘外的模块均为懒加载：首屏只拉取必要代码（体积预算 ≤150KB gzip）
 export const router = createRouter({
   history: createWebHistory(),
+  // 支持 #锚点 深链（如 /settings#caps：topbar 系统信息胶囊直达能力矩阵）；
+  // 顺带修正"切换路由后仍停在旧滚动位置"的默认行为。
+  scrollBehavior(to, _from, savedPosition) {
+    if (to.hash) return { el: to.hash, top: 24, behavior: 'smooth' }
+    return savedPosition ?? { top: 0 }
+  },
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { title: '登录' } },
     {

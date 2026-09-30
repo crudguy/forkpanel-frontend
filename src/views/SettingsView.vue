@@ -7,7 +7,8 @@
  * - deployment：部署级配置只读展示（改 config.toml / PANEL_READ_ONLY 并重启）
  * - reserved：种子预留键未接线（wired:false），如实标注，绝不伪装成可生效
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -15,7 +16,20 @@ import type { SettingsReport } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 const canManage = computed(() => auth.can('settings.manage'))
+
+// 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
+// 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
+// 内容补上后锚点会被顶偏，故在数据就绪后再定位一次。
+function scrollToHash() {
+  const id = route.hash ? route.hash.slice(1) : ''
+  if (!id) return
+  requestAnimationFrame(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+watch(() => route.hash, scrollToHash)
 
 const caps = computed(() => Object.entries(auth.capabilities))
 const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).length)
@@ -128,6 +142,7 @@ onMounted(async () => {
   await load()
   // 角色列表需要 user.manage；loadRoles 内部自判权限，非管理员直接跳过
   await loadRoles()
+  scrollToHash()
 })
 </script>
 
@@ -217,7 +232,9 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section class="card">
+    <!-- 能力矩阵：排障时第一个要看的东西（菜单为什么置灰、功能为什么 501），
+         故挂在锚点 #caps 上，topbar 系统信息胶囊一键直达。 -->
+    <section id="caps" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
       <table>
         <thead><tr><th>能力</th><th>状态</th><th>后端</th><th>原因</th></tr></thead>
