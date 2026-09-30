@@ -55,6 +55,40 @@ const form = ref({
 /** 正在编辑远端的计划（null = 面板关闭）。cfg 的 secret 恒为空初值：凭据不回显。 */
 const editRemote = ref<{ plan: Plan; cfg: RemoteConfig } | null>(null)
 
+// ── 计划字段编辑（审计 F15）：后端 PatchReq 早已支持 cron/保留份数/加密/启停，
+// 此前前端只有「改远端」入口——计划要改只能删了重建，丢历史产物关联。
+const editPlan = ref<{
+  plan: Plan; cron: string; keep: number; encrypt: boolean; enabled: boolean; dest: string
+} | null>(null)
+
+function openEditPlan(p: Plan) {
+  error.value = ''; notice.value = ''
+  editPlan.value = {
+    plan: p,
+    cron: p.cron_expr ?? '', keep: p.keep_count,
+    encrypt: p.encrypt, enabled: p.enabled, dest: p.dest_dir,
+  }
+}
+
+async function saveEditPlan() {
+  const e = editPlan.value; if (!e) return
+  busy.value = true; error.value = ''; notice.value = ''
+  try {
+    await api.patch(API.backups.patch(e.plan.id), {
+      // cron：Some("") = 清空（仅手动执行）；表单已回填现值，只改想要的字段即可
+      cron_expr: e.cron.trim(),
+      keep_count: e.keep,
+      encrypt: e.encrypt,
+      enabled: e.enabled,
+      dest_dir: e.dest.trim() || undefined, // 留空 = 不改目标目录
+    })
+    notice.value = `已更新计划 #${e.plan.id}`
+    editPlan.value = null
+    await load()
+  } catch (err) { error.value = errorText(err) }
+  finally { busy.value = false }
+}
+
 /**
  * 表单 → 请求体。
  *
@@ -342,6 +376,7 @@ function fmtTime(t: number | null) {
               <td class="nowrap">
                 <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="runPlan(p)"><Icon name="play" :size="13" /> 执行</button>
                 <button class="btn-ghost btn-sm" @click="showArtifacts(p)"><Icon name="list" :size="13" /> 产物</button>
+                <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="openRemote(p)"><Icon name="globe" :size="13" /> 远端</button>
                 <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="del(p)"><Icon name="trash" :size="13" /> 删除</button>
               </td>
@@ -371,6 +406,36 @@ function fmtTime(t: number | null) {
           比"能不能连上"更接近真相。「保存」只改进当前计划的远端配置（类型/目标不在此处改）。
           凭据框为空表示<b>沿用已保存的凭据</b>；要清空请把用户名也清空改为匿名访问。
         </p>
+      </section>
+
+      <section class="card" v-if="editPlan">
+        <div class="sec-head">
+          <Icon name="edit" :size="16" />
+          编辑计划 #{{ editPlan.plan.id }}（{{ editPlan.plan.kind }}/{{ editPlan.plan.target }}）
+          <span class="spacer" />
+          <button class="btn-primary btn-sm" :disabled="!canManage || busy" @click="saveEditPlan">保存</button>
+          <button class="btn-ghost btn-sm" @click="editPlan = null">关闭</button>
+        </div>
+
+        <div class="row">
+          <label>cron（清空 = 仅手动）
+            <input v-model="editPlan.cron" placeholder="0 3 * * *" />
+          </label>
+          <label>保留份数（1-365）
+            <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
+          </label>
+          <label class="chk" title="AES-256-GCM 加密产物。主密钥不落库，丢失后备份无法恢复">
+            <input v-model="editPlan.encrypt" type="checkbox" /> 静态加密
+          </label>
+          <label class="chk">
+            <input v-model="editPlan.enabled" type="checkbox" /> 启用
+          </label>
+          <label>输出目录（留空 = 不改）
+            <input v-model="editPlan.dest" placeholder="plans" />
+          </label>
+        </div>
+
+        <p class="tip">修改保存后立即生效；改 cron/启用无需删除重建，历史产物关联保持不变。</p>
       </section>
 
       <section class="card" v-if="curArtifacts">
