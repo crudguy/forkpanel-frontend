@@ -46,6 +46,14 @@ function logout() {
           <input placeholder="搜索服务、站点、日志…" />
         </div>
 
+        <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
+             平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。 -->
+        <div v-if="auth.platform" class="sysinfo"
+          :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}`">
+          <Icon name="server" :size="15" />
+          <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
+        </div>
+
         <span class="spacer" />
 
         <button class="btn-icon ghost" :title="theme === 'dark' ? '切换到亮色' : '切换到暗色'" @click="toggleTheme">
@@ -110,6 +118,15 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .search input { border: none; background: transparent; padding: 0; height: 34px; color: var(--c-text); }
 .search input:focus-visible { outline: none; box-shadow: none; }
 
+/* 系统基础信息胶囊：右侧状态簇的一员，紧凑、不可点击、hover 出详情 */
+.sysinfo {
+  display: flex; align-items: center; gap: 7px; flex: none;
+  height: 34px; padding: 0 12px;
+  border: 1px solid var(--c-border); border-radius: 999px;
+  background: var(--c-bg); color: var(--c-text-dim);
+  font-size: 12.5px; white-space: nowrap;
+}
+
 .spacer { flex: 1; }
 
 .user { position: relative; display: flex; align-items: center; gap: 9px; cursor: pointer;
@@ -148,6 +165,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 @media (max-width: 720px) {
   .search { display: none; }
+  .sysinfo { display: none; }
   .content { padding: 16px; }
 }
 </style>

@@ -15,6 +15,14 @@
  *    logo 占满，按钮被推到可视区之外，于是**收起来就再也展不开**。
  *    也刻意**不做**"点 logo 展开"：logo 在展开态点击没有语义（既非链接也不是开关），
  *    同一个元素在不同状态下做不同事，用户只会更犹豫该点哪里。
+ *
+ * ── 箭头方向约定（2026-09-30 调整）──
+ * chevron 图标原生朝右（">"）。展开态旋转 180° → 朝左（点我会「收起」）；
+ * 折叠态旋转 0°   → 朝右（点我会「展开」）。箭头即"点了侧边栏会往哪走"。
+ *
+ * ── 系统基础信息已移出侧边栏 ──
+ * 底部的 distro·arch 原来塞在折叠开关上方，既挤占开关空间又和 topbar 重复。
+ * 现统一放到 MainLayout 的 topbar 右侧状态簇，侧边栏底部只留折叠开关。
  */
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
@@ -93,18 +101,14 @@ function why(it: Item): string | null {
       </div>
     </nav>
 
-    <!-- 底部固定区：折叠开关 + 平台信息。位置在两种状态下都不变，用户学一次就够。 -->
+    <!-- 底部固定区：只放折叠开关。两种状态都不换位置，用户学一次就够。
+         系统基础信息（distro·arch 等）已移往 MainLayout 的 topbar 右侧状态簇。 -->
     <div class="bottom">
       <button class="toggle" :title="navCollapsed ? '展开侧边栏' : '收起侧边栏'"
         :aria-expanded="!navCollapsed" @click="toggleNav">
         <Icon name="chevron" :size="16" class="chev" />
         <span class="toggle-label">收起侧边栏</span>
       </button>
-
-      <div v-if="auth.platform" class="meta">
-        <Icon name="server" :size="14" />
-        <span class="meta-txt">{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
-      </div>
     </div>
   </aside>
 </template>
@@ -181,17 +185,10 @@ function why(it: Item): string | null {
   transition: background .14s ease, color .14s ease;
 }
 .toggle:hover { background: var(--c-hover); color: var(--c-text); }
-.chev { flex: none; transition: transform .2s ease; }
-/* 展开态箭头指向左（收起），折叠态翻转指向右（展开）——箭头方向即"点了会往哪走" */
-.collapsed .chev { transform: rotate(180deg); }
+.chev { flex: none; transition: transform .2s ease; transform: rotate(180deg); }
+/* 展开态箭头朝左（点我会收起），折叠态翻转朝右（点我会展开）。
+   箭头方向即"点了侧边栏会往哪走"，与主流面板一致。 */
+.collapsed .chev { transform: rotate(0deg); }
 .collapsed .toggle { justify-content: center; padding: 8px; }
 .collapsed .toggle-label { display: none; }
-
-.meta {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px 0;
-  font-size: 12px; color: var(--c-text-mute); white-space: nowrap; overflow: hidden;
-}
-.collapsed .meta { justify-content: center; padding: 6px 0 0; }
-.collapsed .meta-txt { display: none; }
 </style>

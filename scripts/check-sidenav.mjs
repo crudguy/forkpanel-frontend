@@ -7,12 +7,14 @@
  * 只是折叠之后品牌区露出半截 "Fo"、折叠按钮被挤出可视区导致**收起来就展不开**。
  * 类型系统对"元素被挤到可视区之外"这件事没有任何意见，所以只能显式断言。
  *
- * 被钉住的四条不变量（改回去立刻变红）：
+ * 被钉住的五条不变量（改回去立刻变红）：
  *   [1] 折叠态隐藏品牌文字——76px 栏宽装不下 logo+文字+按钮，靠挤只会得到 "Fo"
  *   [2] 品牌行里**不得**放按钮——这是"展不开"的成因（`margin-left:auto` 在满行里
  *       被推到可视区外，点不到）
  *   [3] 开关所在区块 `flex: none`——否则会被 `flex:1` 的导航区挤掉
  *   [4] 开关必须存在且折叠态隐藏其文字——它是唯一的展开入口，且 60px 宽装不下文字
+ *   [5] 箭头方向：展开态朝左（收起）、折叠态朝右（展开）——chevron 原生朝右，
+ *       靠 rotate 翻转表达"点了会往哪走"；翻转这两条 vue-tsc / build 同样不报错
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -85,6 +87,22 @@ must(
   toggleLabel !== null && /display\s*:\s*none/.test(toggleLabel),
   '4b',
   '折叠态必须隐藏开关文字：60px 宽装不下「收起侧边栏」，会折行或溢出',
+)
+
+// [5] 箭头方向：展开朝左、折叠朝右（chevron 原生朝右，靠 rotate 翻转）
+//     `.chev`（基础=展开态）必须 rotate(180deg) → 朝左；
+//     `.collapsed .chev` 必须 rotate(0deg) → 朝右。两条一起翻转＝手感反掉。
+const chev = ruleBody('.chev')
+const chevCollapsed = ruleBody('.collapsed .chev')
+must(
+  chev !== null && /rotate\(\s*180deg\s*\)/.test(chev),
+  '5a',
+  '展开态 chevron 必须 rotate(180deg)：箭头朝左=点它会收起',
+)
+must(
+  chevCollapsed !== null && /rotate\(\s*0(?:deg)?\s*\)/.test(chevCollapsed),
+  '5b',
+  '折叠态 chevron 必须 rotate(0deg)：箭头朝右=点它会展开',
 )
 
 if (failures.length) {
