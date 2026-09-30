@@ -60,16 +60,16 @@ function certLevel(d: number | null) {
 // ── 新建 / 编辑弹窗 ──
 const modalOpen = ref(false)
 const editing = ref<Site | null>(null)
-const form = ref({ name: '', domains: '', root: '', enabled: true })
+const form = ref({ name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' })
 
 function openCreate() {
   editing.value = null
-  form.value = { name: '', domains: '', root: '', enabled: true }
+  form.value = { name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' }
   modalOpen.value = true
 }
 function openEdit(s: Site) {
   editing.value = s
-  form.value = { name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled }
+  form.value = { name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled, kind: 'static', upstreams: '', fpm: '' }
 }
 function closeModal() { modalOpen.value = false; editing.value = null }
 
@@ -109,14 +109,24 @@ async function applyConfig() {
   const name = form.value.name.trim()
   const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
   try {
+    // 站点类型。proxy/php 的目标值会**直接进 nginx 配置文本**，注入校验在后端；
+    // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
+    const kind = form.value.kind
+    if (kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
+    if (kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
     await api.post(API.sites.apply(), {
       name,
       domains,
       root: form.value.root.trim() || name,
       force_https: true,
+      kind,
+      upstreams: kind === 'proxy'
+        ? form.value.upstreams.split(/[,\s]+/).filter(Boolean)
+        : undefined,
+      fpm: kind === 'php' ? form.value.fpm.trim() : undefined,
     })
     notice.value = `已应用配置 ${name}`
-    form.value = { name: '', domains: '', root: '', enabled: true }
+    form.value = { name: '', domains: '', root: '', enabled: true, kind: 'static', upstreams: '', fpm: '' }
     await load()
   } catch (e) {
     if (isUnsupported(e)) notice.value = '当前环境未接入 Web 服务器，无法应用配置'
@@ -225,12 +235,29 @@ async function doDeleteCert() {
         <label>名称<input v-model="form.name" :disabled="!canApply" placeholder="my-site" /></label>
         <label>域名（逗号分隔）<input v-model="form.domains" :disabled="!canApply" placeholder="example.com, www.example.com" /></label>
         <label>根目录<input v-model="form.root" :disabled="!canApply" placeholder="留空则用站点名" /></label>
+        <label>类型
+          <select v-model="form.kind" :disabled="!canApply">
+            <option value="static">静态</option>
+            <option value="proxy">反向代理 / 负载均衡</option>
+            <option value="php">PHP (php-fpm)</option>
+          </select>
+        </label>
+        <label v-if="form.kind === 'proxy'">后端（逗号分隔）
+          <input v-model="form.upstreams" :disabled="!canApply" placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" />
+        </label>
+        <label v-if="form.kind === 'php'">php-fpm
+          <input v-model="form.fpm" :disabled="!canApply" placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
+        </label>
         <button class="btn-primary" :disabled="!canApply || busy || !form.name || !form.domains"
           @click="applyConfig">
           {{ busy ? '应用中…' : '应用' }}
         </button>
       </div>
-      <p class="tip">流程：渲染 → 语法校验 → 原子替换 → reload → 入库。校验失败时旧配置不受影响。</p>
+      <p class="tip">
+        流程：渲染 → 语法校验 → 原子替换 → reload → 入库。校验失败时旧配置不受影响。
+        多个后端由 nginx <code>upstream</code>（least_conn）轮询；后端只接受
+        <code>http(s)://host:port</code>，不接受路径或查询串。
+      </p>
     </section>
 
     <!-- 站点列表 -->
