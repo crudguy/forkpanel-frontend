@@ -129,23 +129,64 @@ async function doDelete() {
 
 // ── 上传（多选，逐文件 PUT 原始字节）──
 function pickUpload() { fileInput.value?.click() }
+/** 超过这个大小就走分片通道。小文件走单请求更省往返（分片至少要 3 次 HTTP）。 */
+const MULTIPART_THRESHOLD = 8 * 1024 * 1024
+
+/** 分片上传进度文案（如 "big.iso（3/12 片）"）；空串表示当前没有进行中的上传 */
+const uploadLabel = ref('')
+
+/**
+ * 分片上传：init → 查已传分片 → 逐片 PUT → complete。
+ *
+ * 先查 status 再传，是为了**断点续传**：同一会话重试时（例如网络抖了一下、用户重选
+ * 同一个文件）能跳过已成功的分片。注意每次 init 都会新建会话，所以当前实现是
+ * "会话内续传"——它覆盖了"单片传输失败后重试"这类最常见的中断。真正跨会话的续传
+ * 需要按文件指纹索引历史会话，那是另一个量级的设计，不做半成品。
+ */
+async function uploadMultipart(f: File, onProgress: (done: number, total: number) => void) {
+  const init = await api.post<{ upload_id: string; chunk_size: number; total_chunks: number }>(
+    API.files.multipartInit(), { path: full(f.name), size: f.size })
+  const { upload_id, chunk_size, total_chunks } = init
+  const st = await api.get<{ received: number[] }>(API.files.multipartItem(upload_id))
+  const have = new Set(st.received)
+  for (let i = 0; i < total_chunks; i++) {
+    if (!have.has(i)) {
+      const start = i * chunk_size
+      const blob = f.slice(start, Math.min(start + chunk_size, f.size))
+      await api.putRaw(API.files.multipartChunk(upload_id, i), blob)
+    }
+    onProgress(i + 1, total_chunks)
+  }
+  return api.post<{ path: string; size: number }>(API.files.multipartComplete(upload_id))
+}
+
 async function onUploadFiles(ev: Event) {
   const input = ev.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   input.value = '' // 允许重复选同一文件
   if (!files.length || !canWrite.value) return
-  uploading.value = true; error.value = ''
+  uploading.value = true; error.value = ''; notice.value = ''
   const failed: string[] = []
+  const usedMultipart = files.some(f => f.size > MULTIPART_THRESHOLD)
   try {
     for (const f of files) {
       try {
-        await api.putRaw<{ path: string; size: number }>(
-          '/api/v1/files/upload', f, { params: { path: full(f.name) } })
+        if (f.size > MULTIPART_THRESHOLD) {
+          uploadLabel.value = `${f.name}（准备中…）`
+          await uploadMultipart(f, (done, total) => {
+            uploadLabel.value = `${f.name}（${done}/${total} 片）`
+          })
+        } else {
+          await api.putRaw<{ path: string; size: number }>(
+            API.files.upload(), f, { params: { path: full(f.name) } })
+        }
       } catch (err) { failed.push(`${f.name}: ${errorText(err)}`) }
+      finally { uploadLabel.value = '' }
     }
     if (failed.length) error.value = `部分上传失败 — ${failed.join('；')}`
+    else if (usedMultipart) notice.value = `已上传 ${files.length} 个文件（大文件走了分片通道）`
     await load()
-  } finally { uploading.value = false }
+  } finally { uploading.value = false; uploadLabel.value = '' }
 }
 
 // ── 下载（同源直链：GET 带 Cookie，浏览器原生保存）──
@@ -222,8 +263,9 @@ function fmtSize(n: number) {
       <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
         <Icon name="trash" :size="15" /> 回收站
       </button>
-      <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload">
-        <Icon name="plus" :size="15" /> {{ uploading ? '上传中…' : '上传' }}
+      <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload"
+        :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MB 的文件自动走分片上传（中断后可续传）`">
+        <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
       </button>
       <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />
     </div>

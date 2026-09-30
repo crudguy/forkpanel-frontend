@@ -85,6 +85,13 @@ export const API = {
     list: () => '/api/v1/files/list',
     stat: () => '/api/v1/files/stat',
     upload: () => '/api/v1/files/upload',
+    // 分片上传（大文件断点续传）
+    multipartInit: () => '/api/v1/files/multipart/init',
+    multipartChunk: (uploadId: string, index: number) =>
+      `/api/v1/files/multipart/chunk?upload_id=${encodeURIComponent(uploadId)}&index=${index}`,
+    multipartItem: (uploadId: string) => `/api/v1/files/multipart/${encodeURIComponent(uploadId)}`,
+    multipartComplete: (uploadId: string) =>
+      `/api/v1/files/multipart/${encodeURIComponent(uploadId)}/complete`,
     download: () => '/api/v1/files/download',
     read: () => '/api/v1/files/read',
     write: () => '/api/v1/files/write',
