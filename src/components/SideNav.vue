@@ -51,7 +51,7 @@ const groups = computed(() => [
     { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.WEBSERVER_MANAGE, perm: 'site.view' },
     { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
     { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
-    { to: '/backups', label: '备份', icon: 'disk', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
+    { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
     { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
   ] },
   { title: '安全', items: [
@@ -61,7 +61,7 @@ const groups = computed(() => [
   ] },
   { title: '运维', items: [
     { to: '/cron', label: '计划任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
-    { to: '/tasks', label: '任务中心', icon: 'terminal', cap: CAP.METRICS_READ, perm: 'task.view' },
+    { to: '/tasks', label: '任务中心', icon: 'tasks', cap: CAP.METRICS_READ, perm: 'task.view' },
     { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage' },
     { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view' },
   ] },

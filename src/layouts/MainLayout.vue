@@ -63,7 +63,7 @@ function logout() {
              置于右侧簇、紧邻深色模式按钮（用户偏好：放最右、挨着主题切换）。 -->
         <div v-if="auth.platform" class="sysinfo"
           :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}`">
-          <Icon name="server" :size="15" />
+          <Icon name="monitor" :size="15" />
           <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
         </div>
 
