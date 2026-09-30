@@ -66,7 +66,7 @@ const canReload = computed(() => webSupported.value && canManage.value)
 async function load() {
   error.value = ''; notice.value = ''
   try {
-    sites.value = await api.get<Site[]>('/api/v1/sites')
+    sites.value = await api.get<Site[]>(API.sites.list())
     certs.value = await api.get<Cert[]>(API.certs.list())
   } catch (e) { error.value = errorText(e) }
 }

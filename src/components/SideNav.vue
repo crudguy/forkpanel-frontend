@@ -103,6 +103,8 @@ function isOn(it: Item): boolean {
           class="item"
           :class="{ disabled: !!why(it), on: isOn(it) }"
           :title="why(it) ?? it.label"
+          :aria-disabled="why(it) ? 'true' : undefined"
+          :tabindex="why(it) ? -1 : undefined"
         >
           <Icon :name="it.icon" :size="19" class="ico" />
           <span class="label">{{ it.label }}</span>

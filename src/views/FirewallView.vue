@@ -37,7 +37,7 @@ const comment = ref('')
 async function load() {
   error.value = ''
   try {
-    const r = await api.get<{ backend: string; active: boolean; rules: Rule[] }>('/api/v1/firewall/rules')
+    const r = await api.get<{ backend: string; active: boolean; rules: Rule[] }>(API.firewall.rules())
     backend.value = r.backend; active.value = r.active; rules.value = r.rules
   } catch (e) { error.value = errorText(e) }
 }

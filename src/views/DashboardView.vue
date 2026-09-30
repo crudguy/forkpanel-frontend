@@ -8,6 +8,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { api, errorText, isUnsupported } from '@/api/client'
+import { API } from '@/api/endpoints'
 import { CAP } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import Icon from '@/components/Icon.vue'
@@ -26,7 +27,7 @@ const ovError = ref('')
 
 async function poll() {
   try {
-    const r = await api.get<any>('/api/v1/system/overview'); apply(r); ovError.value = ''
+    const r = await api.get<any>(API.system.overview()); apply(r); ovError.value = ''
   } catch (e) {
     if (isUnsupported(e)) ovError.value = errorText(e)
   }
@@ -96,7 +97,7 @@ onMounted(async () => {
   if (auth.pollingMode) {
     timer = window.setInterval(poll, 10000)
   } else {
-    es = new EventSource('/api/v1/events/metrics')
+    es = new EventSource(API.events.metrics())
     es.addEventListener('metrics', (ev) => {
       try { apply(JSON.parse((ev as MessageEvent).data)) } catch { /* 忽略坏帧 */ }
     })
@@ -160,7 +161,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
           <div class="sec-head"><Icon name="alert" :size="16" /><span>告警与事件</span></div>
           <ul v-if="alerts.length">
             <li v-for="(a, i) in alerts" :key="i">
-              <span class="dot" :class="a.level === 'danger' ? 'danger' : a.level === 'warn' ? 'warn' : 'ok'" />
+              <!-- 等级文字化（审计 P11）：仅靠 dot 颜色色盲/读屏无法分辨 -->
+              <span class="dot" :class="a.level === 'danger' ? 'danger' : a.level === 'warn' ? 'warn' : 'ok'"
+                :aria-label="a.level === 'danger' ? '严重' : a.level === 'warn' ? '警告' : '提示'" />
+              <span class="a-lv">{{ a.level === 'danger' ? '严重' : a.level === 'warn' ? '警告' : '提示' }}</span>
               <span class="a-msg">{{ a.message }}</span>
             </li>
           </ul>
@@ -201,6 +205,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 .alerts ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .alerts li { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; }
+.a-lv { flex: none; font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--c-border); color: var(--c-text-dim); }
+li:has(.dot.danger) .a-lv { color: var(--c-danger); border-color: var(--c-danger-soft); background: var(--c-danger-soft); }
+li:has(.dot.warn) .a-lv { color: var(--c-warn); border-color: transparent; background: var(--c-warn-bg); }
+li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; background: var(--c-ok-soft); }
 .alerts .a-msg { flex: 1; }
 .ok-state { display: flex; align-items: center; gap: 9px; color: var(--c-text-dim); font-size: 13.5px; }
 </style>

@@ -26,7 +26,9 @@ const sources = ref<Src[]>([])
 const cur = ref('')
 const lines = ref<Line[]>([])
 const grep = ref('')
-const count = ref(200)
+// 初值与下拉选项对齐（审计 F22）：此前 200 不在 100/500/2000 选项内，
+// 首屏下拉无匹配项，显示行数与实际请求行数不符
+const count = ref(100)
 const error = ref('')
 const capped = ref(false)
 const follow = ref(false)

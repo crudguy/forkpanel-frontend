@@ -20,7 +20,8 @@ const busy = ref<number | null>(null)
 async function load() {
   error.value = ''; pending.value = ''; loading.value = true
   try {
-    const r = await api.get<any>(API.processes.list())
+    // 显式 limit（审计 P4）：后端默认 20 会静默截断，用户误以为看全了
+    const r = await api.get<any>(API.processes.list(), { params: { limit: 200, sort: 'cpu' } })
     procs.value = Array.isArray(r) ? r : (r.processes ?? [])
   } catch (e) {
     if (isUnsupported(e)) pending.value = '进程管理功能即将推出（进程快照尚未接入）'
@@ -53,7 +54,7 @@ async function doKill() {
     <div class="page-head">
       <div>
         <h2 class="page-title">进程</h2>
-        <p class="page-sub">实时进程与资源占用</p>
+        <p class="page-sub">实时进程与资源占用 · 按 CPU 排序，仅显示前 200 条</p>
       </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>

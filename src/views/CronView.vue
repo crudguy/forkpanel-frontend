@@ -56,8 +56,11 @@ onMounted(load)
 
 const canManage = computed(() => auth.enabled(CAP.SCHEDULER_MANAGE, 'cron.manage'))
 
+// 创建按钮加 busy 态（审计 U8）：此前请求期间按钮可重复点击，产生重复任务
+const createBusy = ref(false)
 async function create() {
   error.value = ''
+  createBusy.value = true
   try {
     await api.post(API.cron.jobs(), {
       name: form.value.name, expr: form.value.expr,
@@ -66,6 +69,7 @@ async function create() {
     form.value = { name: '', expr: '', command: '', user: 'root' }
     load()
   } catch (e) { error.value = errorText(e) }
+  finally { createBusy.value = false }
 }
 
 async function doDelete() {
@@ -151,7 +155,8 @@ function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString
         </div>
         <div class="field"><label>命令</label><input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn-primary" :disabled="!canManage || !form.name || !form.expr || !form.command" @click="create">创建</button>
+          <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
+            {{ createBusy ? '创建中…' : '创建' }}</button>
           <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
             {{ previewBusy ? '计算中…' : '预览执行时刻' }}
           </button>

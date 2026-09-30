@@ -11,12 +11,16 @@ const auth = useAuthStore()
 const rows = ref<any[]>([])
 const error = ref('')
 const loading = ref(true)
+/** 服务端上限 1000：行数打满即可能被截断（审计 P5），如实提示避免误导合规判断 */
+const truncated = ref(false)
 
 async function load() {
   error.value = ''; loading.value = true
   try {
-    const r = await api.get<any>(API.audit())
+    // 显式拉到服务端上限（默认 100 会静默砍断审计记录）
+    const r = await api.get<any>(API.audit(), { params: { limit: 1000 } })
     rows.value = Array.isArray(r) ? r : (r.logs ?? r.entries ?? [])
+    truncated.value = rows.value.length >= 1000
   } catch (e) { error.value = errorText(e) }
   finally { loading.value = false }
 }
@@ -41,6 +45,7 @@ function resClass(r: string) {
 
     <template v-else>
       <p v-if="error" class="err">{{ error }}</p>
+      <p v-if="truncated" class="warn">审计记录已达单次上限（1000 条），更早的记录未显示</p>
       <div v-if="loading" class="skeleton box" />
       <div v-else class="card flush">
         <table>

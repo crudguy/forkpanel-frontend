@@ -62,7 +62,7 @@ function full(p: string) {
 async function load() {
   loading.value = true; error.value = ''
   try {
-    const r = await api.get<ListResp>('/api/v1/files/list', {
+    const r = await api.get<ListResp>(API.files.list(), {
       params: { path: path.value, hidden: showHidden.value },
     })
     entries.value = r.entries; truncated.value = r.truncated
@@ -91,7 +91,7 @@ async function open(e: Entry) {
   if (e.sensitive) { error.value = '该文件受保护，不可通过面板读取'; return }
   try {
     const r = await api.get<{ content: string | null; binary: boolean; size: number; has_more: boolean }>(
-      '/api/v1/files/read', {
+      API.files.read(), {
         params: { path: `${path.value.replace(/\/+$/, '')}/${e.name}` },
       })
     if (r.binary) { error.value = '二进制文件不支持在线编辑'; return }
@@ -109,7 +109,7 @@ async function save() {
     return
   }
   try {
-    await api.post('/api/v1/files/write', {
+    await api.post(API.files.write(), {
       path: path.value.replace(/\/+$/, '') + '/' + editing.value.name,
       content: editing.value.content,
       // 乐观锁：带上读到的 mtime，被别人改过则拒绝覆盖
@@ -234,7 +234,7 @@ async function runBatch(op: 'trash' | 'move' | 'copy') {
   }
   batchBusy.value = true
   try {
-    const r = await api.post<ActionResp>('/api/v1/files/action', { op, paths, dest })
+    const r = await api.post<ActionResp>(API.files.action(), { op, paths, dest })
     if (r.fail_count > 0) {
       batchErr.value = `${op} 完成：成功 ${r.ok_count}，失败 ${r.fail_count} — ` +
         r.results.filter(x => !x.ok).slice(0, 3).map(x => `${x.path}: ${x.error}`).join('；')
@@ -283,7 +283,9 @@ function fmtSize(n: number) {
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
     <p v-if="notice" class="ok-msg" role="status">{{ notice }}</p>
-    <p v-if="batchErr" class="warn" role="status">{{ batchErr }}</p>
+    <!-- batchErr 是批量操作失败，与 error 同类 → 同用红色错误通道（审计 U14）；
+         truncated / hasMore 是提示性警告，保留黄色 -->
+    <p v-if="batchErr" class="err" role="alert">{{ batchErr }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
 
     <!-- 批量操作条 -->
@@ -299,13 +301,13 @@ function fmtSize(n: number) {
     <div v-if="entries.length" class="card flush">
       <table>
         <thead><tr>
-          <th v-if="canWrite" class="chk"><input type="checkbox" :checked="allChecked" @change="allChecked = !allChecked" /></th>
+          <th v-if="canWrite" class="chk"><input type="checkbox" aria-label="全选" :checked="allChecked" @change="allChecked = !allChecked" /></th>
           <th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th />
         </tr></thead>
         <tbody>
           <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
             <td v-if="canWrite" class="chk">
-              <input v-if="!e.sensitive" type="checkbox"
+              <input v-if="!e.sensitive" type="checkbox" :aria-label="`选择 ${e.name}`"
                 :checked="selected.has(e.name)" @change="toggle(e)" />
             </td>
             <td>
@@ -341,7 +343,7 @@ function fmtSize(n: number) {
       <p v-if="editing.hasMore" class="warn" role="alert">
         该文件大于 2MB，编辑器仅载入了前半部分内容。保存已禁用，以免覆盖并截断原文件。请用「下载」取到完整文件后在本地编辑。
       </p>
-      <textarea v-model="editing.content" spellcheck="false" />
+      <textarea v-model="editing.content" spellcheck="false" aria-label="文件内容" />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>
     </div>
 

@@ -10,6 +10,7 @@
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
+import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import MetricCard from '@/components/MetricCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -58,7 +59,7 @@ const rtError = ref('')
 async function loadRealtime() {
   try {
     const r = await api.get<{ interval_ms: number; samples: Sample[] }>(
-      '/api/v1/metrics/realtime', { params: { since: 60 } })
+      API.metrics.realtime(), { params: { since: 60 } })
     interval.value = r.interval_ms
     mergeRealtime(r.samples)
     rtError.value = ''
@@ -70,7 +71,7 @@ async function loadRealtime() {
 
 async function loadHistory() {
   if (auth.me?.tier === 'nano') { history.value = null; return }
-  try { history.value = await api.get('/api/v1/metrics/history', { params: { gran: gran.value } }) }
+  try { history.value = await api.get(API.metrics.history(), { params: { gran: gran.value } }) }
   catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
 }
 

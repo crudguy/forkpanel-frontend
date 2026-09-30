@@ -95,7 +95,10 @@ onUnmounted(stopPoll)
         <table>
           <thead><tr><th>#</th><th>任务</th><th>状态</th><th class="num">进度</th><th>开始时间</th><th /></tr></thead>
           <tbody>
-            <tr v-for="t in tasks" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)" style="cursor:pointer">
+            <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 打开详情 -->
+            <tr v-for="t in tasks" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)"
+                tabindex="0" role="button" :aria-label="`查看任务 #${t.id} 详情`"
+                @keydown.enter="open(t)" @keydown.space.prevent="open(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
               <td class="mono dim">{{ t.key || t.kind }}</td>
               <td>
