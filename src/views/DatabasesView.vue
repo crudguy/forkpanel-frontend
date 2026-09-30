@@ -2,11 +2,15 @@
 /**
  * 数据库管理。
  *
- * 能力边界：连接管理 + 备份任务 + **只读浏览**（库→表→行预览，分页）。
- * 刻意**不提供 Web SQL 终端**（安全与资源隔离考虑），文案在 UI 上说明，
- * 避免用户一直找"在哪执行 SQL"。
+ * 能力边界：连接管理 + 备份任务 + **只读浏览**（库→表→行预览，分页）
+ * + **只读 SQL 控制台**（仅 SQLite）。
  *
- * 引擎差异：SQLite 为面板内建引擎（已实装浏览）；MySQL/PostgreSQL 需外部客户端，
+ * 关于 SQL 控制台：此前刻意不提供 Web SQL 终端（怕它变成任意写库的入口）。
+ * 现在提供的是**只读**版本，且只对 SQLite 开放——它的连接以只读模式打开，
+ * 写语句物理上就会失败；mysql/pg 没有这个保证，后端诚实 501，
+ * 前端如实展示原因，而不是假装没有这个功能。
+ *
+ * 引擎差异：SQLite 为面板内建引擎（已实装浏览与查询）；MySQL/PostgreSQL 需外部客户端，
  * 未实装的连接由后端标记 `available=false`，此处置灰。
  */
 import { ref, onMounted, computed } from 'vue'
@@ -16,6 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import SqlConsole from '@/components/SqlConsole.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
@@ -30,6 +35,8 @@ const auth = useAuthStore()
 const conns = ref<Conn[]>([])
 const error = ref('')
 const busy = ref(false)
+/** 打开 SQL 控制台的连接（null = 关闭） */
+const sqlConn = ref<Conn | null>(null)
 const form = ref({ name: '', engine: 'sqlite', host: '127.0.0.1', default_db: '' })
 
 async function load() {
@@ -146,6 +153,12 @@ function closeBrowse() { browse.value = null }
               <td><span class="badge" :class="c.available ? 'badge-ok' : 'badge-danger'">{{ c.available ? '可用' : '不可用' }}</span></td>
               <td class="nowrap">
                 <button class="btn-ghost btn-sm" :disabled="!c.available || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
+                <button
+                  class="btn-ghost btn-sm"
+                  :disabled="busy"
+                  :title="c.engine === 'sqlite' ? '执行只读查询' : '仅 SQLite 支持只读查询（其它引擎的连接不是只读的）'"
+                  @click="sqlConn = c"
+                ><Icon name="terminal" :size="13" /> SQL</button>
                 <button class="btn-ghost btn-sm" :disabled="!c.available || !canManage || busy" @click="backup(c)">备份</button>
               </td>
             </tr>
@@ -200,6 +213,8 @@ function closeBrowse() { browse.value = null }
         <p v-else-if="browse.db" class="dim">请选择要预览的表</p>
       </section>
     </template>
+
+    <SqlConsole v-if="sqlConn" :conn="sqlConn" @close="sqlConn = null" />
   </div>
 </template>
 

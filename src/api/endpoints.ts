@@ -106,6 +106,7 @@ export const API = {
       `/api/v1/db/${conn}/${enc(db)}/${enc(table)}/rows`,
     backup: (conn: number) => `/api/v1/db/${conn}/backup`,
     restore: (conn: number) => `/api/v1/db/${conn}/restore`,
+    query: (conn: number) => `/api/v1/db/${conn}/query`,
   },
 
   backups: {
