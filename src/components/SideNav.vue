@@ -67,7 +67,7 @@ const groups = computed(() => [
   ] },
   { title: '系统', items: [
     { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage' },
-    { to: '/audit', label: '审计日志', icon: 'audit', cap: CAP.METRICS_READ, perm: 'audit.view' },
+    // 原「审计日志」已并入日志页的第二个 Tab（/logs/audit）
     { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage' },
   ] },
 ])
