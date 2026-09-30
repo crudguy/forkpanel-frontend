@@ -51,10 +51,16 @@ const passed = computed(() => baseline.value.filter(c => c.applicable && c.ok).l
 const risks = computed(() => baseline.value.filter(c => c.applicable && !c.ok).length)
 const naCount = computed(() => baseline.value.filter(c => !c.applicable).length)
 
+/** 待吊销会话（审计 U5：window.confirm → ConfirmDialog） */
+const revokeTarget = ref<SessionInfo | null>(null)
+function askRevoke(s: SessionInfo) { revokeTarget.value = s }
+
 async function revoke(s: SessionInfo) {
-  const tag = s.current ? '这将登出你自己的当前会话。' : '其持有者将被强制下线。'
-  if (!window.confirm(`确认吊销 ${s.user} 的会话？${tag}`)) return
-  try { await api.del(API.security.revokeSession(s.id)); await load() }
+  try {
+    await api.del(API.security.revokeSession(s.id))
+    revokeTarget.value = null
+    await load()
+  }
   catch (e) { error.value = errorText(e) }
 }
 
@@ -206,7 +212,7 @@ async function doDisable() {
               <td class="muted">{{ fmtTime(s.created_at) }}</td>
               <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
               <td class="nowrap">
-                <button class="btn-danger btn-sm" @click="revoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
+                <button class="btn-danger btn-sm" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
               </td>
             </tr>
           </tbody>
@@ -253,6 +259,13 @@ async function doDisable() {
         </div>
       </section>
     </div>
+    <!-- 吊销会话（审计 U5 收尾：全项目最后一处 window.confirm） -->
+    <ConfirmDialog
+      :open="!!revokeTarget" danger title="吊销会话"
+      :detail="revokeTarget ? `确认吊销 ${revokeTarget.user} 的会话？${revokeTarget.current ? '这将登出你自己的当前会话。' : '其持有者将被强制下线。'}` : ''"
+      @confirm="revokeTarget && revoke(revokeTarget)" @cancel="revokeTarget = null"
+    />
+
     <!-- 基线修复确认（审计 U5：confirm+prompt → ConfirmDialog 确认词） -->
     <ConfirmDialog
       :open="!!pendingFix" danger title="修复安全基线"

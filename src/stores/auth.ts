@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api/client'
+import { API } from '@/api/endpoints'
 import { CAP, type CapabilityMap, type PlatformInfo } from '@/api/types'
 
 export interface Me {
@@ -46,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function loadMe() {
     loading.value = true
     try {
-      const r = await api.get<Me & { capabilities: CapabilityMap }>('/api/v1/auth/me')
+      const r = await api.get<Me & { capabilities: CapabilityMap }>(API.auth.me())
       me.value = { user: r.user, role: r.role, permissions: r.permissions,
                    allowed_roots: r.allowed_roots, tier: r.tier,
                    mfa_enabled: r.mfa_enabled }
@@ -61,18 +62,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loadCapabilities() {
     const r = await api.get<{ platform: PlatformInfo; features: CapabilityMap }>(
-      '/api/v1/system/capabilities')
+      API.system.capabilities())
     platform.value = r.platform
     capabilities.value = r.features
   }
 
   async function login(username: string, password: string, totp?: string) {
-    await api.post('/api/v1/auth/login', { username, password, totp })
+    await api.post(API.auth.login(), { username, password, totp })
     await loadMe()
   }
 
   async function logout() {
-    await api.post('/api/v1/auth/logout')
+    await api.post(API.auth.logout())
     me.value = null
     capabilities.value = {}
   }
