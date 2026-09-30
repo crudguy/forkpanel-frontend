@@ -10,6 +10,7 @@ const ICONS: Record<string, string> = {
   server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="7.5" x2="7.01" y2="7.5"/><line x1="7" y1="16.5" x2="7.01" y2="16.5"/>',
   process: '<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="12" r="2.4"/><path d="M8.2 6.6c3 .8 4 2.8 7.2 4.6M8.2 17.4c3-.8 4-2.8 7.2-4.6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9 19 19M5 19l2.1-2.1M16.9 7.1 19 5"/>',
+  docker: '<rect x="5" y="4.2" width="2.4" height="2.4" rx=".4"/><rect x="8.1" y="4.2" width="2.4" height="2.4" rx=".4"/><rect x="11.2" y="4.2" width="2.4" height="2.4" rx=".4"/><rect x="6.6" y="6.9" width="2.4" height="2.4" rx=".4"/><rect x="9.7" y="6.9" width="2.4" height="2.4" rx=".4"/><path d="M3 11.6c0-1.6 1.2-2.9 2.8-3h8.4c1.5 0 2.8.9 3.4 2.3.4 1 .2 2.1-.5 2.9-1.4 1.9-3.8 2.8-6.4 2.8H6.4C4.4 16.6 3 14.9 3 13z"/><path d="M20.6 13.6c.6-.4 1-.9 1-1.5"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/>',
   database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',

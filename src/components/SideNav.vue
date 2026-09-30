@@ -39,7 +39,7 @@ const groups = computed(() => [
   { title: '概览', items: [
     { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
     // 通知：备份失败/恢复失败等"必须让人知道"的事件汇总（perm 与概览同级）
-    { to: '/notifications', label: '通知', icon: 'list', cap: CAP.METRICS_READ, perm: 'system.view' },
+    { to: '/notifications', label: '通知', icon: 'bell', cap: CAP.METRICS_READ, perm: 'system.view' },
   ] },
   { title: '主机', items: [
     { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
@@ -50,7 +50,7 @@ const groups = computed(() => [
     { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
     { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.WEBSERVER_MANAGE, perm: 'site.view' },
     { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
-    { to: '/containers', label: '容器', icon: 'server', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
+    { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
     { to: '/backups', label: '备份', icon: 'disk', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
     { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
   ] },
