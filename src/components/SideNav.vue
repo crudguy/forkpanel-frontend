@@ -55,8 +55,8 @@ const groups = computed(() => [
     { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
   ] },
   { title: '安全', items: [
-    { to: '/firewall', label: '防火墙', icon: 'firewall', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.view' },
-    { to: '/security', label: '安全中心', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'security.manage' },
+    { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.view' },
+    // 原「安全中心」已并入安全页的第二个 Tab（/firewall/baseline：基线检查 + 会话 + MFA）
     { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
   ] },
   { title: '运维', items: [

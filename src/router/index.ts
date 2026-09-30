@@ -29,7 +29,14 @@ export const router = createRouter({
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: '数据库' } },
         { path: 'containers', name: 'containers', component: () => import('@/views/ContainersView.vue'), meta: { title: '容器' } },
         { path: 'backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { title: '备份' } },
-        { path: 'firewall', name: 'firewall', component: () => import('@/views/FirewallView.vue'), meta: { title: '防火墙' } },
+        {
+          path: 'firewall',
+          component: () => import('@/views/SecurityCenterView.vue'),
+          children: [
+            { path: '', name: 'firewall', component: () => import('@/views/FirewallView.vue'), meta: { title: '防火墙规则' } },
+            { path: 'baseline', name: 'firewall-baseline', component: () => import('@/views/SecurityView.vue'), meta: { title: '安全基线' } },
+          ],
+        },
         { path: 'cron', name: 'cron', component: () => import('@/views/CronView.vue'), meta: { title: '计划任务' } },
         {
           path: 'logs',
@@ -45,7 +52,7 @@ export const router = createRouter({
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
         { path: 'processes', redirect: '/system/procs' },
         { path: 'professional', redirect: '/system/pro' },
-        { path: 'security', name: 'security', component: () => import('@/views/SecurityView.vue'), meta: { title: '安全中心' } },
+        { path: 'security', redirect: '/firewall/baseline' },
         { path: 'tasks', name: 'tasks', component: () => import('@/views/TasksView.vue'), meta: { title: '任务中心' } },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: '用户' } },
         { path: 'audit', redirect: '/logs/audit' },
