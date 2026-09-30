@@ -31,6 +31,51 @@ const llmModel = ref('')
 const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
 const showKey = ref(false)
 
+// ── 角色管理（RBAC 自定义角色）──
+// 安全判断全在后端：防提权（权限必须是自身权限的子集）、内置角色名保留、
+// 被用户引用的角色不可删。前端只把后端给的 known_permissions 渲染成勾选项，
+// **绝不自己发明权限名**——前端多一个后端不认的名字，只会得到一次 400。
+interface RoleRow { name: string; permissions: string[]; builtin: boolean; created_at: number | null }
+const roles = ref<RoleRow[]>([])
+const knownPerms = ref<string[]>([])
+const roleName = ref('')
+const rolePerms = ref<string[]>([])
+const roleBusy = ref(false)
+const roleErr = ref('')
+const canRoles = computed(() => auth.can('user.manage'))
+
+async function loadRoles() {
+  if (!canRoles.value) return
+  try {
+    const r = await api.get<{ roles: RoleRow[]; known_permissions: string[] }>(API.roles.list())
+    roles.value = r.roles
+    knownPerms.value = r.known_permissions
+  } catch (e) { roleErr.value = errorText(e) }
+}
+
+async function createRole() {
+  if (!roleName.value.trim() || !rolePerms.value.length) {
+    roleErr.value = '需要角色名与至少一项权限'
+    return
+  }
+  roleBusy.value = true; roleErr.value = ''
+  try {
+    await api.post(API.roles.create(), { name: roleName.value.trim(), permissions: rolePerms.value })
+    roleName.value = ''; rolePerms.value = []
+    await loadRoles()
+  } catch (e) { roleErr.value = errorText(e) }
+  finally { roleBusy.value = false }
+}
+
+async function deleteRole(name: string) {
+  if (!window.confirm(`删除角色「${name}」？此操作不可撤销。`)) return
+  roleErr.value = ''
+  try {
+    await api.del(API.roles.item(name))
+    await loadRoles()
+  } catch (e) { roleErr.value = errorText(e) }
+}
+
 async function load() {
   if (!canManage.value) return
   loading.value = true
@@ -79,7 +124,11 @@ async function clearKey() {
   } finally { saving.value = false }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // 角色列表需要 user.manage；loadRoles 内部自判权限，非管理员直接跳过
+  await loadRoles()
+})
 </script>
 
 <template>
@@ -190,6 +239,57 @@ onMounted(load)
         <code v-for="p in auth.me?.permissions ?? []" :key="p">{{ p }}</code>
       </div>
     </section>
+
+    <!-- 角色管理（RBAC，需 user.manage） -->
+    <section v-if="canRoles" class="card">
+      <div class="sec-head"><Icon name="users" :size="16" /> 角色（RBAC）</div>
+      <p class="sec-note">
+        内置角色的权限由<strong>代码</strong>定义，不可改也不可删。自定义角色的权限必须是
+        <strong>你自己拥有权限的子集</strong>——否则任何拿到用户管理权的人都能造出一个权限更大的角色
+        再把自己升上去。另：角色权限变更对<strong>已登录会话</strong>需重新登录才生效（权限在登录时快照）。
+      </p>
+      <p v-if="roleErr" class="err" role="alert">{{ roleErr }}</p>
+
+      <div v-if="roles.length" class="card flush">
+        <table>
+          <thead><tr><th>角色</th><th class="num">权限</th><th>来源</th><th /></tr></thead>
+          <tbody>
+            <tr v-for="r in roles" :key="r.name">
+              <td class="mono">{{ r.name }}</td>
+              <td class="num">
+                {{ r.permissions.length }} 项
+                <span v-if="!r.permissions.length" class="danger">（无法解析）</span>
+              </td>
+              <td>{{ r.builtin ? '内置' : '自定义' }}</td>
+              <td class="nowrap">
+                <button v-if="!r.builtin" class="btn-ghost btn-sm" @click="deleteRole(r.name)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="form" style="margin-top:12px">
+        <div class="field">
+          <span class="lbl">新角色名（小写字母开头，2~32 位，可用字母/数字/_/-）</span>
+          <input v-model="roleName" class="inp" placeholder="ops-readonly" />
+        </div>
+        <div class="field">
+          <span class="lbl">权限（勾选；列表来自后端白名单，前端不自行发明名字）</span>
+          <div class="perm-grid">
+            <label v-for="p in knownPerms" :key="p" class="perm-chk">
+              <input v-model="rolePerms" type="checkbox" :value="p" />
+              <code>{{ p }}</code>
+            </label>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" :disabled="roleBusy || !roleName.trim() || !rolePerms.length" @click="createRole">
+            {{ roleBusy ? '创建中…' : '创建角色' }}
+          </button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -209,6 +309,9 @@ onMounted(load)
 .set-ok { color: var(--c-ok); }
 .danger { color: var(--c-danger); }
 .actions { margin-top: 10px; }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
+.perm-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
 .err { color: var(--c-danger); font-size: 13px; margin: 8px 0 0; }
 .ok { color: var(--c-ok); font-size: 13px; margin: 8px 0 0; }
 .kv { display: flex; flex-direction: column; }

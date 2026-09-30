@@ -192,6 +192,12 @@ export const API = {
     remove: (id: number) => `/api/v1/users/${id}`,
   },
 
+  roles: {
+    list: () => '/api/v1/roles',
+    create: () => '/api/v1/roles',
+    item: (name: string) => `/api/v1/roles/${enc(name)}`,
+  },
+
   audit: () => '/api/v1/audit',
 
   // 内置 Web 终端（WebSocket 升级，非 REST）。WS 地址由前端按当前 location 构造，
