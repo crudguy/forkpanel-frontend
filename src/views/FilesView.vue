@@ -201,6 +201,62 @@ function download(e: Entry) {
   window.location.href = `/api/v1/files/download?path=${encodeURIComponent(full(e.name))}`
 }
 
+// ── 通用输入弹窗（审计 F3/U5）：替代 window.prompt——原生弹窗脱离设计系统
+//    且无校验；此处统一收集输入，确认后关闭并回调，错误走页面既有通道
+const ask = ref<{
+  title: string; label: string; value: string; placeholder?: string; okText?: string;
+  validate?: (v: string) => string | null;
+  onOk: (v: string) => void;
+} | null>(null)
+function askOk() {
+  const a = ask.value; if (!a) return
+  if (a.validate) {
+    const err = a.validate(a.value)
+    if (err) { error.value = err; return }
+  }
+  const cb = a.onOk
+  ask.value = null
+  cb(a.value.trim())
+}
+
+// ── 建目录 / 重命名 / 改权限（审计 F3：后端路由早已注册，此前前端零调用）──
+function askMkdir() {
+  ask.value = {
+    title: '新建文件夹', label: '文件夹名称', value: '', placeholder: 'new-folder',
+    okText: '创建',
+    onOk: (v) => {
+      api.post(API.files.mkdir(), { path: full(v) })
+        .then(() => { notice.value = `已创建 ${v}`; load() })
+        .catch((e) => { error.value = errorText(e) })
+    },
+  }
+}
+
+function askRename(e: Entry) {
+  ask.value = {
+    title: '重命名', label: '新名称', value: e.name, okText: '重命名',
+    validate: (v) => (!v.trim() ? '名称不能为空' : null),
+    onOk: (v) => {
+      api.post(API.files.rename(), { from: full(e.name), to: full(v) })
+        .then(() => { notice.value = `已重命名为 ${v}`; load() })
+        .catch((err) => { error.value = errorText(err) })
+    },
+  }
+}
+
+function askChmod(e: Entry) {
+  ask.value = {
+    title: '修改权限', label: '八进制权限（如 644 / 755）',
+    value: e.mode ?? '', placeholder: '644', okText: '应用',
+    validate: (v) => (/^[0-7]{3,4}$/.test(v.trim()) ? null : '必须是 3-4 位八进制数，如 644'),
+    onOk: (v) => {
+      api.post(API.files.chmod(), { path: full(e.name), mode: v })
+        .then(() => { notice.value = `已修改 ${e.name} 权限为 ${v}`; load() })
+        .catch((err) => { error.value = errorText(err) })
+    },
+  }
+}
+
 // ── 批量 ──
 const allChecked = computed({
   get: () => entries.value.filter(e => !e.sensitive).length > 0 &&
@@ -221,17 +277,26 @@ const selectedEntries = computed(() =>
   entries.value.filter(e => selected.value.has(e.name)))
 
 const confirmBatchDel = ref(false)
-async function runBatch(op: 'trash' | 'move' | 'copy') {
+function runBatch(op: 'trash' | 'move' | 'copy') {
   const paths = selectedEntries.value.map(e => full(e.name))
   if (!paths.length || batchBusy.value) return
   batchErr.value = ''
   notice.value = ''
-  let dest: string | undefined
   if (op !== 'trash') {
-    const input = window.prompt(`输入目标目录（${op === 'move' ? '移动' : '复制'}到该目录下，同名跳过）：`, path.value)
-    if (!input?.trim()) return
-    dest = input.trim()
+    // 目标目录改走统一弹窗（审计 U5：替代 window.prompt）
+    ask.value = {
+      title: op === 'move' ? '移动到…' : '复制到…',
+      label: `目标目录（${op === 'move' ? '移动' : '复制'}到该目录下，同名跳过）`,
+      value: path.value, okText: op === 'move' ? '移动' : '复制',
+      validate: (v) => (!v.trim() ? '目标目录不能为空' : null),
+      onOk: (dest) => execBatch(op, paths, dest),
+    }
+    return
   }
+  execBatch(op, paths)
+}
+
+async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: string) {
   batchBusy.value = true
   try {
     const r = await api.post<ActionResp>(API.files.action(), { op, paths, dest })
@@ -267,6 +332,7 @@ function fmtSize(n: number) {
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron" :size="14" /> 上级</button>
       <button class="btn-ghost" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button v-if="canWrite" class="btn-ghost" :disabled="loading" @click="askMkdir"><Icon name="plus" :size="15" /> 新建文件夹</button>
       <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
         <Icon name="trash" :size="15" /> 回收站
       </button>
@@ -324,6 +390,9 @@ function fmtSize(n: number) {
             <td class="nowrap">
               <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="download(e)">下载</button>
               <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="open(e)">编辑</button>
+              <!-- 重命名 / 权限（审计 F3）：行内直接入口，目录与文件均可 -->
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askRename(e)">重命名</button>
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askChmod(e)">权限</button>
               <button v-if="canWrite" class="btn-danger btn-sm" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
             </td>
           </tr>
@@ -360,6 +429,20 @@ function fmtSize(n: number) {
       :detail="`即将把已选的 ${selected.size} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
       @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
 
+    <!-- 通用输入弹窗（新建文件夹 / 重命名 / 权限 / 批量目标） -->
+    <div v-if="ask" class="mask" @click.self="ask = null">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>{{ ask.title }}</h3>
+        <label class="blk">{{ ask.label }}
+          <input v-model="ask.value" :placeholder="ask.placeholder" @keyup.enter="askOk" />
+        </label>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="ask = null">取消</button>
+          <button class="btn-primary" @click="askOk">{{ ask.okText ?? '确定' }}</button>
+        </div>
+      </div>
+    </div>
+
     <TrashPanel v-if="showTrash" @close="showTrash = false" @changed="load()" />
   </div>
 </template>
@@ -375,4 +458,11 @@ tr.sens { background: var(--c-warn-bg); }
 .editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
 .editor textarea { min-height: 320px; font-family: var(--mono); font-size: 13px; }
+/* 通用输入弹窗（与 DatabasesView 同形态） */
+.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
+.modal { background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: 12px; padding: 20px 24px; width: min(400px, 92vw); }
+.modal h3 { margin: 0 0 12px; font-size: 16px; }
+.modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
+.modal .blk input { margin-top: 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 </style>
