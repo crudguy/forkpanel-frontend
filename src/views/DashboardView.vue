@@ -20,7 +20,6 @@ let es: EventSource | undefined
 // 实时推送是 overview 的字段子集，必须「合并」而非整体替换——
 // 否则 SSE 不含的 disk/net/alerts/uptime 等字段会被覆盖成 undefined（进而显示 0）。
 function apply(d: any) { ov.value = { ...(ov.value || {}), ...d } }
-const degraded = computed(() => !!ov.value?.degraded)
 
 async function poll() {
   try { const r = await api.get<any>('/api/v1/system/overview'); apply(r) } catch { /* 静默重试 */ }
@@ -95,23 +94,6 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <template>
   <div class="dash">
-    <!-- 欢迎条 -->
-    <section class="welcome card">
-      <div class="w-glow" />
-      <div class="w-main">
-        <div class="w-title">
-          欢迎回来，<b>{{ auth.me?.user || '管理员' }}</b>
-        </div>
-        <div class="w-sub">服务器运行状态一览</div>
-      </div>
-      <div class="w-status">
-        <span class="dot ok" />
-        <span>运行中</span>
-        <span v-if="degraded" class="badge badge-warn">已降频</span>
-        <span class="badge badge-primary">{{ auth.me?.tier || '—' }}</span>
-      </div>
-    </section>
-
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
     </p>
@@ -170,16 +152,6 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
-
-.welcome { position: relative; overflow: hidden; display: flex; align-items: center;
-           justify-content: space-between; gap: 16px; padding: 22px 24px;
-           background: linear-gradient(120deg, var(--c-surface), var(--c-surface-2)); }
-.w-glow { position: absolute; right: -60px; top: -80px; width: 240px; height: 240px;
-          background: radial-gradient(circle, var(--c-primary-soft), transparent 70%); pointer-events: none; }
-.w-title { font-size: 19px; font-weight: 600; }
-.w-title b { color: var(--c-primary); }
-.w-sub { color: var(--c-text-dim); font-size: 13px; margin-top: 3px; }
-.w-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; z-index: 1; }
 
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
