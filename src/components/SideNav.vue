@@ -35,43 +35,33 @@ interface Item { to: string; label: string; icon: string; cap: string; perm: str
 
 const auth = useAuthStore()
 
-// 分组结构：参考主流面板（概览 / 主机 / 应用 / 安全 / 运维 / 系统）
-const groups = computed(() => [
-  { title: '概览', items: [
-    { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
-    // 「通知」不再占菜单位：topbar 常驻铃铛 + 未读徽标即入口（未读信号从"翻菜单"变为常驻可见）
-  ] },
-  { title: '主机', items: [
-    { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
-    // 原「专业监控 / 进程」已并入主机监控页的页内 Tab（/system/pro、/system/procs）
-  ] },
-  { title: '应用', items: [
-    { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
-    // 门禁用 METRICS_READ 兜底而非 WEBSERVER_MANAGE：站点 CRUD（静态站）不依赖
-    // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
-    // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
-    { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
-    { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
-    { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
-    { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
-    { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
-  ] },
-  { title: '安全', items: [
-    { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.view' },
-    // 原「安全中心」已并入安全页的第二个 Tab（/firewall/baseline：基线检查 + 会话 + MFA）
-    { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
-  ] },
-  { title: '运维', items: [
-    { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
-    // 原「任务中心」已并入任务页的第二个 Tab（/cron/tasks）
-    { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage' },
-    { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view' },
-  ] },
-  { title: '系统', items: [
-    { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage' },
-    // 原「审计日志」已并入日志页的第二个 Tab（/logs/audit）
-    { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage' },
-  ] },
+// 菜单项：扁平列表，不再分组。可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，
+// **禁止** isLinux / navigator.platform 之类平台判断。新模块 cap 复用既有常量兜底
+// （明细类用 METRICS_READ），仅 perm 区分可见性。
+const items = computed(() => [
+  { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
+  // 「通知」不再占菜单位：topbar 常驻铃铛 + 未读徽标即入口
+  { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
+  // 「专业监控 / 进程」已并入主机监控页页内 Tab（/system/pro、/system/procs）
+  { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
+  // 门禁用 METRICS_READ 兜底而非 WEBSERVER_MANAGE：站点 CRUD（静态站）不依赖
+  // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
+  // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
+  { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
+  { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
+  { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
+  { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
+  { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
+  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.view' },
+  // 「安全中心」已并入安全页第二个 Tab（/firewall/baseline：基线检查 + 会话 + MFA）
+  { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
+  { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
+  // 「任务中心」已并入任务页第二个 Tab（/cron/tasks）
+  { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage' },
+  { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view' },
+  { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage' },
+  // 「审计日志」已并入日志页第二个 Tab（/logs/audit）
+  { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage' },
 ])
 
 function why(it: Item): string | null {
@@ -94,22 +84,19 @@ function isOn(it: Item): boolean {
     </div>
 
     <nav class="nav">
-      <div v-for="g in groups" :key="g.title" class="group">
-        <div class="group-title">{{ g.title }}</div>
-        <RouterLink
-          v-for="it in g.items"
-          :key="it.to"
-          :to="it.to"
-          class="item"
-          :class="{ disabled: !!why(it), on: isOn(it) }"
-          :title="why(it) ?? it.label"
-          :aria-disabled="why(it) ? 'true' : undefined"
-          :tabindex="why(it) ? -1 : undefined"
-        >
-          <Icon :name="it.icon" :size="19" class="ico" />
-          <span class="label">{{ it.label }}</span>
-        </RouterLink>
-      </div>
+      <RouterLink
+        v-for="it in items"
+        :key="it.to"
+        :to="it.to"
+        class="item"
+        :class="{ disabled: !!why(it), on: isOn(it) }"
+        :title="why(it) ?? it.label"
+        :aria-disabled="why(it) ? 'true' : undefined"
+        :tabindex="why(it) ? -1 : undefined"
+      >
+        <Icon :name="it.icon" :size="19" class="ico" />
+        <span class="label">{{ it.label }}</span>
+      </RouterLink>
     </nav>
 
     <!-- 底部固定区：只放折叠开关。两种状态都不换位置，用户学一次就够。
@@ -150,18 +137,7 @@ function isOn(it: Item): boolean {
 .collapsed .brand { justify-content: center; gap: 0; padding: 16px 0 14px; }
 .collapsed .brand-name { display: none; }
 
-.nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 14px; }
-.group { display: flex; flex-direction: column; gap: 2px; }
-.group-title {
-  font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
-  color: var(--c-text-mute); padding: 4px 10px; margin-bottom: 2px;
-}
-/* 折叠态：分组标题无处安放，改成分隔细线——比留一段空白更能说明"这里是另一组"。
-   （旧实现是 opacity:0 + 保留 14px 高度：线没有、空间占着，看着像排版出错。） */
-.collapsed .group-title {
-  font-size: 0; line-height: 0; color: transparent;
-  height: 1px; padding: 0; margin: 8px 10px 7px; background: var(--c-border);
-}
+.nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
 
 .item {
   position: relative;
