@@ -71,6 +71,8 @@ export const router = createRouter({
         { path: 'audit', redirect: '/logs/audit' },
       ],
     },
+    // 兜底：未匹配的路径重定向到首页。缺此条时访问未知 URL 会渲染空白页（无 404 视图）。
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 

@@ -13,15 +13,13 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const TITLES: Record<string, string> = {
-  dashboard: '概览', system: '主机监控', 'system-pro': '专业快照', 'system-procs': '进程管理',
-  services: '软件与服务', sites: '网站与 SSL', databases: '数据库', files: '文件',
-  logs: '日志', 'logs-audit': '审计日志',
-  firewall: '防火墙规则', 'firewall-baseline': '安全基线',
-  cron: '计划任务', 'cron-tasks': '任务中心',
-  users: '用户', settings: '设置',
-}
-const title = computed(() => TITLES[String(route.name)] ?? 'ForkPanel')
+// 顶栏标题直接取路由 meta.title（单一事实源）。原先此处再维护一份 TITLES 映射，
+// 与 router 的 meta.title 重复且易漏项——漏了 terminal/assistant/containers/backups/
+// notifications，顶栏即回退成品牌名 "ForkPanel"。改为读 meta.title 后不会再有遗漏。
+const title = computed(() => {
+  const t = route.meta.title
+  return typeof t === 'string' && t ? t : 'ForkPanel'
+})
 
 // 顶栏副标题：与各视图原先内容区顶部的灰色 page-sub 说明同源，集中到此统一收口。
 // 动态信息（ServicesView 的 init、FirewallView 的启用状态/后端、FilesView 的当前路径）
@@ -30,17 +28,16 @@ const SUBTITLES: Record<string, string> = {
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
   'system-procs': '实时进程 · 按 CPU 排序（前 200 条）',
-  services: '服务管理与软件安装卸载',
+  services: '服务启停与软件包安装/卸载',
   sites: '虚拟主机站点与证书管理',
   databases: '连接管理 · 只读浏览 · 备份任务',
   logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
   'logs-audit': '关键操作追踪',
-  firewall: '防火墙规则管理',
   'firewall-baseline': '基线检查与活跃会话',
   cron: '平台原生调度，表达式语义由后端校验',
   'cron-tasks': '后台任务与执行进度（运行中每 2 秒自动刷新）',
   users: '面板账号与权限',
-  settings: '面板设置 · 运行环境与能力矩阵排查',
+  settings: '运行环境与能力矩阵排查',
   terminal: '内置 Web 终端（宿主级 shell）· 操作后请务必登出',
   assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
   backups: '本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）',

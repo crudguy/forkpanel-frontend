@@ -151,9 +151,6 @@ onMounted(async () => {
 
 <template>
   <div>
-    <div class="page-head">
-    </div>
-
     <!-- ── 面板设置（仅 settings.manage 可见）── -->
     <template v-if="canManage">
       <section class="card">

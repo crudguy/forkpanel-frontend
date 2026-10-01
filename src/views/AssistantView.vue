@@ -66,9 +66,6 @@ function fmtUp(sec: number): string {
 
 <template>
   <div>
-    <div class="page-head">
-    </div>
-
     <EmptyState v-if="!canOpen" title="无权访问诊断助手" />
 
     <template v-else>
