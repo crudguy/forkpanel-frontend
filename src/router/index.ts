@@ -31,6 +31,8 @@ export const router = createRouter({
         },
         { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件与服务' } },
         { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue'), meta: { title: '网站与 SSL' } },
+        // WAF 是站点配置的一部分（同一次 apply 下发），单独开一页只为统一查看/批量调整
+        { path: 'waf', name: 'waf', component: () => import('@/views/WafView.vue'), meta: { title: 'WAF' } },
         { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue'), meta: { title: '文件' } },
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: '数据库' } },
         { path: 'containers', name: 'containers', component: () => import('@/views/ContainersView.vue'), meta: { title: '容器' } },

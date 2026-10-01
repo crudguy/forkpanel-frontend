@@ -42,6 +42,7 @@ const SUBTITLES: Record<string, string> = {
   assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
   backups: '本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）',
   containers: 'Docker · 只读列举 + 启停/重启/删除（不提供创建容器）',
+  waf: '各站点防护档位与 CC 限速 · 随 nginx 配置一同下发',
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 

@@ -48,6 +48,8 @@ const items = computed(() => [
   // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
   // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
   { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
+  // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
+  { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
   { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
   { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
