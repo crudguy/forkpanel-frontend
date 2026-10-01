@@ -345,7 +345,7 @@ async function doDeleteCert() {
         <code>http(s)://host:port</code>，不接受路径或查询串。
       </p>
       <p class="tip">
-        WAF 与站点配置**同一次下发**（它本来就是 nginx 配置的一部分）。
+        WAF 与站点配置<b>同一次下发</b>（它本来就是 nginx 配置的一部分）。
         超限返回 <code>429</code>；<code>/.well-known</code> 始终放行——ACME 挑战文件在那里，
         一刀切会把证书续期打死。
         <b>「编辑」不会回填后端 / php-fpm 地址</b>（后端未持久化它们），

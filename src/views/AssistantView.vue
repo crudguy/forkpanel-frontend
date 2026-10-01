@@ -13,6 +13,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { AssistantReport, AssistantFinding } from '@/api/types'
 import Icon from '@/components/Icon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 const auth = useAuthStore()
 const router = useRouter()

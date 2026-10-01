@@ -48,7 +48,7 @@ const unavailableHint = computed(() => {
       return '宿主机未安装 Docker CLI（在 /usr/bin 等标准路径下未找到 docker 可执行文件）。安装 Docker 后重启面板即可。'
     case 'daemon_unreachable':
       return '已检测到 docker 命令，但守护进程不可达：面板进程不在 docker 组，或 Docker 服务未运行。'
-        + '排查：① `systemctl start docker` 启动服务；② 执行 `usermod -aG docker <面板运行用户>` 后**重启面板**；'
+        + '排查：① 执行 systemctl start docker 启动服务；② 执行 usermod -aG docker <面板运行用户> 后重启面板；'
         + '③ 确认 /var/run/docker.sock 存在且可连。'
     default:
       return undefined
