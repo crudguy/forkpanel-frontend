@@ -53,7 +53,6 @@ async function doKill() {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">进程</h2>
         <p class="page-sub">实时进程与资源占用 · 按 CPU 排序，仅显示前 200 条</p>
       </div>
       <span class="spacer" />

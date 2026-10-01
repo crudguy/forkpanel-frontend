@@ -93,7 +93,6 @@ async function doDelete() {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">防火墙与安全</h2>
         <p class="page-sub">
           <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
           后端：{{ backend || '—' }}

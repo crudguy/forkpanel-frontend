@@ -164,7 +164,7 @@ async function doDisable() {
 <template>
   <div>
     <div class="page-head">
-      <div><h2 class="page-title">安全中心</h2><p class="page-sub">基线检查与活跃会话</p></div>
+      <div><p class="page-sub">基线检查与活跃会话</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>

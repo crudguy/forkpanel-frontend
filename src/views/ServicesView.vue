@@ -284,7 +284,6 @@ async function doConfirmed() {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">软件与服务</h2>
         <p class="page-sub">
           服务管理 · 软件安装卸载
           <span v-if="init" class="badge badge-primary">init: {{ init }}</span>

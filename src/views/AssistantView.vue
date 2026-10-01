@@ -68,7 +68,6 @@ function fmtUp(sec: number): string {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">AI 助手</h2>
         <p class="page-sub">内置规则诊断 · 基于真实系统数据 · 只建议不自动执行</p>
       </div>
     </div>

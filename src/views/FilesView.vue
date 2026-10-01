@@ -325,7 +325,6 @@ function fmtSize(n: number) {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">文件</h2>
         <p class="page-sub"><code class="cwd">{{ path }}</code></p>
       </div>
       <span class="spacer" />

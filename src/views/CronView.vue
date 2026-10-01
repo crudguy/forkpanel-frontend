@@ -131,7 +131,6 @@ function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">计划任务</h2>
         <p class="page-sub">平台原生调度，表达式语义由后端校验</p>
       </div>
       <span class="spacer" />

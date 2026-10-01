@@ -172,7 +172,6 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">日志</h2>
         <p class="page-sub">字面量过滤（非正则）· 单次上限 2000 行 · 支持实时跟随</p>
       </div>
       <span class="spacer" />

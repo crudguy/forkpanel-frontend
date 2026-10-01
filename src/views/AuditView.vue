@@ -35,7 +35,7 @@ function resClass(r: string) {
 <template>
   <div>
     <div class="page-head">
-      <div><h2 class="page-title">审计日志</h2><p class="page-sub">关键操作追踪</p></div>
+      <div><p class="page-sub">关键操作追踪</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>

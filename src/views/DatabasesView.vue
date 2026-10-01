@@ -148,7 +148,6 @@ function closeBrowse() { browse.value = null }
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">数据库</h2>
         <p class="page-sub">连接管理 · 只读浏览 · 备份任务</p>
       </div>
       <span class="spacer" />

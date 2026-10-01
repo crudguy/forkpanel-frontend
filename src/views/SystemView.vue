@@ -169,7 +169,7 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">主机监控 <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span></h2>
+        <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
         <p class="page-sub">CPU / 内存 / 负载 / 磁盘 / 网络 的实时趋势与历史走向</p>
       </div>
       <span class="spacer" />

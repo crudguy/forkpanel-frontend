@@ -285,7 +285,6 @@ function fmtTime(t: number | null) {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">备份</h2>
         <p class="page-sub">本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）</p>
       </div>
       <span class="spacer" />

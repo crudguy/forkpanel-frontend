@@ -128,7 +128,6 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">终端</h2>
         <p class="page-sub">内置 Web 终端（宿主级 shell）· 操作后请务必登出</p>
       </div>
       <span class="spacer" />

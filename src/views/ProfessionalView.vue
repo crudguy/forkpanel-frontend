@@ -140,7 +140,7 @@ onUnmounted(() => {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">专业监控 <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span></h2>
+        <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
         <p class="page-sub">CPU 每核 / 负载 1·5·15 / 内存交换 / 每挂载点磁盘 / 每网卡吞吐 / 进程的完整快照</p>
       </div>
     </div>

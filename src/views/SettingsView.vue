@@ -153,7 +153,6 @@ onMounted(async () => {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">设置</h2>
         <p class="page-sub">面板设置 · 运行环境与能力矩阵排查</p>
       </div>
     </div>

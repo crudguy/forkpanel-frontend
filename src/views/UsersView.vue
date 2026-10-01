@@ -86,7 +86,7 @@ onMounted(load)
 <template>
   <div>
     <div class="page-head">
-      <div><h2 class="page-title">用户</h2><p class="page-sub">面板账号与权限</p></div>
+      <div><p class="page-sub">面板账号与权限</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading || notReady || !canManage" @click="openCreate">
         <Icon name="user-plus" :size="15" /> 新建用户

@@ -115,7 +115,6 @@ function canStop(c: Container) { return c.state === 'running' }
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">容器</h2>
         <p class="page-sub">Docker · 只读列举 + 启停/重启/删除（不提供创建容器）</p>
       </div>
       <span class="spacer" />

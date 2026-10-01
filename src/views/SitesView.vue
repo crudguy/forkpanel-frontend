@@ -278,7 +278,6 @@ async function doDeleteCert() {
   <div>
     <div class="page-head">
       <div>
-        <h2 class="page-title">网站与 SSL</h2>
         <p class="page-sub">虚拟主机站点与证书管理</p>
       </div>
       <span class="spacer" />
