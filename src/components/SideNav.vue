@@ -52,8 +52,11 @@ const items = computed(() => [
   { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
   { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
-  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.view' },
-  // 「安全中心」已并入安全页第二个 Tab（/firewall/baseline：基线检查 + 会话 + MFA）
+  // 门禁用 METRICS_READ 兜底而非 FIREWALL_MANAGE：本页第二个 Tab /firewall/baseline
+  // （基线检查 + 会话 + MFA）后端 security 路由只校验 SECURITY_MANAGE、**不查** firewall
+  // cap——用 firewall 门禁会让没装 ufw 的机器连 MFA 都进不去（同 F20「站点门禁」教训）。
+  // 防火墙规则 Tab 在页内自行按 FIREWALL_MANAGE 置灰/提示 501，能力位依旧诚实。
+  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.METRICS_READ, perm: 'firewall.view' },
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
   // 「任务中心」已并入任务页第二个 Tab（/cron/tasks）
