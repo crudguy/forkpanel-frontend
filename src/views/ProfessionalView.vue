@@ -138,12 +138,6 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <div class="page-head">
-      <div>
-        <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
-      </div>
-    </div>
-
     <p v-if="snapError" class="err" role="alert">{{ snapError }}</p>
 
     <div v-if="loading && !snap" class="card skeleton" style="height:280px" />
@@ -285,10 +279,6 @@ onUnmounted(() => {
 .dim { color: var(--c-text-mute); }
 .err { color: var(--c-danger); font-size: 13px; margin: 0 2px 8px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-
-.tier-chip { font-size: 12px; font-weight: 600; vertical-align: middle; margin-left: 8px;
-  padding: 2px 9px; border-radius: 999px; color: var(--c-ok);
-  background: var(--c-ok-soft); border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent); }
 
 /* CPU 每核 + 负载 */
 .cpu-detail { padding: 14px; }

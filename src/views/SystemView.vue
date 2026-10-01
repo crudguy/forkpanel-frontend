@@ -168,9 +168,6 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
-      </div>
       <span class="spacer" />
       <!-- 进程管理是本页的一个 Tab，但"杀失控进程"是救火动作，给常驻直达入口 -->
       <RouterLink to="/system/procs" class="btn-ghost">
@@ -292,8 +289,4 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
   color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
 .chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
 .chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
-/* 档位徽标：借标题行呈现，省去一张独立卡片 */
-.tier-chip { font-size: 12px; font-weight: 600; vertical-align: middle; margin-left: 8px;
-  padding: 2px 9px; border-radius: 999px; color: var(--c-ok);
-  background: var(--c-ok-soft); border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent); }
 </style>
