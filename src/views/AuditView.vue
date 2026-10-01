@@ -35,7 +35,6 @@ function resClass(r: string) {
 <template>
   <div>
     <div class="page-head">
-      <div><p class="page-sub">关键操作追踪</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
@@ -68,6 +67,5 @@ function resClass(r: string) {
 
 <style scoped>
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
-.page-sub { margin: 2px 0 0; color: var(--c-text-dim); font-size: 13px; }
 .box { height: 300px; border-radius: var(--radius); }
 </style>

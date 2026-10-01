@@ -67,9 +67,6 @@ function fmtUp(sec: number): string {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">内置规则诊断 · 基于真实系统数据 · 只建议不自动执行</p>
-      </div>
     </div>
 
     <EmptyState v-if="!canOpen" title="无权访问诊断助手" />

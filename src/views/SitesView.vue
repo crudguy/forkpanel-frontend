@@ -277,9 +277,6 @@ async function doDeleteCert() {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">虚拟主机站点与证书管理</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
       <button class="btn-primary" :disabled="!canManage || busy" @click="openCreate">

@@ -23,6 +23,31 @@ const TITLES: Record<string, string> = {
 }
 const title = computed(() => TITLES[String(route.name)] ?? 'ForkPanel')
 
+// 顶栏副标题：与各视图原先内容区顶部的灰色 page-sub 说明同源，集中到此统一收口。
+// 动态信息（ServicesView 的 init、FirewallView 的启用状态/后端、FilesView 的当前路径）
+// 不在此列，保留在各自视图的 page-head，避免顶栏出现过长/动态文案。
+const SUBTITLES: Record<string, string> = {
+  system: '实时资源趋势与历史走向',
+  'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
+  'system-procs': '实时进程 · 按 CPU 排序（前 200 条）',
+  services: '服务管理与软件安装卸载',
+  sites: '虚拟主机站点与证书管理',
+  databases: '连接管理 · 只读浏览 · 备份任务',
+  logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
+  'logs-audit': '关键操作追踪',
+  firewall: '防火墙规则管理',
+  'firewall-baseline': '基线检查与活跃会话',
+  cron: '平台原生调度，表达式语义由后端校验',
+  'cron-tasks': '后台任务与执行进度（运行中每 2 秒自动刷新）',
+  users: '面板账号与权限',
+  settings: '面板设置 · 运行环境与能力矩阵排查',
+  terminal: '内置 Web 终端（宿主级 shell）· 操作后请务必登出',
+  assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
+  backups: '本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）',
+  containers: 'Docker · 只读列举 + 启停/重启/删除（不提供创建容器）',
+}
+const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
+
 const theme = ref<ThemeMode>(getTheme())
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
@@ -70,7 +95,10 @@ function logout() {
     <SideNav />
     <main>
       <header class="topbar">
-        <h1 class="title">{{ title }}</h1>
+        <div class="title-block">
+          <h1 class="title">{{ title }}</h1>
+          <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+        </div>
 
         <span class="spacer" />
 
@@ -153,6 +181,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   border-bottom: 1px solid var(--c-border);
 }
 .title { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
+.title-block { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 1px; }
+.subtitle { font-size: 12px; line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
 
 /* 系统基础信息胶囊：右侧状态簇的一员，紧凑、hover 出详情，点击直达能力矩阵 */
 .bell { position: relative; color: var(--c-text-dim); }

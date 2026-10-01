@@ -141,7 +141,6 @@ onUnmounted(() => {
     <div class="page-head">
       <div>
         <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
-        <p class="page-sub">CPU 每核 / 负载 1·5·15 / 内存交换 / 每挂载点磁盘 / 每网卡吞吐 / 进程的完整快照</p>
       </div>
     </div>
 

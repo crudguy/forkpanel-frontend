@@ -86,7 +86,6 @@ onMounted(load)
 <template>
   <div>
     <div class="page-head">
-      <div><p class="page-sub">面板账号与权限</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading || notReady || !canManage" @click="openCreate">
         <Icon name="user-plus" :size="15" /> 新建用户
@@ -181,7 +180,6 @@ onMounted(load)
 
 <style scoped>
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
-.page-sub { margin: 2px 0 0; color: var(--c-text-dim); font-size: 13px; }
 .box { height: auto; }
 .tip p { font-size: 13.5px; color: var(--c-text-dim); line-height: 1.7; margin: 6px 0; }
 .cmd { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm);

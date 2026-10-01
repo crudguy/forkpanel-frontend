@@ -130,9 +130,6 @@ function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">平台原生调度，表达式语义由后端校验</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>

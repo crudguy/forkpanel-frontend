@@ -93,10 +93,8 @@ async function doDelete() {
   <div>
     <div class="page-head">
       <div>
-        <p class="page-sub">
-          <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
-          后端：{{ backend || '—' }}
-        </p>
+        <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
+        <span class="badge">后端：{{ backend || '—' }}</span>
       </div>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy || !canManage" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>

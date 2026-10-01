@@ -171,9 +171,6 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">字面量过滤（非正则）· 单次上限 2000 行 · 支持实时跟随</p>
-      </div>
       <span class="spacer" />
       <select v-model="cur" :disabled="!canView" class="ctl">
         <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.label }}</option>

@@ -52,9 +52,6 @@ async function doKill() {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">实时进程与资源占用 · 按 CPU 排序，仅显示前 200 条</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>

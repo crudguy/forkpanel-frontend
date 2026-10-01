@@ -83,7 +83,6 @@ onUnmounted(stopPoll)
 <template>
   <div>
     <div class="page-head">
-      <div><p class="page-sub">后台任务与执行进度（运行中每 2 秒自动刷新）</p></div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
@@ -145,7 +144,6 @@ onUnmounted(stopPoll)
 <style scoped>
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
 .meta { margin: 0 0 10px; font-size: 12.5px; color: var(--c-text-dim); }
-.page-sub { margin: 2px 0 0; color: var(--c-text-dim); font-size: 13px; }
 .box { height: 320px; border-radius: var(--radius); }
 .mini { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .mini .progress { flex: 1; }

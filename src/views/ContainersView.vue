@@ -114,9 +114,6 @@ function canStop(c: Container) { return c.state === 'running' }
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">Docker · 只读列举 + 启停/重启/删除（不提供创建容器）</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="busy || !supported" @click="load">
         <Icon name="refresh" :size="15" /> 刷新

@@ -147,9 +147,6 @@ function closeBrowse() { browse.value = null }
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">连接管理 · 只读浏览 · 备份任务</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>

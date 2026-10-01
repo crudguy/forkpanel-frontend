@@ -170,7 +170,6 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
     <div class="page-head">
       <div>
         <span class="tier-chip">{{ auth.me?.tier ?? '-' }}</span>
-        <p class="page-sub">CPU / 内存 / 负载 / 磁盘 / 网络 的实时趋势与历史走向</p>
       </div>
       <span class="spacer" />
       <!-- 进程管理是本页的一个 Tab，但"杀失控进程"是救火动作，给常驻直达入口 -->

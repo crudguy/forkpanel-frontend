@@ -283,12 +283,7 @@ async function doConfirmed() {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">
-          服务管理 · 软件安装卸载
-          <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
-        </p>
-      </div>
+      <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
       <button class="btn-primary" :disabled="!!busy" @click="load">
         <Icon name="refresh" :size="15" /> 刷新
@@ -472,7 +467,6 @@ async function doConfirmed() {
 </template>
 
 <style scoped>
-.page-sub { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; color: var(--c-text-dim); font-size: 13px; }
 .dim { color: var(--c-text-dim); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 .acts { white-space: nowrap; }

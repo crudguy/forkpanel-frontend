@@ -284,9 +284,6 @@ function fmtTime(t: number | null) {
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub">本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）</p>
-      </div>
       <span class="spacer" />
       <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
