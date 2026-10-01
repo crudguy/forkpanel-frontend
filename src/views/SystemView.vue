@@ -167,14 +167,6 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 
 <template>
   <div>
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 进程管理是本页的一个 Tab，但"杀失控进程"是救火动作，给常驻直达入口 -->
-      <RouterLink to="/system/procs" class="btn-ghost">
-        <Icon name="tasks" :size="15" /> 进程管理
-      </RouterLink>
-    </div>
-
     <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
     <!-- 当前快照读数（本页实时读数头，差异化在下方趋势） -->
