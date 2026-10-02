@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -30,6 +30,37 @@ async function load() {
   finally { loading.value = false }
 }
 onMounted(load)
+
+// ── 表头排序（纯前端，数据已全量拉回，点击即时排序，不回源）──
+type SortKey = 'pid' | 'name' | 'user' | 'cpu' | 'mem'
+const sortKey = ref<SortKey>('cpu')
+const sortDir = ref<'asc' | 'desc'>('desc')
+const sorted = computed(() => {
+  const arr = procs.value.slice()
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  arr.sort((a, b) => {
+    switch (sortKey.value) {
+      case 'pid': return (a.pid - b.pid) * dir
+      case 'cpu': return ((a.cpu_pct ?? 0) - (b.cpu_pct ?? 0)) * dir
+      case 'mem': return (a.rss_kib - b.rss_kib) * dir
+      case 'name': return (a.name ?? '').localeCompare(b.name ?? '') * dir
+      case 'user': return (a.user ?? '').localeCompare(b.user ?? '') * dir
+    }
+  })
+  return arr
+})
+function toggleSort(k: SortKey) {
+  if (sortKey.value === k) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sortKey.value = k
+    // 数值列默认降序（高占用在前），文本列默认升序（A→Z）
+    sortDir.value = (k === 'pid' || k === 'cpu' || k === 'mem') ? 'desc' : 'asc'
+  }
+}
+function sortInd(k: SortKey): string {
+  if (sortKey.value !== k) return ''
+  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
 
 const killTarget = ref<Proc | null>(null)
 // 默认发 SIGTERM（进程能正常收尾）；只有卡死不响应才用 SIGKILL 强制。
@@ -66,13 +97,20 @@ async function doKill() {
       <div v-else class="card flush">
         <table>
           <thead>
-            <tr><th>PID</th><th>进程</th><th>用户</th><th class="num">CPU</th><th class="num">内存</th><th /></tr>
+            <tr>
+              <th class="sortable" :class="{ active: sortKey === 'pid' }" @click="toggleSort('pid')">PID{{ sortInd('pid') }}</th>
+              <th class="sortable" :class="{ active: sortKey === 'name' }" @click="toggleSort('name')">进程{{ sortInd('name') }}</th>
+              <th class="sortable" :class="{ active: sortKey === 'user' }" @click="toggleSort('user')">用户{{ sortInd('user') }}</th>
+              <th class="num sortable" :class="{ active: sortKey === 'cpu' }" @click="toggleSort('cpu')">CPU{{ sortInd('cpu') }}</th>
+              <th class="num sortable" :class="{ active: sortKey === 'mem' }" @click="toggleSort('mem')">内存{{ sortInd('mem') }}</th>
+              <th />
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="p in procs" :key="p.pid">
+            <tr v-for="p in sorted" :key="p.pid">
               <td class="mono">{{ p.pid }}</td>
               <td>{{ p.name }}</td>
-              <td>{{ p.user }}</td>
+              <td>{{ p.user ?? '-' }}</td>
               <td class="num">{{ (p.cpu_pct ?? 0).toFixed(1) }}%</td>
               <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
               <td class="nowrap">
@@ -84,7 +122,7 @@ async function doKill() {
                   @click="askKill(p, true)">强制</button>
               </td>
             </tr>
-            <tr v-if="!procs.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
+            <tr v-if="!sorted.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
           </tbody>
         </table>
       </div>
@@ -102,4 +140,12 @@ async function doKill() {
 
 <style scoped>
 .box { height: 320px; border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+th { color: var(--c-text-mute); font-weight: 600; }
+td.num, th.num { text-align: right; }
+tbody tr:hover { background: var(--c-hover); }
+.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.sortable:hover { color: var(--c-text); }
+.sortable.active { color: var(--c-primary); }
 </style>
