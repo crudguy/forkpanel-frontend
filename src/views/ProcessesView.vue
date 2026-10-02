@@ -20,8 +20,8 @@ const busy = ref<number | null>(null)
 async function load() {
   error.value = ''; pending.value = ''; loading.value = true
   try {
-    // 显式 limit（审计 P4）：后端默认 20 会静默截断，用户误以为看全了
-    const r = await api.get<any>(API.processes.list(), { params: { limit: 200, sort: 'cpu' } })
+    // limit=0（或省略）= 展示全部进程，由前端即时排序，不回源。
+    const r = await api.get<any>(API.processes.list(), { params: { limit: 0, sort: 'cpu' } })
     procs.value = Array.isArray(r) ? r : (r.processes ?? [])
   } catch (e) {
     if (isUnsupported(e)) pending.value = '进程管理功能即将推出（进程快照尚未接入）'

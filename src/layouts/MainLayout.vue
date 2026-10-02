@@ -27,7 +27,7 @@ const title = computed(() => {
 const SUBTITLES: Record<string, string> = {
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
-  'system-procs': '实时进程 · 按 CPU 排序（前 200 条）',
+  'system-procs': '服务器全部进程 · 点表头可按 CPU / 内存 / 用户排序 · 可结束异常进程',
   services: '服务启停与软件包安装/卸载',
   sites: '虚拟主机站点与证书管理',
   databases: '连接管理 · 只读浏览 · 备份任务',
