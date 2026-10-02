@@ -78,6 +78,7 @@ export const API = {
   certs: {
     list: () => '/api/v1/certs',
     renew: (id: number) => `/api/v1/certs/${id}/renew`,
+    autoRenew: (id: number) => `/api/v1/certs/${id}/auto-renew`,
     remove: (id: number) => `/api/v1/certs/${id}`,
   },
 
