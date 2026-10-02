@@ -41,7 +41,7 @@ interface Site {
   /** php-fpm 目标（kind=php 时存在）；其余为 null */
   fpm: string | null
 }
-interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string }
+interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string; source: string }
 
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
@@ -265,6 +265,17 @@ async function renewCert(c: Cert) {
     else error.value = errorText(e)
   } finally { busy.value = false; await load() }
 }
+async function setAutoRenew(c: Cert, val: boolean) {
+  busy.value = true; error.value = ''; notice.value = ''
+  try {
+    await api.patch(API.certs.autoRenew(c.id), { enabled: val })
+    c.auto_renew = val
+    notice.value = `${c.domain} 自动续期已${val ? '开启' : '关闭'}`
+  } catch (e) {
+    if (isUnsupported(e)) error.value = '当前环境未接入 ACME，无法自动续期'
+    else error.value = errorText(e)
+  } finally { busy.value = false }
+}
 async function doDeleteCert() {
   if (!delCert.value) return
   busy.value = true; error.value = ''
@@ -396,7 +407,13 @@ async function doDeleteCert() {
             <td class="dim">{{ c.issuer ?? '—' }}</td>
             <td>{{ c.not_after ? new Date(c.not_after * 1000).toLocaleDateString() : '—' }}</td>
             <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
-            <td>{{ c.auto_renew ? '是' : '否' }}</td>
+            <td>
+              <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
+                <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy"
+                       @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
+              </span>
+              <span v-else class="dim tiny">仅 ACME</span>
+            </td>
             <td><span class="badge" :class="(c.renew_state === 'failed') ? 'badge-danger' : (c.renew_state === 'ok' ? 'badge-ok' : 'badge-warn')">{{ c.renew_state ?? 'idle' }}</span></td>
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
@@ -493,4 +510,12 @@ async function doDeleteCert() {
 .ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
 .ssl-opt input { width: auto; margin-top: 2px; }
 .btn-sm.danger { color: #ff7b72; }
+/* 自动续期开关（与 CronView 的 .switch 视觉保持一致） */
+.switch { position: relative; width: 34px; height: 19px; display: inline-block; vertical-align: middle; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s; }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--c-text-dim); transition: all .15s; }
+.switch input:checked + i { background: var(--c-primary-soft); border-color: var(--c-primary); }
+.switch input:checked + i::after { left: 17px; background: var(--c-primary); }
+.switch input:disabled + i { opacity: .45; cursor: not-allowed; }
 </style>
