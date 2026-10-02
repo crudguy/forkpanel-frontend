@@ -61,6 +61,8 @@ const loadTone = computed<'primary' | 'warn' | 'danger'>(() => {
 // ── 运行状态总览（替换原"快捷入口"导航网格：侧边栏已覆盖导航，这里改呈真实状态）──
 const svc = ref<{ total: number; active: number; failed: number; ok: boolean }>({ total: 0, active: 0, failed: 0, ok: false })
 const ct = ref<{ total: number; running: number; ok: boolean }>({ total: 0, running: 0, ok: false })
+// 容器不可用的原因（取自能力矩阵，避免为诊断而调用 list 触发 501）：daemon_unreachable | binary_missing
+const ctUnavailable = ref<string>('')
 const site = ref<{ total: number; enabled: number; ok: boolean }>({ total: 0, enabled: 0, ok: false })
 const bk = ref<{ total: number; fail: number; ok: boolean }>({ total: 0, fail: 0, ok: false })
 
@@ -72,7 +74,12 @@ const siteTone = computed(() => !site.value.ok ? 'muted' : 'ok')
 const bkTone = computed(() => !bk.value.ok ? 'muted' : bk.value.fail > 0 ? 'danger' : bk.value.total === 0 ? 'warn' : 'ok')
 
 const svcText = computed(() => !svc.value.ok ? '—' : svc.value.failed > 0 ? `${svc.value.failed} 个服务异常` : `${svc.value.active} 个运行中`)
-const ctText = computed(() => !ct.value.ok ? '守护进程不可达' : `运行中 ${ct.value.running} / 共 ${ct.value.total}`)
+const ctText = computed(() => {
+  if (ct.value.ok) return `运行中 ${ct.value.running} / 共 ${ct.value.total}`
+  if (ctUnavailable.value === 'daemon_unreachable') return '守护进程不可达'
+  if (ctUnavailable.value === 'binary_missing') return '未安装 Docker'
+  return '不可用'
+})
 const bkText = computed(() => !bk.value.ok ? '—' : bk.value.total === 0 ? '未配置计划' : bk.value.fail > 0 ? `${bk.value.fail} 个计划失败` : '全部正常')
 
 async function loadStatus() {
@@ -85,10 +92,18 @@ async function loadStatus() {
       failed: list.filter(s => s.state === 'failed').length, ok: true }
   } catch { /* 静默 */ }
   if (containerSupported.value) {
-    try {
-      const list = await api.get<any[]>(API.containers.list())
-      ct.value = { total: list.length, running: list.filter(c => c.state === 'running').length, ok: true }
-    } catch { /* 静默 */ }
+    // 能力双轨：container.view 只控制菜单/卡片可见（containerSupported 已判定），
+    // 真正能否操作取决于 container.manage（守护进程可达性）。
+    // 不可用时直接读能力矩阵的 reason，避免调用 list 撞 CONTAINER_MANAGE 门禁而返回 501、污染控制台。
+    const cm = auth.capabilities[CAP.CONTAINER_MANAGE]
+    if (cm?.supported) {
+      try {
+        const list = await api.get<any[]>(API.containers.list())
+        ct.value = { total: list.length, running: list.filter(c => c.state === 'running').length, ok: true }
+      } catch { /* 静默 */ }
+    } else {
+      ctUnavailable.value = cm?.reason || 'unknown'
+    }
   }
   try {
     const list = await api.get<any[]>(API.sites.list())
