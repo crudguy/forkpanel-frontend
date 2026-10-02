@@ -41,6 +41,7 @@ export const CAP = {
   BACKUP_MANAGE: 'backup.manage',
   // 容器：取决于宿主 Docker 守护进程**可达性**（二进制存在 ≠ 可用）
   CONTAINER_MANAGE: 'container.manage',
+  CONTAINER_VIEW: 'container.view',
   /// 内置 Web 终端：本机存在可用交互 shell（bash/sh）。高危面——能力位只管"能不能开"，
   /// 真正准入还叠加 system.manage 权限 + 只读拒绝（见后端 routes/terminal.rs）。
   TERMINAL_MANAGE: 'terminal.manage',

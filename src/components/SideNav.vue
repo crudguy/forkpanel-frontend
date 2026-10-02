@@ -51,7 +51,7 @@ const items = computed(() => [
   // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
   { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
   { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
-  { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_MANAGE, perm: 'container.view' },
+  { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_VIEW, perm: 'container.view' },
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
   { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
   // 门禁用 METRICS_READ 兜底而非 FIREWALL_MANAGE：本页第二个 Tab /firewall/baseline
