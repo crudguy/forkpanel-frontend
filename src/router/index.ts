@@ -24,7 +24,7 @@ export const router = createRouter({
           path: 'system',
           component: () => import('@/views/MonitorView.vue'),
           children: [
-            { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '主机监控' } },
+            { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '实时趋势' } },
             { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],
@@ -57,7 +57,7 @@ export const router = createRouter({
           path: 'logs',
           component: () => import('@/views/LogCenterView.vue'),
           children: [
-            { path: '', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: '日志' } },
+            { path: '', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: '系统日志' } },
             { path: 'audit', name: 'logs-audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志' } },
           ],
         },
