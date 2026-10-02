@@ -4,8 +4,11 @@
  *
  * 能力边界的处理是本页的重点：
  * `container.manage` 由后端按 **Docker 守护进程 socket 可达性** 判定，而不是
- * "装了 docker 没有"。所以这里必须区分两种不可用，并给出**可操作的**建议
- * （加入 docker 组 / 启动 daemon），否则用户只会看到一个说不出原因的灰页。
+ * "装了 docker 没有"。所以这里必须区分两种不可用，并给出**可操作的**引导。
+ *
+ * 关键原则（方案 C 收尾）：诊断不是让用户"复制命令去终端执行"，而是**可视化点点点**——
+ * `daemon_unreachable` 下直接给三个按钮（启动 Docker 服务 / 把面板用户加入 docker 组 /
+ * 重启面板），后端按面板进程真实身份执行，用户无需手敲任何命令。
  *
  * 刻意不提供的操作：**创建容器**（`docker run` 等价宿主机任意代码执行，
  * 需独立的镜像白名单与特权/挂载禁用设计）、镜像删除与拉取。页面里明确写出，
@@ -43,10 +46,21 @@ const installBusy = ref(false)
 const installTaskId = ref<string | null>(null)
 const installError = ref('')
 
+// 诊断分支下的"修复"交互状态（daemon_unreachable：把复制命令换成按钮）
+const fixBusy = ref(false)
+const fixError = ref('')
+const fixNote = ref('')
+const startOpen = ref(false)
+const joinOpen = ref(false)
+const restartOpen = ref(false)
+
 const supported = computed(() => auth.supported(CAP.CONTAINER_MANAGE))
 const canManage = computed(() => auth.enabled(CAP.CONTAINER_MANAGE, 'container.manage'))
 /** 不可用原因机器码（来自能力位 reason）。菜单常亮，进入后据此分流展示。 */
 const unavailableReason = computed(() => auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined)
+/** 修复动作需要的权限点（启动/重启服务用 system.manage，加组用 container.manage）。 */
+const canService = computed(() => auth.can('service.manage'))
+const canJoin = computed(() => auth.can('container.manage'))
 
 /** 把后端的机器码 reason 翻成可执行的建议——"不支持"三个字对用户毫无帮助。 */
 const unavailableHint = computed(() => {
@@ -55,28 +69,11 @@ const unavailableHint = computed(() => {
     case 'binary_missing':
       return '宿主机未安装 Docker。可点下方"安装 Docker"一键安装（高危操作，需二次确认）；装完仍需把面板运行用户加入 docker 组并重启面板方可管理。'
     case 'daemon_unreachable':
-      return '已检测到 docker 命令，但守护进程不可达：面板进程不在 docker 组，或 Docker 服务未运行。'
-        + '排查：① 执行 systemctl start docker 启动服务；② 执行 usermod -aG docker <面板运行用户> 后重启面板；'
-        + '③ 确认 /var/run/docker.sock 存在且可连。'
+      return '已检测到 docker 命令，但守护进程不可达：面板进程不在 docker 组，或 Docker 服务未运行。点击下方按钮依次操作即可管理容器，无需手敲命令。'
     default:
       return undefined
   }
 })
-
-/** daemon_unreachable 时给用户的复制命令（含当前登录用户，避免手动替换）。 */
-const daemonFixCommands = computed(() => {
-  if (unavailableReason.value !== 'daemon_unreachable') return []
-  const user = auth.me?.user ?? '<面板运行用户>'
-  return [
-    'systemctl start docker',
-    `usermod -aG docker ${user}`,
-    'systemctl restart panel   # 或重启面板服务使新组生效',
-  ]
-})
-
-async function copyText(t: string) {
-  try { await navigator.clipboard.writeText(t) } catch { /* 忽略：用户可手动选择复制 */ }
-}
 
 /** 提交一键安装 Docker（经后端任务队列，高危二次确认）。 */
 async function doInstall() {
@@ -88,6 +85,41 @@ async function doInstall() {
     notice.value = `已提交安装任务（${r.package}），可在"任务"页查看进度。装完后请把面板运行用户加入 docker 组并重启面板。`
   } catch (e) { installError.value = errorText(e) }
   finally { installBusy.value = false; installOpen.value = false }
+}
+
+/** 可视化修复①：启动 Docker 服务（复用 services/docker/start）。 */
+async function startDocker() {
+  startOpen.value = false
+  fixBusy.value = true; fixError.value = ''; fixNote.value = ''
+  try {
+    await api.post(API.services.start('docker'), {})
+    fixNote.value = 'Docker 服务已启动。若容器页仍提示不可达，请继续：把面板用户加入 docker 组 → 重启面板。'
+  } catch (e) { fixError.value = errorText(e) }
+  finally { fixBusy.value = false }
+}
+
+/** 可视化修复②：把面板运行用户加入 docker 组（后端按面板进程身份执行，非登录用户）。 */
+async function joinGroup() {
+  joinOpen.value = false
+  fixBusy.value = true; fixError.value = ''; fixNote.value = ''
+  try {
+    const r = await api.post<{ user: string }>(API.containers.joinDockerGroup(), {})
+    fixNote.value = `已将面板用户「${r.user}」加入 docker 组，请点击「重启面板」使新组生效。`
+  } catch (e) { fixError.value = errorText(e) }
+  finally { fixBusy.value = false }
+}
+
+/** 可视化修复③：重启面板使新组生效（重启期间面板短暂不可用，稍后重新登录）。 */
+async function restartPanel() {
+  restartOpen.value = false
+  fixBusy.value = true; fixError.value = ''; fixNote.value = '面板正在重启，稍后请重新登录。'
+  try {
+    await api.post(API.services.restart('panel'), {})
+  } catch (e) {
+    // 重启成功时面板进程先断开再起，前端可能收不到 200；以 notice 为准，不报错
+    fixError.value = errorText(e)
+  }
+  finally { fixBusy.value = false }
 }
 
 async function load() {
@@ -173,13 +205,23 @@ function canStop(c: Container) { return c.state === 'running' }
         <span v-if="installTaskId" class="ok-note">已提交安装任务（ID：{{ installTaskId }}），可在"任务"页查看进度</span>
       </div>
 
-      <!-- daemon_unreachable：给出可直接复制的修复命令 -->
-      <div v-else-if="unavailableReason === 'daemon_unreachable'" class="diag-cmds">
-        <p class="dim">依次执行以下命令并重启面板即可管理容器：</p>
-        <div v-for="(cmd, i) in daemonFixCommands" :key="i" class="cmd-row">
-          <code>{{ cmd }}</code>
-          <button class="btn-ghost btn-sm" @click="copyText(cmd)">复制</button>
-        </div>
+      <!-- daemon_unreachable：可视化修复（按钮代替"复制命令去执行"） -->
+      <div v-else-if="unavailableReason === 'daemon_unreachable'" class="diag-actions">
+        <p class="dim">点击下方按钮依次修复即可管理容器：</p>
+        <button class="btn-primary" :disabled="fixBusy || !canService" @click="startOpen = true">
+          <Icon name="play" :size="15" /> 启动 Docker 服务
+        </button>
+        <button class="btn-primary" :disabled="fixBusy || !canJoin" @click="joinOpen = true">
+          <Icon name="docker" :size="15" /> 把面板用户加入 docker 组
+        </button>
+        <button class="btn-ghost" :disabled="fixBusy || !canService" @click="restartOpen = true">
+          <Icon name="restart" :size="15" /> 重启面板
+        </button>
+        <span v-if="!canService && !canJoin" class="dim">
+          需要 system.manage 与 container.manage 权限才能执行修复操作。
+        </span>
+        <span v-if="fixNote" class="ok-note">{{ fixNote }}</span>
+        <p v-if="fixError" class="err">{{ fixError }}</p>
       </div>
 
       <p v-if="installError" class="err">{{ installError }}</p>
@@ -271,6 +313,14 @@ function canStop(c: Container) { return c.state === 'running' }
     <ConfirmDialog :open="installOpen" danger title="安装 Docker"
       :detail="'将在宿主机上通过包管理器安装 Docker 引擎。这是高危系统变更；安装完成后仍需把面板运行用户加入 docker 组并重启面板，才能在此管理容器。'"
       confirm-word="安装 Docker" @confirm="doInstall" @cancel="installOpen = false" />
+
+    <ConfirmDialog :open="joinOpen" danger title="把面板用户加入 docker 组"
+      :detail="'将把面板运行用户加入 docker 组。docker 组等同 root 级权限（可借 docker 提权到宿主 root），请确认你了解风险。完成后需重启面板使新组生效。'"
+      confirm-word="加入 docker 组" @confirm="joinGroup" @cancel="joinOpen = false" />
+
+    <ConfirmDialog :open="restartOpen" danger title="重启面板"
+      :detail="'将重启面板服务，使新加入的 docker 组生效。重启期间面板会短暂不可用，稍后需重新登录。'"
+      confirm-word="重启面板" @confirm="restartPanel" @cancel="restartOpen = false" />
   </div>
 </template>
 
@@ -282,11 +332,6 @@ function canStop(c: Container) { return c.state === 'running' }
 .diag-head :deep(.icon) { color: var(--c-primary); }
 .diag-hint { color: var(--c-text-dim); font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
 .diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.diag-cmds { display: flex; flex-direction: column; gap: 8px; }
-.diag-cmds .dim { font-size: 13px; margin: 0 0 2px; }
-.cmd-row { display: flex; align-items: center; gap: 10px; }
-.cmd-row code { flex: 1; padding: 8px 10px; background: var(--c-code-bg, #1e1e1e); color: var(--c-code, #e6e6e6);
-  border-radius: 6px; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .tabs button { display: inline-flex; align-items: center; gap: 6px; }
 .tabs button.on { border-color: var(--c-primary); color: var(--c-primary); }
