@@ -130,6 +130,7 @@ export const API = {
   containers: {
     list: () => '/api/v1/containers',
     images: () => '/api/v1/containers/images',
+    install: () => '/api/v1/containers/install',
     // 生命周期动作；id 为容器 ID 或名称（后端白名单校验）
     start: (id: string) => `/api/v1/containers/${id}/start`,
     stop: (id: string) => `/api/v1/containers/${id}/stop`,

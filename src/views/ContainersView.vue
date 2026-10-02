@@ -37,15 +37,23 @@ const notice = ref('')
 const busy = ref(false)
 const delTarget = ref<Container | null>(null)
 
+// 安装 Docker：诊断分支下的交互状态
+const installOpen = ref(false)
+const installBusy = ref(false)
+const installTaskId = ref<string | null>(null)
+const installError = ref('')
+
 const supported = computed(() => auth.supported(CAP.CONTAINER_MANAGE))
 const canManage = computed(() => auth.enabled(CAP.CONTAINER_MANAGE, 'container.manage'))
+/** 不可用原因机器码（来自能力位 reason）。菜单常亮，进入后据此分流展示。 */
+const unavailableReason = computed(() => auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined)
 
 /** 把后端的机器码 reason 翻成可执行的建议——"不支持"三个字对用户毫无帮助。 */
 const unavailableHint = computed(() => {
-  const r = auth.capabilities[CAP.CONTAINER_MANAGE]?.reason
+  const r = unavailableReason.value
   switch (r) {
     case 'binary_missing':
-      return '宿主机未安装 Docker CLI（在 /usr/bin 等标准路径下未找到 docker 可执行文件）。安装 Docker 后重启面板即可。'
+      return '宿主机未安装 Docker。可点下方"安装 Docker"一键安装（高危操作，需二次确认）；装完仍需把面板运行用户加入 docker 组并重启面板方可管理。'
     case 'daemon_unreachable':
       return '已检测到 docker 命令，但守护进程不可达：面板进程不在 docker 组，或 Docker 服务未运行。'
         + '排查：① 执行 systemctl start docker 启动服务；② 执行 usermod -aG docker <面板运行用户> 后重启面板；'
@@ -54,6 +62,33 @@ const unavailableHint = computed(() => {
       return undefined
   }
 })
+
+/** daemon_unreachable 时给用户的复制命令（含当前登录用户，避免手动替换）。 */
+const daemonFixCommands = computed(() => {
+  if (unavailableReason.value !== 'daemon_unreachable') return []
+  const user = auth.me?.user ?? '<面板运行用户>'
+  return [
+    'systemctl start docker',
+    `usermod -aG docker ${user}`,
+    'systemctl restart panel   # 或重启面板服务使新组生效',
+  ]
+})
+
+async function copyText(t: string) {
+  try { await navigator.clipboard.writeText(t) } catch { /* 忽略：用户可手动选择复制 */ }
+}
+
+/** 提交一键安装 Docker（经后端任务队列，高危二次确认）。 */
+async function doInstall() {
+  installBusy.value = true; installError.value = ''; installTaskId.value = null
+  try {
+    const r = await api.post<{ task_id: string; package: string }>(
+      API.containers.install(), { confirm_token: '安装 Docker' })
+    installTaskId.value = r.task_id
+    notice.value = `已提交安装任务（${r.package}），可在"任务"页查看进度。装完后请把面板运行用户加入 docker 组并重启面板。`
+  } catch (e) { installError.value = errorText(e) }
+  finally { installBusy.value = false; installOpen.value = false }
+}
 
 async function load() {
   error.value = ''; notice.value = ''
@@ -120,10 +155,35 @@ function canStop(c: Container) { return c.state === 'running' }
       </button>
     </div>
 
-    <EmptyState v-if="!supported"
-      title="当前环境不支持容器管理"
-      :hint="unavailableHint"
-      :reason="auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined" />
+    <!-- 不可用：诊断/引导视图（菜单已常亮，不置灰）。按 reason 分流展示。 -->
+    <div v-if="!supported" class="diag">
+      <div class="diag-head">
+        <Icon name="docker" :size="22" />
+        <h3 v-if="unavailableReason === 'binary_missing'">本机未安装 Docker</h3>
+        <h3 v-else-if="unavailableReason === 'daemon_unreachable'">Docker 守护进程不可达</h3>
+        <h3 v-else>当前环境不支持容器管理</h3>
+      </div>
+      <p class="diag-hint">{{ unavailableHint || '该环境暂不满足容器管理的前置条件。' }}</p>
+
+      <!-- binary_missing：提供一键安装（高危，二次确认） -->
+      <div v-if="unavailableReason === 'binary_missing'" class="diag-actions">
+        <button class="btn-primary" :disabled="installBusy" @click="installOpen = true">
+          <Icon name="download" :size="15" /> 安装 Docker
+        </button>
+        <span v-if="installTaskId" class="ok-note">已提交安装任务（ID：{{ installTaskId }}），可在"任务"页查看进度</span>
+      </div>
+
+      <!-- daemon_unreachable：给出可直接复制的修复命令 -->
+      <div v-else-if="unavailableReason === 'daemon_unreachable'" class="diag-cmds">
+        <p class="dim">依次执行以下命令并重启面板即可管理容器：</p>
+        <div v-for="(cmd, i) in daemonFixCommands" :key="i" class="cmd-row">
+          <code>{{ cmd }}</code>
+          <button class="btn-ghost btn-sm" @click="copyText(cmd)">复制</button>
+        </div>
+      </div>
+
+      <p v-if="installError" class="err">{{ installError }}</p>
+    </div>
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
@@ -207,11 +267,26 @@ function canStop(c: Container) { return c.state === 'running' }
     <ConfirmDialog :open="!!delTarget" danger title="删除容器"
       :detail="delTarget ? `将删除容器「${delTarget.name}」（镜像 ${delTarget.image}）。\n\n容器内未持久化到卷或宿主目录的数据会一并丢失，且无法恢复。运行中的容器需先停止。` : ''"
       confirm-word="删除" @confirm="doRemove" @cancel="delTarget = null" />
+
+    <ConfirmDialog :open="installOpen" danger title="安装 Docker"
+      :detail="'将在宿主机上通过包管理器安装 Docker 引擎。这是高危系统变更；安装完成后仍需把面板运行用户加入 docker 组并重启面板，才能在此管理容器。'"
+      confirm-word="安装 Docker" @confirm="doInstall" @cancel="installOpen = false" />
   </div>
 </template>
 
 <style scoped>
 .ok-note { color: var(--c-ok, #3fb950); font-size: 13px; margin: 0 0 12px; }
+.diag { max-width: 720px; margin: 8px 0 16px; padding: 20px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-card); }
+.diag-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.diag-head h3 { margin: 0; font-size: 16px; }
+.diag-head :deep(.icon) { color: var(--c-primary); }
+.diag-hint { color: var(--c-text-dim); font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
+.diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.diag-cmds { display: flex; flex-direction: column; gap: 8px; }
+.diag-cmds .dim { font-size: 13px; margin: 0 0 2px; }
+.cmd-row { display: flex; align-items: center; gap: 10px; }
+.cmd-row code { flex: 1; padding: 8px 10px; background: var(--c-code-bg, #1e1e1e); color: var(--c-code, #e6e6e6);
+  border-radius: 6px; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .tabs button { display: inline-flex; align-items: center; gap: 6px; }
 .tabs button.on { border-color: var(--c-primary); color: var(--c-primary); }
