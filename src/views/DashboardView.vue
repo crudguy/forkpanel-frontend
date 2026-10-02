@@ -58,20 +58,47 @@ const loadTone = computed<'primary' | 'warn' | 'danger'>(() => {
   return l > 4 ? 'danger' : l > 2 ? 'warn' : 'primary'
 })
 
-const shortcuts = [
-  { to: '/system', label: '主机监控', icon: 'cpu' },
-  { to: '/services', label: '软件与服务', icon: 'server' },
-  { to: '/sites', label: '网站与 SSL', icon: 'globe' },
-  { to: '/databases', label: '数据库', icon: 'database' },
-  { to: '/files', label: '文件', icon: 'folder' },
-  { to: '/backups', label: '备份', icon: 'archive' },
-  { to: '/logs', label: '日志', icon: 'list' },
-  { to: '/firewall', label: '安全', icon: 'shield' },
-  { to: '/cron', label: '任务', icon: 'clock' },
-  { to: '/cron/tasks', label: '任务中心', icon: 'tasks' },
-  { to: '/terminal', label: '终端', icon: 'terminal' },
-  { to: '/users', label: '用户', icon: 'users' },
-]
+// ── 运行状态总览（替换原"快捷入口"导航网格：侧边栏已覆盖导航，这里改呈真实状态）──
+const svc = ref<{ total: number; active: number; failed: number; ok: boolean }>({ total: 0, active: 0, failed: 0, ok: false })
+const ct = ref<{ total: number; running: number; ok: boolean }>({ total: 0, running: 0, ok: false })
+const site = ref<{ total: number; enabled: number; ok: boolean }>({ total: 0, enabled: 0, ok: false })
+const bk = ref<{ total: number; fail: number; ok: boolean }>({ total: 0, fail: 0, ok: false })
+
+const containerSupported = computed(() => auth.supported(CAP.CONTAINER_VIEW))
+
+const svcTone = computed(() => !svc.value.ok ? 'muted' : svc.value.failed > 0 ? 'danger' : 'ok')
+const ctTone = computed(() => !ct.value.ok ? 'muted' : ct.value.total > 0 && ct.value.running === 0 ? 'warn' : 'ok')
+const siteTone = computed(() => !site.value.ok ? 'muted' : 'ok')
+const bkTone = computed(() => !bk.value.ok ? 'muted' : bk.value.fail > 0 ? 'danger' : bk.value.total === 0 ? 'warn' : 'ok')
+
+const svcText = computed(() => !svc.value.ok ? '—' : svc.value.failed > 0 ? `${svc.value.failed} 个服务异常` : `${svc.value.active} 个运行中`)
+const ctText = computed(() => !ct.value.ok ? '守护进程不可达' : `运行中 ${ct.value.running} / 共 ${ct.value.total}`)
+const bkText = computed(() => !bk.value.ok ? '—' : bk.value.total === 0 ? '未配置计划' : bk.value.fail > 0 ? `${bk.value.fail} 个计划失败` : '全部正常')
+
+async function loadStatus() {
+  // 各列表独立抓取，单点失败静默（审计 F19），不拖累整块渲染
+  try {
+    // 注意：服务列表是包装对象（{init_system, services}），不是裸数组
+    const r = await api.get<{ services: any[] }>(API.services.list())
+    const list = r.services ?? []
+    svc.value = { total: list.length, active: list.filter(s => s.state === 'active').length,
+      failed: list.filter(s => s.state === 'failed').length, ok: true }
+  } catch { /* 静默 */ }
+  if (containerSupported.value) {
+    try {
+      const list = await api.get<any[]>(API.containers.list())
+      ct.value = { total: list.length, running: list.filter(c => c.state === 'running').length, ok: true }
+    } catch { /* 静默 */ }
+  }
+  try {
+    const list = await api.get<any[]>(API.sites.list())
+    site.value = { total: list.length, enabled: list.filter(s => s.enabled).length, ok: true }
+  } catch { /* 静默 */ }
+  try {
+    const list = await api.get<any[]>(API.backups.list())
+    bk.value = { total: list.length, fail: list.filter(p => p.last_result === 'fail').length, ok: true }
+  } catch { /* 静默 */ }
+}
 
 const sysInfo = computed(() => {
   const p = auth.platform
@@ -94,6 +121,7 @@ onMounted(async () => {
   await auth.loadMe()
   if (!auth.supported(CAP.METRICS_READ)) return
   await poll()
+  await loadStatus()
   if (auth.pollingMode) {
     timer = window.setInterval(poll, 10000)
   } else {
@@ -139,13 +167,33 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
         <RouterLink to="/system/procs" class="btn-ghost btn-sm">查看占用进程</RouterLink>
       </div>
 
-      <!-- 快捷入口 -->
+      <!-- 运行状态总览（替换原快捷入口：导航由侧边栏承担，这里呈真实状态） -->
       <section class="card">
-        <div class="sec-head"><Icon name="bolt" :size="16" /><span>快捷入口</span></div>
-        <div class="quick">
-          <RouterLink v-for="q in shortcuts" :key="q.to" :to="q.to" class="quick-item">
-            <span class="q-ico"><Icon :name="q.icon" :size="20" /></span>
-            <span class="q-label">{{ q.label }}</span>
+        <div class="sec-head"><Icon name="gauge" :size="16" /><span>运行状态</span></div>
+        <div class="status">
+          <RouterLink to="/services" class="st-tile">
+            <span class="st-dot" :class="svcTone" />
+            <span class="st-ico"><Icon name="server" :size="18" /></span>
+            <span class="st-main">服务</span>
+            <span class="st-sub">{{ svcText }}</span>
+          </RouterLink>
+          <RouterLink v-if="containerSupported" to="/containers" class="st-tile">
+            <span class="st-dot" :class="ctTone" />
+            <span class="st-ico"><Icon name="docker" :size="18" /></span>
+            <span class="st-main">容器</span>
+            <span class="st-sub">{{ ctText }}</span>
+          </RouterLink>
+          <RouterLink to="/sites" class="st-tile">
+            <span class="st-dot" :class="siteTone" />
+            <span class="st-ico"><Icon name="globe" :size="18" /></span>
+            <span class="st-main">网站</span>
+            <span class="st-sub">{{ site.ok ? `共 ${site.total} 个 · 启用 ${site.enabled}` : '—' }}</span>
+          </RouterLink>
+          <RouterLink to="/backups" class="st-tile">
+            <span class="st-dot" :class="bkTone" />
+            <span class="st-ico"><Icon name="archive" :size="18" /></span>
+            <span class="st-main">备份</span>
+            <span class="st-sub">{{ bkText }}</span>
           </RouterLink>
         </div>
       </section>
@@ -190,16 +238,21 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
 
-.quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
-.quick-item { display: flex; flex-direction: column; align-items: center; gap: 9px;
-              padding: 16px 10px; border-radius: 12px; text-decoration: none; color: var(--c-text);
-              border: 1px solid var(--c-border); background: var(--c-surface-2);
-              transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
-.quick-item:hover { transform: translateY(-3px); border-color: var(--c-border-strong); box-shadow: var(--shadow); }
-.q-ico { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
-         background: var(--c-primary-soft); color: var(--c-primary); }
-.quick-item:hover .q-ico { background: var(--gradient); color: #fff; box-shadow: var(--glow); }
-.q-label { font-size: 13px; }
+.status { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.st-tile { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+           column-gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px;
+           text-decoration: none; color: var(--c-text); border: 1px solid var(--c-border);
+           background: var(--c-surface-2); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.st-tile:hover { transform: translateY(-2px); border-color: var(--c-border-strong); box-shadow: var(--shadow); }
+.st-dot { position: absolute; top: 14px; right: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--c-text-dim); }
+.st-dot.ok { background: var(--c-ok); }
+.st-dot.warn { background: var(--c-warn); }
+.st-dot.danger { background: var(--c-danger); }
+.st-dot.muted { background: var(--c-border-strong); }
+.st-ico { grid-row: 1 / span 2; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+          background: var(--c-primary-soft); color: var(--c-primary); }
+.st-main { font-size: 14px; font-weight: 600; }
+.st-sub { font-size: 12.5px; color: var(--c-text-dim); }
 
 .info dl { margin: 0; display: flex; flex-direction: column; gap: 0; }
 .info .row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--c-border); }
