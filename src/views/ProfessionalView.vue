@@ -10,17 +10,14 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import type { SystemSnapshot, ProcessInfo } from '@/api/types'
+import type { SystemSnapshot } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
 const snap = ref<SystemSnapshot | null>(null)
-const procs = ref<ProcessInfo[]>([])
-const procSort = ref<'cpu' | 'mem'>('cpu')
 const loading = ref(true)
-const procError = ref('')
 
 // 配色：与主机监控页图例一致，彼此对比鲜明
 const C = {
@@ -100,38 +97,25 @@ async function loadSnapshot() {
   }
   finally { loading.value = false }
 }
-async function loadProcs() {
-  procError.value = ''
-  try {
-    procs.value = await api.get<ProcessInfo[]>(API.processes.list(),
-      { params: { sort: procSort.value, limit: 15 } })
-  } catch (e) { procError.value = errorText(e) }
-}
-function switchSort(s: 'cpu' | 'mem') { procSort.value = s; loadProcs() }
-
-let rtTimer: number | undefined, procTimer: number | undefined
+let rtTimer: number | undefined
 
 /** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9） */
 function onVisibility() {
   if (document.hidden) {
     if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-    if (procTimer) { clearInterval(procTimer); procTimer = undefined }
   } else {
-    loadSnapshot(); loadProcs()
+    loadSnapshot()
     rtTimer = window.setInterval(loadSnapshot, 2000)
-    procTimer = window.setInterval(loadProcs, 3000)
   }
 }
 
 onMounted(() => {
-  loadSnapshot(); loadProcs()
+  loadSnapshot()
   rtTimer = window.setInterval(loadSnapshot, 2000)
-  procTimer = window.setInterval(loadProcs, 3000)
   document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
   if (rtTimer) clearInterval(rtTimer)
-  if (procTimer) clearInterval(procTimer)
   document.removeEventListener('visibilitychange', onVisibility)
 })
 </script>
@@ -239,30 +223,6 @@ onUnmounted(() => {
       </div>
       <EmptyState v-else title="无温度传感器（本机无 /sys/class/hwmon）" />
 
-      <!-- 进程 -->
-      <div class="sec-head">
-        <Icon name="process" :size="16" /> 进程（Top {{ procs.length }}）
-        <span class="gran">
-          <button class="chip" :class="{ on: procSort === 'cpu' }" @click="switchSort('cpu')">CPU</button>
-          <button class="chip" :class="{ on: procSort === 'mem' }" @click="switchSort('mem')">内存</button>
-        </span>
-      </div>
-      <p v-if="procError" class="err">{{ procError }}</p>
-      <div class="card flush">
-        <table>
-          <thead><tr><th>PID</th><th>进程</th><th class="num">CPU</th><th class="num">内存</th><th>用户</th></tr></thead>
-          <tbody>
-            <tr v-for="p in procs" :key="p.pid">
-              <td class="mono">{{ p.pid }}</td>
-              <td>{{ p.name }}</td>
-              <td class="num">{{ fmtPct(p.cpu_pct) }}%</td>
-              <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
-              <td>{{ p.user ?? '-' }}</td>
-            </tr>
-            <tr v-if="!procs.length"><td colspan="5"><EmptyState title="无进程数据" /></td></tr>
-          </tbody>
-        </table>
-      </div>
     </template>
     <EmptyState v-else title="暂无快照数据" hint="采集由内部调度器驱动，稍候自动出现" />
   </div>
@@ -325,13 +285,6 @@ onUnmounted(() => {
 .temp-warn { margin-top: 6px; font-size: 12px; color: var(--c-danger); }
 .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; }
 .badge.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
-
-/* 进程排序切换 */
-.gran { margin-left: auto; display: inline-flex; gap: 6px; }
-.chip { font: inherit; font-size: 12px; padding: 3px 11px; border-radius: 999px; cursor: pointer;
-  color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
-.chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
-.chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
 
 /* 进程表 */
 table { width: 100%; border-collapse: collapse; }
