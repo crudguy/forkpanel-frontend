@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -100,16 +101,17 @@ async function submitBootstrap() {
 
 <template>
   <div class="login">
+    <!-- 品牌 LOGO（橙红渐变方块 + 狗头，与侧边栏品牌一致），所有模式共用 -->
+    <div class="brand-logo"><Icon name="dog" :size="34" /></div>
+
     <!-- 首启：检测中 -->
     <form v-if="mode === 'checking'" class="card" @submit.prevent>
       <h1>叉叉面板 ForkPanel</h1>
-      <p class="sub">正在检查初始化状态…</p>
     </form>
 
     <!-- 首启：创建 owner -->
     <form v-else-if="mode === 'bootstrap'" class="card" @submit.prevent="submitBootstrap">
       <h1>初始化面板</h1>
-      <p class="sub">首次使用：请输入服务器终端上打印的引导令牌，创建管理员账号</p>
 
       <p v-if="!tokenActive" class="warn" role="alert">
         引导令牌不存在或已过期：在服务器上重启 <code>panel serve</code> 可重新生成
@@ -146,14 +148,12 @@ async function submitBootstrap() {
     <!-- 首启：成功 -->
     <form v-else-if="mode === 'done'" class="card" @submit.prevent>
       <h1>初始化完成</h1>
-      <p class="sub">管理员账号已创建，请使用刚设置的账号登录</p>
       <button type="submit" @click="mode = 'login'">去登录</button>
     </form>
 
     <!-- 常规登录 -->
     <form v-else class="card" @submit.prevent="submit">
       <h1>叉叉面板 ForkPanel</h1>
-      <p class="sub">请登录以继续</p>
 
       <label>
         <span>用户名</span>
@@ -185,10 +185,14 @@ async function submitBootstrap() {
 </template>
 
 <style scoped>
-.login { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+.login { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; min-height: 100vh; padding: 24px; }
+.brand-logo {
+  width: 64px; height: 64px; border-radius: 16px;
+  display: grid; place-items: center;
+  background: var(--gradient); box-shadow: var(--glow);
+}
 .card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
-h1 { font-size: 20px; margin: 0; }
-.sub { color: var(--c-text-dim); margin: -8px 0 4px; font-size: 13px; }
+h1 { font-size: 20px; margin: 0; text-align: center; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .error { color: var(--c-danger); font-size: 13px; margin: 0; }
 .warn {
