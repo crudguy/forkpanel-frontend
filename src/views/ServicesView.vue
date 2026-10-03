@@ -55,7 +55,8 @@ async function load() {
   try {
     const r = await api.get<{ init_system: string; services: Svc[] }>(API.services.list())
     init.value = r.init_system
-    svcs.value = r.services
+    // 兜底：services 缺失时保持空数组，后续 computed（filter/sort）不会崩
+    svcs.value = r.services ?? []
   } catch (e) { error.value = errorText(e) }
 }
 

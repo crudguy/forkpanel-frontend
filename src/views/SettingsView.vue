@@ -63,8 +63,9 @@ async function loadRoles() {
   if (!canRoles.value) return
   try {
     const r = await api.get<{ roles: RoleRow[]; known_permissions: string[] }>(API.roles.list())
-    roles.value = r.roles
-    knownPerms.value = r.known_permissions
+    // 兜底：后端异常路径可能返 null，v-for 虽不渲染但后续 .filter/.length 会崩
+    roles.value = r.roles ?? []
+    knownPerms.value = r.known_permissions ?? []
   } catch (e) { roleErr.value = errorText(e) }
 }
 

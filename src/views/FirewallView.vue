@@ -41,7 +41,9 @@ async function load() {
   if (!auth.supported(CAP.FIREWALL_MANAGE)) return
   try {
     const r = await api.get<{ backend: string; active: boolean; rules: Rule[] }>(API.firewall.rules())
-    backend.value = r.backend; active.value = r.active; rules.value = r.rules
+    backend.value = r.backend; active.value = r.active
+    // 兜底：后端无规则时可能返 null（表格的 sorted/统计都假定是数组）
+    rules.value = r.rules ?? []
   } catch (e) { error.value = errorText(e) }
 }
 onMounted(load)
