@@ -141,7 +141,9 @@ onMounted(load)
                 <span v-else class="badge">引导账号</span>
               </td>
             </tr>
-            <tr v-if="!users.length"><td colspan="5"><EmptyState title="无用户" /></td></tr>
+            <!-- colspan 必须等于表头列数（用户名/角色/权限范围/状态/最后登录/操作 = 6）。
+                 此前写 5，空列表时 EmptyState 只占前 5 列，最后一列留空。 -->
+            <tr v-if="!users.length"><td colspan="6"><EmptyState title="无用户" /></td></tr>
           </tbody>
         </table>
       </div>

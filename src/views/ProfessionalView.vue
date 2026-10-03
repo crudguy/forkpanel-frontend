@@ -105,6 +105,9 @@ function onVisibility() {
     if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
   } else {
     loadSnapshot()
+    // 恢复前必须先清旧句柄（同 SystemView）：后台标签打开时 onMounted 已建过定时器，
+    // 直接覆盖会让旧句柄丢失、两个定时器同时跑。
+    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
     rtTimer = window.setInterval(loadSnapshot, 2000)
   }
 }

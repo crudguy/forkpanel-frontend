@@ -107,6 +107,9 @@ onMounted(load)
         <div class="row">
           <strong>{{ n.title }}</strong>
           <span class="tag">{{ n.source }}</span>
+          <!-- 级别文案走共享词表：后端返回英文枚举，直接渲染会中英混杂。
+               此前 notifLevelLabel 已导入却从未使用，级别完全没有展示。 -->
+          <span class="lvl">{{ notifLevelLabel(n.level) }}</span>
           <span class="time">{{ fmt(n.ts) }}</span>
         </div>
         <p v-if="n.body" class="body">{{ n.body }}</p>
@@ -144,6 +147,12 @@ h1 { font-size: 18px; margin: 0; }
 .item.crit { border-left-color: var(--c-danger); }
 .item.warn { border-left-color: var(--c-warn); }
 .item.info { border-left-color: var(--c-cyan); }
+/* 后端级别取值是 info/warn/error（见 types.ts 的 notifLevelLabel），
+   此前只定义了 crit/warn/info——error 级通知左边框无色，看不出是错误。
+   crit 保留以兼容旧数据。 */
+.item.error { border-left-color: var(--c-danger); }
+.item.crit { border-left-color: var(--c-danger); }
+.lvl { font-size: 11px; color: var(--c-text-dim); }
 .item.read { opacity: .55; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tag { font-size: 12px; opacity: .7; }

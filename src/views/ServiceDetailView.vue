@@ -213,6 +213,18 @@ onMounted(async () => {
   await loadSvc()
   if (svc.value) void loadJournal()
 })
+
+// 同一路由内换 unit 时组件会被复用，onMounted 不会重跑——不监听就会停在旧服务的数据
+// 上（且上一个服务的日志跟随流还开着）。必须先关流再重载。
+watch(() => route.params.unit, async () => {
+  closeFollow()
+  follow.value = false
+  cfg.value = null          // 否则会带着上一个服务的配置内容进入新服务
+  tab.value = 'log'
+  await loadSvc()
+  if (svc.value) void loadJournal()
+})
+
 onUnmounted(closeFollow)
 </script>
 

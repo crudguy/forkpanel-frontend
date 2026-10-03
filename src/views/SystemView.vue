@@ -86,6 +86,11 @@ function onVisibility() {
   } else {
     loadRealtime()
     loadHistory()
+    // 恢复前必须先清旧句柄：页面在后台标签打开时 onMounted 已经建过定时器，
+    // 而 visibilitychange 要等真正切换才触发——此处若直接覆盖，旧句柄丢失、
+    // 两个定时器同时跑（双倍请求），onUnmounted 也只能清掉后建的那一个。
+    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
+    if (histTimer) { clearInterval(histTimer); histTimer = undefined }
     const poll = Math.min(Math.max(interval.value || 2000, 1000), 3000)
     rtTimer = window.setInterval(loadRealtime, poll)
     histTimer = window.setInterval(loadHistory, 30000)
@@ -146,10 +151,14 @@ const histRows = computed<HistRow[]>(() => history.value?.samples ?? [])
 const historyUnavailable = computed(() =>
   auth.me?.tier === 'nano' || !!history.value?.unavailable)
 const histCpuPts = computed(() => buildHist(r => r[1], 100))
-const histMemPts = computed(() => buildHist(r => {
-  const total = last.value?.mem_total_kib ?? r[2] * 4
-  return r[2] / Math.max(1, total) * 100
-}, 100))
+// 历史样本只记录 mem_used_kib，总量只有实时快照里有。快照尚未到达时不能拿
+// "已用×4" 当总量——那会让曲线恒为 25%，是个编出来的数字。改为总量未知时先不画
+// （polyline points 为空即不渲染），等快照到达后按真实总量绘制。
+const histMemPts = computed(() => {
+  const total = last.value?.mem_total_kib
+  if (!total) return ''
+  return buildHist(r => r[2] / Math.max(1, total) * 100, 100)
+})
 const histLoadMax = computed(() => Math.max(2, ...histRows.value.map(r => r[3])))
 const histLoadPts = computed(() => buildHist(r => r[3], histLoadMax.value))
 
