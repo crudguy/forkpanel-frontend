@@ -12,7 +12,7 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, fmtDateTime, fmtTime as fmtClock } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -222,7 +222,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
           </div>
           <div v-if="stats.histogram.length" class="hist">
             <div v-for="(b, i) in stats.histogram" :key="i" class="hist-bar"
-                 :title="`${new Date(b.start * 1000).toLocaleString()} → ${new Date(b.end * 1000).toLocaleString()}：${b.count} 行`">
+                 :title="`${fmtDateTime(b.start)} → ${fmtDateTime(b.end)}：${b.count} 行`">
               <i :style="{ height: Math.max(2, (b.count / histMax) * 100) + '%' }" />
             </div>
           </div>
@@ -239,7 +239,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       </section>
 
       <pre ref="viewEl" class="view"><code v-for="(l, i) in lines" :key="i" :class="l.level?.toLowerCase()">
-<span class="ts">{{ l.ts ? new Date(l.ts * 1000).toLocaleTimeString() : '—' }}</span> {{ l.text }}</code></pre>
+<span class="ts">{{ fmtClock(l.ts) }}</span> {{ l.text }}</code></pre>
       <EmptyState v-if="!lines.length && !error" :title="follow ? '等待新日志…' : '无匹配日志'" />
     </template>
   </div>

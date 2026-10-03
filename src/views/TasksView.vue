@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { taskStateBadge, taskStateLabel } from '@/api/types'
+import { fmtDateTime, taskStateBadge, taskStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -76,7 +76,7 @@ async function cancel(t: Task) {
 // 且把英文 state 直接甩给用户；服务页判的却是 'done'——同一任务两处颜色不同
 function stateClass(s: string) { return taskStateBadge(s) }
 const stateText = taskStateLabel
-function fmtTime(t?: number | null) { return t ? new Date(t * 1000).toLocaleString() : '—' }
+function fmtTime(t?: number | null) { return fmtDateTime(t) }
 onUnmounted(stopPoll)
 </script>
 

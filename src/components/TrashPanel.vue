@@ -12,6 +12,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { fmtDateTime, fmtSize } from '@/api/types'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
 
@@ -73,14 +74,8 @@ async function purgeAll() {
   finally { busy.value = '' }
 }
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`
-  return `${(n / 1024 ** 3).toFixed(2)} GB`
-}
 function fmtTime(ts: number) {
-  return ts ? new Date(ts * 1000).toLocaleString() : '—'
+  return fmtDateTime(ts)
 }
 
 onMounted(load)

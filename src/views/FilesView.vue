@@ -16,7 +16,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, fmtDateTime, fmtSize } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -53,7 +53,9 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const notice = ref('')
 const showTrash = ref(false)
 
-const canWrite = computed(() => auth.can('file.write'))
+// 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
+// 此前只判权限，能力位在文件页从未生效（侧边栏门禁用的是 FILE_READ）。
+const canWrite = computed(() => auth.can('file.write') && auth.supported(CAP.FILE_WRITE))
 
 function full(p: string) {
   return path.value.replace(/\/+$/, '') + '/' + p
@@ -313,12 +315,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
   finally { batchBusy.value = false }
 }
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`
-  return `${(n / 1024 ** 3).toFixed(2)} GB`
-}
+// fmtSize 已统一到 types.ts（此前此处与 TrashPanel 各写一份，BackupsView 是第三份且更差）
 </script>
 
 <template>
@@ -385,7 +382,7 @@ function fmtSize(n: number) {
             <td class="num">{{ e.kind === 'dir' ? '—' : fmtSize(e.size) }}</td>
             <td class="num mono">{{ e.mode ?? '—' }}</td>
             <td>{{ e.owner ?? '—' }}</td>
-            <td class="num">{{ new Date(e.modified * 1000).toLocaleString() }}</td>
+            <td class="num">{{ fmtDateTime(e.modified) }}</td>
             <td class="nowrap">
               <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="download(e)">下载</button>
               <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="open(e)">编辑</button>

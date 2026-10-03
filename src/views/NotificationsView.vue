@@ -13,6 +13,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { fmtDateTime, notifLevelLabel } from '@/api/types'
 
 interface NotificationItem {
   id: number
@@ -30,7 +31,7 @@ const loading = ref(false)
 const error = ref('')
 
 function fmt(ts: number): string {
-  return new Date(ts * 1000).toLocaleString()
+  return fmtDateTime(ts)
 }
 
 async function load() {
