@@ -40,6 +40,8 @@ const esRetries = ref(0)
 const MAX_ES_RETRIES = 5
 
 async function loadSources() {
+  // 请求级门控：无可用日志源时 logs.read=no，源列表端点返 501
+  if (!auth.supported(CAP.LOGS_READ)) return
   try {
     const r = await api.get<{ sources: Src[] }>(API.logs.sources())
     sources.value = r.sources
@@ -49,6 +51,8 @@ async function loadSources() {
 
 async function load() {
   if (!cur.value) return
+  // 同上：直接读日志内容也受同一能力位守卫
+  if (!auth.supported(CAP.LOGS_READ)) return
   error.value = ''
   try {
     const r = await api.get<{ lines: Line[]; capped: boolean }>(API.logs.read(cur.value), {

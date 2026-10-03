@@ -36,6 +36,9 @@ const comment = ref('')
 
 async function load() {
   error.value = ''
+  // 请求级门控：能力位为 no 时后端返 501。template 里的 EmptyState 只挡渲染，
+  // 不挡请求——不 gate 的话用户先看到红色报错再看到"不支持"，体验割裂。
+  if (!auth.supported(CAP.FIREWALL_MANAGE)) return
   try {
     const r = await api.get<{ backend: string; active: boolean; rules: Rule[] }>(API.firewall.rules())
     backend.value = r.backend; active.value = r.active; rules.value = r.rules

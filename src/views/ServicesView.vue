@@ -48,6 +48,8 @@ const installable = computed(() => WHITELIST.filter(n => !installedNames.value.h
 
 async function load() {
   error.value = ''
+  // 请求级门控：init 系统未知时后端返 501（service.manage=no）
+  if (!auth.supported(CAP.SERVICE_MANAGE)) return
   try {
     const r = await api.get<{ init_system: string; services: Svc[] }>(API.services.list())
     init.value = r.init_system
@@ -57,6 +59,8 @@ async function load() {
 
 async function loadPackages() {
   pkgNote.value = ''
+  // 同上：无包管理器时 package.install=no，枚举端点会 501
+  if (!auth.supported(CAP.PACKAGE_INSTALL)) { pkgs.value = []; return }
   try {
     const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
     pkgs.value = r.packages ?? []

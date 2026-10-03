@@ -36,6 +36,8 @@ const editError = ref('')
 
 async function load() {
   error.value = ''; note.value = ''
+  // 请求级门控：系统无 crontab 时 scheduler.manage=no，列表端点返 501
+  if (!auth.supported(CAP.SCHEDULER_MANAGE)) return
   try { jobs.value = await api.get<Job[]>(API.cron.jobs()) }
   catch (e) { error.value = errorText(e); jobs.value = [] }
 }
