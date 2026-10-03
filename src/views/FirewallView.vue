@@ -65,10 +65,19 @@ async function apply() {
 /** 待确认的关闭动作（审计 U5：window.confirm → ConfirmDialog）。开启无风险不需确认。 */
 const confirmOff = ref(false)
 
-async function toggleActive() {
+// 原实现把「关闭」与「启用」压在一个 toggleActive 里：关闭分支置 confirmOff 后
+// 直接 return，而确认框回调又指回同一函数 → active 仍为 true，永远走不到发请求的
+// 分支（且模板里根本没有 confirmOff 对应的确认框，点了完全没反应）；
+// 同时「启用」分支的 body 写死 enabled:false，点启用实际是下发关闭。
+// 现拆成：按钮只决定「要不要先确认」，实际下发统一走 setActive(on)。
+function toggleActive() {
   if (active.value) { confirmOff.value = true; return }
+  void setActive(true)
+}
+
+async function setActive(on: boolean) {
   busy.value = true
-  try { await api.put(API.firewall.setEnabled(), { enabled: false }); load() }
+  try { await api.put(API.firewall.setEnabled(), { enabled: on }); load() }
   catch (e) { error.value = errorText(e) }
   finally { busy.value = false; confirmOff.value = false }
 }
@@ -161,6 +170,10 @@ async function doDelete() {
       </div>
       <EmptyState v-else title="暂无规则" />
     </template>
+
+    <ConfirmDialog :open="confirmOff" danger title="关闭防火墙"
+      detail="关闭后面板创建的所有放行规则将不再生效，正在放行的端口（含 SSH）会随后端策略变化，可能导致无法远程连接。请确认你了解此操作的后果。"
+      @confirm="setActive(false)" @cancel="confirmOff = false" />
 
     <ConfirmDialog :open="!!delTarget" danger title="删除防火墙规则"
       :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"

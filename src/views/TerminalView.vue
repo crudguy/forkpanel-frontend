@@ -81,6 +81,9 @@ function connect() {
     return
   }
   ws.binaryType = 'arraybuffer'
+  // 捕获本次连接的 socket 引用：onclose 是异步触发的，重连时旧 socket 的 onclose
+  // 会在新连接建好之后才跑，届时需要分辨「关掉的是不是当前这个」。
+  const sock = ws
 
   ws.onopen = () => { connected.value = true; status.value = shell.value ? `已连接 · ${shell.value}` : '已连接' }
   ws.onmessage = (ev: MessageEvent) => {
@@ -104,6 +107,10 @@ function connect() {
     }
   }
   ws.onclose = () => {
+    // 重连场景：disconnect() 关闭旧 socket 后会立刻建新连接，而旧 socket 的 onclose
+    // 是异步触发的。此处若无条件清 ws，会把刚建好的新连接引用抹掉——新连接从此
+    // 无法被 disconnect()/onUnmounted 关闭（泄漏），终端还会多打一行「连接已关闭」。
+    if (ws !== sock) return
     connected.value = false
     status.value = '已断开'
     term?.writeln('\r\n\x1b[33m[连接已关闭]\x1b[0m')

@@ -405,9 +405,11 @@ async function doDeleteCert() {
           <tr v-for="c in certs" :key="c.id">
             <td>{{ c.domain }}</td>
             <td class="dim">{{ c.issuer ?? '—' }}</td>
+            <!-- 列序必须与表头「域名|签发者|来源|到期|剩余」一致。此前来源与到期/剩余
+                 错位：「来源」列显示到期日、「剩余」列显示来源，证书到期日被看错。 -->
+            <td class="dim">{{ certSourceLabel(c.source) }}</td>
             <td>{{ fmtDate(c.not_after) }}</td>
             <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
-            <td class="dim">{{ certSourceLabel(c.source) }}</td>
             <td>
               <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
                 <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy"
