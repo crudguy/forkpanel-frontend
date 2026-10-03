@@ -63,7 +63,9 @@ function sortInd(k: SortKey): string {
 }
 
 const killTarget = ref<Proc | null>(null)
-// 默认发 SIGTERM（进程能正常收尾）；只有卡死不响应才用 SIGKILL 强制。
+// 默认发 SIGTERM（让进程能保存数据、正常退出）；卡死不响应时才升级到 SIGKILL。
+// UI 文案用「结束 / 立即终止」而非「强制」——"强制"没说明强在哪（强制什么？），
+// 用户无法据此判断该不该点。
 const force = ref(false)
 function askKill(p: Proc, f = false) { killTarget.value = p; force.value = f }
 async function doKill() {
@@ -82,20 +84,31 @@ async function doKill() {
 
 <template>
   <div>
-    <div class="page-head">
-      <span class="spacer" />
-      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <EmptyState v-if="!auth.supported(CAP.PROCESS_LIST)"
       title="当前环境不支持进程管理" :reason="auth.capabilities[CAP.PROCESS_LIST]?.reason ?? undefined" />
 
     <template v-else>
       <p v-if="pending" class="note">{{ pending }}</p>
       <p v-if="error" class="err">{{ error }}</p>
+
+      <!-- 表头栏：进程数 + 刷新。放在表格上方而不是 page-head，是因为这个页
+           的操作对象就是这张表，刷新按钮紧贴表头更符合操作直觉（与 FirewallView
+           的"表头行内刷新"一致）。 -->
+      <div v-if="!loading" class="sec-head">
+        <Icon name="process" :size="16" />
+        <span>共 {{ sorted.length }} 个进程</span>
+        <span class="spacer" />
+        <button class="btn-ghost btn-sm" :disabled="loading" @click="load">
+          <Icon name="refresh" :size="14" /> 刷新
+        </button>
+      </div>
+
       <div v-if="loading" class="skeleton box" />
       <div v-else class="card flush">
         <table>
+          <colgroup>
+            <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
+          </colgroup>
           <thead>
             <tr>
               <th class="sortable" :class="{ active: sortKey === 'pid' }" @click="toggleSort('pid')">PID{{ sortInd('pid') }}</th>
@@ -103,23 +116,23 @@ async function doKill() {
               <th class="sortable" :class="{ active: sortKey === 'user' }" @click="toggleSort('user')">用户{{ sortInd('user') }}</th>
               <th class="num sortable" :class="{ active: sortKey === 'cpu' }" @click="toggleSort('cpu')">CPU{{ sortInd('cpu') }}</th>
               <th class="num sortable" :class="{ active: sortKey === 'mem' }" @click="toggleSort('mem')">内存{{ sortInd('mem') }}</th>
-              <th />
+              <th class="acts-col">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="p in sorted" :key="p.pid">
-              <td class="mono">{{ p.pid }}</td>
-              <td>{{ p.name }}</td>
+              <td class="pid mono">{{ p.pid }}</td>
+              <td class="proc-name" :title="p.name">{{ p.name }}</td>
               <td>{{ p.user ?? '-' }}</td>
               <td class="num">{{ (p.cpu_pct ?? 0).toFixed(1) }}%</td>
               <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
-              <td class="nowrap">
+              <td class="acts-col nowrap">
                 <button class="btn-danger btn-sm" :disabled="busy === p.pid || p.pid <= 1" @click="askKill(p)">
                   <Icon name="stop" :size="14" /> 结束
                 </button>
                 <button class="btn-ghost btn-sm" :disabled="busy === p.pid || p.pid <= 1"
-                  title="发送 SIGKILL：进程不会有任何收尾机会，仅在卡死不响应时使用"
-                  @click="askKill(p, true)">强制</button>
+                  title="立即终止：进程没有保存数据、关闭连接的收尾机会，仅在它已卡死不响应时使用"
+                  @click="askKill(p, true)">立即终止</button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
@@ -128,11 +141,11 @@ async function doKill() {
       </div>
     </template>
 
-    <ConfirmDialog :open="!!killTarget" danger :title="force ? '强制结束进程' : '结束进程'"
+    <ConfirmDialog :open="!!killTarget" danger :title="force ? '立即终止进程' : '结束进程'"
       :detail="killTarget
         ? (force
-          ? `将向 ${killTarget.name}（PID ${killTarget.pid}）发送 SIGKILL。进程会被立即终止，没有保存现场、关闭连接的机会——仅在它已卡死、不响应 SIGTERM 时使用。`
-          : `将向 ${killTarget.name}（PID ${killTarget.pid}）发送 SIGTERM，允许其正常退出。系统关键进程（PID ≤ 1）已被禁止。`)
+          ? `即将立即终止 ${killTarget.name}（PID ${killTarget.pid}）。它没有保存数据、关闭连接的收尾机会，未写入磁盘的内容会丢失——请仅在它已卡死、点了「结束」无响应时使用。`
+          : `将向 ${killTarget.name}（PID ${killTarget.pid}）发送正常终止信号，允许它自行保存数据并退出。若无响应，可回来改用「立即终止」。系统关键进程（PID ≤ 1）已被禁止。`)
         : ''"
       @confirm="doKill" @cancel="killTarget = null" />
   </div>
@@ -140,7 +153,7 @@ async function doKill() {
 
 <style scoped>
 .box { height: 320px; border-radius: var(--radius); }
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
 th { color: var(--c-text-mute); font-weight: 600; }
 td.num, th.num { text-align: right; }
@@ -148,4 +161,29 @@ tbody tr:hover { background: var(--c-hover); }
 .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .sortable:hover { color: var(--c-text); }
 .sortable.active { color: var(--c-primary); }
+
+/* 本页原先用 page-head 承载刷新按钮，现已移除；sec-head 成为首个元素，
+   全局 .sec-head 只有 margin-bottom 没有 margin-top，需补顶部节奏。 */
+.sec-head { margin-top: 2px; }
+
+/* 列宽：固定布局，避免进程名长短不定把 CPU/内存列挤到视口外。
+   类名用 w- 前缀，与单元格自身的 class（.pid/.proc-name）区分开。 */
+col.w-pid  { width: 80px; }
+col.w-user { width: 110px; }
+col.w-cpu  { width: 84px; }
+col.w-mem  { width: 96px; }
+col.w-acts { width: 200px; }   /* 容纳「结束」+「立即终止」两个按钮 */
+
+/* 操作列：按钮右对齐，与数值列的视觉重心一致；表头也右对齐，
+   否则「操作」二字悬在左、下方按钮靠右，看着像两列。 */
+th.acts-col, td.acts-col { text-align: right; }
+
+/* 进程名可能极长（容器/内核线程的完整名可达数十字符），固定布局下必须
+   省略号截断，否则会顶开列宽把右侧列挤出视口；完整名走 title 悬停。 */
+td.proc-name {
+  max-width: 0;               /* 配合 table-layout:fixed 允许内容省略 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>
