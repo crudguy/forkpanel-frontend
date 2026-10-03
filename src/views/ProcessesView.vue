@@ -174,27 +174,28 @@ async function doKill() {
       <p v-if="pending" class="note">{{ pending }}</p>
       <p v-if="error" class="err">{{ error }}</p>
 
-      <!-- 表头栏：进程数 + 刷新。放在表格上方而不是 page-head，是因为这个页
-           的操作对象就是这张表，刷新按钮紧贴表头更符合操作直觉（与 FirewallView
-           的"表头行内刷新"一致）。 -->
-      <div v-if="!loading" class="sec-head">
-        <Icon name="process" :size="16" />
-        <span>共 {{ sorted.length }} 个进程</span>
-        <span class="spacer" />
-        <button class="btn-ghost btn-sm" :disabled="loading" @click="load()">
-          <Icon name="refresh" :size="14" /> 刷新
-        </button>
-      </div>
-
       <div v-if="loading" class="skeleton box" />
-      <div v-else class="card flush">
+      <div v-else class="card flush procs-card">
+        <!-- 表头工具条：进程数 + 刷新。作为卡片顶栏紧贴表格，与下方 thead
+             合成一个统一的"表头区"，避免原先「悬浮条 + 卡片内列头」两层表头
+             各自为政、视觉割裂。（其它列表页刷新在 page-head，本页操作对象只
+             有这张表，故把工具条收进卡片顶栏更紧凑，也保留"刷新贴着表"的直觉） -->
+        <div class="procs-toolbar">
+          <Icon name="process" :size="16" />
+          <span class="count">共 {{ sorted.length }} 个进程</span>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="load()">
+            <Icon name="refresh" :size="14" /> 刷新
+          </button>
+        </div>
+        <div class="procs-scroll">
         <table>
           <colgroup>
             <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
           </colgroup>
           <thead>
             <tr>
-              <th class="sortable" :class="{ active: sortKey === 'pid' }" @click="toggleSort('pid')">PID{{ sortInd('pid') }}</th>
+              <th class="num sortable" :class="{ active: sortKey === 'pid' }" @click="toggleSort('pid')">PID{{ sortInd('pid') }}</th>
               <th class="sortable" :class="{ active: sortKey === 'name' }" @click="toggleSort('name')">进程{{ sortInd('name') }}</th>
               <th class="sortable" :class="{ active: sortKey === 'user' }" @click="toggleSort('user')">用户{{ sortInd('user') }}</th>
               <th class="num sortable" :class="{ active: sortKey === 'cpu' }" @click="toggleSort('cpu')">CPU{{ sortInd('cpu') }}</th>
@@ -204,27 +205,34 @@ async function doKill() {
           </thead>
           <tbody>
             <tr v-for="p in sorted" :key="p.pid">
-              <td class="pid mono">{{ p.pid }}</td>
+              <td class="pid mono num">{{ p.pid }}</td>
               <td class="proc-name" :title="p.name">{{ p.name }}</td>
               <td>{{ p.user ?? '-' }}</td>
               <td class="num">{{ (p.cpu_pct ?? 0).toFixed(1) }}%</td>
               <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
               <td class="acts-col nowrap">
-                <button class="btn-ghost btn-sm" :disabled="busy === p.pid || p.pid <= 1"
+                <!-- 操作改为纯图标：颜色即语义、节省列宽。
+                     重载=中性灰(refresh↻) / 结束=琥珀(stop■) / 立即终止=红(bolt⚡)，
+                     危险度梯度对应 SIGHUP<SIGTERM<SIGKILL；图标形状差异大，一眼可辨。
+                     文字说明保留在确认弹窗，hover 仍有 title 提示。 -->
+                <button class="btn-icon act-reload" :disabled="busy === p.pid || p.pid <= 1"
                   :title="ACTION_META.reload.title" @click="askKill(p, 'reload')">
-                  <Icon name="refresh" :size="14" /> {{ ACTION_META.reload.label }}
+                  <Icon name="refresh" :size="16" />
                 </button>
-                <button class="btn-danger btn-sm" :disabled="busy === p.pid || p.pid <= 1"
+                <button class="btn-icon act-term" :disabled="busy === p.pid || p.pid <= 1"
                   :title="ACTION_META.term.title" @click="askKill(p, 'term')">
-                  <Icon name="stop" :size="14" /> {{ ACTION_META.term.label }}
+                  <Icon name="stop" :size="16" />
                 </button>
-                <button class="btn-ghost btn-sm danger-ghost" :disabled="busy === p.pid || p.pid <= 1"
-                  :title="ACTION_META.kill.title" @click="askKill(p, 'kill')">{{ ACTION_META.kill.label }}</button>
+                <button class="btn-icon act-kill" :disabled="busy === p.pid || p.pid <= 1"
+                  :title="ACTION_META.kill.title" @click="askKill(p, 'kill')">
+                  <Icon name="bolt" :size="16" />
+                </button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
           </tbody>
         </table>
+        </div>
       </div>
     </template>
 
@@ -237,18 +245,26 @@ async function doKill() {
 
 <style scoped>
 .box { height: 320px; border-radius: var(--radius); }
+/* 卡片只负责圆角裁切；横向滚动交给内部 .procs-scroll，
+   这样顶栏（进程数 + 刷新）在窄屏不被表内容带着横滚。 */
+.card.flush.procs-card { overflow: hidden; }
+/* 表头工具条：与 thead 合成统一表头区，下边线与 thead 的上沿相接，
+   视觉上是一整块"表头"而非悬浮条 + 卡片列头两层。 */
+.procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
+.procs-toolbar .icon { color: var(--c-primary); }
+.procs-toolbar .count { font-weight: 600; font-size: 14px; }
+.procs-scroll { overflow: auto; }
+
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
-th { color: var(--c-text-mute); font-weight: 600; }
+/* 与全站表格表头一致：用 text-dim 而非更暗的 text-mute，
+   此前单列头偏灰、与 Firewall/Services 等列表页对不齐。 */
+th { color: var(--c-text-dim); font-weight: 600; }
 td.num, th.num { text-align: right; }
 tbody tr:hover { background: var(--c-hover); }
 .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .sortable:hover { color: var(--c-text); }
 .sortable.active { color: var(--c-primary); }
-
-/* 本页原先用 page-head 承载刷新按钮，现已移除；sec-head 成为首个元素，
-   全局 .sec-head 只有 margin-bottom 没有 margin-top，需补顶部节奏。 */
-.sec-head { margin-top: 2px; }
 
 /* 列宽：固定布局，避免进程名长短不定把 CPU/内存列挤到视口外。
    类名用 w- 前缀，与单元格自身的 class（.pid/.proc-name）区分开。 */
@@ -256,16 +272,22 @@ col.w-pid  { width: 80px; }
 col.w-user { width: 110px; }
 col.w-cpu  { width: 84px; }
 col.w-mem  { width: 96px; }
-col.w-acts { width: 248px; }   /* 容纳「重载」+「结束」+「立即终止」三个按钮 */
+col.w-acts { width: 144px; }   /* 纯图标按钮：3×34 + 间距 + 单元格内边距，足够且不撑宽 */
 
 /* 操作列：按钮右对齐，与数值列的视觉重心一致；表头也右对齐，
    否则「操作」二字悬在左、下方按钮靠右，看着像两列。 */
 th.acts-col, td.acts-col { text-align: right; }
 
-/* 「立即终止」用 ghost 底 + 危险色文字：与「结束」的实心 danger 按钮
-   拉开层次，同一行里两个红色实心按钮会让人以为是重复操作。 */
-.danger-ghost { color: var(--c-danger); border-color: transparent; background: transparent; }
-.danger-ghost:hover:not(:disabled) { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); }
+/* 纯图标操作按钮：颜色即语义，节省列宽。
+   重载(neutral) / 结束(amber, 温和停止) / 立即终止(red, 强制) 形成危险度梯度，
+   与 SIGHUP < SIGTERM < SIGKILL 的信号强度一致；hover 仍有 title 解释，
+   文字说明保留在确认弹窗。图标 refresh/stop/bolt 形状差异大，一眼可辨。 */
+.act-reload { color: var(--c-text-dim); }
+.act-reload:hover:not(:disabled) { color: var(--c-text); }
+.act-term { color: var(--c-warn); border-color: var(--c-warn); background: var(--c-warn-bg); }
+.act-term:hover:not(:disabled) { color: var(--c-warn); border-color: var(--c-warn); background: var(--c-warn-bg); filter: brightness(1.08); }
+.act-kill { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); }
+.act-kill:hover:not(:disabled) { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); filter: brightness(1.08); }
 
 /* 进程名可能极长（容器/内核线程的完整名可达数十字符），固定布局下必须
    省略号截断，否则会顶开列宽把右侧列挤出视口；完整名走 title 悬停。 */
