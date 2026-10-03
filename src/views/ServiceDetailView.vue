@@ -42,16 +42,21 @@ const busy = ref('')            // `${name}:${action}`
 const notFound = ref(false)
 
 /** 后端没有单服务 GET：列表里有全部字段（含 enabled/description/managed），故取列表再定位 */
+// 请求序号：换 unit（路由参数变化）时前后两次加载会并发，
+// 旧的那个若后到，会把新服务的详情覆盖掉（页面显示 A 的名字却配着 B 的数据）。
+let svcSeq = 0
 async function loadSvc() {
+  const seq = ++svcSeq
   loading.value = true; error.value = ''
   try {
     const r = await api.get<{ init_system: string; services: ServiceInfo[] }>(API.services.list())
+    if (seq !== svcSeq) return
     init.value = r.init_system
     const found = (r.services ?? []).find(s => s.name === unit.value) ?? null
     svc.value = found
     notFound.value = !found
-  } catch (e) { error.value = errorText(e) }
-  finally { loading.value = false }
+  } catch (e) { if (seq === svcSeq) error.value = errorText(e) }
+  finally { if (seq === svcSeq) loading.value = false }
 }
 
 async function svcAct(action: 'start' | 'stop' | 'restart') {
@@ -102,16 +107,22 @@ const journal = ref<string[]>([])
 const jLoading = ref(false)
 const jError = ref('')
 
+// 日志请求比列表慢得多，换 unit 时最容易后到并覆盖新服务的日志
+// （表现：切到 B 服务，日志区显示的仍是 A 的日志，还停留在"加载中"之后）。
+let jSeq = 0
 async function loadJournal() {
   if (!svc.value) return
+  const seq = ++jSeq
   jLoading.value = true; jError.value = ''
   try {
     const r = await api.get<ServiceJournal>(API.services.journal(svc.value.name), { params: { lines: 200 } })
+    if (seq !== jSeq) return
     journal.value = r.lines ?? []
   } catch (e) {
+    if (seq !== jSeq) return
     if (isUnsupported(e)) jError.value = '日志查看功能即将推出'
     else jError.value = errorText(e)
-  } finally { jLoading.value = false }
+  } finally { if (seq === jSeq) jLoading.value = false }
 }
 
 // ── 日志跟随（SSE）──

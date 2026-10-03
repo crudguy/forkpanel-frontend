@@ -44,22 +44,33 @@ async function loadSources() {
   if (!auth.supported(CAP.LOGS_READ)) return
   try {
     const r = await api.get<{ sources: Src[] }>(API.logs.sources())
-    sources.value = r.sources
-    if (r.sources.length && !cur.value) { cur.value = r.sources[0].id; load() }
+    // 兜底后再取 .length：此前直接 `r.sources.length`，后端返 null 会抛
+    // TypeError，被 catch 吞成一句错误文案，连"无日志源"都显示不出来
+    const list = r.sources ?? []
+    sources.value = list
+    if (list.length && !cur.value) { cur.value = list[0].id; load() }
   } catch (e) { error.value = errorText(e) }
 }
 
+// 请求序号：快速切换日志源/改过滤条件时，旧请求可能后到并覆盖新结果——
+// 表现为"切到了 B 源，显示的却是 A 的内容"，且不会有任何报错提示。
+let loadSeq = 0
 async function load() {
   if (!cur.value) return
   // 同上：直接读日志内容也受同一能力位守卫
   if (!auth.supported(CAP.LOGS_READ)) return
+  const seq = ++loadSeq
   error.value = ''
   try {
     const r = await api.get<{ lines: Line[]; capped: boolean }>(API.logs.read(cur.value), {
       params: { lines: count.value, grep: grep.value || undefined },
     })
-    lines.value = r.lines; capped.value = r.capped
-  } catch (e) { error.value = errorText(e); lines.value = [] }
+    if (seq !== loadSeq) return   // 已有更新的请求在途，丢弃本次结果
+    lines.value = r.lines ?? []; capped.value = r.capped
+  } catch (e) {
+    if (seq !== loadSeq) return
+    error.value = errorText(e); lines.value = []
+  }
 }
 
 function closeStream() {

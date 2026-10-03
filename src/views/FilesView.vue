@@ -61,17 +61,24 @@ function full(p: string) {
   return path.value.replace(/\/+$/, '') + '/' + p
 }
 
+// 请求序号：连续切目录/连点刷新时，先发的请求可能**后到**，
+// 若不加甄别就会用旧目录的结果覆盖新目录（且把 loading 提前清掉 → 表格闪一下）。
+let loadSeq = 0
 async function load() {
+  const seq = ++loadSeq
   loading.value = true; error.value = ''
   try {
     const r = await api.get<ListResp>(API.files.list(), {
       params: { path: path.value, hidden: showHidden.value },
     })
-    entries.value = r.entries; truncated.value = r.truncated
+    if (seq !== loadSeq) return   // 已有更新的请求在途，丢弃本次结果
+    entries.value = r.entries ?? []; truncated.value = r.truncated
     path.value = r.path
     selected.value = new Set() // 换目录即清空选择
-  } catch (e) { error.value = errorText(e); entries.value = [] }
-  finally { loading.value = false }
+  } catch (e) {
+    if (seq !== loadSeq) return
+    error.value = errorText(e); entries.value = []
+  } finally { if (seq === loadSeq) loading.value = false }
 }
 
 onMounted(load)
@@ -200,7 +207,9 @@ async function onUploadFiles(ev: Event) {
 
 // ── 下载（同源直链：GET 带 Cookie，浏览器原生保存）──
 function download(e: Entry) {
-  window.location.href = `/api/v1/files/download?path=${encodeURIComponent(full(e.name))}`
+  // 走 endpoints 统一定义：路径集中一处，后端改 URL 时不会漏掉这里
+  // （此前硬编码 `/api/v1/files/download?...`，绕过了 API.files.download()）。
+  window.location.href = `${API.files.download()}?path=${encodeURIComponent(full(e.name))}`
 }
 
 // ── 通用输入弹窗（审计 F3/U5）：替代 window.prompt——原生弹窗脱离设计系统
