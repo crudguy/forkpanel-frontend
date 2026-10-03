@@ -46,6 +46,8 @@ interface Cert { id: number; domain: string; issuer: string | null; not_after: n
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
 const certs = ref<Cert[]>([])
+interface RenewSweep { last_at: number; last_queued: number; next_at: number }
+const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
@@ -68,6 +70,8 @@ async function load() {
   try {
     sites.value = await api.get<Site[]>(API.sites.list())
     certs.value = await api.get<Cert[]>(API.certs.list())
+    try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
+    catch { /* 扫描状态缺失不阻断证书列表 */ }
   } catch (e) { error.value = errorText(e) }
 }
 onMounted(load)
@@ -77,6 +81,15 @@ function certLevel(d: number | null) {
   if (d > 30) return 'ok'
   if (d >= 7) return 'warn'
   return 'bad'
+}
+
+// 自动续期扫描状态摘要：供证书区表头展示"上次/下次扫描"
+function sweepSummary(): string {
+  const s = sweep.value
+  if (!s.last_at) return '尚未运行 · 每日约 04:05 自动扫描'
+  const fmt = (t: number) => new Date(t * 1000).toLocaleString()
+  const queued = s.last_queued > 0 ? ` · 上次入队 ${s.last_queued} 张` : ''
+  return `上次 ${fmt(s.last_at)} · 下次约 ${fmt(s.next_at)}${queued}`
 }
 
 // ── 新建 / 编辑弹窗 ──
@@ -398,6 +411,7 @@ async function doDeleteCert() {
 
     <!-- 证书列表 -->
     <div class="sec-head"><Icon name="lock" :size="16" /> 证书</div>
+    <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
     <div v-if="certs.length" class="card flush">
       <table>
         <thead><tr><th>域名</th><th>签发者</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
@@ -492,6 +506,7 @@ async function doDeleteCert() {
 .waf label.inline { flex-direction: row; align-items: center; cursor: help; }
 .waf label.inline input { width: auto; }
 .tiny { font-size: 11.5px; }
+.cert-sweep { margin: 0 0 10px; padding-left: 2px; }
 .notice { color: var(--c-ok, #3fb950); background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3);
   padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .tip.warn { color: #d29922; background: rgba(210,153,34,.12); border-color: rgba(210,153,34,.3); }
