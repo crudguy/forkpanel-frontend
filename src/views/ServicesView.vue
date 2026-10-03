@@ -356,7 +356,9 @@ async function doConfirmed() {
 tr.rowlink { cursor: pointer; }
 tr.rowlink:hover { background: var(--c-hover); }
 
-/* 服务详情已迁到独立页 ServiceDetailView：弹窗相关的
-   .mask/.box/.m-*/.tab/.cfg-*/.switch 样式随弹窗一并移除，
-   留在这里只会让人以为本页还在渲染这些元素。 */
+/* 服务详情已迁到独立页 ServiceDetailView：弹窗相关的样式
+   （.mask / .box / .m-tabs / .m-config / .cfg-edit / .switch 等）已随弹窗一并移除，
+   留在这里只会让人以为本页还在渲染这些元素。
+   注意：注释里不要写 "星号+斜杠" 形式的通配符（如 .m-* ），
+   那会提前闭合本注释、让后面的中文变成裸 CSS，导致整个 SFC 编译失败。 */
 </style>
