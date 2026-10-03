@@ -18,7 +18,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, containerStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
@@ -251,7 +251,7 @@ function canStop(c: Container) { return c.state === 'running' }
               <td class="mono">{{ c.name }}</td>
               <td class="mono dim">{{ c.image }}</td>
               <td>
-                <span class="badge" :class="stateClass(c.state)">{{ c.state }}</span>
+                <span class="badge" :class="stateClass(c.state)">{{ containerStateLabel(c.state) }}</span>
                 <span class="dim status-text">{{ c.status }}</span>
               </td>
               <td class="mono dim">{{ c.ports || '—' }}</td>

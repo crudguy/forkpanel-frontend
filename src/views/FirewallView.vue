@@ -12,7 +12,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, fwActionLabel, fwBackendLabel, fwProtocolLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -97,7 +97,7 @@ async function doDelete() {
     <div class="page-head">
       <div>
         <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
-        <span class="badge">后端：{{ backend || '—' }}</span>
+        <span class="badge">后端：{{ fwBackendLabel(backend) }}</span>
       </div>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy || !canManage" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
@@ -139,8 +139,8 @@ async function doDelete() {
           <tbody>
             <tr v-for="r in rules" :key="r.id">
               <td class="mono">{{ r.ports }}</td>
-              <td>{{ r.protocol }}</td>
-              <td><span class="badge" :class="r.action === 'allow' ? 'badge-ok' : 'badge-danger'">{{ r.action }}</span></td>
+              <td>{{ fwProtocolLabel(r.protocol) }}</td>
+              <td><span class="badge" :class="r.action === 'allow' ? 'badge-ok' : 'badge-danger'">{{ fwActionLabel(r.action) }}</span></td>
               <td>{{ r.direction === 'in' ? '入站' : '出站' }}</td>
               <td class="mono">{{ r.source ?? '任意' }}</td>
               <td class="dim">{{ r.comment ?? '—' }}</td>

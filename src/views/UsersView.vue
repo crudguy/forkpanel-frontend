@@ -3,35 +3,50 @@ import { ref, computed, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, fmtDateTime, roleLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
+/** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
+interface UserOut {
+  id: number
+  username: string
+  role: string
+  /** 目录作用域：文件与站点操作被限制在这些根内 */
+  allowed_roots: string[]
+  /** ⚠️ 后端列表里恒为 false（只有 /auth/me 是权威 MFA 状态），勿据此显示 */
+  mfa_enabled: boolean
+  disabled: boolean
+  created_at: number
+  last_login_at: number | null
+}
+
 const auth = useAuthStore()
-const users = ref<any[]>([])
+const users = ref<UserOut[]>([])
 const error = ref('')
 const loading = ref(true)
 const notReady = ref(false)
 
+/** 可分配的内置角色（owner 不可经 API 分配，故不在列）。 */
 const ROLES = ['admin', 'operator', 'viewer']
 const canManage = computed(() => auth.enabled(CAP.USER_MANAGE, 'user.manage'))
 
 // 弹窗：新建 / 编辑共用
-const editing = ref<any>(null)
+const editing = ref<UserOut | null>(null)
 const showModal = ref(false)
 const form = ref({ username: '', password: '', role: 'operator', rootsText: '', disabled: false })
 const saving = ref(false)
 const formErr = ref('')
 
 // 删除确认
-const delTarget = ref<any>(null)
+const delTarget = ref<UserOut | null>(null)
 
 async function load() {
   error.value = ''; loading.value = true; notReady.value = false
   try {
-    const r = await api.get<any>(API.users.list())
-    users.value = Array.isArray(r) ? r : (r.users ?? [])
+    // 后端 GET /users 返回**裸数组** UserOut[]（不是包装对象）
+    users.value = await api.get<UserOut[]>(API.users.list())
   } catch (e) {
     const t = errorText(e)
     // 后端用户管理仍占位（返回 unsupported）→ 友好提示而非报错
@@ -46,7 +61,7 @@ function openCreate() {
   formErr.value = ''
   showModal.value = true
 }
-function openEdit(u: any) {
+function openEdit(u: UserOut) {
   editing.value = u
   form.value = {
     username: u.username, password: '', role: u.role,
@@ -74,7 +89,7 @@ async function save() {
   } catch (e) { formErr.value = errorText(e) }
   finally { saving.value = false }
 }
-function askDelete(u: any) { delTarget.value = u }
+function askDelete(u: UserOut) { delTarget.value = u }
 async function doDelete() {
   if (!delTarget.value) return
   try { await api.del(API.users.remove(delTarget.value.id)); delTarget.value = null; load() }
@@ -108,13 +123,14 @@ onMounted(load)
       <div v-else-if="loading" class="skeleton box" />
       <div v-else class="card flush">
         <table>
-          <thead><tr><th>用户名</th><th>角色</th><th>权限范围</th><th>状态</th><th /></tr></thead>
+          <thead><tr><th>用户名</th><th>角色</th><th>权限范围</th><th>状态</th><th>最后登录</th><th /></tr></thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.username }}</td>
-              <td><span class="badge badge-primary">{{ u.role }}</span></td>
+              <td><span class="badge badge-primary">{{ roleLabel(u.role) }}</span></td>
               <td class="muted">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
               <td><span class="badge" :class="u.disabled ? 'badge-danger' : 'badge-ok'">{{ u.disabled ? '已禁用' : '正常' }}</span></td>
+              <td class="muted">{{ u.last_login_at ? fmtDateTime(u.last_login_at) : '从未登录' }}</td>
               <td class="nowrap">
                 <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(u)">
                   <Icon name="edit" :size="14" /> 编辑

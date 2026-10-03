@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, auditResultLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -16,7 +16,24 @@ import Icon from '@/components/Icon.vue'
  */
 
 const auth = useAuthStore()
-const rows = ref<any[]>([])
+
+/** 对应后端 `AuditEntry`（routes/audit.rs）。此前用 `any[]`，字段名拼错无从发现。 */
+interface AuditEntry {
+  id: number
+  /** Unix 秒 */
+  ts: number
+  actor: string
+  /** 来源 IP；后端 2026-10-03 起真实写入（此前恒为空串），进程重启前的记录仍为空 */
+  actor_ip: string
+  action: string
+  target: string
+  /** ok / changed / unchanged / queued / denied / error / fail */
+  result: string
+  /** JSON 字符串；后端多为 "{}"，用 prettyDetail 容错解析 */
+  detail_json: string | null
+}
+
+const rows = ref<AuditEntry[]>([])
 const error = ref('')
 const loading = ref(true)
 
@@ -60,7 +77,7 @@ async function load() {
     if (since != null) params.since = since
     if (until != null) params.until = until
 
-    const r = await api.get<any>(API.audit(), { params })
+    const r = await api.get<{ items: AuditEntry[]; page: number; page_size: number; total: number }>(API.audit(), { params })
     rows.value = r?.items ?? []
     total.value = r?.total ?? 0
     // 筛选后总页数可能变小：越界则回退到最后一页
@@ -81,7 +98,7 @@ function goto(p: number) {
 function changeSize() { page.value = 1; load() }
 function toggle(i: number) { expanded.value = expanded.value === i ? null : i }
 
-function fmt(ts?: number) { return ts ? new Date(ts * 1000).toLocaleString() : '—' }
+function fmt(ts?: number) { return fmtDateTime(ts) }
 function resClass(r: string) {
   if (r === 'ok') return 'b-ok'
   if (r === 'queued') return 'b-wait'
@@ -140,7 +157,7 @@ onMounted(load)
                   <td>{{ a.actor }}</td>
                   <td class="mono">{{ a.action }}</td>
                   <td class="muted">{{ a.target || '—' }}</td>
-                  <td><span class="badge" :class="resClass(a.result)">{{ a.result }}</span></td>
+                  <td><span class="badge" :class="resClass(a.result)">{{ auditResultLabel(a.result) }}</span></td>
                   <td class="nowrap chev-cell">
                     <Icon name="chevron" :size="14" :class="{ rot: expanded === i }" />
                   </td>

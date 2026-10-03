@@ -10,7 +10,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -126,7 +126,7 @@ async function saveEdit() {
   finally { editBusy.value = false }
 }
 
-function fmt(ts: number | null) { return ts ? new Date(ts * 1000).toLocaleString() : '—' }
+function fmt(ts: number | null) { return fmtDateTime(ts) }
 </script>
 
 <template>

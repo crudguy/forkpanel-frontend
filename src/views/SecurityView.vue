@@ -8,6 +8,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
+import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
@@ -16,12 +17,15 @@ interface BaselineItem {
   current: string; expected: string; advice: string; applicable: boolean
 }
 
-/** 在线会话（后端内存快照；ip 刻意不采集——后端返回 null，界面不展示该列） */
+/** 在线会话（后端内存快照）。`ip` 后端仍不采集、恒返回 null，
+ *  故类型标成 `string | null` 而不是 `null` —— 硬编码成字面量 null 会让
+ *  后端将来开始返回 IP 时**编译报错**（本该静默通过后逐步展示），
+ *  反而阻碍上游补齐。 */
 interface SessionInfo {
   id: string
   user: string
   role: string
-  ip: null
+  ip: string | null
   created_at: number
   last_seen: number
   expires_at: number
@@ -65,8 +69,12 @@ async function revoke(s: SessionInfo) {
 }
 
 function fmtTime(unix: number): string {
-  if (!unix) return '—'
-  return new Date(unix * 1000).toLocaleString('zh-CN', { hour12: false })
+  return fmtDateTime(unix)
+}
+
+/** 会话列表用相对时间更直观（"3 分钟前"比时间戳更容易判断是否该踢）。 */
+function fmtAgoTime(unix: number): string {
+  return fmtAgo(unix)
 }
 
 function blClass(c: BaselineItem) {
@@ -207,8 +215,8 @@ async function doDisable() {
                 {{ s.user }}
                 <span v-if="s.current" class="cur-badge">当前</span>
               </td>
-              <td class="muted">{{ s.role }}</td>
-              <td class="muted">{{ fmtTime(s.created_at) }}</td>
+              <td class="muted">{{ roleLabel(s.role) }}</td>
+              <td class="muted" :title="fmtTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
               <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
               <td class="nowrap">
                 <button class="btn-danger btn-sm" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>

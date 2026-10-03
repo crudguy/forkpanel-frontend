@@ -14,7 +14,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, PackageInfo, ServiceConfig, ServiceJournal, TaskRun, TASK_FINISHED, taskStateBadge, taskStateLabel } from '@/api/types'
+import { CAP, PackageInfo, ServiceConfig, ServiceJournal, TaskRun, TASK_FINISHED, fmtDateTime, serviceStateLabel, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -107,7 +107,9 @@ async function pollTask() {
         const o = await api.get<{ lines?: string[] }>(API.tasks.output(t.id) + '?lines=12')
         t.out = (o.lines ?? []).slice(-10)
       } catch { /* 输出读取失败不阻断状态展示 */ }
-      if (row.state === 'done') { loadPackages(); load() }
+      // 成功终态是 'ok'（不是 'done'，后端从不返回 done）——
+      // 此处若写 'done' 则刷新分支永不命中，装完软件列表不更新
+      if (row.state === 'ok') { loadPackages(); load() }
     }
   } catch { /* 轮询瞬时失败忽略，下个周期重试 */ }
 }
@@ -361,7 +363,7 @@ async function doConfirmed() {
               {{ s.name }}
               <span v-if="!s.managed" class="badge badge-warn">未托管</span>
             </td>
-            <td><span class="badge" :class="stateBadge(s.state)">{{ s.state }}</span></td>
+            <td><span class="badge" :class="stateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
             <td>{{ s.enabled ? '是' : '否' }}</td>
             <td class="dim">{{ s.description ?? '—' }}</td>
             <td class="acts"><button class="btn-ghost btn-sm">管理 ›</button></td>

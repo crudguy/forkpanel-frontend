@@ -21,27 +21,13 @@ import { useModal } from '@/composables/useModal'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-interface Site {
-  id: number; name: string; domains: string[]; root: string
-  /** API 口径：static | proxy | php */
-  kind: string
-  enabled: boolean; tls: boolean; created_at?: number
-  waf_enabled: boolean
-  waf_profile: string | null
-  /** CC 限速（次/秒）；null = 不限速 */
-  waf_rate_per_sec: number | null
-  waf_burst: number | null
-  /** 反代后端列表（kind=proxy 时存在）；static/php 为 null */
-  upstreams: string[] | null
-  /** php-fpm 目标（kind=php 时存在）；其余为 null */
-  fpm: string | null
-}
-interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string; source: string }
+// Site 已移入 src/api/types.ts（WafView 此前另存一份删减副本，必然漂移）
+interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string | null; source: string }
 
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
@@ -87,7 +73,7 @@ function certLevel(d: number | null) {
 function sweepSummary(): string {
   const s = sweep.value
   if (!s.last_at) return '尚未运行 · 每日约 04:05 自动扫描'
-  const fmt = (t: number) => new Date(t * 1000).toLocaleString()
+  const fmt = (t: number) => fmtDateTime(t)
   const queued = s.last_queued > 0 ? ` · 上次入队 ${s.last_queued} 张` : ''
   return `上次 ${fmt(s.last_at)} · 下次约 ${fmt(s.next_at)}${queued}`
 }
@@ -414,13 +400,14 @@ async function doDeleteCert() {
     <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
     <div v-if="certs.length" class="card flush">
       <table>
-        <thead><tr><th>域名</th><th>签发者</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>域名</th><th>签发者</th><th>来源</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="c in certs" :key="c.id">
             <td>{{ c.domain }}</td>
             <td class="dim">{{ c.issuer ?? '—' }}</td>
-            <td>{{ c.not_after ? new Date(c.not_after * 1000).toLocaleDateString() : '—' }}</td>
+            <td>{{ fmtDate(c.not_after) }}</td>
             <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
+            <td class="dim">{{ certSourceLabel(c.source) }}</td>
             <td>
               <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
                 <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy"
@@ -428,7 +415,7 @@ async function doDeleteCert() {
               </span>
               <span v-else class="dim tiny">仅 ACME</span>
             </td>
-            <td><span class="badge" :class="(c.renew_state === 'failed') ? 'badge-danger' : (c.renew_state === 'ok' ? 'badge-ok' : 'badge-warn')">{{ c.renew_state ?? 'idle' }}</span></td>
+            <td><span class="badge" :class="(c.renew_state === 'failed') ? 'badge-danger' : (c.renew_state === 'ok' ? 'badge-ok' : 'badge-warn')">{{ certRenewStateLabel(c.renew_state) }}</span></td>
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
               <button class="btn-ghost btn-sm danger" :disabled="!canSsl" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>

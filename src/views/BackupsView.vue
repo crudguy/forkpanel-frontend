@@ -18,7 +18,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, emptyRemote, type RemoteConfig } from '@/api/types'
+import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
 import Icon from '@/components/Icon.vue'
@@ -111,13 +111,8 @@ function remotePayload(c: RemoteConfig): Record<string, string> {
   return p
 }
 
-/** last_result → 徽章文案。未知值原样显示，不硬套三档（后端将来加值也看得见）。 */
-function resultLabel(r: string | null) {
-  if (r === 'ok') return 'ok'
-  if (r === 'partial') return '本地 ok · 远端失败'
-  if (r === 'fail') return '失败'
-  return r ?? ''
-}
+/** last_result → 徽章文案已统一到 types.ts 的 backupResultLabel
+ *  （此前此处对 'ok' 故意返回英文 "ok"，与全站中文口径不一致）。 */
 function resultClass(r: string | null) {
   if (r === 'ok') return 'badge-ok'
   return r === 'partial' ? 'badge-warn' : 'badge-danger'
@@ -271,13 +266,9 @@ async function showArtifacts(p: Plan) {
 /** 选中的产物名（恢复目标）。产物按名称倒序，默认取最新一份。 */
 const selName = ref('')
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
+// 统一走 types.ts 的 fmtSize（此前此处只有 2 档，100GB 显示成 "102400.0 MB"）
 function fmtTime(t: number | null) {
-  return t ? new Date(t * 1000).toLocaleString() : '—'
+  return fmtDateTime(t)
 }
 </script>
 
@@ -336,14 +327,14 @@ function fmtTime(t: number | null) {
           <tbody>
             <tr v-for="p in plans" :key="p.id">
               <td>{{ p.id }}</td>
-              <td>{{ p.kind }}</td>
+              <td>{{ backupKindLabel(p.kind) }}</td>
               <td class="mono">{{ p.target }}</td>
               <td class="dim mono">{{ p.dest_dir }}</td>
               <td>{{ p.keep_count }}</td>
               <td :class="p.encrypt ? '' : 'dim'">{{ p.encrypt ? '已加密' : '未加密' }}</td>
               <td class="dim">
                 <template v-if="p.remote_kind">
-                  {{ p.remote_kind }}
+                  {{ remoteKindLabel(p.remote_kind) }}
                   <span v-if="p.remote_has_secret" class="badge badge-ok" title="凭据已加密存储，永不回显">凭据</span>
                 </template>
                 <template v-else>—</template>
@@ -352,7 +343,7 @@ function fmtTime(t: number | null) {
               <td class="dim">
                 {{ fmtTime(p.last_run_at) }}
                 <span class="badge" :class="resultClass(p.last_result)" v-if="p.last_result">
-                  {{ resultLabel(p.last_result) }}
+                  {{ backupResultLabel(p.last_result) }}
                 </span>
               </td>
               <td class="nowrap">
