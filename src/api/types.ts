@@ -168,16 +168,30 @@ export interface PackageInfo {
   version: string | null
   manager: string
 }
+/** 服务条目（GET /api/v1/services 的 services[]）。
+    列表页与服务详情页共用——两处各自定义必然漂移，故提到 types.ts 单一事实源。 */
+export interface ServiceInfo {
+  name: string
+  state: string
+  enabled: boolean
+  description: string | null
+  /** 是否受面板托管（未托管服务的停止需二次确认） */
+  managed: boolean
+}
 export interface ServiceJournal {
   name: string
   lines: string[]
 }
-/** 服务单元文件（GET /api/v1/services/{unit}/config） */
+/** 服务配置（GET/PUT /api/v1/services/{unit}/config） */
 export interface ServiceConfig {
   path: string
   content: string
   /** false=位于发行版目录，修改可能在包升级时被覆盖，建议改用 drop-in */
   writable: boolean
+  /** 文件是否已存在；target=dropin 时 false 表示"保存即新建" */
+  exists: boolean
+  /** 本次读写目标：unit=单元文件本体 / dropin=override.conf */
+  target: 'unit' | 'dropin'
 }
 /** 任务中心条目（GET /api/v1/tasks，用于安装/卸载进度轮询） */
 export interface TaskRun {

@@ -53,6 +53,9 @@ export const API = {
     restart: (unit: string) => `/api/v1/services/${enc(unit)}/restart`,
     setEnabled: (unit: string) => `/api/v1/services/${enc(unit)}/enabled`,
     journal: (unit: string) => `/api/v1/services/${enc(unit)}/journal`,
+    // 日志跟随（SSE）：先补最近 N 行历史，再 journalctl -f 增量
+    journalStream: (unit: string, lines?: number) =>
+      `/api/v1/services/${enc(unit)}/journal/stream${lines ? `?lines=${lines}` : ''}`,
     config: (unit: string) => `/api/v1/services/${enc(unit)}/config`,
     configUpdate: (unit: string) => `/api/v1/services/${enc(unit)}/config`,
   },

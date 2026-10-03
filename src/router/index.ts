@@ -30,6 +30,10 @@ export const router = createRouter({
           ],
         },
         { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件与服务' } },
+        // 服务详情：原先是列表页里的模态弹窗（启停+日志+配置三块挤在半屏里），
+        // 改独立路由页后地址可分享、浏览器返回可用、编辑区有完整高度。
+        // 不在侧边栏单列入口——由列表页行点击进入。
+        { path: 'services/:unit', name: 'service-detail', component: () => import('@/views/ServiceDetailView.vue'), meta: { title: '服务详情' } },
         { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue'), meta: { title: '网站与 SSL' } },
         // WAF 是站点配置的一部分（同一次 apply 下发），单独开一页只为统一查看/批量调整
         { path: 'waf', name: 'waf', component: () => import('@/views/WafView.vue'), meta: { title: 'WAF' } },
