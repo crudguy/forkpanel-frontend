@@ -14,20 +14,41 @@ import MetricCard from '@/components/MetricCard.vue'
 import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
-const ov = ref<any>(null)
+
+/** 对应后端 `OverviewResp`（routes/system.rs::overview）。此前用 `any`，
+ *  SSE 合并时字段拼错会静默显示 0。 */
+interface Overview {
+  ts: number
+  uptime_sec: number
+  cpu_pct: number
+  mem_used_kib: number
+  mem_total_kib: number
+  load1: number
+  disks: number
+  disk_used_bytes: number
+  disk_total_bytes: number
+  net_in_bps: number
+  net_out_bps: number
+  /** nano | small | standard */
+  tier: string
+  /** 采样已降频（低配保护），UI 需提示 */
+  degraded: boolean
+}
+
+const ov = ref<Overview | null>(null)
 let timer: number | undefined
 let es: EventSource | undefined
 
 // 实时推送是 overview 的字段子集，必须「合并」而非整体替换——
-// 否则 SSE 不含的 disk/net/alerts/uptime 等字段会被覆盖成 undefined（进而显示 0）。
-function apply(d: any) { ov.value = { ...(ov.value || {}), ...d } }
+// 否则 SSE 不含的 disk/net/degraded 等字段会被覆盖成 undefined（进而显示 0）。
+function apply(d: Partial<Overview>) { ov.value = { ...(ov.value || {}), ...d } as Overview }
 
 /** 确定性失败（501/403）的显式提示；普通网络抖动静默重试（审计 F19） */
 const ovError = ref('')
 
 async function poll() {
   try {
-    const r = await api.get<any>(API.system.overview()); apply(r); ovError.value = ''
+    const r = await api.get<Overview>(API.system.overview()); apply(r); ovError.value = ''
   } catch (e) {
     if (isUnsupported(e)) ovError.value = errorText(e)
   }
@@ -86,7 +107,7 @@ async function loadStatus() {
   // 各列表独立抓取，单点失败静默（审计 F19），不拖累整块渲染
   try {
     // 注意：服务列表是包装对象（{init_system, services}），不是裸数组
-    const r = await api.get<{ services: any[] }>(API.services.list())
+    const r = await api.get<{ services: { state: string }[] }>(API.services.list())
     const list = r.services ?? []
     svc.value = { total: list.length, active: list.filter(s => s.state === 'active').length,
       failed: list.filter(s => s.state === 'failed').length, ok: true }
@@ -98,7 +119,7 @@ async function loadStatus() {
     const cm = auth.capabilities[CAP.CONTAINER_MANAGE]
     if (cm?.supported) {
       try {
-        const list = await api.get<any[]>(API.containers.list())
+        const list = await api.get<{ state: string }[]>(API.containers.list())
         ct.value = { total: list.length, running: list.filter(c => c.state === 'running').length, ok: true }
       } catch { /* 静默 */ }
     } else {
@@ -106,11 +127,11 @@ async function loadStatus() {
     }
   }
   try {
-    const list = await api.get<any[]>(API.sites.list())
+    const list = await api.get<{ enabled: boolean }[]>(API.sites.list())
     site.value = { total: list.length, enabled: list.filter(s => s.enabled).length, ok: true }
   } catch { /* 静默 */ }
   try {
-    const list = await api.get<any[]>(API.backups.list())
+    const list = await api.get<{ last_result: string | null }[]>(API.backups.list())
     bk.value = { total: list.length, fail: list.filter(p => p.last_result === 'fail').length, ok: true }
   } catch { /* 静默 */ }
 }
@@ -130,7 +151,24 @@ const sysInfo = computed(() => {
 // 救火直达：CPU / 内存冲高时，用户下一个动作几乎必然是"谁在吃资源"。
 // 进程管理已并入主机监控的 Tab（2 击），这里在异常时补一条 1 击捷径。
 const hot = computed(() => Number(cpu.value) >= 85 || memPct.value >= 90)
-const alerts = computed<any[]>(() => ov.value?.alerts ?? [])
+
+/**
+ * 告警条目。**此前是从 `ov.alerts` 取的，但后端 OverviewResp 从不返回该字段**
+ * （已核对 routes/system.rs），所以这个卡片永远显示"无活跃告警"——一个
+ * 看起来有、实则恒为空的区块。后端暂无告警聚合接口，故按已有指标在前端
+ * 生成：判据与上面的 `hot` 一致，只是把阈值写明便于后续替换为真接口。
+ */
+interface Alert { level: 'danger' | 'warn'; message: string }
+const alerts = computed<Alert[]>(() => {
+  const out: Alert[] = []
+  const c = Number(cpu.value)
+  const m = memPct.value
+  if (c >= 95) out.push({ level: 'danger', message: `CPU 占用 ${c.toFixed(1)}%，持续高位` })
+  else if (c >= 85) out.push({ level: 'warn', message: `CPU 占用 ${c.toFixed(1)}%` })
+  if (m >= 95) out.push({ level: 'danger', message: `内存占用 ${m.toFixed(1)}%，接近耗尽` })
+  else if (m >= 90) out.push({ level: 'warn', message: `内存占用 ${m.toFixed(1)}%` })
+  return out
+})
 
 onMounted(async () => {
   await auth.loadMe()

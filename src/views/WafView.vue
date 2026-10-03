@@ -19,23 +19,9 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
-
-interface Site {
-  id: number; name: string; domains: string[]; root: string
-  /** API 口径：static | proxy | php */
-  kind: string
-  enabled: boolean
-  waf_enabled: boolean
-  waf_profile: string | null
-  /** CC 限速（次/秒）；null = 不限速 */
-  waf_rate_per_sec: number | null
-  waf_burst: number | null
-  upstreams: string[] | null
-  fpm: string | null
-}
 
 /** 每站点一份草稿：就地编辑，点「应用」才下发 */
 interface Draft { on: boolean; profile: string; rate: number; burst: number }
@@ -97,7 +83,9 @@ async function applyWaf(s: Site) {
     await api.post(API.sites.apply(), {
       name: s.name,
       domains: s.domains,
-      root: s.root || s.name,
+      // 后端 root 是必填 String（非 Option），恒有值；此前 `|| s.name` 的兜底
+      // 与 SitesView 的 `root: s.root` 不一致，且会静默把空 root 变成站点名
+      root: s.root,
       force_https: true,
       kind: s.kind,
       upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
