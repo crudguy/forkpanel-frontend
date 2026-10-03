@@ -62,18 +62,66 @@ function sortInd(k: SortKey): string {
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
 }
 
+/**
+ * 三种信号操作，语义差别很大，故用显式联合类型而非布尔开关——
+ * 布尔（force）会让"是不是强制"散落在按钮、title、弹窗多处 if 里，
+ * 加第三种时必漏。
+ *
+ *  - reload 重载：SIGHUP(1)，daemon 重新读配置而**不退出**（nginx 等）
+ *  - 结束：     SIGTERM(15)，请求退出，允许保存数据/关连接
+ *  - 立即终止： SIGKILL(9)，内核直接杀，无收尾机会
+ *
+ * 文案用「立即终止」而非「强制」——"强制"没说明强在哪，用户不敢点。
+ */
+type ProcAction = 'reload' | 'term' | 'kill'
+
+const ACTION_META: Record<ProcAction, { label: string; title: string; danger: boolean }> = {
+  reload: {
+    label: '重载',
+    title: '重载配置：发送 SIGHUP，进程重新读取配置但不退出。适用于 nginx 这类守护进程——不中断服务',
+    danger: false,
+  },
+  term: {
+    label: '结束',
+    title: '正常退出：发送 SIGTERM，进程可以保存数据、关闭连接后自行退出',
+    danger: true,
+  },
+  kill: {
+    label: '立即终止',
+    title: '立即终止：发送 SIGKILL，进程没有保存数据、关闭连接的收尾机会，未落盘内容会丢失。仅在它卡死不响应时使用',
+    danger: true,
+  },
+}
+
 const killTarget = ref<Proc | null>(null)
-// 默认发 SIGTERM（让进程能保存数据、正常退出）；卡死不响应时才升级到 SIGKILL。
-// UI 文案用「结束 / 立即终止」而非「强制」——"强制"没说明强在哪（强制什么？），
-// 用户无法据此判断该不该点。
-const force = ref(false)
-function askKill(p: Proc, f = false) { killTarget.value = p; force.value = f }
+const action = ref<ProcAction>('term')
+
+function askKill(p: Proc, a: ProcAction = 'term') { killTarget.value = p; action.value = a }
+
+const ACTION_SIGNAL: Record<ProcAction, string> = { reload: 'hup', term: 'term', kill: 'kill' }
+
+const killTitle = computed(() => ({
+  reload: '重载进程配置', term: '结束进程', kill: '立即终止进程',
+}[action.value]))
+
+/** 确认弹窗正文：说清"会发生什么"与"何时该用/不该用"，
+ *  并给出退路（"若无响应可改用立即终止"），避免用户因不确定而不敢操作。 */
+const ACTION_DETAIL: Record<ProcAction, (p: Proc) => string> = {
+  reload: (p) => `将向 ${p.name}（PID ${p.pid}）发送 SIGHUP，让它重新读取配置而**不退出**。`
+    + `适用于 nginx 这类守护进程的热重载——服务不中断。`
+    + `注意：并非所有进程都实现了重载语义，普通的应用程序收到后可能什么都不做。`,
+  term: (p) => `将向 ${p.name}（PID ${p.pid}）发送 SIGTERM，允许它保存数据、关闭连接后自行退出。`
+    + `若无响应，可回来改用「立即终止」。系统关键进程（PID ≤ 1）已被禁止。`,
+  kill: (p) => `即将立即终止 ${p.name}（PID ${p.pid}）。它没有保存数据、关闭连接的收尾机会，`
+    + `未写入磁盘的内容会丢失——请仅在它已卡死、点了「结束」无响应时使用。`,
+}
+
 async function doKill() {
   const p = killTarget.value
   if (!p) return
   busy.value = p.pid
   try {
-    await api.post(API.processes.kill(String(p.pid)), { signal: force.value ? 'kill' : 'term' })
+    await api.post(API.processes.kill(String(p.pid)), { signal: ACTION_SIGNAL[action.value] })
     killTarget.value = null
     await load()
   }
@@ -127,12 +175,16 @@ async function doKill() {
               <td class="num">{{ (p.cpu_pct ?? 0).toFixed(1) }}%</td>
               <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
               <td class="acts-col nowrap">
-                <button class="btn-danger btn-sm" :disabled="busy === p.pid || p.pid <= 1" @click="askKill(p)">
-                  <Icon name="stop" :size="14" /> 结束
-                </button>
                 <button class="btn-ghost btn-sm" :disabled="busy === p.pid || p.pid <= 1"
-                  title="立即终止：进程没有保存数据、关闭连接的收尾机会，仅在它已卡死不响应时使用"
-                  @click="askKill(p, true)">立即终止</button>
+                  :title="ACTION_META.reload.title" @click="askKill(p, 'reload')">
+                  <Icon name="refresh" :size="14" /> {{ ACTION_META.reload.label }}
+                </button>
+                <button class="btn-danger btn-sm" :disabled="busy === p.pid || p.pid <= 1"
+                  :title="ACTION_META.term.title" @click="askKill(p, 'term')">
+                  <Icon name="stop" :size="14" /> {{ ACTION_META.term.label }}
+                </button>
+                <button class="btn-ghost btn-sm danger-ghost" :disabled="busy === p.pid || p.pid <= 1"
+                  :title="ACTION_META.kill.title" @click="askKill(p, 'kill')">{{ ACTION_META.kill.label }}</button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
@@ -141,12 +193,9 @@ async function doKill() {
       </div>
     </template>
 
-    <ConfirmDialog :open="!!killTarget" danger :title="force ? '立即终止进程' : '结束进程'"
-      :detail="killTarget
-        ? (force
-          ? `即将立即终止 ${killTarget.name}（PID ${killTarget.pid}）。它没有保存数据、关闭连接的收尾机会，未写入磁盘的内容会丢失——请仅在它已卡死、点了「结束」无响应时使用。`
-          : `将向 ${killTarget.name}（PID ${killTarget.pid}）发送正常终止信号，允许它自行保存数据并退出。若无响应，可回来改用「立即终止」。系统关键进程（PID ≤ 1）已被禁止。`)
-        : ''"
+    <ConfirmDialog :open="!!killTarget" :danger="ACTION_META[action].danger"
+      :title="killTitle"
+      :detail="killTarget ? ACTION_DETAIL[action](killTarget) : ''"
       @confirm="doKill" @cancel="killTarget = null" />
   </div>
 </template>
@@ -172,11 +221,16 @@ col.w-pid  { width: 80px; }
 col.w-user { width: 110px; }
 col.w-cpu  { width: 84px; }
 col.w-mem  { width: 96px; }
-col.w-acts { width: 200px; }   /* 容纳「结束」+「立即终止」两个按钮 */
+col.w-acts { width: 248px; }   /* 容纳「重载」+「结束」+「立即终止」三个按钮 */
 
 /* 操作列：按钮右对齐，与数值列的视觉重心一致；表头也右对齐，
    否则「操作」二字悬在左、下方按钮靠右，看着像两列。 */
 th.acts-col, td.acts-col { text-align: right; }
+
+/* 「立即终止」用 ghost 底 + 危险色文字：与「结束」的实心 danger 按钮
+   拉开层次，同一行里两个红色实心按钮会让人以为是重复操作。 */
+.danger-ghost { color: var(--c-danger); border-color: transparent; background: transparent; }
+.danger-ghost:hover:not(:disabled) { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); }
 
 /* 进程名可能极长（容器/内核线程的完整名可达数十字符），固定布局下必须
    省略号截断，否则会顶开列宽把右侧列挤出视口；完整名走 title 悬停。 */
