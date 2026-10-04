@@ -215,7 +215,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .backdrop { position: fixed; inset: 0; z-index: 40; }
 .menu {
-  position: absolute; right: 0; top: 46px; z-index: 41; width: 210px;
+  position: absolute; right: 0; top: 46px; z-index: 41; width: 168px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
