@@ -47,8 +47,11 @@ const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.install
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
 
 // 软件与服务拆成顶部两个 Tab（仿容器页 services/images 内部 Tab 范式）。
-// 默认服务列表（常驻轮询）；软件 Tab 按类别分组、靠任务流/手动刷新。
-const tab = ref<'services' | 'software'>('services')
+// Tab 顺序与默认选中都跟侧边栏菜单名「软件与服务」对齐：软件在前、服务在后，
+// 进页面停在第一项（软件）。服务 Tab 仍是唯一常驻轮询的那个（切过去才起轮询）。
+// 注：模板里两个内容块的出现顺序仍是「服务在前、软件在后」——它们 v-if/v-else
+// 互斥、同时只渲染一个，先后不影响观感；别据 DOM 顺序误以为 Tab 反了。
+const tab = ref<'software' | 'services'>('software')
 
 // 软件包按运维职责分组，顺序即展示顺序。
 //
@@ -148,8 +151,11 @@ function onVisibility() {
 }
 
 onMounted(() => {
+  // 两个子数据都预加载：软件区是默认 Tab；服务列表虽非默认，但顶部 init 徽标
+  // 取自 /services —— 不预拉的话，进软件 Tab 时那枚徽标会一直空着。
+  // 轮询仍由 start() 按当前 tab 决定（默认 software → 不起轮询）。
   load()
-  loadPackages()   // 预加载软件区，切到软件 Tab 即时显示
+  loadPackages()
   start()
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -327,8 +333,8 @@ async function doConfirmed() {
     </div>
 
     <div class="tabs">
-      <button :class="{ active: tab === 'services' }" @click="onTab('services')">服务</button>
       <button :class="{ active: tab === 'software' }" @click="onTab('software')">软件</button>
+      <button :class="{ active: tab === 'services' }" @click="onTab('services')">服务</button>
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
