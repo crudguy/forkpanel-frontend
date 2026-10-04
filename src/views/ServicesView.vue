@@ -399,9 +399,11 @@ async function doConfirmed() {
           <p v-if="pkgNote" class="tip dim">{{ pkgNote }}</p>
           <!-- 已安装软件：按类别分组 -->
           <div v-if="installedByCat.length" class="card" style="margin-bottom:14px">
+            <!-- 不再挂「（白名单内 N 个）」：
+                 ① "白名单内"是实现概念，用户不关心这个限制条件；
+                 ② 总数已被下面每个类别标题的「已装 1/3 」分项表达，更直观且带分母。 -->
             <div class="sec-head">
               <Icon name="database" :size="16" /> 已安装软件
-              <span class="dim">（白名单内 {{ pkgs.length }} 个）</span>
             </div>
             <template v-for="cat in installedByCat" :key="cat.key">
               <div class="cat-head">
@@ -426,7 +428,7 @@ async function doConfirmed() {
               仅允许白名单内的软件包：面板以 root 运行，任意安装等同任意代码执行。卸载走任务队列，进度见顶部任务条与右下角任务面板。
             </p>
           </div>
-          <EmptyState v-else title="白名单内暂无已安装软件" />
+          <EmptyState v-else title="暂无已安装软件" hint="切换到下方的「安装软件」可添加运维组件" />
           <!-- 可安装软件：按类别分组 -->
           <div v-if="installableByCat.length" class="card">
             <div class="sec-head"><Icon name="plus" :size="16" /> 安装软件</div>
