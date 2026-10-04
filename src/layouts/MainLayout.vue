@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { roleLabel } from '@/api/types'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -78,9 +79,6 @@ onMounted(() => {
 })
 onUnmounted(() => { if (unreadTimer) clearInterval(unreadTimer) })
 
-// 档位 tier 的中文可读标签：原「档位」二字偏术语，改为自解释文案（描述性能资源档）
-const TIER_LABELS: Record<string, string> = { nano: '轻量配置', small: '进阶配置', standard: '标准配置' }
-const tierLabel = computed(() => TIER_LABELS[String(auth.me?.tier)] ?? String(auth.me?.tier ?? ''))
 function logout() {
   userMenu.value = false
   auth.logout()
@@ -143,7 +141,7 @@ function logout() {
               <span class="avatar sm">{{ initial }}</span>
               <div>
                 <div class="m-name">{{ auth.me?.user }}</div>
-                <div class="m-sub">{{ auth.me?.role }} · {{ tierLabel }}</div>
+                <div class="m-sub">{{ roleLabel(auth.me?.role) }}</div>
               </div>
             </div>
             <button class="mi" @click="openPwdDialog">
