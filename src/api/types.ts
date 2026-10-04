@@ -358,6 +358,17 @@ export const containerStateLabel = enumLabel({
   paused: '已暂停', restarting: '重启中', dead: '已死',
 })
 
+/** 容器状态 → 徽标配色。语义与 containerStateLabel、serviceStateBadge 一致：
+ *  - running                 运行中          绿
+ *  - restarting/paused/created 过渡/暂停态    琥珀
+ *  - 其余（exited/dead 等）   不在运行        红
+ *  抽成共享函数，避免各列表页各写一份 stateClass 导致加新状态时漂移。 */
+export function containerStateBadge(s: string): string {
+  if (s === 'running') return 'badge-ok'
+  if (s === 'restarting' || s === 'paused' || s === 'created') return 'badge-warn'
+  return 'badge-danger'
+}
+
 /** 防火墙规则的协议 / 动作 / 方向。 */
 export const fwProtocolLabel = enumLabel({ tcp: 'TCP', udp: 'UDP', icmp: 'ICMP', any: '任意' })
 export const fwActionLabel = enumLabel({ allow: '允许', deny: '拒绝', reject: '拒绝并回复' })

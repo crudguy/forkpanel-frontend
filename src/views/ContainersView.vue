@@ -14,11 +14,11 @@
  * 需独立的镜像白名单与特权/挂载禁用设计）、镜像删除与拉取。页面里明确写出，
  * 避免用户以为是漏做的功能。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, containerStateLabel } from '@/api/types'
+import { CAP, containerStateLabel, containerStateBadge } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
@@ -38,6 +38,7 @@ const images = ref<Image[]>([])
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
+const loading = ref(false)
 const delTarget = ref<Container | null>(null)
 
 // 安装 Docker：诊断分支下的交互状态
@@ -122,18 +123,44 @@ async function restartPanel() {
   finally { fixBusy.value = false }
 }
 
-async function load() {
-  error.value = ''; notice.value = ''
-  if (!supported.value) return
+async function load(silent = false) {
+  if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
+  if (!supported.value) { if (!silent) loading.value = false; return }
   try {
     if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
     else images.value = await api.get<Image[]>(API.containers.images())
+    if (silent) error.value = '' // 自愈：轮询成功清旧错
   } catch (e) {
-    error.value = errorText(e)
+    if (!silent) error.value = errorText(e)
     containers.value = []; images.value = []
+  } finally {
+    if (!silent) loading.value = false
   }
 }
-onMounted(load)
+
+// 自动轮询：5s 拉一次；隐藏标签页时暂停、可见时补一次；卸载清理。
+let timer: ReturnType<typeof setInterval> | undefined
+let pageVisible = true
+function startPoll() {
+  stopPoll()
+  timer = setInterval(() => { if (pageVisible && supported.value) load(true) }, 5000)
+}
+function stopPoll() { if (timer !== undefined) { clearInterval(timer); timer = undefined } }
+function onVisibility() {
+  pageVisible = document.visibilityState === 'visible'
+  if (pageVisible && supported.value) load(true)
+}
+onMounted(() => {
+  load()
+  if (supported.value) {
+    startPoll()
+    document.addEventListener('visibilitychange', onVisibility)
+  }
+})
+onUnmounted(() => {
+  stopPoll()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 
 async function switchTab(t: 'containers' | 'images') {
   tab.value = t
@@ -163,12 +190,6 @@ async function doRemove() {
   finally { busy.value = false; await load() }
 }
 
-/** 状态 → 徽章色调。running 绿；exited/dead 灰/红；过渡态黄。 */
-function stateClass(s: string) {
-  if (s === 'running') return 'badge-ok'
-  if (s === 'restarting' || s === 'paused' || s === 'created') return 'badge-warn'
-  return 'badge-danger'
-}
 /** 短 ID（12 位，与 `docker ps` 默认展示一致）；完整值放 title 供核对。 */
 function shortId(id: string) {
   if (id.startsWith('sha256:')) return id.slice(7, 19)
@@ -182,7 +203,7 @@ function canStop(c: Container) { return c.state === 'running' }
   <div>
     <div class="page-head">
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy || !supported" @click="load">
+      <button class="btn-primary" :disabled="busy || !supported" @click="load()">
         <Icon name="refresh" :size="15" /> 刷新
       </button>
     </div>
@@ -231,6 +252,8 @@ function canStop(c: Container) { return c.state === 'running' }
       <p v-if="error" class="err" role="alert">{{ error }}</p>
       <p v-if="notice" class="ok-note">{{ notice }}</p>
 
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton box" />
+
       <div class="tabs">
         <button :class="{ on: tab === 'containers' }" @click="switchTab('containers')">
           <Icon name="server" :size="14" /> 容器
@@ -242,19 +265,22 @@ function canStop(c: Container) { return c.state === 'running' }
 
       <!-- ── 容器 ── -->
       <div class="card flush" v-if="tab === 'containers' && containers.length">
-        <table>
+        <table class="fixed">
+          <colgroup>
+            <col class="w-name" /><col class="w-img" /><col class="w-state" /><col class="w-ports" /><col class="w-id" /><col class="w-acts" />
+          </colgroup>
           <thead>
             <tr><th>名称</th><th>镜像</th><th>状态</th><th>端口</th><th>ID</th><th /></tr>
           </thead>
           <tbody>
             <tr v-for="c in containers" :key="c.id">
-              <td class="mono">{{ c.name }}</td>
-              <td class="mono dim">{{ c.image }}</td>
+              <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
+              <td class="mono dim ellipsis" :title="c.image">{{ c.image }}</td>
               <td>
-                <span class="badge" :class="stateClass(c.state)">{{ containerStateLabel(c.state) }}</span>
-                <span class="dim status-text">{{ c.status }}</span>
+                <span class="badge" :class="containerStateBadge(c.state)">{{ containerStateLabel(c.state) }}</span>
+                <span class="dim status-text ellipsis" :title="c.status">{{ c.status }}</span>
               </td>
-              <td class="mono dim">{{ c.ports || '—' }}</td>
+              <td class="mono dim ellipsis" :title="c.ports">{{ c.ports || '—' }}</td>
               <td class="mono dim" :title="c.id">{{ shortId(c.id) }}</td>
               <td class="nowrap">
                 <button class="btn-ghost btn-sm" :disabled="!canManage || busy || !canStart(c)"
@@ -276,7 +302,7 @@ function canStop(c: Container) { return c.state === 'running' }
           </tbody>
         </table>
       </div>
-      <EmptyState v-else-if="tab === 'containers'" title="没有容器"
+      <EmptyState v-else-if="tab === 'containers' && !loading" title="没有容器"
         hint="该 Docker 守护进程上没有任何容器（含已停止）。" />
 
       <!-- ── 镜像 ── -->
@@ -296,7 +322,7 @@ function canStop(c: Container) { return c.state === 'running' }
           </tbody>
         </table>
       </div>
-      <EmptyState v-else title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
+      <EmptyState v-else-if="!loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
 
       <p class="tip">
         <b>不提供</b>「创建容器 / 删除镜像 / 拉取镜像」：创建容器等价于在宿主机执行任意代码
@@ -337,4 +363,21 @@ function canStop(c: Container) { return c.state === 'running' }
 .tabs button.on { border-color: var(--c-primary); color: var(--c-primary); }
 .status-text { margin-left: 8px; font-size: 12px; }
 .tip { font-size: 12px; color: var(--c-text-dim); line-height: 1.7; margin-top: 14px; }
+
+/* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
+   长单元名/镜像名/状态文本 ellipsis 截断、完整值走 title 悬停。 */
+table.fixed { table-layout: fixed; width: 100%; }
+table.fixed th, table.fixed td { overflow: hidden; }
+.ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+col.w-name { width: 22%; }
+col.w-img { width: 24%; }
+col.w-state { width: 16%; }
+col.w-ports { width: 14%; }
+col.w-id { width: 12%; }
+col.w-acts { width: 12%; }
+
+/* 首次加载骨架（scoped，观感与服务/进程页统一；keyframes 独立命名避免全局冲突） */
+.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }
+.box { height: 260px; }
+@keyframes ct-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 </style>
