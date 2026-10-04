@@ -34,20 +34,51 @@ const init = ref('')
 const error = ref('')
 const pkgNote = ref('')
 // svcError 随服务弹窗移除（服务操作的错误提示现由详情页承载）
-const busy = ref('')            // 软件安装/卸载提交中
+// 注：此前有个 busy ref 名曰「软件安装/卸载提交中」，但全文件从未给它赋过值——
+// 于是 :disabled="!!busy" 恒为 false，刷新按钮的禁用保护从来没生效过（假保护）。
+// 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
 
-// 与后端 ALLOWED_PACKAGES 保持一致的展示白名单
-const WHITELIST = [
-  'nginx', 'caddy', 'apache2', 'mysql-server', 'mariadb-server', 'postgresql',
-  'redis', 'memcached', 'php-fpm', 'php8.1-fpm', 'php8.2-fpm', 'php8.3-fpm',
-  'certbot', 'fail2ban', 'ufw', 'curl', 'wget', 'git', 'unzip', 'tar',
-]
-
+// 注：此前这里另有一份 WHITELIST 数组，与 CATEGORIES 重复且与后端 ALLOWED_PACKAGES
+// 三角漂移（改一处漏两处）。现在包集合的唯一事实源是下面的 CATEGORIES.pkgs，
+// 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验。
 const canManage = computed(() => auth.enabled(CAP.SERVICE_MANAGE, 'service.manage'))
 const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.install'))
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
-const installable = computed(() => WHITELIST.filter(n => !installedNames.value.has(n)))
+
+// 软件与服务拆成顶部两个 Tab（仿容器页 services/images 内部 Tab 范式）。
+// 默认服务列表（常驻轮询）；软件 Tab 按类别分组、靠任务流/手动刷新。
+const tab = ref<'services' | 'software'>('services')
+
+// 软件包按运维职责分组，顺序即展示顺序。
+//
+// 这里是**前端可安装/可卸载包集合的唯一事实源**（pkgs 的并集），不再另设 WHITELIST。
+// 收窄说明：已去掉 curl/wget/git/unzip/tar 这类通用基础工具——它们与"服务管理"
+// 无关，混进已安装清单只会制造噪声（面板以 root 运行，白名单本就该尽量小）。
+// 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验：
+// 后端新增而前端没加 → 用户拿不到安装入口；前端新增而后端没加 → 点了被 400 拒绝。
+const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
+  { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2'] },
+  { key: 'db', label: '数据库', pkgs: ['mysql-server', 'mariadb-server', 'postgresql'] },
+  { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached'] },
+  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'php8.1-fpm', 'php8.2-fpm', 'php8.3-fpm'] },
+  { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
+]
+
+// 已安装软件按类别分组：只保留确有包在 pkgs 里的类别（空类别不渲染小标题）。
+const installedByCat = computed(() => {
+  const all = pkgs.value ?? []
+  return CATEGORIES.map(c => ({
+    ...c,
+    items: c.pkgs.map(n => all.find(x => x.name === n)).filter((x): x is PackageInfo => !!x),
+  })).filter(c => c.items.length)
+})
+
+// 可安装软件按类别分组：白名单内、且尚未安装的包。
+const installableByCat = computed(() => CATEGORIES.map(c => ({
+  ...c,
+  items: c.pkgs.filter(p => !installedNames.value.has(p)),
+})).filter(c => c.items.length))
 
 async function load(silent = false) {
   // silent=true 是轮询刷新：不能重置 loading（否则表格每轮闪一次骨架），
@@ -66,13 +97,19 @@ async function load(silent = false) {
   finally { if (!silent) loading.value = false }
 }
 
-async function loadPackages() {
+// 包探测的真实成本：后端对白名单内每个候选都跑一次包管理器查询
+// （Debian 上是 15 次 dpkg-query），不是一次廉价请求。Tab 来回切换若每次都全量探测，
+// 很快就变成"切一下卡一下"。故给清单加软新鲜度：5s 内视为新鲜，除非显式 force。
+let pkgLoadedAt = 0
+async function loadPackages(force = false) {
+  if (!force && pkgs.value && Date.now() - pkgLoadedAt < 5000) return
   pkgNote.value = ''
   // 同上：无包管理器时 package.install=no，枚举端点会 501
   if (!auth.supported(CAP.PACKAGE_INSTALL)) { pkgs.value = []; return }
   try {
     const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
     pkgs.value = r.packages ?? []
+    pkgLoadedAt = Date.now()
   } catch (e) {
     pkgs.value = []
     if (isUnsupported(e)) pkgNote.value = '软件包枚举功能即将推出（可先使用下方安装）'
@@ -86,18 +123,33 @@ async function loadPackages() {
 // 仍配 visibilitychange 暂停 + onUnmounted 清理，避免后台标签页空转拉请求。
 let timer: number | undefined
 function stop() { if (timer) { clearInterval(timer); timer = undefined } }
-function start() { stop(); if (auth.supported(CAP.SERVICE_MANAGE)) timer = window.setInterval(() => load(true), 5000) }
+// 轮询只服务列表（软件区靠任务流/手动刷新）；且仅 services Tab 激活时才跑。
+function start() {
+  stop()
+  if (tab.value === 'services' && auth.supported(CAP.SERVICE_MANAGE)) {
+    timer = window.setInterval(() => load(true), 5000)
+  }
+}
+
+/** 切 Tab：服务 → 立即拉一次并开轮询；软件 → 停轮询并加载软件清单。 */
+function onTab(t: 'services' | 'software') {
+  tab.value = t
+  if (t === 'services') { load(); start() }
+  else { stop(); loadPackages() }
+}
+
+/** 刷新当前 Tab：服务列表 reload，软件清单 reload（用户显式点刷新 → 强制，绕过新鲜度）。 */
+function refresh() { if (tab.value === 'services') load() ; else loadPackages(true) }
 
 /** 页面隐藏时停轮询：后台标签页持续拉服务列表纯属浪费。 */
 function onVisibility() {
   if (document.hidden) { stop(); return }
-  load(true)
-  start()
+  if (tab.value === 'services') { load(true); start() }
 }
 
 onMounted(() => {
   load()
-  loadPackages()
+  loadPackages()   // 预加载软件区，切到软件 Tab 即时显示
   start()
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -205,7 +257,7 @@ async function onTaskFinished(state: string) {
   }
   // 成功终态是 'ok'（不是 'done'，后端从不返回 done）——
   // 此处若写 'done' 则刷新分支永不命中，装完软件列表不更新
-  if (state === 'ok') { loadPackages(); load() }
+  if (state === 'ok') { loadPackages(true); load() }
 }
 
 // 徽标与文案统一走共享词表（src/api/types.ts），与任务中心口径一致
@@ -268,9 +320,15 @@ async function doConfirmed() {
     <div class="page-head">
       <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="!!busy" @click="load()">
+      <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
+      <button class="btn-primary" :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()">
         <Icon name="refresh" :size="15" /> 刷新
       </button>
+    </div>
+
+    <div class="tabs">
+      <button :class="{ active: tab === 'services' }" @click="onTab('services')">服务</button>
+      <button :class="{ active: tab === 'software' }" @click="onTab('software')">软件</button>
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
@@ -290,72 +348,93 @@ async function doConfirmed() {
       <pre v-if="task.out?.length" class="out">{{ task.out.join('\n') }}</pre>
     </div>
 
-    <!-- 软件区 -->
-    <section v-if="auth.supported(CAP.PACKAGE_INSTALL)" class="card" style="margin-bottom:14px">
-      <div class="sec-head">
-        <Icon name="database" :size="16" /> 已安装软件
-        <span v-if="pkgs && !pkgNote" class="dim">（白名单内 {{ pkgs.length }} 个）</span>
+    <!-- 服务 Tab：常驻轮询的列表 -->
+    <div v-if="tab === 'services'">
+      <EmptyState v-if="!auth.supported(CAP.SERVICE_MANAGE)"
+        title="当前环境不支持服务管理"
+        :reason="auth.capabilities[CAP.SERVICE_MANAGE]?.reason ?? undefined" />
+      <div v-else class="card flush svc-card">
+        <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
+        <div v-if="loading" class="skeleton box" />
+        <template v-else>
+          <table>
+            <colgroup>
+              <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
+            </colgroup>
+            <thead><tr>
+              <th>服务</th><th>状态</th><th class="num">开机自启</th><th>说明</th><th class="acts-col">操作</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
+                <td class="svc-name" :title="s.name">
+                  {{ s.name }}
+                  <span v-if="!s.managed" class="badge badge-warn">未托管</span>
+                </td>
+                <td><span class="badge" :class="serviceStateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
+                <td class="num">{{ s.enabled ? '是' : '否' }}</td>
+                <td class="dim svc-desc">{{ s.description ?? '—' }}</td>
+                <td class="acts-col nowrap"><button class="btn-ghost btn-sm">详情 ›</button></td>
+              </tr>
+              <tr v-if="!svcs.length"><td colspan="5"><EmptyState title="未发现服务" /></td></tr>
+            </tbody>
+          </table>
+        </template>
       </div>
-      <p v-if="pkgNote" class="tip dim">{{ pkgNote }}</p>
+    </div>
+
+    <!-- 软件 Tab：按运维类别分组（Web/数据库/缓存/运行环境/安全），靠任务流/手动刷新 -->
+    <div v-else>
+      <EmptyState v-if="!auth.supported(CAP.PACKAGE_INSTALL)"
+        title="当前环境不支持软件包管理"
+        :reason="auth.capabilities[CAP.PACKAGE_INSTALL]?.reason ?? undefined" />
       <template v-else>
-        <div v-if="pkgs?.length" class="pkg-grid">
-          <div v-for="p in pkgs" :key="p.name" class="pkg">
-            <span class="pkg-name mono">{{ p.name }}</span>
-            <span class="pkg-meta">
-              <span v-if="p.version" class="badge">v{{ p.version }}</span>
-              <span class="badge badge-primary">{{ p.manager }}</span>
-            </span>
-            <button class="btn-danger btn-sm" :disabled="!canPkg || !!task" @click="askRemove(p.name)">卸载</button>
+        <div v-if="pkgs === null" class="card"><div class="skeleton box" /></div>
+        <template v-else>
+          <p v-if="pkgNote" class="tip dim">{{ pkgNote }}</p>
+          <!-- 已安装软件：按类别分组 -->
+          <div v-if="installedByCat.length" class="card" style="margin-bottom:14px">
+            <div class="sec-head">
+              <Icon name="database" :size="16" /> 已安装软件
+              <span class="dim">（白名单内 {{ pkgs.length }} 个）</span>
+            </div>
+            <template v-for="cat in installedByCat" :key="cat.key">
+              <div class="cat-head">
+                {{ cat.label }}
+                <span class="cat-count">已装 {{ cat.items.length }}/{{ cat.pkgs.length }}</span>
+              </div>
+              <div class="pkg-grid">
+                <div v-for="p in cat.items" :key="p.name" class="pkg">
+                  <span class="pkg-name mono">{{ p.name }}</span>
+                  <span class="pkg-meta">
+                    <span v-if="p.version" class="badge">v{{ p.version }}</span>
+                    <span class="badge badge-primary">{{ p.manager }}</span>
+                  </span>
+                  <button class="btn-danger btn-sm" :disabled="!canPkg || !!task" @click="askRemove(p.name)">卸载</button>
+                </div>
+              </div>
+            </template>
+            <p class="tip dim" style="margin-top:12px">
+              仅允许白名单内的软件包：面板以 root 运行，任意安装等同任意代码执行。卸载走任务队列，进度见顶部任务条与右下角任务面板。
+            </p>
           </div>
-        </div>
-        <EmptyState v-else title="白名单内暂无已安装软件" />
-        <template v-if="installable.length">
-          <div class="sec-head" style="margin-top:18px">
-            <Icon name="plus" :size="16" /> 安装软件
-          </div>
-          <div class="pkgs">
-            <button v-for="p in installable" :key="p" class="btn-ghost"
-                    :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
-              {{ loadingPkg === p ? '提交中…' : '+ ' + p }}
-            </button>
+          <EmptyState v-else title="白名单内暂无已安装软件" />
+          <!-- 可安装软件：按类别分组 -->
+          <div v-if="installableByCat.length" class="card">
+            <div class="sec-head"><Icon name="plus" :size="16" /> 安装软件</div>
+            <template v-for="cat in installableByCat" :key="cat.key">
+              <div class="cat-head">
+                {{ cat.label }}
+                <span class="cat-count">可选 {{ cat.items.length }}</span>
+              </div>
+              <div class="pkgs">
+                <button v-for="p in cat.items" :key="p" class="btn-ghost"
+                        :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
+                  {{ loadingPkg === p ? '提交中…' : '+ ' + p }}
+                </button>
+              </div>
+            </template>
           </div>
         </template>
-      </template>
-      <p class="tip dim" style="margin-top:12px">
-        仅允许白名单内的软件包：面板以 root 运行，任意安装等同任意代码执行。安装/卸载走任务队列，进度见顶部任务条与右下角任务面板。
-      </p>
-    </section>
-
-    <!-- 服务列表 -->
-    <EmptyState v-if="!auth.supported(CAP.SERVICE_MANAGE)"
-      title="当前环境不支持服务管理"
-      :reason="auth.capabilities[CAP.SERVICE_MANAGE]?.reason ?? undefined" />
-
-    <div v-else class="card flush svc-card">
-      <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
-      <div v-if="loading" class="skeleton box" />
-      <template v-else>
-        <table>
-          <colgroup>
-            <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
-          </colgroup>
-          <thead><tr>
-            <th>服务</th><th>状态</th><th class="num">开机自启</th><th>说明</th><th class="acts-col">操作</th>
-          </tr></thead>
-          <tbody>
-            <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
-              <td class="svc-name" :title="s.name">
-                {{ s.name }}
-                <span v-if="!s.managed" class="badge badge-warn">未托管</span>
-              </td>
-              <td><span class="badge" :class="serviceStateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
-              <td class="num">{{ s.enabled ? '是' : '否' }}</td>
-              <td class="dim svc-desc">{{ s.description ?? '—' }}</td>
-              <td class="acts-col nowrap"><button class="btn-ghost btn-sm">详情 ›</button></td>
-            </tr>
-            <tr v-if="!svcs.length"><td colspan="5"><EmptyState title="未发现服务" /></td></tr>
-          </tbody>
-        </table>
       </template>
     </div>
 
@@ -370,6 +449,22 @@ async function doConfirmed() {
 .dim { color: var(--c-text-dim); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 .acts { white-space: nowrap; }
+
+/* 顶部 Tab（仿容器页 services/images 切换）：服务常驻轮询、软件按类别分组 */
+.tabs { display: flex; gap: 6px; margin: 2px 0 14px; }
+.tabs button { padding: 7px 16px; border: 1px solid var(--c-border); background: var(--c-glass);
+  border-radius: 999px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; transition: .15s; }
+.tabs button:hover { border-color: var(--c-primary); }
+.tabs button.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+
+/* 软件类别小标题：把同类包聚在一起，避免白名单式长列表难扫读 */
+.cat-head { display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--c-text-dim);
+  margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--c-border); }
+.cat-head:first-of-type { margin-top: 2px; }
+/* 类别计数：一眼看出"这类包本机装了几个 / 还剩几个可选"，不用逐个包名去数 */
+.cat-count { margin-left: auto; font-size: 11.5px; font-weight: 500;
+  color: var(--c-text-dim); background: var(--c-hover); padding: 1px 8px; border-radius: 999px; }
 
 /* 服务表格：固定列宽，避免长单元名(php8.1-fpm/mariadb-server)把右侧列挤出视口。
    类名用 w- 前缀，与单元格自身 class 区分（同进程页范式）。 */
