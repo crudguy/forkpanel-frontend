@@ -242,7 +242,8 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
             <div class="pats-title">高频消息模式（数字/引号内容已归一）</div>
             <div v-for="(p, i) in stats.top_patterns" :key="i" class="pat">
               <span class="pat-n">{{ p.count }}×</span>
-              <code class="pat-t">{{ p.pattern }}</code>
+              <!-- pattern 通常很长且被 ellipsis 截断，完整值走 title 悬停 -->
+              <code class="pat-t" :title="p.pattern">{{ p.pattern }}</code>
             </div>
           </div>
           <p v-else class="muted">无出现 ≥2 次的消息模式</p>

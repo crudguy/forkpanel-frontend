@@ -98,7 +98,8 @@ onMounted(load)
       <ul v-else class="tp-list">
         <li v-for="t in items" :key="t.id">
           <div class="tp-main">
-            <span class="tp-name">{{ t.name }}</span>
+            <!-- 长文件名会被 ellipsis 截断，配 title 才能悬停看全名（同 ServiceView pkg-name） -->
+            <span class="tp-name" :title="t.name">{{ t.name }}</span>
             <span class="tp-kind">{{ t.kind === 'dir' ? '目录' : fmtSize(t.size_bytes) }}</span>
             <span class="tp-path" :title="t.original_path">{{ t.original_path }}</span>
             <span class="tp-time">{{ fmtTime(t.deleted_at) }}</span>

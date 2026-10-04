@@ -114,7 +114,9 @@ function useSample(s: string) {
             </thead>
             <tbody>
               <tr v-for="(r, ri) in result.rows" :key="ri">
-                <td v-for="(v, ci) in r" :key="ci">
+                <!-- 结果单元格是等宽 nowrap + ellipsis，长文本最容易被截断；
+                     完整值一律挂 title，否则看不到具体内容（NULL 也保持可读） -->
+                <td v-for="(v, ci) in r" :key="ci" :title="String(v ?? 'NULL')">
                   <span v-if="v === null" class="null">NULL</span>
                   <template v-else>{{ v }}</template>
                 </td>

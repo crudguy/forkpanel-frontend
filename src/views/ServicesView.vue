@@ -410,9 +410,12 @@ async function doConfirmed() {
               </div>
               <div class="pkg-grid">
                 <div v-for="p in cat.items" :key="p.name" class="pkg">
-                  <span class="pkg-name mono">{{ p.name }}</span>
+                  <!-- 包名可能长（mariadb-server / php8.1-fpm），卡片窄时会被 ellipsis 截断，
+                       截断处一律配 title 才能悬停看全名（同服务表格 svc-name 的处理） -->
+                  <span class="pkg-name mono" :title="p.name">{{ p.name }}</span>
                   <span class="pkg-meta">
-                    <span v-if="p.version" class="badge">v{{ p.version }}</span>
+                    <!-- 发行版版本号可以很长（如 8.0.36-0ubuntu0.22.04.1），同样给悬停全值 -->
+                    <span v-if="p.version" class="badge" :title="p.version">v{{ p.version }}</span>
                     <span class="badge badge-primary">{{ p.manager }}</span>
                   </span>
                   <button class="btn-danger btn-sm" :disabled="!canPkg || !!task" @click="askRemove(p.name)">卸载</button>
@@ -505,7 +508,9 @@ col.w-acts { width: 96px; }
 .pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
 .pkg { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); }
-.pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行人
+   （卡片被撑高、右侧操作按钮被挤），而不是显示省略号。 */
+.pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pkg-meta { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* 表格行可点 */
