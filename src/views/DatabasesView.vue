@@ -11,7 +11,8 @@
  * 前端如实展示原因，而不是假装没有这个功能。
  *
  * 引擎差异：SQLite 为面板内建引擎（已实装浏览与查询）；MySQL/PostgreSQL 需外部客户端，
- * 未实装的连接由后端标记 `available=false`，此处置灰。
+ * 缺少外部客户端的连接由后端标记 `client_ready=false`，此处置灰。
+ * 注意它**不代表连接可达**——只表示本机有没有 psql/mysqldump 这类工具。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -25,7 +26,7 @@ import SqlConsole from '@/components/SqlConsole.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
-  port: number | null; default_db: string | null; available: boolean; has_password: boolean
+  port: number | null; default_db: string | null; client_ready: boolean; has_password: boolean
 }
 interface DbTableInfo { name: string; rows: number; engine: string | null }
 interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
@@ -187,26 +188,35 @@ function closeBrowse() { browse.value = null }
 
       <div class="card flush" v-if="conns.length">
         <table>
-          <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库 / 文件</th><th>可用性</th><th /></tr></thead>
+          <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库 / 文件</th><th>客户端</th><th /></tr></thead>
           <tbody>
             <tr v-for="c in conns" :key="c.id">
               <td>{{ c.name }}</td>
               <td>{{ c.engine }}</td>
               <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
               <td class="dim mono">{{ c.default_db ?? '—' }}</td>
-              <td><span class="badge" :class="c.available ? 'badge-ok' : 'badge-danger'">{{ c.available ? '可用' : '不可用' }}</span></td>
+              <td>
+                <!-- 该字段只代表「外部客户端有无安装」，不代表连接可达。
+                     旧文案「可用」会让用户在绿色徽标下点备份然后失败，且无从归因。 -->
+                <span class="badge" :class="c.client_ready ? 'badge-ok' : 'badge-warn'"
+                      :title="c.client_ready
+                        ? '已安装所需客户端工具；不代表此连接可以连通（口令/网络/权限要在操作时才验证）'
+                        : '未安装该引擎所需的客户端工具，相关操作已置灰'">
+                  {{ c.client_ready ? '客户端就绪' : '缺客户端' }}
+                </span>
+              </td>
               <td class="nowrap">
-                <button class="btn-ghost btn-sm" :disabled="!c.available || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
+                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
                 <button
                   class="btn-ghost btn-sm"
                   :disabled="busy"
                   :title="c.engine === 'sqlite' ? '执行只读查询' : '仅 SQLite 支持只读查询（其它引擎的连接不是只读的）'"
                   @click="sqlConn = c"
                 ><Icon name="terminal" :size="13" /> SQL</button>
-                <button class="btn-ghost btn-sm" :disabled="!c.available || !canManage || busy" @click="backup(c)">备份</button>
+                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || !canManage || busy" @click="backup(c)">备份</button>
                 <button
                   class="btn-ghost btn-sm"
-                  :disabled="!c.available || !canManage || busy"
+                  :disabled="!c.client_ready || !canManage || busy"
                   :title="c.engine === 'sqlite' ? '从备份文件恢复（覆盖当前库）' : 'mysql/postgres 恢复需外部客户端，本环境不可用'"
                   @click="openRestore(c)"
                 >恢复</button>
