@@ -3,15 +3,18 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { CAP, ProcessInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-interface Proc { pid: number; name: string; cpu_pct: number; rss_kib: number; user: string }
+// 直接复用契约类型 ProcessInfo（与后端 panel_os::ProcessInfo 逐字段对齐：
+// pid/ppid/name/cpu_pct/rss_kib/cmdline/user）。不再维护仅含子集的局部 Proc——
+// 否则 ppid/cmdline 缺失、user 被错标成 string，字段一旦在后端改名就静默渲染成"—"。
+type Proc = ProcessInfo
 
 const auth = useAuthStore()
-const procs = ref<Proc[]>([])
+const procs = ref<ProcessInfo[]>([])
 const error = ref('')
 const pending = ref('')
 const loading = ref(true)
@@ -22,8 +25,10 @@ async function load(silent = false) {
   if (!silent) { error.value = ''; pending.value = ''; loading.value = true }
   try {
     // limit=0（或省略）= 展示全部进程，由前端即时排序，不回源。
-    const r = await api.get<any>(API.processes.list(), { params: { limit: 0, sort: 'cpu' } })
-    procs.value = Array.isArray(r) ? r : (r.processes ?? [])
+    // r 已是拆信封后的裸数组 ProcessInfo[]（client.ts 自动取 body.data）；
+    // 原 Array.isArray(r) ? r : r.processes 分支是旧信封时代的死代码，删去。
+    const r = await api.get<ProcessInfo[]>(API.processes.list(), { params: { limit: 0, sort: 'cpu' } })
+    procs.value = r
     // 仅手动刷新/首次加载才清错误：轮询失败不该让常驻的表格抖动，
     // 但也不能把错误静默吞掉——下一轮成功即自愈。
     if (!silent) { error.value = ''; pending.value = '' }
