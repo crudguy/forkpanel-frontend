@@ -339,6 +339,19 @@ export const serviceStateLabel = enumLabel({
   activating: '启动中', deactivating: '停止中', unknown: '未知',
 })
 
+/** 服务状态 → 徽标配色。语义与 serviceStateLabel、taskStateBadge 一致：
+ *  - active      运行中  绿
+ *  - failed      失败    红
+ *  - activating/deactivating 过渡态 琥珀
+ *  - 其余（inactive/unknown 等）中性、不挂底色
+ *  抽成共享函数，避免各列表页各写一份 stateBadge 导致加新状态时漂移。 */
+export function serviceStateBadge(s: string): string {
+  if (s === 'active') return 'badge-ok'
+  if (s === 'failed') return 'badge-danger'
+  if (s === 'activating' || s === 'deactivating') return 'badge-warn'
+  return ''
+}
+
 /** 容器状态（docker/podman CLI 口径）。 */
 export const containerStateLabel = enumLabel({
   running: '运行中', exited: '已退出', created: '已创建',

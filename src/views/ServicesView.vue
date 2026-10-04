@@ -16,7 +16,7 @@ import { useRouter } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
-import { CAP, PackageInfo, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, taskStateBadge, taskStateLabel } from '@/api/types'
+import { CAP, PackageInfo, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -28,6 +28,7 @@ interface TaskWatch { id: number; label: string; state: string; percent: number;
 
 const auth = useAuthStore()
 const svcs = ref<Svc[]>([])
+const loading = ref(true)        // 服务列表首次加载骨架
 const pkgs = ref<PackageInfo[] | null>(null)
 const init = ref('')
 const error = ref('')
@@ -48,16 +49,21 @@ const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.install
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
 const installable = computed(() => WHITELIST.filter(n => !installedNames.value.has(n)))
 
-async function load() {
-  error.value = ''
+async function load(silent = false) {
+  // silent=true 是轮询刷新：不能重置 loading（否则表格每轮闪一次骨架），
+  // 也不清 error（否则常驻表格抖动）；失败不写 error——下一轮成功即自愈。
+  if (!silent) { error.value = ''; loading.value = true }
   // 请求级门控：init 系统未知时后端返 501（service.manage=no）
-  if (!auth.supported(CAP.SERVICE_MANAGE)) return
+  if (!auth.supported(CAP.SERVICE_MANAGE)) { if (!silent) loading.value = false; return }
   try {
     const r = await api.get<{ init_system: string; services: Svc[] }>(API.services.list())
     init.value = r.init_system
     // 兜底：services 缺失时保持空数组，后续 computed（filter/sort）不会崩
     svcs.value = r.services ?? []
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) {
+    if (!silent) error.value = errorText(e)
+  }
+  finally { if (!silent) loading.value = false }
 }
 
 async function loadPackages() {
@@ -74,8 +80,32 @@ async function loadPackages() {
   }
 }
 
-onMounted(() => { load(); loadPackages() })
-onUnmounted(stopWatch)
+// ─────────────── 自动刷新 ───────────────
+// 服务的启停 / 开机自启状态会变（在详情页操作、或系统层面变化），手动刷新不及时；
+// 加轮询让列表常驻最新。5s 比进程页 3s 更克制——服务状态变化频率低，无需高刷。
+// 仍配 visibilitychange 暂停 + onUnmounted 清理，避免后台标签页空转拉请求。
+let timer: number | undefined
+function stop() { if (timer) { clearInterval(timer); timer = undefined } }
+function start() { stop(); if (auth.supported(CAP.SERVICE_MANAGE)) timer = window.setInterval(() => load(true), 5000) }
+
+/** 页面隐藏时停轮询：后台标签页持续拉服务列表纯属浪费。 */
+function onVisibility() {
+  if (document.hidden) { stop(); return }
+  load(true)
+  start()
+}
+
+onMounted(() => {
+  load()
+  loadPackages()
+  start()
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onUnmounted(() => {
+  stopWatch()
+  stop()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 
 // ─────────────── 安装/卸载任务进度 ───────────────
 
@@ -213,10 +243,7 @@ function goDetail(s: Svc) {
   router.push({ name: 'service-detail', params: { unit: s.name } })
 }
 
-function stateBadge(s: string) {
-  return s === 'active' ? 'badge-ok' : s === 'failed' ? 'badge-danger'
-    : (s === 'activating' || s === 'deactivating') ? 'badge-warn' : ''
-}
+// 状态徽标统一走共享 serviceStateBadge（src/api/types.ts），与任务中心口径一致
 
 // ─────────────── 卸载软件确认（需输入包名） ───────────────
 
@@ -241,7 +268,7 @@ async function doConfirmed() {
     <div class="page-head">
       <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="!!busy" @click="load">
+      <button class="btn-primary" :disabled="!!busy" @click="load()">
         <Icon name="refresh" :size="15" /> 刷新
       </button>
     </div>
@@ -304,23 +331,32 @@ async function doConfirmed() {
       title="当前环境不支持服务管理"
       :reason="auth.capabilities[CAP.SERVICE_MANAGE]?.reason ?? undefined" />
 
-    <div v-else class="card flush">
-      <table>
-        <thead><tr><th>服务</th><th>状态</th><th>开机自启</th><th>说明</th><th /></tr></thead>
-        <tbody>
-          <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
-            <td>
-              {{ s.name }}
-              <span v-if="!s.managed" class="badge badge-warn">未托管</span>
-            </td>
-            <td><span class="badge" :class="stateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
-            <td>{{ s.enabled ? '是' : '否' }}</td>
-            <td class="dim">{{ s.description ?? '—' }}</td>
-            <td class="acts"><button class="btn-ghost btn-sm">详情 ›</button></td>
-          </tr>
-        </tbody>
-      </table>
-      <EmptyState v-if="!svcs.length && !error" title="未发现服务" />
+    <div v-else class="card flush svc-card">
+      <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
+      <div v-if="loading" class="skeleton box" />
+      <template v-else>
+        <table>
+          <colgroup>
+            <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
+          </colgroup>
+          <thead><tr>
+            <th>服务</th><th>状态</th><th class="num">开机自启</th><th>说明</th><th class="acts-col">操作</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
+              <td class="svc-name" :title="s.name">
+                {{ s.name }}
+                <span v-if="!s.managed" class="badge badge-warn">未托管</span>
+              </td>
+              <td><span class="badge" :class="serviceStateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
+              <td class="num">{{ s.enabled ? '是' : '否' }}</td>
+              <td class="dim svc-desc">{{ s.description ?? '—' }}</td>
+              <td class="acts-col nowrap"><button class="btn-ghost btn-sm">详情 ›</button></td>
+            </tr>
+            <tr v-if="!svcs.length"><td colspan="5"><EmptyState title="未发现服务" /></td></tr>
+          </tbody>
+        </table>
+      </template>
     </div>
 
 
@@ -334,6 +370,24 @@ async function doConfirmed() {
 .dim { color: var(--c-text-dim); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 .acts { white-space: nowrap; }
+
+/* 服务表格：固定列宽，避免长单元名(php8.1-fpm/mariadb-server)把右侧列挤出视口。
+   类名用 w- 前缀，与单元格自身 class 区分（同进程页范式）。 */
+.svc-card { overflow: hidden; }
+.svc-card table { table-layout: fixed; }
+.svc-card th, .svc-card td { font-size: 13px; }
+.svc-card th.num, .svc-card td.num { text-align: right; }
+.svc-card th.acts-col, .svc-card td.acts-col { text-align: right; }
+col.w-state { width: 96px; }
+col.w-enabled { width: 84px; }
+col.w-acts { width: 96px; }
+.svc-card td.svc-name,
+.svc-card td.svc-desc { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 首次加载骨架（scoped，与列表页统一观感） */
+.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: svc-sk 1.4s ease infinite; border-radius: var(--radius); }
+.box { height: 320px; }
+@keyframes svc-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
 /* 任务进度条 */
 .taskstrip { padding: 12px 16px; margin-bottom: 14px; border-color: var(--c-primary-soft); }
