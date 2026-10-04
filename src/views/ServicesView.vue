@@ -68,12 +68,42 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
 ]
 
+// 软件（包）→ 服务（systemd 单元）的候选名。
+//
+// 用户想要的是"装上去的软件能管理"。但**包 ≠ 服务单元，名字也不总一致**：
+// mariadb-server 包对应的是 mariadb.service，apache2 包在 RHEL 上叫 httpd.service，
+// certbot 根本没有 service（它是 certbot.timer 定时器），ufw 也不是靠服务启停来管理。
+// 所以不能假设"每个软件都有服务"去给通用按钮——那等于给用户一批点了必失败的入口。
+//
+// 做法：只在**本机真实服务列表**（svcs）里反查，查到才渲染入口与状态，查不到就不显示。
+const UNIT_HINTS: Record<string, string[]> = {
+  'mysql-server': ['mysql', 'mysqld', 'mariadb'],
+  'mariadb-server': ['mariadb', 'mysql', 'mysqld'],
+  redis: ['redis-server', 'redis'],
+  apache2: ['apache2', 'httpd'],
+  certbot: [],   // 靠定时器触发续期，没有常驻服务可管
+  ufw: [],       // 规则由「防火墙」页管理
+}
+
+/** 找该软件包对应的服务单元；找不到返回 null（调用方据此决定是否渲染入口）。 */
+function unitFor(pkg: string): Svc | null {
+  for (const cand of [pkg, ...(UNIT_HINTS[pkg] ?? [])]) {
+    // 后端服务的 name 是完整单元名（带 .service 后缀），也兼容无后缀形态
+    const hit = svcs.value.find(s => s.name === `${cand}.service` || s.name === cand)
+    if (hit) return hit
+  }
+  return null
+}
+
 // 已安装软件按类别分组：只保留确有包在 pkgs 里的类别（空类别不渲染小标题）。
 const installedByCat = computed(() => {
   const all = pkgs.value ?? []
   return CATEGORIES.map(c => ({
     ...c,
-    items: c.pkgs.map(n => all.find(x => x.name === n)).filter((x): x is PackageInfo => !!x),
+    // unit 为 null 表示该软件没有可管理的服务（如 certbot/ufw）——UI 据此不渲染入口
+    items: c.pkgs.map(n => all.find(x => x.name === n))
+      .filter((x): x is PackageInfo => !!x)
+      .map(p => ({ ...p, unit: unitFor(p.name) })),
   })).filter(c => c.items.length)
 })
 
@@ -138,7 +168,9 @@ function start() {
 function onTab(t: 'services' | 'software') {
   tab.value = t
   if (t === 'services') { load(); start() }
-  else { stop(); loadPackages() }
+  // 软件卡片的「服务状态」取自服务列表，而轮询只在服务 Tab 跑；切过来时补一次
+  // silent 刷新，避免停在几分钟前的旧状态上。
+  else { stop(); load(true); loadPackages() }
 }
 
 /** 刷新当前 Tab：服务列表 reload，软件清单 reload（用户显式点刷新 → 强制，绕过新鲜度）。 */
@@ -300,6 +332,8 @@ const router = useRouter()
 function goDetail(s: Svc) {
   router.push({ name: 'service-detail', params: { unit: s.name } })
 }
+/** 软件卡片 → 对应服务的详情页（与点服务行走的是同一个入口）。 */
+function goUnit(s: Svc) { router.push({ name: 'service-detail', params: { unit: s.name } }) }
 
 // 状态徽标统一走共享 serviceStateBadge（src/api/types.ts），与任务中心口径一致
 
@@ -420,6 +454,15 @@ async function doConfirmed() {
                     <span v-if="p.version" class="badge" :title="p.version">v{{ p.version }}</span>
                     <span class="badge badge-primary">{{ p.manager }}</span>
                   </span>
+                  <!-- 有对应服务才显示状态与管理入口；该软件无从管理时整块不渲染，
+                       不给"点了必失败"的按钮（certbot/ufw 之类就没有） -->
+                  <template v-if="p.unit">
+                    <span class="badge" :class="serviceStateBadge(p.unit.state)">{{ serviceStateLabel(p.unit.state) }}</span>
+                    <button class="btn-ghost btn-sm icon-btn" title="服务管理：状态 / 启停 / 日志 / 配置"
+                            @click="goUnit(p.unit)">
+                      <Icon name="gear" :size="13" />
+                    </button>
+                  </template>
                   <button class="btn-danger btn-sm" :disabled="!canPkg || !!task" @click="askRemove(p.name)">卸载</button>
                 </div>
               </div>
@@ -507,9 +550,13 @@ col.w-acts { width: 96px; }
        white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; }
 
 /* 软件卡片 */
-.pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.pkg { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+/* 卡片内容变多（版本 + 包管理器 + 服务状态 + 管理/卸载），过窄会把按钮挤到换行，
+   故下限从 230px 提到 290px。 */
+.pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.pkg { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); }
+/* 图标按钮：卡片里横向空间紧张，操作按钮一律用图标 + title 说明 */
+.icon-btn { padding: 4px 7px; }
 /* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行人
    （卡片被撑高、右侧操作按钮被挤），而不是显示省略号。 */
 .pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
