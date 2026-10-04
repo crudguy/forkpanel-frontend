@@ -37,6 +37,7 @@ const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
+const loading = ref(false)
 
 // 数据模型 CRUD 仅看 RBAC 权限点（角色维度，与平台能力无关，owner/admin 恒有）
 const canManage = computed(() => auth.can('site.manage'))
@@ -51,14 +52,19 @@ const sslHint = computed(() => (sslReady.value ? '' : (canSsl.value ? '需 opens
 const canApply = computed(() => webSupported.value && canManage.value)
 const canReload = computed(() => webSupported.value && canManage.value)
 
-async function load() {
-  error.value = ''; notice.value = ''
+async function load(silent = false) {
+  if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
   try {
     sites.value = await api.get<Site[]>(API.sites.list())
     certs.value = await api.get<Cert[]>(API.certs.list())
     try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
     catch { /* 扫描状态缺失不阻断证书列表 */ }
-  } catch (e) { error.value = errorText(e) }
+    if (silent) error.value = '' // 自愈：轮询成功清旧错（站点页不轮询，保留一致语义）
+  } catch (e) {
+    if (!silent) error.value = errorText(e)
+  } finally {
+    if (!silent) loading.value = false
+  }
 }
 onMounted(load)
 
@@ -288,7 +294,7 @@ async function doDeleteCert() {
   <div>
     <div class="page-head">
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-primary" :disabled="busy" @click="load()"><Icon name="refresh" :size="15" /> 刷新</button>
       <button class="btn-primary" :disabled="!canManage || busy" @click="openCreate">
         <Icon name="plus" :size="15" /> 新建站点
       </button>
@@ -365,14 +371,18 @@ async function doDeleteCert() {
 
     <!-- 站点列表 -->
     <div class="sec-head"><Icon name="globe" :size="16" /> 站点</div>
-    <div v-if="sites.length" class="card flush">
-      <table>
+    <div v-if="loading && !sites.length" class="skeleton box" />
+    <div v-else-if="sites.length" class="card flush">
+      <table class="fixed">
+        <colgroup>
+          <col class="w-name" /><col class="w-dom" /><col class="w-root" /><col class="w-kind" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-acts" />
+        </colgroup>
         <thead><tr><th>名称</th><th>域名</th><th>根目录</th><th>类型</th><th>WAF</th><th>状态</th><th>TLS</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="s in sites" :key="s.id">
-            <td>{{ s.name }}</td>
-            <td>{{ s.domains.join(', ') }}</td>
-            <td class="mono dim">{{ s.root }}</td>
+            <td class="ellipsis" :title="s.name">{{ s.name }}</td>
+            <td class="ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
+            <td class="mono dim ellipsis" :title="s.root">{{ s.root }}</td>
             <td>{{ kindLabel(s.kind) }}</td>
             <td>
               <template v-if="s.waf_enabled">
@@ -398,13 +408,17 @@ async function doDeleteCert() {
     <!-- 证书列表 -->
     <div class="sec-head"><Icon name="lock" :size="16" /> 证书</div>
     <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
-    <div v-if="certs.length" class="card flush">
-      <table>
+    <div v-if="loading && !certs.length" class="skeleton box" />
+    <div v-else-if="certs.length" class="card flush">
+      <table class="fixed">
+        <colgroup>
+          <col class="w-dom" /><col class="w-iss" /><col class="w-src" /><col class="w-exp" /><col class="w-left" /><col class="w-auto" /><col class="w-st" /><col class="w-acts" />
+        </colgroup>
         <thead><tr><th>域名</th><th>签发者</th><th>来源</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="c in certs" :key="c.id">
-            <td>{{ c.domain }}</td>
-            <td class="dim">{{ c.issuer ?? '—' }}</td>
+            <td class="ellipsis" :title="c.domain">{{ c.domain }}</td>
+            <td class="dim ellipsis" :title="c.issuer ?? ''">{{ c.issuer ?? '—' }}</td>
             <!-- 列序必须与表头「域名|签发者|来源|到期|剩余」一致。此前来源与到期/剩余
                  错位：「来源」列显示到期日、「剩余」列显示来源，证书到期日被看错。 -->
             <td class="dim">{{ certSourceLabel(c.source) }}</td>
@@ -522,4 +536,29 @@ async function doDeleteCert() {
 .switch input:checked + i { background: var(--c-primary-soft); border-color: var(--c-primary); }
 .switch input:checked + i::after { left: 17px; background: var(--c-primary); }
 .switch input:disabled + i { opacity: .45; cursor: not-allowed; }
+
+/* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
+   长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。 */
+table.fixed { table-layout: fixed; width: 100%; }
+table.fixed th, table.fixed td { overflow: hidden; }
+.ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 站点表 */
+col.w-name { width: 14%; }
+col.w-dom { width: 24%; }
+col.w-root { width: 20%; }
+col.w-kind { width: 10%; }
+col.w-waf { width: 12%; }
+col.w-st { width: 8%; }
+col.w-tls { width: 8%; }
+col.w-acts { width: 12%; }
+/* 证书表 */
+col.w-iss { width: 14%; }
+col.w-src { width: 10%; }
+col.w-exp { width: 12%; }
+col.w-left { width: 9%; }
+col.w-auto { width: 12%; }
+/* 骨架（观感与列表页统一；keyframes 独立命名避免全局冲突） */
+.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: site-sk 1.4s ease infinite; border-radius: var(--radius); }
+.box { height: 300px; }
+@keyframes site-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 </style>
