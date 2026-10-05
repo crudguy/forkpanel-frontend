@@ -40,6 +40,7 @@ const pkgNote = ref('')
 // 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
 const versions = ref<Record<string, string>>({})  // 可选安装版本（留空=最新），按包名键控
+const versionOpen = ref<Record<string, boolean>>({})  // 哪些包展开了「指定版本」输入框（默认全收）
 // 后端白名单随 /packages 下发的 name→label 映射（品牌名，如 apache2→Apache）。
 // 单一事实源在后端，前端只消费，不在 CATEGORIES 里再维护一份标签。
 const labelMap = ref<Map<string, string>>(new Map())
@@ -511,8 +512,12 @@ async function doConfirmed() {
                   <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
                     {{ loadingPkg === p ? '提交中…' : '+ ' + labelOf(p) }}
                   </button>
-                  <input class="pkg-version" v-model="versions[p]" :disabled="!canPkg || !!loadingPkg || !!task"
-                         placeholder="版本（可选，留空=最新）" autocomplete="off" />
+                  <template v-if="versionOpen[p]">
+                    <input class="pkg-version" v-model="versions[p]" :disabled="!canPkg || !!loadingPkg || !!task"
+                           placeholder="版本（可选，留空=最新）" autocomplete="off" />
+                    <button class="btn-link" :disabled="!canPkg || !!loadingPkg || !!task" @click="versionOpen[p] = false">收起</button>
+                  </template>
+                  <button v-else class="btn-link" :disabled="!canPkg || !!loadingPkg || !!task" @click="versionOpen[p] = true">指定版本</button>
                 </div>
               </div>
             </template>
@@ -538,6 +543,13 @@ async function doConfirmed() {
   background: var(--c-glass); border: 1px solid var(--c-border); border-radius: var(--radius-sm); }
 .pkg-version::placeholder { color: var(--c-text-dim); }
 .pkg-version:disabled { opacity: .55; cursor: not-allowed; }
+/* 弱化的「指定版本 / 收起」文字按钮：默认每行不显示版本框，避免十几个包全挂同一句
+   占位文字造成的重复冗余；点了才就地展开输入框（版本安装能力本身不变）。 */
+.btn-link { padding: 4px 8px; font-size: 12.5px; line-height: 1; color: var(--c-text-dim);
+  background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer; white-space: nowrap; }
+.btn-link:hover:not(:disabled) { color: var(--gradient); border-color: var(--c-border); }
+.btn-link:disabled { opacity: .5; cursor: not-allowed; }
 .acts { white-space: nowrap; }
 
 /* 顶部 Tab 已改用全站统一的分段控件 components/TabBar.vue：
