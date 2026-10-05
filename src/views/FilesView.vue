@@ -335,7 +335,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       </div>
       <span class="spacer" />
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
-      <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron" :size="14" /> 上级</button>
+      <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
       <button class="btn-ghost" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
       <button v-if="canWrite" class="btn-ghost" :disabled="loading" @click="askMkdir"><Icon name="plus" :size="15" /> 新建文件夹</button>
       <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
