@@ -165,6 +165,7 @@ export interface ProcessInfo {
 // ── 软件与服务（对应后端 /api/v1/packages、/api/v1/services/{unit}/journal）──
 export interface PackageInfo {
   name: string
+  label?: string
   version: string | null
   manager: string
 }

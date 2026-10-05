@@ -40,6 +40,10 @@ const pkgNote = ref('')
 // 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
 const versions = ref<Record<string, string>>({})  // 可选安装版本（留空=最新），按包名键控
+// 后端白名单随 /packages 下发的 name→label 映射（品牌名，如 apache2→Apache）。
+// 单一事实源在后端，前端只消费，不在 CATEGORIES 里再维护一份标签。
+const labelMap = ref<Map<string, string>>(new Map())
+function labelOf(n: string): string { return labelMap.value.get(n) ?? n }
 
 // 注：此前这里另有一份 WHITELIST 数组，与 CATEGORIES 重复且与后端 ALLOWED_PACKAGES
 // 三角漂移（改一处漏两处）。现在包集合的唯一事实源是下面的 CATEGORIES.pkgs，
@@ -150,8 +154,9 @@ async function loadPackages(force = false) {
   // 同上：无包管理器时 package.install=no，枚举端点会 501
   if (!auth.supported(CAP.PACKAGE_INSTALL)) { pkgs.value = []; return }
   try {
-    const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
+    const r = await api.get<{ packages: PackageInfo[]; catalog: { name: string; label: string }[] }>(API.packages.list())
     pkgs.value = r.packages ?? []
+    labelMap.value = new Map((r.catalog ?? []).map(c => [c.name, c.label]))
     pkgLoadedAt = Date.now()
   } catch (e) {
     pkgs.value = []
@@ -351,7 +356,7 @@ function goUnit(s: Svc) { router.push({ name: 'service-detail', params: { unit: 
 // ─────────────── 卸载软件确认（需输入包名） ───────────────
 
 const confirmRemove = ref<string | null>(null)
-const confirmTitle = computed(() => confirmRemove.value ? `卸载软件 ${confirmRemove.value}` : '')
+const confirmTitle = computed(() => confirmRemove.value ? `卸载软件 ${labelOf(confirmRemove.value)}` : '')
 const confirmDetail = computed(() => confirmRemove.value
   ? `将从系统中卸载 ${confirmRemove.value}（走任务队列执行包管理器 remove）。配置文件与用户数据一般会保留，请确认无正在进行的业务依赖。`
   : '')
@@ -460,7 +465,7 @@ async function doConfirmed() {
                        而 .pkg-name 是唯一可收缩项，空间不足时被压到 0 → 名称整个消失。
                        故第一行只放包名（独占，ellipsis + title 悬停看全名）与右侧操作图标。 -->
                   <div class="pkg-head">
-                    <span class="pkg-name mono" :title="p.name">{{ p.name }}</span>
+                    <span class="pkg-name mono" :title="p.name">{{ labelOf(p.name) }}</span>
                     <span class="pkg-actions">
                       <!-- 有对应服务才给管理入口；该软件无从管理时整块不渲染，
                            不给"点了必失败"的按钮（certbot/ufw 之类就没有） -->
@@ -470,7 +475,7 @@ async function doConfirmed() {
                       </button>
                       <!-- 卸载用图标按钮不占横向空间，语义与后果写进 title -->
                       <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || !!task"
-                              :title="`卸载 ${p.name}：从系统移除该软件包（走任务队列）`" @click="askRemove(p.name)">
+                              :title="`卸载 ${labelOf(p.name)}：从系统移除该软件包（走任务队列）`" @click="askRemove(p.name)">
                         <Icon name="trash" :size="13" />
                       </button>
                     </span>
@@ -501,7 +506,7 @@ async function doConfirmed() {
               <div class="pkgs">
                 <div v-for="p in cat.items" :key="p" class="pkg-install-row">
                   <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
-                    {{ loadingPkg === p ? '提交中…' : '+ ' + p }}
+                    {{ loadingPkg === p ? '提交中…' : '+ ' + labelOf(p) }}
                   </button>
                   <input class="pkg-version" v-model="versions[p]" :disabled="!canPkg || !!loadingPkg || !!task"
                          placeholder="版本（可选，留空=最新）" autocomplete="off" />
