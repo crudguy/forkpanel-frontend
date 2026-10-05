@@ -39,6 +39,7 @@ const pkgNote = ref('')
 // 于是 :disabled="!!busy" 恒为 false，刷新按钮的禁用保护从来没生效过（假保护）。
 // 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
+const versions = ref<Record<string, string>>({})  // 可选安装版本（留空=最新），按包名键控
 
 // 注：此前这里另有一份 WHITELIST 数组，与 CATEGORIES 重复且与后端 ALLOWED_PACKAGES
 // 三角漂移（改一处漏两处）。现在包集合的唯一事实源是下面的 CATEGORIES.pkgs，
@@ -314,11 +315,12 @@ function taskStateText(s: string) { return taskStateLabel(s) }
 // ─────────────── 软件安装 / 卸载 ───────────────
 
 async function install(p: string) {
+  const v = (versions.value[p] ?? '').trim() || undefined
   loadingPkg.value = p; error.value = ''
   try {
-    const r = await api.post<{ task_id: number; created: boolean }>(API.packages.install(), { name: p })
+    const r = await api.post<{ task_id: number; created: boolean }>(API.packages.install(), { name: p, version: v })
     if (!r.created) error.value = '该安装任务已在进行中（已复用已有任务）'
-    watchTask(r.task_id, `安装 ${p}`)
+    watchTask(r.task_id, `安装 ${p}${v ? ' @ ' + v : ''}`)
   } catch (e) {
     if (isUnsupported(e)) error.value = '软件安装功能即将推出'
     else error.value = errorText(e)
@@ -497,10 +499,13 @@ async function doConfirmed() {
                 <span class="cat-count">可选 {{ cat.items.length }}</span>
               </div>
               <div class="pkgs">
-                <button v-for="p in cat.items" :key="p" class="btn-ghost"
-                        :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
-                  {{ loadingPkg === p ? '提交中…' : '+ ' + p }}
-                </button>
+                <div v-for="p in cat.items" :key="p" class="pkg-install-row">
+                  <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
+                    {{ loadingPkg === p ? '提交中…' : '+ ' + p }}
+                  </button>
+                  <input class="pkg-version" v-model="versions[p]" :disabled="!canPkg || !!loadingPkg || !!task"
+                         placeholder="版本（可选，留空=最新）" autocomplete="off" />
+                </div>
               </div>
             </template>
           </div>
@@ -518,6 +523,13 @@ async function doConfirmed() {
 <style scoped>
 .dim { color: var(--c-text-dim); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 可安装软件：每行 = 安装按钮 + 可选版本输入框（留空=最新）。横向一行放不下时换行，
+   但版本框宽度固定、不挤压按钮，避免「版本框把 + 按钮挤没」（已安装的卡片是另一套布局）。 */
+.pkg-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pkg-version { width: 176px; padding: 6px 9px; font-size: 12.5px; color: var(--c-text);
+  background: var(--c-glass); border: 1px solid var(--c-border); border-radius: var(--radius-sm); }
+.pkg-version::placeholder { color: var(--c-text-dim); }
+.pkg-version:disabled { opacity: .55; cursor: not-allowed; }
 .acts { white-space: nowrap; }
 
 /* 顶部 Tab 已改用全站统一的分段控件 components/TabBar.vue：
