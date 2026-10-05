@@ -175,13 +175,13 @@ function closeBrowse() { browse.value = null }
           <label>主机<input v-model="form.host" :disabled="form.engine === 'sqlite'" /></label>
           <template v-if="form.engine !== 'sqlite'">
             <label>端口<input v-model="form.port" inputmode="numeric" :placeholder="form.engine === 'mysql' ? '3306' : '5432'" /></label>
-            <label>用户名<input v-model="form.user" autocomplete="off" /></label>
+            <label>用户名<span style="color:#e5484d;margin-left:2px" title="MySQL/PostgreSQL 连接必须指定账号">*</span><input v-model="form.user" autocomplete="off" :placeholder="form.engine === 'mysql' ? 'root' : 'postgres'" /></label>
             <label>口令<input v-model="form.password" type="password" autocomplete="new-password" /></label>
           </template>
           <label>{{ form.engine === 'sqlite' ? '数据库文件' : '库名' }}
             <input v-model="form.default_db" :placeholder="form.engine === 'sqlite' ? '/path/to/app.db' : 'myapp'" />
           </label>
-          <button class="btn-primary" :disabled="!canManage || busy || !form.name" @click="create">添加</button>
+          <button class="btn-primary" :disabled="!canManage || busy || !form.name || (form.engine !== 'sqlite' && !form.user.trim())" @click="create">添加</button>
         </div>
         <p class="tip">仅提供列表 / 只读浏览 / 备份，<b>不提供 Web SQL 终端</b>（安全与资源隔离考虑）。</p>
       </section>
