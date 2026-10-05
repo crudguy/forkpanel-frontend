@@ -446,24 +446,32 @@ async function doConfirmed() {
               </div>
               <div class="pkg-grid">
                 <div v-for="p in cat.items" :key="p.name" class="pkg">
-                  <!-- 包名可能长（mariadb-server / php8.1-fpm），卡片窄时会被 ellipsis 截断，
-                       截断处一律配 title 才能悬停看全名（同服务表格 svc-name 的处理） -->
-                  <span class="pkg-name mono" :title="p.name">{{ p.name }}</span>
-                  <span class="pkg-meta">
+                  <!-- 两行布局：单行放不下"包名 + 长版本号 + 管理器 + 状态 + 两个操作"，
+                       而 .pkg-name 是唯一可收缩项，空间不足时被压到 0 → 名称整个消失。
+                       故第一行只放包名（独占，ellipsis + title 悬停看全名）与右侧操作图标。 -->
+                  <div class="pkg-head">
+                    <span class="pkg-name mono" :title="p.name">{{ p.name }}</span>
+                    <span class="pkg-actions">
+                      <!-- 有对应服务才给管理入口；该软件无从管理时整块不渲染，
+                           不给"点了必失败"的按钮（certbot/ufw 之类就没有） -->
+                      <button v-if="p.unit" class="btn-ghost btn-sm icon-btn" title="服务管理：状态 / 启停 / 日志 / 配置"
+                              @click="goUnit(p.unit)">
+                        <Icon name="gear" :size="13" />
+                      </button>
+                      <!-- 卸载用图标按钮不占横向空间，语义与后果写进 title -->
+                      <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || !!task"
+                              :title="`卸载 ${p.name}：从系统移除该软件包（走任务队列）`" @click="askRemove(p.name)">
+                        <Icon name="trash" :size="13" />
+                      </button>
+                    </span>
+                  </div>
+                  <div class="pkg-meta">
                     <!-- 发行版版本号可以很长（如 8.0.36-0ubuntu0.22.04.1），同样给悬停全值 -->
                     <span v-if="p.version" class="badge" :title="p.version">v{{ p.version }}</span>
                     <span class="badge badge-primary">{{ p.manager }}</span>
-                  </span>
-                  <!-- 有对应服务才显示状态与管理入口；该软件无从管理时整块不渲染，
-                       不给"点了必失败"的按钮（certbot/ufw 之类就没有） -->
-                  <template v-if="p.unit">
-                    <span class="badge" :class="serviceStateBadge(p.unit.state)">{{ serviceStateLabel(p.unit.state) }}</span>
-                    <button class="btn-ghost btn-sm icon-btn" title="服务管理：状态 / 启停 / 日志 / 配置"
-                            @click="goUnit(p.unit)">
-                      <Icon name="gear" :size="13" />
-                    </button>
-                  </template>
-                  <button class="btn-danger btn-sm" :disabled="!canPkg || !!task" @click="askRemove(p.name)">卸载</button>
+                    <!-- 服务状态徽标：随 meta 行一起换行，不再挤占包名空间 -->
+                    <span v-if="p.unit" class="badge" :class="serviceStateBadge(p.unit.state)">{{ serviceStateLabel(p.unit.state) }}</span>
+                  </div>
                 </div>
               </div>
             </template>
@@ -549,18 +557,19 @@ col.w-acts { width: 96px; }
        border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
        white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; }
 
-/* 软件卡片 */
-/* 卡片内容变多（版本 + 包管理器 + 服务状态 + 管理/卸载），过窄会把按钮挤到换行，
-   故下限从 230px 提到 290px。 */
+/* 软件卡片：两行布局（第一行包名 + 操作图标，第二行版本/管理器/状态徽标）。
+   此前单行放置时，包名是唯一的可收缩 flex 项，被长版本号挤到 0 宽度 → 名称整个消失。 */
 .pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
-.pkg { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+.pkg { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); }
+.pkg-head { display: flex; align-items: center; gap: 8px; }
+.pkg-actions { display: flex; gap: 6px; flex-shrink: 0; }
 /* 图标按钮：卡片里横向空间紧张，操作按钮一律用图标 + title 说明 */
 .icon-btn { padding: 4px 7px; }
-/* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行人
-   （卡片被撑高、右侧操作按钮被挤），而不是显示省略号。 */
+/* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行，
+   而不是显示省略号。 */
 .pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pkg-meta { display: flex; gap: 6px; flex-shrink: 0; }
+.pkg-meta { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* 表格行可点 */
 tr.rowlink { cursor: pointer; }
