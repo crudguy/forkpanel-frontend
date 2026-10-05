@@ -49,6 +49,11 @@ const versionAllOpen = ref(false)
 const labelMap = ref<Map<string, string>>(new Map())
 function labelOf(n: string): string { return labelMap.value.get(n) ?? n }
 
+// 官方仓库通常不含、需先配第三方软件源才能安装的包（后端下发，前端只消费）。
+// 这类包仍保留安装入口（配好源即可装），只是加提示避免用户白点一次才发现装不了。
+const externalPkgs = ref<Set<string>>(new Set())
+function needsExternalSource(n: string): boolean { return externalPkgs.value.has(n) }
+
 // 注：此前这里另有一份 WHITELIST 数组，与 CATEGORIES 重复且与后端 ALLOWED_PACKAGES
 // 三角漂移（改一处漏两处）。现在包集合的唯一事实源是下面的 CATEGORIES.pkgs，
 // 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验。
@@ -82,7 +87,7 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
   { key: 'db', label: '数据库', pkgs: ['mysql-server', 'mariadb-server', 'postgresql'] },
   { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached', 'valkey-server'] },
-  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'php8.1-fpm', 'php8.2-fpm', 'php8.3-fpm', 'nodejs', 'default-jdk'] },
+  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'nodejs', 'default-jdk'] },
   { key: 'storage', label: '存储', pkgs: ['minio'] },
   { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata', 'uptime-kuma'] },
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
@@ -161,9 +166,10 @@ async function loadPackages(force = false) {
   // 同上：无包管理器时 package.install=no，枚举端点会 501
   if (!auth.supported(CAP.PACKAGE_INSTALL)) { pkgs.value = []; return }
   try {
-    const r = await api.get<{ packages: PackageInfo[]; catalog: { name: string; label: string }[] }>(API.packages.list())
+    const r = await api.get<{ packages: PackageInfo[]; catalog: { name: string; label: string; external?: boolean }[] }>(API.packages.list())
     pkgs.value = r.packages ?? []
     labelMap.value = new Map((r.catalog ?? []).map(c => [c.name, c.label]))
+    externalPkgs.value = new Set((r.catalog ?? []).filter(c => c.external).map(c => c.name))
     pkgLoadedAt = Date.now()
   } catch (e) {
     pkgs.value = []
@@ -518,8 +524,11 @@ async function doConfirmed() {
               </div>
               <div class="pkgs">
                 <div v-for="p in cat.items" :key="p" class="pkg-install-row">
-                  <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task" @click="install(p)">
+                  <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task"
+                          :title="needsExternalSource(p) ? `安装 ${labelOf(p)}：官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败` : `安装 ${labelOf(p)}`"
+                          @click="install(p)">
                     {{ loadingPkg === p ? '提交中…' : '+ ' + labelOf(p) }}
+                    <span v-if="needsExternalSource(p)" class="ext-hint" title="需第三方软件源">需配源</span>
                   </button>
                   <input v-if="versionAllOpen" class="pkg-version" v-model="versions[p]"
                          :disabled="!canPkg || !!loadingPkg || !!task"
@@ -557,6 +566,11 @@ async function doConfirmed() {
 .btn-link:hover:not(:disabled) { color: var(--gradient); border-color: var(--c-border); }
 .btn-link:disabled { opacity: .5; cursor: not-allowed; }
 .ms-auto { margin-left: auto; }  /* 把总开关推到区块头最右 */
+/* 「需配源」小徽标：跟在安装按钮文字后，提示官方仓库通常不含此包。
+   用 inline-flex + 小字号，避免把按钮撑宽导致整行换行错位。 */
+.ext-hint { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 5px;
+  font-size: 10.5px; line-height: 1.5; color: var(--c-text-dim);
+  border: 1px solid var(--c-border); border-radius: 999px; white-space: nowrap; }
 .acts { white-space: nowrap; }
 
 /* 顶部 Tab 已改用全站统一的分段控件 components/TabBar.vue：
