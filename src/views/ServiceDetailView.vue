@@ -243,7 +243,7 @@ onUnmounted(closeFollow)
   <div>
     <div class="page-head">
       <button class="btn-ghost btn-sm" @click="router.push({ name: 'services' })">
-        <Icon name="chevron" :size="14" /> 返回列表
+        <Icon name="chevron-left" :size="14" /> 返回列表
       </button>
       <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
