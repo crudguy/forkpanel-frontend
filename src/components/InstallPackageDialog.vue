@@ -19,6 +19,8 @@ const props = defineProps<{
   name: string          // 逻辑包名（提交用）
   label?: string        // 品牌名（展示用）；缺省则退回 name
   versions: string[]    // 可用版本（新→旧）；空数组=查不到
+  /** 该包当前已安装的版本（未安装则为空/不传）；下拉里会标「（已安装）」 */
+  installed?: string | null
   loading?: boolean     // 正在查询版本列表
   external?: boolean    // 官方仓库通常不含，需先配第三方源
 }>()
@@ -44,14 +46,17 @@ useModal(() => props.open, box, cancel)
 <template>
   <div v-if="open" class="mask" @click.self="cancel">
     <div ref="box" class="box" role="dialog" aria-modal="true">
-      <h3>安装 {{ label || name }}</h3>
-      <p class="detail">选择要安装的版本。默认「最新版本」，即软件源当前的候选版本。</p>
+      <!-- 已安装的软件也能打开此弹窗（换版本），此时标题要说清是"切换"而非"安装" -->
+      <h3>{{ installed ? '切换版本' : '安装' }} {{ label || name }}</h3>
+      <p class="detail">
+        {{ installed ? '选择要切换到的版本，当前版本已在下拉中标注。' : '选择要安装的版本，默认「最新版本」。' }}
+      </p>
 
       <label>
         <span>版本</span>
         <select v-model="picked" :disabled="loading">
           <option value="">最新版本（软件源默认）</option>
-          <option v-for="v in versions" :key="v" :value="v">{{ v }}</option>
+          <option v-for="v in versions" :key="v" :value="v">{{ v === installed ? v + '（已安装）' : v }}</option>
         </select>
       </label>
 
@@ -65,7 +70,7 @@ useModal(() => props.open, box, cancel)
 
       <div class="acts">
         <button @click="cancel">取消</button>
-        <button class="primary" :disabled="loading" @click="confirm">安装</button>
+        <button class="primary" :disabled="loading" @click="confirm">{{ installed ? '切换版本' : '安装' }}</button>
       </div>
     </div>
   </div>
@@ -78,11 +83,25 @@ useModal(() => props.open, box, cancel)
 h3 { margin: 0; font-size: 16px; }
 .detail { margin: 0; font-size: 13px; color: var(--c-text-dim); line-height: 1.6; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-/* 版本号可能很长（如 5:8.0.2-3+deb13u3），select 宽度固定 + 文本溢出省略，
-   避免长版本把弹窗撑宽。 */
-select { width: 100%; padding: 7px 9px; font-size: 13px; color: var(--c-text);
-  background: var(--c-glass); border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm); text-overflow: ellipsis; }
+/* 版本下拉：原先用 --c-border/--c-glass（弱边框弱背景），在弹窗里几乎看不出是个
+   可点的控件。改对齐全站输入基线（--c-border-strong + --c-bg），并补一个明确的
+   箭头指示——原生箭头在深色主题下几乎不可见。
+   版本号可能很长（如 5:8.0.2-3+deb13u3），故右侧留足箭头空间 + 文本溢出省略。 */
+select {
+  width: 100%; padding: 9px 34px 9px 11px; font-size: 13.5px; color: var(--c-text);
+  background-color: var(--c-bg);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-xs);
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  /* 中间灰箭头：深浅两套主题下都可见（data-uri 无法用 currentColor） */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%238a8f98' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 11px center;
+  cursor: pointer;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+select:hover:not(:disabled) { border-color: var(--c-primary-2); }
+select:focus-visible { outline: none; border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-soft); }
 select:disabled { opacity: .55; cursor: not-allowed; }
 .hint { margin: 0; font-size: 12.5px; color: var(--c-text-dim); }
 .warn { margin: 0; font-size: 12.5px; color: var(--c-text-dim);

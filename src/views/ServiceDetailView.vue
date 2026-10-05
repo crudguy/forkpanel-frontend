@@ -33,6 +33,13 @@ const auth = useAuthStore()
 const unit = computed(() => String(route.params.unit ?? ''))
 const canManage = computed(() => auth.enabled(CAP.SERVICE_MANAGE, 'service.manage'))
 
+// 返回上一页面。深链直接进入时 window.history 里没有本站历史，
+// router.back() 会退出应用——此时兜底回服务列表。
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push({ name: 'services-units' })
+}
+
 const svc = ref<ServiceInfo | null>(null)
 const init = ref('')
 const loading = ref(true)
@@ -242,8 +249,12 @@ onUnmounted(closeFollow)
 <template>
   <div>
     <div class="page-head">
-      <button class="btn-ghost btn-sm" @click="router.push({ name: 'services-units' })">
-        <Icon name="chevron-left" :size="14" /> 返回列表
+      <!-- 返回**上一页面**而非硬编码跳服务页签：本页可从软件页、概览等多处进入，
+           写死跳 services-units 会把用户送到一个他从没待过的地方。
+           深链直接进入（无历史）时才兜底回服务列表。 -->
+      <button class="btn-ghost btn-sm icon-only" title="返回上一页" aria-label="返回上一页"
+              @click="goBack">
+        <Icon name="chevron-left" :size="14" />
       </button>
       <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
@@ -383,6 +394,9 @@ onUnmounted(closeFollow)
 
 <style scoped>
 .svc-head { padding: 18px; margin-bottom: 14px; }
+/* 返回按钮去掉文字后需保持可点击面积：固定为正方形，图标居中 */
+.icon-only { display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; }
 .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .title-row h2 { margin: 0; font-size: 17px; }
 .desc { margin: 6px 0 0; font-size: 13px; color: var(--c-text-dim); }

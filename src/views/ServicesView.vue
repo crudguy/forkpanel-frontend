@@ -45,6 +45,9 @@ const loadingPkg = ref('')      // 正在提交安装的包名
 // （选择入口就在操作路径上，且版本是下拉选项而非手输，避免输错）。
 const dlgPkg = ref('')            // 弹窗当前包名；空=未打开
 const dlgVersions = ref<string[]>([])
+// 已安装版本由**后端**给出（apt policy 的 Installed: 行），比前端拿已装列表反查
+// 可靠——逻辑名与真实包名不一致时（php-fpm ↔ php8.4-fpm）前端反查会漏。
+const dlgInstalled = ref<string | null>(null)
 const dlgLoading = ref(false)
 // 后端白名单随 /packages 下发的 name→label 映射（品牌名，如 apache2→Apache）。
 // 单一事实源在后端，前端只消费，不在 CATEGORIES 里再维护一份标签。
@@ -343,16 +346,18 @@ async function askInstall(p: string) {
   error.value = ''
   dlgPkg.value = p
   dlgVersions.value = []
+  dlgInstalled.value = null
   dlgLoading.value = true
   try {
-    const r = await api.get<{ name: string; versions: string[] }>(API.packages.versions(p))
+    const r = await api.get<{ name: string; versions: string[]; installed: string | null }>(API.packages.versions(p))
     dlgVersions.value = r.versions ?? []
+    dlgInstalled.value = r.installed ?? null
   } catch {
     dlgVersions.value = []   // 查不到就只提供「最新版本」，弹窗仍可用
   } finally { dlgLoading.value = false }
 }
 
-function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = [] }
+function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = []; dlgInstalled.value = null }
 
 // 弹窗确认后真正提交（version 为 undefined 表示装最新版）
 async function doInstall(v: string | undefined) {
@@ -395,8 +400,10 @@ function goUnit(s: Svc) { router.push({ name: 'service-detail', params: { unit: 
 
 const confirmRemove = ref<string | null>(null)
 const confirmTitle = computed(() => confirmRemove.value ? `卸载软件 ${labelOf(confirmRemove.value)}` : '')
+// 文案不提「任务队列 / 包管理器 remove」等实现细节，只说用户关心的后果：
+// 配置文件与数据一般保留、请确认无业务依赖。
 const confirmDetail = computed(() => confirmRemove.value
-  ? `将从系统中卸载 ${confirmRemove.value}（走任务队列执行包管理器 remove）。配置文件与用户数据一般会保留，请确认无正在进行的业务依赖。`
+  ? `将从系统中卸载 ${labelOf(confirmRemove.value)}。配置文件与用户数据一般会保留，请确认没有正在运行的业务依赖它。`
   : '')
 const confirmWord = computed(() => confirmRemove.value ?? undefined)
 
@@ -511,9 +518,16 @@ async function doConfirmed() {
                               @click="goUnit(p.unit)">
                         <Icon name="gear" :size="13" />
                       </button>
+                      <!-- 切换版本：已安装的软件也可能需要换版本（升级/回退），
+                           此前只有「未安装」的包才有安装入口，已装的无法操作。
+                           复用同一个安装弹窗，其中会标出「（已安装）」的当前版本。 -->
+                      <button class="btn-ghost btn-sm icon-btn" :disabled="!canPkg || !!task"
+                              :title="`切换版本：为 ${labelOf(p.name)} 选择其他可安装版本`" @click="askInstall(p.name)">
+                        <Icon name="download" :size="13" />
+                      </button>
                       <!-- 卸载用图标按钮不占横向空间，语义与后果写进 title -->
                       <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || !!task"
-                              :title="`卸载 ${labelOf(p.name)}：从系统移除该软件包（走任务队列）`" @click="askRemove(p.name)">
+                              :title="`卸载 ${labelOf(p.name)}：从系统移除该软件包`" @click="askRemove(p.name)">
                         <Icon name="trash" :size="13" />
                       </button>
                     </span>
@@ -521,25 +535,27 @@ async function doConfirmed() {
                   <div class="pkg-meta">
                     <!-- 发行版版本号可以很长（如 8.0.36-0ubuntu0.22.04.1），同样给悬停全值 -->
                     <span v-if="p.version" class="badge" :title="p.version">v{{ p.version }}</span>
-                    <span class="badge badge-primary">{{ p.manager }}</span>
+                    <!-- 原这里有「包管理器」徽标（apt / dnf / apk…）：那是实现细节，
+                         普通用户看不懂且换发行版还变字，纯噪音，已移除。 -->
                     <!-- 服务状态徽标：随 meta 行一起换行，不再挤占包名空间 -->
                     <span v-if="p.unit" class="badge" :class="serviceStateBadge(p.unit.state)">{{ serviceStateLabel(p.unit.state) }}</span>
                   </div>
                 </div>
               </div>
             </template>
+            <!-- 文案刻意不提「白名单 / root / 任意代码执行」：那是实现侧的安全理由，
+                 用户只需知道"这里提供的是经过验证的常用软件"。 -->
             <p class="tip dim" style="margin-top:12px">
-              仅允许白名单内的软件包：面板以 root 运行，任意安装等同任意代码执行。卸载走任务队列，进度见顶部任务条与右下角任务面板。
+              这里只提供经过验证的常用运维软件。卸载会排队执行，进度见顶部任务条。
             </p>
           </div>
-          <EmptyState v-else title="暂无已安装软件" hint="切换到下方的「安装软件」可添加运维组件" />
+          <EmptyState v-else title="暂无已安装软件" hint="从下方「安装软件」中选择需要的组件" />
           <!-- 可安装软件：按类别分组 -->
           <div v-if="installableByCat.length" class="card">
-            <!-- 版本选择已移到「点安装 → 弹窗选版本」，这里不再放总开关：
-                 开关在区块右上角容易被看漏，用户会直接点安装装成最新版。 -->
+            <!-- 版本选择已移到「点安装 → 弹窗选版本」。此处刻意不再放任何开关或说明：
+                 开关/说明放在区块头容易被略过，而弹窗就在点击路径上，用户必然看见。 -->
             <div class="sec-head">
               <Icon name="plus" :size="16" /> 安装软件
-              <span class="sec-note">点击软件可选择安装版本</span>
             </div>
             <template v-for="cat in installableByCat" :key="cat.key">
               <div class="cat-head">
@@ -568,7 +584,8 @@ async function doConfirmed() {
                    @confirm="doConfirmed" @cancel="confirmRemove = null" />
 
     <InstallPackageDialog :open="!!dlgPkg" :name="dlgPkg" :label="labelOf(dlgPkg)"
-                          :versions="dlgVersions" :loading="dlgLoading"
+                          :versions="dlgVersions" :installed="dlgInstalled"
+                          :loading="dlgLoading"
                           :external="needsExternalSource(dlgPkg)"
                           @confirm="doInstall" @cancel="closeInstallDlg" />
   </div>
@@ -579,9 +596,6 @@ async function doConfirmed() {
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 可安装软件：每行就是一个安装按钮（版本选择在弹窗里做）。 */
 .pkg-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-/* 区块头的弱提示：「点击软件可选择安装版本」。放在标题右侧、不抢视觉焦点，
-   但比原先的「指定版本」开关更贴着操作区，不容易被整体略过。 */
-.sec-note { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--c-text-dim); }
 /* 「需配源」小徽标：跟在安装按钮文字后，提示官方仓库通常不含此包。
    用 inline-flex + 小字号，避免把按钮撑宽导致整行换行错位。 */
 .ext-hint { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 5px;
