@@ -58,7 +58,10 @@ function needsExternalSource(n: string): boolean { return externalPkgs.value.has
 // 三角漂移（改一处漏两处）。现在包集合的唯一事实源是下面的 CATEGORIES.pkgs，
 // 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验。
 const canManage = computed(() => auth.enabled(CAP.SERVICE_MANAGE, 'service.manage'))
-const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.install'))
+// 权限点必须是 package.manage（见后端 auth::perm::PACKAGE_MANAGE）——此前误传成
+// 能力位名 package.install，而权限集合里根本没有这一项，导致 owner 也过不了
+// `enabled = supported && can`，安装/卸载按钮被自己 disable（能力位 supported 是 true）。
+const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.manage'))
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
 
 // 「软件 / 服务」两个 Tab 由**子路由**驱动（services-software / services-units 指向本组件）：
