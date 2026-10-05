@@ -75,11 +75,14 @@ const TABS = [
 // 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验：
 // 后端新增而前端没加 → 用户拿不到安装入口；前端新增而后端没加 → 点了被 400 拒绝。
 const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
-  { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2'] },
+  { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
   { key: 'db', label: '数据库', pkgs: ['mysql-server', 'mariadb-server', 'postgresql'] },
-  { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached'] },
-  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'php8.1-fpm', 'php8.2-fpm', 'php8.3-fpm'] },
+  { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached', 'valkey-server'] },
+  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'php8.1-fpm', 'php8.2-fpm', 'php8.3-fpm', 'nodejs', 'default-jdk'] },
+  { key: 'storage', label: '存储', pkgs: ['minio'] },
+  { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata', 'uptime-kuma'] },
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
+  { key: 'network', label: '网络', pkgs: ['wireguard-tools'] },
 ]
 
 // 软件（包）→ 服务（systemd 单元）的候选名。
