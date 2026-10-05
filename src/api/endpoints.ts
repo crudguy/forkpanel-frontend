@@ -64,6 +64,8 @@ export const API = {
     list: () => '/api/v1/packages',
     install: () => '/api/v1/packages/install',
     remove: (name: string) => `/api/v1/packages/${enc(name)}`,
+    // 按需查询可用版本（安装弹窗打开时），刻意不随 packages_list 全量拉取
+    versions: (name: string) => `/api/v1/packages/${enc(name)}/versions`,
   },
 
   sites: {

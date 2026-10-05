@@ -20,6 +20,7 @@ import { CAP, PackageInfo, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceSt
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import InstallPackageDialog from '@/components/InstallPackageDialog.vue'
 import Icon from '@/components/Icon.vue'
 import TabBar from '@/components/TabBar.vue'
 
@@ -39,11 +40,12 @@ const pkgNote = ref('')
 // 于是 :disabled="!!busy" 恒为 false，刷新按钮的禁用保护从来没生效过（假保护）。
 // 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
-const versions = ref<Record<string, string>>({})  // 可选安装版本（留空=最新），按包名键控
-// 「指定版本」输入框的展开状态用**一个全局开关**：此前每行各挂一个「指定版本」
-// 文字按钮，25 个包就是 25 句重复文案，纯冗余。改为「安装软件」区块头一个总开关，
-// 点一次全部行统一展开/收起。
-const versionAllOpen = ref(false)
+// 安装对话框状态：点「+ 安装」先弹窗选版本，再提交。
+// 演进：行内版本输入框（25 行重复占位）→ 区块头总开关（易看漏）→ 现在的安装弹窗
+// （选择入口就在操作路径上，且版本是下拉选项而非手输，避免输错）。
+const dlgPkg = ref('')            // 弹窗当前包名；空=未打开
+const dlgVersions = ref<string[]>([])
+const dlgLoading = ref(false)
 // 后端白名单随 /packages 下发的 name→label 映射（品牌名，如 apache2→Apache）。
 // 单一事实源在后端，前端只消费，不在 CATEGORIES 里再维护一份标签。
 const labelMap = ref<Map<string, string>>(new Map())
@@ -335,8 +337,28 @@ function taskStateText(s: string) { return taskStateLabel(s) }
 
 // ─────────────── 软件安装 / 卸载 ───────────────
 
-async function install(p: string) {
-  const v = (versions.value[p] ?? '').trim() || undefined
+// 点「+ 安装」：先开弹窗并按需拉该包的可用版本（不阻塞——查不到也能装最新版）。
+// 版本查询失败不当错误：那只会让用户没法选版本，但装最新版仍然可用。
+async function askInstall(p: string) {
+  error.value = ''
+  dlgPkg.value = p
+  dlgVersions.value = []
+  dlgLoading.value = true
+  try {
+    const r = await api.get<{ name: string; versions: string[] }>(API.packages.versions(p))
+    dlgVersions.value = r.versions ?? []
+  } catch {
+    dlgVersions.value = []   // 查不到就只提供「最新版本」，弹窗仍可用
+  } finally { dlgLoading.value = false }
+}
+
+function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = [] }
+
+// 弹窗确认后真正提交（version 为 undefined 表示装最新版）
+async function doInstall(v: string | undefined) {
+  const p = dlgPkg.value
+  if (!p) return
+  closeInstallDlg()
   loadingPkg.value = p; error.value = ''
   try {
     const r = await api.post<{ task_id: number; created: boolean }>(API.packages.install(), { name: p, version: v })
@@ -513,12 +535,11 @@ async function doConfirmed() {
           <EmptyState v-else title="暂无已安装软件" hint="切换到下方的「安装软件」可添加运维组件" />
           <!-- 可安装软件：按类别分组 -->
           <div v-if="installableByCat.length" class="card">
+            <!-- 版本选择已移到「点安装 → 弹窗选版本」，这里不再放总开关：
+                 开关在区块右上角容易被看漏，用户会直接点安装装成最新版。 -->
             <div class="sec-head">
               <Icon name="plus" :size="16" /> 安装软件
-              <button class="btn-link ms-auto" :disabled="!canPkg || !!loadingPkg || !!task"
-                      @click="versionAllOpen = !versionAllOpen">
-                {{ versionAllOpen ? '收起版本' : '指定版本' }}
-              </button>
+              <span class="sec-note">点击软件可选择安装版本</span>
             </div>
             <template v-for="cat in installableByCat" :key="cat.key">
               <div class="cat-head">
@@ -528,14 +549,11 @@ async function doConfirmed() {
               <div class="pkgs">
                 <div v-for="p in cat.items" :key="p" class="pkg-install-row">
                   <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task"
-                          :title="needsExternalSource(p) ? `安装 ${labelOf(p)}：官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败` : `安装 ${labelOf(p)}`"
-                          @click="install(p)">
+                          :title="needsExternalSource(p) ? `安装 ${labelOf(p)}：官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败` : `安装 ${labelOf(p)}（可选择版本）`"
+                          @click="askInstall(p)">
                     {{ loadingPkg === p ? '提交中…' : '+ ' + labelOf(p) }}
                     <span v-if="needsExternalSource(p)" class="ext-hint" title="需第三方软件源">需配源</span>
                   </button>
-                  <input v-if="versionAllOpen" class="pkg-version" v-model="versions[p]"
-                         :disabled="!canPkg || !!loadingPkg || !!task"
-                         placeholder="版本（留空=最新）" autocomplete="off" />
                 </div>
               </div>
             </template>
@@ -548,27 +566,22 @@ async function doConfirmed() {
     <ConfirmDialog :open="!!confirmRemove" :title="confirmTitle" :detail="confirmDetail"
                    :confirm-word="confirmWord" danger
                    @confirm="doConfirmed" @cancel="confirmRemove = null" />
+
+    <InstallPackageDialog :open="!!dlgPkg" :name="dlgPkg" :label="labelOf(dlgPkg)"
+                          :versions="dlgVersions" :loading="dlgLoading"
+                          :external="needsExternalSource(dlgPkg)"
+                          @confirm="doInstall" @cancel="closeInstallDlg" />
   </div>
 </template>
 
 <style scoped>
 .dim { color: var(--c-text-dim); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
-/* 可安装软件：每行 = 安装按钮 + 可选版本输入框（留空=最新）。横向一行放不下时换行，
-   但版本框宽度固定、不挤压按钮，避免「版本框把 + 按钮挤没」（已安装的卡片是另一套布局）。 */
+/* 可安装软件：每行就是一个安装按钮（版本选择在弹窗里做）。 */
 .pkg-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.pkg-version { width: 176px; padding: 6px 9px; font-size: 12.5px; color: var(--c-text);
-  background: var(--c-glass); border: 1px solid var(--c-border); border-radius: var(--radius-sm); }
-.pkg-version::placeholder { color: var(--c-text-dim); }
-.pkg-version:disabled { opacity: .55; cursor: not-allowed; }
-/* 弱化文字按钮：现在只用于「安装软件」区块头的「指定版本 / 收起版本」总开关。
-   版本输入框默认收起，点总开关才统一展开——避免 25 个包各挂一句重复的占位文案。 */
-.btn-link { padding: 4px 8px; font-size: 12.5px; line-height: 1; color: var(--c-text-dim);
-  background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
-  cursor: pointer; white-space: nowrap; }
-.btn-link:hover:not(:disabled) { color: var(--gradient); border-color: var(--c-border); }
-.btn-link:disabled { opacity: .5; cursor: not-allowed; }
-.ms-auto { margin-left: auto; }  /* 把总开关推到区块头最右 */
+/* 区块头的弱提示：「点击软件可选择安装版本」。放在标题右侧、不抢视觉焦点，
+   但比原先的「指定版本」开关更贴着操作区，不容易被整体略过。 */
+.sec-note { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--c-text-dim); }
 /* 「需配源」小徽标：跟在安装按钮文字后，提示官方仓库通常不含此包。
    用 inline-flex + 小字号，避免把按钮撑宽导致整行换行错位。 */
 .ext-hint { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 5px;
