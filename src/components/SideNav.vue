@@ -74,10 +74,11 @@ function why(it: Item): string | null {
 }
 
 const route = useRoute()
-// 「主机监控」含页内子 Tab（/system、/system/pro、/system/procs），高亮按前缀匹配；
-// 其余菜单仍精确匹配——概览 '/' 是所有路径的前缀，绝不能改前缀，否则全页常亮。
+// 含页内子 Tab 的菜单（主机监控 /system/*、软件与服务 /services/*、日志 /logs/audit、
+// 任务 /cron/tasks、安全 /firewall/baseline）高亮按**前缀**匹配；
+// 其余仍精确匹配——概览 '/' 是所有路径的前缀，绝不能改前缀，否则全页常亮。
 function isOn(it: Item): boolean {
-  return it.to === '/system' ? route.path.startsWith('/system') : route.path === it.to
+  return route.path === it.to || route.path.startsWith(it.to + '/')
 }
 </script>
 

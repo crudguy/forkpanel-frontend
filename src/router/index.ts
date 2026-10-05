@@ -29,7 +29,12 @@ export const router = createRouter({
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],
         },
-        { path: 'services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件与服务' } },
+        // 「软件 / 服务」是同一页的两个 Tab，**由子路由承载**（两条路由指向同一组件）：
+        // 顶栏标题随子路由 meta.title 变化、Tab 可深链可前进后退，与「主机监控」同范式。
+        // 旧链接 /services 重定向到默认 Tab（软件）。
+        { path: 'services', redirect: '/services/software' },
+        { path: 'services/software', name: 'services-software', component: () => import('@/views/ServicesView.vue'), meta: { title: '软件' } },
+        { path: 'services/units', name: 'services-units', component: () => import('@/views/ServicesView.vue'), meta: { title: '服务' } },
         // 服务详情：原先是列表页里的模态弹窗（启停+日志+配置三块挤在半屏里），
         // 改独立路由页后地址可分享、浏览器返回可用、编辑区有完整高度。
         // 不在侧边栏单列入口——由列表页行点击进入。

@@ -11,8 +11,8 @@
  * - 软件区展示白名单内已装列表（/packages），卸载需输入包名确认；
  *   安装/卸载走任务队列，进度由 SSE（/api/v1/events/tasks）推送并在顶部任务条展示。
  */
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
+import TabBar from '@/components/TabBar.vue'
 
 // Svc 直接取 types.ts 的 ServiceInfo（与服务详情页共用，避免两处各自定义漂移）；
 // 以别名引入是为保留本文件既有的 Svc 写法、压低改动面。
@@ -46,12 +47,20 @@ const canManage = computed(() => auth.enabled(CAP.SERVICE_MANAGE, 'service.manag
 const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.install'))
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
 
-// 软件与服务拆成顶部两个 Tab（仿容器页 services/images 内部 Tab 范式）。
-// Tab 顺序与默认选中都跟侧边栏菜单名「软件与服务」对齐：软件在前、服务在后，
-// 进页面停在第一项（软件）。服务 Tab 仍是唯一常驻轮询的那个（切过去才起轮询）。
-// 注：模板里两个内容块的出现顺序仍是「服务在前、软件在后」——它们 v-if/v-else
-// 互斥、同时只渲染一个，先后不影响观感；别据 DOM 顺序误以为 Tab 反了。
-const tab = ref<'software' | 'services'>('software')
+// 「软件 / 服务」两个 Tab 由**子路由**驱动（services-software / services-units 指向本组件）：
+// 顶栏标题随路由 meta.title 变化、Tab 可深链可前进后退，与「主机监控」同范式。
+// 故 tab 只是路由的投影，不再持有本地状态——避免 URL 与界面各说各话。
+const route = useRoute()
+const tab = computed<'software' | 'services'>(() =>
+  route.name === 'services-units' ? 'services' : 'software')
+
+// 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
+// 高亮按 route.path 精确比对）。顺序与侧边栏菜单名「软件与服务」对齐：
+// 软件在前（默认 Tab）、服务在后。
+const TABS = [
+  { to: '/services/software', label: '软件' },
+  { to: '/services/units', label: '服务' },
+]
 
 // 软件包按运维职责分组，顺序即展示顺序。
 //
@@ -164,14 +173,14 @@ function start() {
   }
 }
 
-/** 切 Tab：服务 → 立即拉一次并开轮询；软件 → 停轮询并加载软件清单。 */
-function onTab(t: 'services' | 'software') {
-  tab.value = t
+/** Tab 切换由**路由变化**驱动（不再是点击 handler）：服务 → 立即拉一次并开轮询；
+    软件 → 停轮询并加载软件清单。 */
+watch(tab, (t) => {
   if (t === 'services') { load(); start() }
   // 软件卡片的「服务状态」取自服务列表，而轮询只在服务 Tab 跑；切过来时补一次
   // silent 刷新，避免停在几分钟前的旧状态上。
   else { stop(); load(true); loadPackages() }
-}
+})
 
 /** 刷新当前 Tab：服务列表 reload，软件清单 reload（用户显式点刷新 → 强制，绕过新鲜度）。 */
 function refresh() { if (tab.value === 'services') load() ; else loadPackages(true) }
@@ -357,18 +366,17 @@ async function doConfirmed() {
 
 <template>
   <div>
+    <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue），
+         本页专属信息（init 系统）与刷新按钮归拢到右侧，不再是三处各自孤立。 -->
     <div class="page-head">
-      <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
+      <TabBar :tabs="TABS" />
       <span class="spacer" />
+      <span v-if="init" class="badge badge-primary"
+            title="面板探测到的 init 系统，决定服务命令走 systemd 还是其它">init: {{ init }}</span>
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
       <button class="btn-primary" :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()">
         <Icon name="refresh" :size="15" /> 刷新
       </button>
-    </div>
-
-    <div class="tabs">
-      <button :class="{ active: tab === 'software' }" @click="onTab('software')">软件</button>
-      <button :class="{ active: tab === 'services' }" @click="onTab('services')">服务</button>
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
@@ -512,12 +520,8 @@ async function doConfirmed() {
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 .acts { white-space: nowrap; }
 
-/* 顶部 Tab（仿容器页 services/images 切换）：服务常驻轮询、软件按类别分组 */
-.tabs { display: flex; gap: 6px; margin: 2px 0 14px; }
-.tabs button { padding: 7px 16px; border: 1px solid var(--c-border); background: var(--c-glass);
-  border-radius: 999px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; transition: .15s; }
-.tabs button:hover { border-color: var(--c-primary); }
-.tabs button.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+/* 顶部 Tab 已改用全站统一的分段控件 components/TabBar.vue：
+   原先本地的 .tabs 是"胶囊 + 橙色填充"，与其它页面的分段控件形状不一致。 */
 
 /* 软件类别小标题：把同类包聚在一起，避免白名单式长列表难扫读 */
 .cat-head { display: flex; align-items: center; gap: 8px;
