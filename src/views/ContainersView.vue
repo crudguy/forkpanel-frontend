@@ -22,6 +22,7 @@ import { CAP, containerStateLabel, containerStateBadge } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
+import TabBar from '@/components/TabBar.vue'
 
 interface Container {
   id: string; name: string; image: string; state: string
@@ -33,6 +34,12 @@ interface Image {
 
 const auth = useAuthStore()
 const tab = ref<'containers' | 'images'>('containers')
+// 顶部 Tab（容器/镜像）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
+// 与主机监控等页面外观统一；图标位可选，激活态白底上随 currentColor 变白。
+const tabs = [
+  { value: 'containers', label: '容器', icon: 'server' },
+  { value: 'images', label: '镜像', icon: 'disk' },
+]
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
 const error = ref('')
@@ -162,8 +169,8 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibility)
 })
 
-async function switchTab(t: 'containers' | 'images') {
-  tab.value = t
+async function switchTab(t: string) {
+  tab.value = t as 'containers' | 'images'
   await load()
 }
 
@@ -252,16 +259,12 @@ function canStop(c: Container) { return c.state === 'running' }
       <p v-if="error" class="err" role="alert">{{ error }}</p>
       <p v-if="notice" class="ok-note">{{ notice }}</p>
 
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton box" />
-
-      <div class="tabs">
-        <button :class="{ on: tab === 'containers' }" @click="switchTab('containers')">
-          <Icon name="server" :size="14" /> 容器
-        </button>
-        <button :class="{ on: tab === 'images' }" @click="switchTab('images')">
-          <Icon name="disk" :size="14" /> 镜像
-        </button>
+      <div class="tabs-wrap">
+        <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
       </div>
+
+      <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush" v-if="tab === 'containers' && containers.length">
@@ -358,9 +361,8 @@ function canStop(c: Container) { return c.state === 'running' }
 .diag-head :deep(.icon) { color: var(--c-primary); }
 .diag-hint { color: var(--c-text-dim); font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
 .diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-.tabs button { display: inline-flex; align-items: center; gap: 6px; }
-.tabs button.on { border-color: var(--c-primary); color: var(--c-primary); }
+/* 顶部 Tab（容器/镜像）改用通用 TabBar 组件后的间距保留 */
+.tabs-wrap { margin-bottom: 12px; }
 .status-text { margin-left: 8px; font-size: 12px; }
 .tip { font-size: 12px; color: var(--c-text-dim); line-height: 1.7; margin-top: 14px; }
 
