@@ -237,7 +237,9 @@ async function doUpgrade(n: string, v: string | undefined, confirmed = false) {
 
 // 跨主版本升级确认弹窗状态。后端对跨主版本（如 PostgreSQL 17→18、Node.js 20→24）
 // 强制二次确认；这里只在用户真的点了「更新」且后端回了 409 时弹出，而非每次渲染都拦。
-const majorUpgrade = ref<{ name: string; version?: string; from: string; to: string; note: string } | null>(null)
+// mode 区分触发来源：install 弹窗也能触发升级（已装包选新版本），确认后须回 install 端点重发。
+// 省略 mode 视为 upgrade（升级按钮那条路径）。
+const majorUpgrade = ref<{ name: string; version?: string; from: string; to: string; note: string; mode?: 'install' | 'upgrade' } | null>(null)
 const majorDetail = computed(() => {
   const m = majorUpgrade.value
   if (!m) return ''
@@ -247,7 +249,8 @@ async function confirmMajorUpgrade() {
   const m = majorUpgrade.value
   if (!m) return
   majorUpgrade.value = null
-  await doUpgrade(m.name, m.version, true)
+  if (m.mode === 'install') await doInstall(m.version, true)
+  else await doUpgrade(m.name, m.version, true)
 }
 
 // ─────────────── 自动刷新 ───────────────
@@ -425,17 +428,27 @@ async function askInstall(p: string) {
 
 function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = []; dlgInstalled.value = null }
 
-// 弹窗确认后真正提交（version 为 undefined 表示装最新版）
-async function doInstall(v: string | undefined) {
+// 弹窗确认后真正提交（version 为 undefined 表示装最新版）。
+// 已装包选到跨主版本时，后端同样会 409 强制二次确认（install 语义上等于升级），
+// 此处须与 doUpgrade 一致地拦截弹窗，否则会落到通用错误文案、装不成。
+async function doInstall(v: string | undefined, confirmed = false) {
   const p = dlgPkg.value
   if (!p) return
   closeInstallDlg()
   loadingPkg.value = p; error.value = ''
   try {
-    const r = await api.post<{ task_id: number; created: boolean }>(API.packages.install(), { name: p, version: v })
+    const r = await api.post<{ task_id: number; created: boolean }>(
+      API.packages.install(), { name: p, version: v, confirm_major: confirmed || undefined })
     if (!r.created) error.value = '该安装任务已在进行中（已复用已有任务）'
     watchTask(r.task_id, `安装 ${p}${v ? ' @ ' + v : ''}`)
   } catch (e) {
+    if (e instanceof ApiError && e.code === 10005) {
+      const d = e.detail as { kind?: string; from?: string; to?: string; note?: string } | undefined
+      if (d?.kind === 'major_upgrade') {
+        majorUpgrade.value = { name: p, version: v, from: d.from ?? '', to: d.to ?? '', note: d.note ?? '', mode: 'install' }
+        return
+      }
+    }
     if (isUnsupported(e)) error.value = '软件安装功能即将推出'
     else error.value = errorText(e)
   } finally { loadingPkg.value = '' }
