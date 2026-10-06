@@ -180,6 +180,9 @@ export interface UpgradablePkg {
   current: string
   /** 可升级到的版本 */
   candidate: string
+  /** 是否跨主版本升级（current 与 candidate 首段数字不同）。跨主版本可能不向后兼容，
+   *  需要数据迁移或服务重配，前端据此弹窗二次确认。 */
+  major?: boolean
 }
 /** 服务条目（GET /api/v1/services 的 services[]）。
     列表页与服务详情页共用——两处各自定义必然漂移，故提到 types.ts 单一事实源。 */

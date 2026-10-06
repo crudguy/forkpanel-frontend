@@ -13,7 +13,7 @@
  */
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, errorText, isUnsupported } from '@/api/client'
+import { api, errorText, isUnsupported, ApiError } from '@/api/client'
 import { API } from '@/api/endpoints'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
 import { CAP, PackageInfo, UpgradablePkg, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
@@ -209,18 +209,45 @@ async function loadUpgradable() {
   }
 }
 
-/** 升级到指定版本（v 为空=升到源里最新版）。 */
-async function doUpgrade(n: string, v: string | undefined) {
+/** 升级到指定版本（v 为空=升到源里最新版）。
+ *  confirmed=true 表示用户已在跨主版本警告弹窗里确认，后端据此放行；
+ *  否则跨主版本升级会被后端 409 强制二次确认（不能只靠前端拦截）。 */
+async function doUpgrade(n: string, v: string | undefined, confirmed = false) {
   error.value = ''
   loadingPkg.value = n
   try {
-    const r = await api.post<{ task_id: number; created: boolean }>(API.packages.upgrade(), { name: n, version: v })
+    const r = await api.post<{ task_id: number; created: boolean }>(
+      API.packages.upgrade(), { name: n, version: v, confirm_major: confirmed || undefined })
     if (!r.created) error.value = '该升级任务已在进行中（已复用已有任务）'
     watchTask(r.task_id, `升级 ${labelOf(n)}${v ? ' 到 ' + v : '到最新版'}`)
   } catch (e) {
+    // 跨主版本升级：后端返回 409（code 10005, detail.kind=major_upgrade）强制二次确认，
+    // 这里拦截并弹出迁移警告，不落到通用错误文案里。
+    if (e instanceof ApiError && e.code === 10005) {
+      const d = e.detail as { kind?: string; from?: string; to?: string; note?: string } | undefined
+      if (d?.kind === 'major_upgrade') {
+        majorUpgrade.value = { name: n, version: v, from: d.from ?? '', to: d.to ?? '', note: d.note ?? '' }
+        return
+      }
+    }
     if (isUnsupported(e)) error.value = '软件升级功能即将推出'
     else error.value = errorText(e)
   } finally { loadingPkg.value = '' }
+}
+
+// 跨主版本升级确认弹窗状态。后端对跨主版本（如 PostgreSQL 17→18、Node.js 20→24）
+// 强制二次确认；这里只在用户真的点了「更新」且后端回了 409 时弹出，而非每次渲染都拦。
+const majorUpgrade = ref<{ name: string; version?: string; from: string; to: string; note: string } | null>(null)
+const majorDetail = computed(() => {
+  const m = majorUpgrade.value
+  if (!m) return ''
+  return `将把 ${labelOf(m.name)} 从 v${m.from} 升级到 v${m.to}。${m.note}`
+})
+async function confirmMajorUpgrade() {
+  const m = majorUpgrade.value
+  if (!m) return
+  majorUpgrade.value = null
+  await doUpgrade(m.name, m.version, true)
 }
 
 // ─────────────── 自动刷新 ───────────────
@@ -566,7 +593,7 @@ async function doConfirmed() {
                            故title 明说后果。 -->
                       <button v-if="upgradableMap.get(p.name)" class="btn-ghost btn-sm icon-btn"
                               :disabled="!canUpgrade || !!task"
-                              :title="`更新 ${labelOf(p.name)}：从 v${upgradableMap.get(p.name)!.current} 升到 v${upgradableMap.get(p.name)!.candidate}。升级会重启该软件对应的服务`"
+                              :title="`更新 ${labelOf(p.name)}：从 v${upgradableMap.get(p.name)!.current} 升到 v${upgradableMap.get(p.name)!.candidate}。升级会重启该软件对应的服务${upgradableMap.get(p.name)!.major ? '（跨主版本升级，可能不兼容，确认前请先备份数据）' : ''}`"
                               @click="doUpgrade(p.name, undefined)">
                         <Icon name="refresh" :size="13" />
                       </button>
@@ -589,9 +616,10 @@ async function doConfirmed() {
                     <span v-if="p.version" class="badge pkg-ver" :title="p.version">v{{ p.version }}</span>
                     <!-- 有新版：只在真探测到时显示，并给出「现→新」两个版本；
                          用 warn 色而非 danger（升级是常规维护，不是危险态）。 -->
-                    <span v-if="upgradableMap.get(p.name)" class="badge badge-warn nowrap"
-                          :title="`可更新：v${upgradableMap.get(p.name)!.current} → v${upgradableMap.get(p.name)!.candidate}`">
-                      有新版 v{{ upgradableMap.get(p.name)!.candidate }}
+                    <span v-if="upgradableMap.get(p.name)" class="badge nowrap"
+                          :class="upgradableMap.get(p.name)!.major ? 'badge-danger' : 'badge-warn'"
+                          :title="`可更新：v${upgradableMap.get(p.name)!.current} → v${upgradableMap.get(p.name)!.candidate}${upgradableMap.get(p.name)!.major ? '（跨主版本，升级需数据迁移）' : ''}`">
+                      {{ upgradableMap.get(p.name)!.major ? '跨主版本 ' : '有新版 ' }}v{{ upgradableMap.get(p.name)!.candidate }}
                     </span>
                     <!-- 原这里有「包管理器」徽标（apt / dnf / apk…）：那是实现细节，
                          普通用户看不懂且换发行版还变字，纯噪音，已移除。 -->
@@ -646,6 +674,12 @@ async function doConfirmed() {
     <ConfirmDialog :open="!!confirmRemove" :title="confirmTitle" :detail="confirmDetail"
                    :confirm-word="confirmWord" danger
                    @confirm="doConfirmed" @cancel="confirmRemove = null" />
+
+    <!-- 跨主版本升级确认：后端 409 强制二次确认，前端弹窗说明数据迁移风险。
+         与卸载确认共用 ConfirmDialog，但走独立状态/处理器，互不干扰。 -->
+    <ConfirmDialog :open="!!majorUpgrade" title="跨主版本升级确认"
+                   :detail="majorDetail" danger
+                   @confirm="confirmMajorUpgrade" @cancel="majorUpgrade = null" />
 
     <InstallPackageDialog :open="!!dlgPkg" :name="dlgPkg" :label="labelOf(dlgPkg)"
                           :versions="dlgVersions" :installed="dlgInstalled"
