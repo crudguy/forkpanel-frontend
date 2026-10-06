@@ -334,7 +334,7 @@ async function doDeleteCert() {
       </div>
 
       <div class="waf">
-        <label class="inline" title="在被管理站点前生成拦截规则；规则集是后端编译期常量，此处只能选档位与数值">
+        <label class="inline" title="在被管理站点前生成拦截规则；规则集由系统内置，此处只能选档位与数值">
           <input type="checkbox" v-model="form.wafOn" :disabled="!canApply" /> 启用 WAF
         </label>
         <template v-if="form.wafOn">
