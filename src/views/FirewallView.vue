@@ -136,7 +136,7 @@ async function doDelete() {
           <label>备注
             <input v-model="comment" placeholder="web" />
           </label>
-          <button class="btn-primary" :disabled="busy || !ports" @click="apply">应用</button>
+          <button class="btn-primary" :disabled="busy || !canManage || !ports" @click="apply">应用</button>
         </div>
         <p class="tip">
           仅支持放行（allow）。封禁端口可能导致 SSH 失联，需通过命令行操作。
