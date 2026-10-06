@@ -22,6 +22,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import InstallPackageDialog from '@/components/InstallPackageDialog.vue'
 import Icon from '@/components/Icon.vue'
+import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
 
 // Svc 直接取 types.ts 的 ServiceInfo（与服务详情页共用，避免两处各自定义漂移）；
@@ -548,6 +549,9 @@ async function doConfirmed() {
                        而 .pkg-name 是唯一可收缩项，空间不足时被压到 0 → 名称整个消失。
                        故第一行只放包名（独占，ellipsis + title 悬停看全名）与右侧操作图标。 -->
                   <div class="pkg-head">
+                    <!-- 软件图标：官方 logo(B) 优先，无 logo 时回退首字母徽章(A)。
+                         flex:none —— 图标绝不能参与收缩，空间不足时被压扁的是包名。 -->
+                    <PkgIcon :name="p.name" :label="labelOf(p.name)" :size="18" />
                     <span class="pkg-name mono" :title="p.name">{{ labelOf(p.name) }}</span>
                     <span class="pkg-actions">
                       <!-- 有对应服务才给管理入口；该软件无从管理时整块不渲染，
