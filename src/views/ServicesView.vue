@@ -27,7 +27,9 @@ import TabBar from '@/components/TabBar.vue'
 
 // Svc 直接取 types.ts 的 ServiceInfo（与服务详情页共用，避免两处各自定义漂移）；
 // 以别名引入是为保留本文件既有的 Svc 写法、压低改动面。
-interface TaskWatch { id: number; label: string; state: string; percent: number; out?: string[] }
+// pkg = 逻辑包名，用于"按包门控"：只有**同一个包**在跑时才禁它的按钮，
+// 不同包可以并行提交（后端按 Package 组串行排队，第二个会停在"排队中"）。
+interface TaskWatch { id: number; pkg: string; label: string; state: string; percent: number; out?: string[] }
 
 const auth = useAuthStore()
 const svcs = ref<Svc[]>([])
@@ -219,7 +221,7 @@ async function doUpgrade(n: string, v: string | undefined, confirmed = false) {
     const r = await api.post<{ task_id: number; created: boolean }>(
       API.packages.upgrade(), { name: n, version: v, confirm_major: confirmed || undefined })
     if (!r.created) error.value = '该升级任务已在进行中（已复用已有任务）'
-    watchTask(r.task_id, `升级 ${labelOf(n)}${v ? ' 到 ' + v : '到最新版'}`)
+    watchTask(r.task_id, n, `升级 ${labelOf(n)}${v ? ' 到 ' + v : '到最新版'}`)
   } catch (e) {
     // 跨主版本升级：后端返回 409（code 10005, detail.kind=major_upgrade）强制二次确认，
     // 这里拦截并弹出迁移警告，不落到通用错误文案里。
@@ -310,55 +312,86 @@ onUnmounted(() => {
 // 终态判定沿用共享词表：此前写死 ['done',...]，而后端成功终态是 'ok'
 // （'done' 根本不会出现）→ 任务完成后进度条永不停止。
 const FINISHED = TASK_FINISHED
-const task = ref<TaskWatch | null>(null)
+// 多任务并行：同一时刻可能有多条包任务在跑（后端按 Package 组串行排队，
+// 没抢到闸门的停在 queued）。故这里是**集合**而不是单个 ref——
+// 此前是单值 + "任意任务在跑就禁用全部按钮"，等于把并发能力整个废掉了。
+const tasks = ref<TaskWatch[]>([])
+// 已处理过终态的任务 id：SSE 的 finished 与连上后的补同步都会命中终态，
+// 用集合去重，避免同一任务被刷两次。
+const settled = new Set<number>()
 const MAX_ES_RETRIES = 5
 let es: EventSource | null = null
 let esRetries = 0
-let taskSettled = false
 
-function watchTask(id: number, label: string) {
-  stopWatch()
-  taskSettled = false
-  task.value = { id, label, state: 'running', percent: 0, out: [] }
+function findTask(id: number) { return tasks.value.find(t => t.id === id) }
+
+/** 该逻辑包是否有进行中的任务（排队中/进行中）——只禁**同一个包**的重复提交。 */
+function pkgBusy(name: string) {
+  return tasks.value.some(t => t.pkg === name && !FINISHED.has(t.state))
+}
+
+function watchTask(id: number, pkg: string, label: string) {
+  // 幂等：后端把重复提交合并到同一 task_id，前端不能再插一条重复行
+  if (!findTask(id)) {
+    tasks.value = [...tasks.value, { id, pkg, label, state: 'queued', percent: 0, out: [] }]
+  }
   openTaskStream()
   // 见 syncTaskOnce 注释：补一次状态同步，兜住"订阅前就已结束"的时间差
-  void syncTaskOnce()
+  void syncTaskOnce(id)
 }
 function stopWatch() { if (es) { es.close(); es = null } }
-function dismissTask() { stopWatch(); task.value = null }
+function dismissTask(id: number) {
+  tasks.value = tasks.value.filter(t => t.id !== id)
+  if (!tasks.value.length) stopWatch()
+}
 
 function openTaskStream() {
-  stopWatch()
+  // 流是全局的（/events/tasks 广播所有任务），已连上就复用，绝不重开
+  if (es) { esRetries = 0; return }
   esRetries = 0
   es = new EventSource(API.events.tasks())
   es.onopen = () => { esRetries = 0 }
+  // 事件里带 id：按 id 落到对应任务行；不属于本页已知任务的事件直接忽略
+  // 收到 progress / log 就说明任务**真的开始跑了**（后端是拿到闸门之后才上报的）。
+  // 状态必须一并纠正：前端只在建行时写 'queued'，此后仅 finished 与补同步会更新，
+  // 会漏掉 queued → running 这一跃迁，显示出「排队中 5%」这种自相矛盾的组合。
   es.addEventListener('progress', (ev: MessageEvent) => {
     const d = parseEv<{ id: number; percent: number }>(ev)
-    if (d && task.value && d.id === task.value.id) task.value.percent = d.percent ?? 0
+    if (!d) return
+    const t = findTask(d.id)
+    if (!t) return
+    t.percent = d.percent ?? 0
+    if (t.state === 'queued') t.state = 'running'
   })
   es.addEventListener('log', (ev: MessageEvent) => {
     const d = parseEv<{ id: number; line: string }>(ev)
-    if (!d || !task.value || d.id !== task.value.id) return
-    const out = task.value.out ?? []
+    if (!d) return
+    const t = findTask(d.id)
+    if (!t) return
+    if (t.state === 'queued') t.state = 'running'
+    const out = t.out ?? []
     out.push(d.line)
-    task.value.out = out.slice(-10)   // 只留尾部：apt 输出很长，别把内存撑爆
+    t.out = out.slice(-10)   // 只留尾部：apt 输出很长，别把内存撑爆
   })
   es.addEventListener('finished', (ev: MessageEvent) => {
     const d = parseEv<{ id: number; state: string }>(ev)
-    if (d && task.value && d.id === task.value.id) {
-      task.value.state = d.state
-      void onTaskFinished(d.state)
-    }
+    if (!d) return
+    const t = findTask(d.id)
+    if (!t) return
+    t.state = d.state
+    void onTaskFinished(d.id, d.state)
   })
   // EventSource 断线会自动重连，但要给失败反馈与重连上限（同 LogsView 审计 P7）：
   // 此前无上限，断网/后端重启时 UI 会长期停在「执行中」而没有任何提示
   es.onerror = () => {
     esRetries += 1
     if (esRetries > MAX_ES_RETRIES) {
-      const label = task.value?.label ?? ''
       stopWatch()
-      task.value = null
-      error.value = `任务进度实时推送已断开（连续 ${MAX_ES_RETRIES} 次重连失败）：${label} 可能仍在执行，可到任务中心查看`
+      // 不清空列表（清空等于把用户正在看的任务弄丢）：尽力用 HTTP 补一次真实状态
+      const pending = tasks.value.filter(t => !FINISHED.has(t.state))
+      for (const t of pending) void syncTaskOnce(t.id)
+      const who = pending.map(t => t.label).join('、')
+      error.value = `任务进度实时推送已断开（连续 ${MAX_ES_RETRIES} 次重连失败）：${who || '进行中的任务'} 可能仍在执行，可到任务中心查看`
     }
   }
 }
@@ -369,38 +402,42 @@ function parseEv<T>(ev: MessageEvent): T | null {
 }
 
 /** 入队 → 订阅之间存在时间差，极短的任务可能在连上 SSE 前就已结束；
-    连上后补一次状态同步，避免进度条永远停在「执行中」。 */
-async function syncTaskOnce() {
-  const t = task.value
-  if (!t) return
+    连上后补一次状态同步，避免进度条永远停在「执行中」。
+    也要把 queued 同步过来：包任务是串行排队的，后提交的那条会先停在 queued。 */
+async function syncTaskOnce(id: number) {
+  if (!findTask(id)) return
   try {
     const r = await api.get<TaskRun[] | { tasks: TaskRun[] }>(API.tasks.list())
     const list = Array.isArray(r) ? r : (r.tasks ?? [])
-    const row = list.find(x => x.id === t.id)
+    const row = list.find(x => x.id === id)
     if (!row) return
-    if (row.progress != null && task.value) task.value.percent = row.progress
-    if (FINISHED.has(row.state)) {
-      if (task.value) task.value.state = row.state
-      await onTaskFinished(row.state)
-    }
+    const cur = findTask(id)
+    if (!cur) return
+    if (row.progress != null) cur.percent = row.progress
+    // 状态一律同步（含 queued）——此前只在终态时写，排队中的任务会一直显示"进行中"
+    if (typeof row.state === 'string') cur.state = row.state
+    if (FINISHED.has(row.state)) await onTaskFinished(id, row.state)
   } catch { /* 同步失败不致命：SSE 仍在工作 */ }
 }
 
-async function onTaskFinished(state: string) {
-  if (taskSettled) return          // SSE 的 finished 与补同步可能同时命中终态
-  taskSettled = true
-  stopWatch()
+async function onTaskFinished(id: number, state: string) {
+  if (settled.has(id)) return     // SSE 的 finished 与补同步可能同时命中终态
+  settled.add(id)
   // log 事件已实时累积输出；若该任务没有产生日志事件，回落到 HTTP 读取
-  if (task.value && !task.value.out?.length) {
+  const t = findTask(id)
+  if (t && !t.out?.length) {
     try {
-      const o = await api.get<{ lines?: string[] }>(API.tasks.output(task.value.id) + '?lines=12')
-      if (task.value) task.value.out = (o.lines ?? []).slice(-10)
+      const o = await api.get<{ lines?: string[] }>(API.tasks.output(id) + '?lines=12')
+      const cur = findTask(id)
+      if (cur) cur.out = (o.lines ?? []).slice(-10)
     } catch { /* 输出读取失败不阻断状态展示 */ }
   }
   // 成功终态是 'ok'（不是 'done'，后端从不返回 done）——
   // 此处若写 'done' 则刷新分支永不命中，装完软件列表不更新
   // 升级成功也要刷新可升级清单，否则「有新版」徽标会一直挂着（版本已变但徽标没消）
   if (state === 'ok') { loadPackages(true); loadUpgradable(); load() }
+  // 全部任务都落终态才断流：多任务并行时不能有一条完成就关掉 SSE
+  if (tasks.value.every(x => FINISHED.has(x.state))) stopWatch()
 }
 
 // 徽标与文案统一走共享词表（src/api/types.ts），与任务中心口径一致
@@ -440,7 +477,7 @@ async function doInstall(v: string | undefined, confirmed = false) {
     const r = await api.post<{ task_id: number; created: boolean }>(
       API.packages.install(), { name: p, version: v, confirm_major: confirmed || undefined })
     if (!r.created) error.value = '该安装任务已在进行中（已复用已有任务）'
-    watchTask(r.task_id, `安装 ${p}${v ? ' @ ' + v : ''}`)
+    watchTask(r.task_id, p, `安装 ${p}${v ? ' @ ' + v : ''}`)
   } catch (e) {
     if (e instanceof ApiError && e.code === 10005) {
       const d = e.detail as { kind?: string; from?: string; to?: string; note?: string } | undefined
@@ -459,7 +496,7 @@ async function removePkg(n: string) {
   try {
     const r = await api.del<{ task_id: number; created: boolean }>(API.packages.remove(n))
     if (!r.created) error.value = '该卸载任务已在进行中（已复用已有任务）'
-    watchTask(r.task_id, `卸载 ${n}`)
+    watchTask(r.task_id, n, `卸载 ${n}`)
   } catch (e) { error.value = errorText(e) }
 }
 
@@ -512,19 +549,24 @@ async function doConfirmed() {
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
 
-    <!-- 安装/卸载任务进度条 -->
-    <div v-if="task" class="card taskstrip">
-      <div class="ts-head">
-        <Icon name="terminal" :size="15" />
-        <strong>{{ task.label }}</strong>
-        <span class="badge" :class="taskBadge(task.state)">
-          {{ taskStateText(task.state) }} {{ task.percent }}%
-        </span>
-        <span class="spacer" />
-        <button class="btn-ghost btn-sm" @click="dismissTask">关闭</button>
+    <!-- 安装/卸载/升级任务进度：多任务并行，逐条展示。
+         后提交的包任务会先停在「排队中」——后端按 Package 组串行，
+         等前一条释放 apt/dpkg 全局锁后自动开始（不是失败）。 -->
+    <div v-if="tasks.length" class="card taskstrip">
+      <div v-for="t in tasks" :key="t.id" class="ts-row">
+        <div class="ts-head">
+          <Icon name="terminal" :size="15" />
+          <strong>{{ t.label }}</strong>
+          <span class="badge" :class="taskBadge(t.state)"
+                :title="t.state === 'queued' ? '等待前一个软件操作释放 apt/dpkg 锁，会自动开始' : undefined">
+            {{ taskStateText(t.state) }} {{ t.percent }}%
+          </span>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" @click="dismissTask(t.id)">关闭</button>
+        </div>
+        <div class="progress"><i :style="{ width: t.percent + '%' }" /></div>
+        <pre v-if="t.out?.length" class="out">{{ t.out.join('\n') }}</pre>
       </div>
-      <div class="progress"><i :style="{ width: task.percent + '%' }" /></div>
-      <pre v-if="task.out?.length" class="out">{{ task.out.join('\n') }}</pre>
     </div>
 
     <!-- 服务 Tab：常驻轮询的列表 -->
@@ -604,8 +646,11 @@ async function doConfirmed() {
                            与「切换版本」并存但语义不同：这是"升到源里最新版"的一键操作，
                            切换版本是让用户自己挑（含回退）。升级会重启对应服务，
                            故title 明说后果。 -->
+                      <!-- 门控从"任意任务在跑就全禁"改成"只禁同一个包"：
+                           不同包可以同时提交，后端按 Package 组串行排队，
+                           后提交的会停在「排队中」而不是被按钮挡在外面。 -->
                       <button v-if="upgradableMap.get(p.name)" class="btn-ghost btn-sm icon-btn"
-                              :disabled="!canUpgrade || !!task"
+                              :disabled="!canUpgrade || pkgBusy(p.name)"
                               :title="`更新 ${labelOf(p.name)}：从 v${upgradableMap.get(p.name)!.current} 升到 v${upgradableMap.get(p.name)!.candidate}。升级会重启该软件对应的服务${upgradableMap.get(p.name)!.major ? '（跨主版本升级，可能不兼容，确认前请先备份数据）' : ''}`"
                               @click="doUpgrade(p.name, undefined)">
                         <Icon name="refresh" :size="13" />
@@ -613,12 +658,12 @@ async function doConfirmed() {
                       <!-- 切换版本：已安装的软件也可能需要换版本（升级/回退），
                            此前只有「未安装」的包才有安装入口，已装的无法操作。
                            复用同一个安装弹窗，其中会标出「（已安装）」的当前版本。 -->
-                      <button class="btn-ghost btn-sm icon-btn" :disabled="!canPkg || !!task"
+                      <button class="btn-ghost btn-sm icon-btn" :disabled="!canPkg || pkgBusy(p.name)"
                               :title="`切换版本：为 ${labelOf(p.name)} 选择其他可安装版本`" @click="askInstall(p.name)">
                         <Icon name="download" :size="13" />
                       </button>
                       <!-- 卸载用图标按钮不占横向空间，语义与后果写进 title -->
-                      <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || !!task"
+                      <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || pkgBusy(p.name)"
                               :title="`卸载 ${labelOf(p.name)}：从系统移除该软件包`" @click="askRemove(p.name)">
                         <Icon name="trash" :size="13" />
                       </button>
@@ -666,7 +711,7 @@ async function doConfirmed() {
               </div>
               <div class="pkgs">
                 <div v-for="p in cat.items" :key="p" class="pkg-install-row">
-                  <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task"
+                  <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || pkgBusy(p)"
                           :title="needsExternalSource(p) ? `安装 ${labelOf(p)}：官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败` : `安装 ${labelOf(p)}（可选择版本）`"
                           @click="askInstall(p)">
                     <!-- 安装行同样用软件图标，与上方已安装卡片视觉统一；
@@ -744,8 +789,9 @@ col.w-acts { width: 96px; }
 .box { height: 320px; }
 @keyframes svc-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
-/* 任务进度条 */
+/* 任务进度条（多任务并行：一张卡片里纵向排列多条，逐条用分隔线隔开） */
 .taskstrip { padding: 12px 16px; margin-bottom: 14px; border-color: var(--c-primary-soft); }
+.ts-row + .ts-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--c-border); }
 .ts-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ts-head strong { font-size: 13.5px; }
 .progress { height: 6px; background: var(--c-hover); border-radius: 3px; overflow: hidden; }
