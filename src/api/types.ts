@@ -29,6 +29,7 @@ export const CAP = {
   FILE_WRITE: 'file.write',
   SERVICE_MANAGE: 'service.manage',
   PACKAGE_INSTALL: 'package.install',
+  PACKAGE_UPGRADE: 'package.upgrade',
   FIREWALL_MANAGE: 'firewall.manage',
   WEBSERVER_MANAGE: 'webserver.manage',
   SCHEDULER_MANAGE: 'scheduler.manage',
@@ -168,6 +169,17 @@ export interface PackageInfo {
   label?: string
   version: string | null
   manager: string
+}
+/** 可升级条目（GET /api/v1/packages/upgradable 的 items[]）。
+    name 是**逻辑包名**（与 PackageInfo.name 同域），UI 按它匹配已安装卡片；
+    已在后端过滤到白名单，故不会返回面板管不到的系统库。 */
+export interface UpgradablePkg {
+  name: string
+  label?: string
+  /** 当前已安装版本 */
+  current: string
+  /** 可升级到的版本 */
+  candidate: string
 }
 /** 服务条目（GET /api/v1/services 的 services[]）。
     列表页与服务详情页共用——两处各自定义必然漂移，故提到 types.ts 单一事实源。 */

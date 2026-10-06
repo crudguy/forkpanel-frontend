@@ -66,6 +66,11 @@ export const API = {
     remove: (name: string) => `/api/v1/packages/${enc(name)}`,
     // 按需查询可用版本（安装弹窗打开时），刻意不随 packages_list 全量拉取
     versions: (name: string) => `/api/v1/packages/${enc(name)}/versions`,
+    // 探测「有新版」（只读）。单独端点而非并入 list：要跑 apt list --upgradable，
+    // 而 list 是页面/轮询高频调用，混在一起每次刷新都多付子进程开销。
+    upgradable: () => '/api/v1/packages/upgradable',
+    // 升级到指定版本（不传 version = 升到源里最新版）
+    upgrade: () => '/api/v1/packages/upgrade',
   },
 
   sites: {

@@ -16,7 +16,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
-import { CAP, PackageInfo, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
+import { CAP, PackageInfo, UpgradablePkg, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -57,6 +57,12 @@ function labelOf(n: string): string { return labelMap.value.get(n) ?? n }
 // 官方仓库通常不含、需先配第三方软件源才能安装的包（后端下发，前端只消费）。
 // 这类包仍保留安装入口（配好源即可装），只是加提示避免用户白点一次才发现装不了。
 const externalPkgs = ref<Set<string>>(new Set())
+/**
+ * 可升级清单（探测结果）。
+ * 独立于 pkgs 软新鲜度单独存：它要跑一次 apt list --upgradable（秒级子进程），
+ * 失败时**不写 error**（否则常驻卡片抖动），空数组=无可升级项，属正常状态。
+ */
+const upgradable = ref<UpgradablePkg[]>([])
 function needsExternalSource(n: string): boolean { return externalPkgs.value.has(n) }
 
 // 注：此前这里另有一份 WHITELIST 数组，与 CATEGORIES 重复且与后端 ALLOWED_PACKAGES
@@ -67,6 +73,11 @@ const canManage = computed(() => auth.enabled(CAP.SERVICE_MANAGE, 'service.manag
 // 能力位名 package.install，而权限集合里根本没有这一项，导致 owner 也过不了
 // `enabled = supported && can`，安装/卸载按钮被自己 disable（能力位 supported 是 true）。
 const canPkg = computed(() => auth.enabled(CAP.PACKAGE_INSTALL, 'package.manage'))
+// 升级与安装是两个能力位（package.upgrade / package.install），别混用：
+// 探测「有新版」属只读，但仍要 package.manage 权限，故用 enabled 而非仅 supported。
+const canUpgrade = computed(() => auth.enabled(CAP.PACKAGE_UPGRADE, 'package.manage'))
+/** 逻辑包名 → 可升级到的版本（探测结果；空=无可升级项）。 */
+const upgradableMap = computed(() => new Map(upgradable.value.map(u => [u.name, u])))
 const installedNames = computed(() => new Set(pkgs.value?.map(p => p.name) ?? []))
 
 // 「软件 / 服务」两个 Tab 由**子路由**驱动（services-software / services-units 指向本组件）：
@@ -93,11 +104,11 @@ const TABS = [
 // 后端新增而前端没加 → 用户拿不到安装入口；前端新增而后端没加 → 点了被 400 拒绝。
 const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
-  { key: 'db', label: '数据库', pkgs: ['mysql-server', 'mariadb-server', 'postgresql'] },
+  { key: 'db', label: '数据库', pkgs: ['mariadb-server', 'postgresql'] },
   { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached', 'valkey-server'] },
   { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'nodejs', 'default-jdk'] },
   { key: 'storage', label: '存储', pkgs: ['minio'] },
-  { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata', 'uptime-kuma'] },
+  { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata'] },
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
   { key: 'network', label: '网络', pkgs: ['wireguard-tools'] },
 ]
@@ -111,7 +122,6 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
 //
 // 做法：只在**本机真实服务列表**（svcs）里反查，查到才渲染入口与状态，查不到就不显示。
 const UNIT_HINTS: Record<string, string[]> = {
-  'mysql-server': ['mysql', 'mysqld', 'mariadb'],
   'mariadb-server': ['mariadb', 'mysql', 'mysqld'],
   redis: ['redis-server', 'redis'],
   apache2: ['apache2', 'httpd'],
@@ -186,6 +196,32 @@ async function loadPackages(force = false) {
   }
 }
 
+/** 探测「有新版」。静默失败：探测是锦上添花，不该让整页报错或抖动。 */
+async function loadUpgradable() {
+  // 能力门控必须在请求前：无包管理器时端点会 501
+  if (!auth.supported(CAP.PACKAGE_UPGRADE)) { upgradable.value = []; return }
+  try {
+    const r = await api.get<{ items: UpgradablePkg[] }>(API.packages.upgradable())
+    upgradable.value = r.items ?? []
+  } catch {
+    upgradable.value = []   // 失败即"无可升级"，不写 error
+  }
+}
+
+/** 升级到指定版本（v 为空=升到源里最新版）。 */
+async function doUpgrade(n: string, v: string | undefined) {
+  error.value = ''
+  loadingPkg.value = n
+  try {
+    const r = await api.post<{ task_id: number; created: boolean }>(API.packages.upgrade(), { name: n, version: v })
+    if (!r.created) error.value = '该升级任务已在进行中（已复用已有任务）'
+    watchTask(r.task_id, `升级 ${labelOf(n)}${v ? ' 到 ' + v : '到最新版'}`)
+  } catch (e) {
+    if (isUnsupported(e)) error.value = '软件升级功能即将推出'
+    else error.value = errorText(e)
+  } finally { loadingPkg.value = '' }
+}
+
 // ─────────────── 自动刷新 ───────────────
 // 服务的启停 / 开机自启状态会变（在详情页操作、或系统层面变化），手动刷新不及时；
 // 加轮询让列表常驻最新。5s 比进程页 3s 更克制——服务状态变化频率低，无需高刷。
@@ -206,11 +242,11 @@ watch(tab, (t) => {
   if (t === 'services') { load(); start() }
   // 软件卡片的「服务状态」取自服务列表，而轮询只在服务 Tab 跑；切过来时补一次
   // silent 刷新，避免停在几分钟前的旧状态上。
-  else { stop(); load(true); loadPackages() }
+  else { stop(); load(true); loadPackages(); loadUpgradable() }
 })
 
 /** 刷新当前 Tab：服务列表 reload，软件清单 reload（用户显式点刷新 → 强制，绕过新鲜度）。 */
-function refresh() { if (tab.value === 'services') load() ; else loadPackages(true) }
+function refresh() { if (tab.value === 'services') load() ; else { loadPackages(true); loadUpgradable() } }
 
 /** 页面隐藏时停轮询：后台标签页持续拉服务列表纯属浪费。 */
 function onVisibility() {
@@ -224,6 +260,7 @@ onMounted(() => {
   // 轮询仍由 start() 按当前 tab 决定（默认 software → 不起轮询）。
   load()
   loadPackages()
+  loadUpgradable()   // 首屏就要显示「有新版」徽标，缺了它用户得切Tab 才看到
   start()
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -331,7 +368,8 @@ async function onTaskFinished(state: string) {
   }
   // 成功终态是 'ok'（不是 'done'，后端从不返回 done）——
   // 此处若写 'done' 则刷新分支永不命中，装完软件列表不更新
-  if (state === 'ok') { loadPackages(true); load() }
+  // 升级成功也要刷新可升级清单，否则「有新版」徽标会一直挂着（版本已变但徽标没消）
+  if (state === 'ok') { loadPackages(true); loadUpgradable(); load() }
 }
 
 // 徽标与文案统一走共享词表（src/api/types.ts），与任务中心口径一致
@@ -518,6 +556,16 @@ async function doConfirmed() {
                               @click="goUnit(p.unit)">
                         <Icon name="gear" :size="13" />
                       </button>
+                      <!-- 更新到最新版：仅当探测到该包有新版时才渲染。
+                           与「切换版本」并存但语义不同：这是"升到源里最新版"的一键操作，
+                           切换版本是让用户自己挑（含回退）。升级会重启对应服务，
+                           故title 明说后果。 -->
+                      <button v-if="upgradableMap.get(p.name)" class="btn-ghost btn-sm icon-btn"
+                              :disabled="!canUpgrade || !!task"
+                              :title="`更新 ${labelOf(p.name)}：从 v${upgradableMap.get(p.name)!.current} 升到 v${upgradableMap.get(p.name)!.candidate}。升级会重启该软件对应的服务`"
+                              @click="doUpgrade(p.name, undefined)">
+                        <Icon name="refresh" :size="13" />
+                      </button>
                       <!-- 切换版本：已安装的软件也可能需要换版本（升级/回退），
                            此前只有「未安装」的包才有安装入口，已装的无法操作。
                            复用同一个安装弹窗，其中会标出「（已安装）」的当前版本。 -->
@@ -534,7 +582,13 @@ async function doConfirmed() {
                   </div>
                   <div class="pkg-meta">
                     <!-- 发行版版本号可以很长（如 8.0.36-0ubuntu0.22.04.1），同样给悬停全值 -->
-                    <span v-if="p.version" class="badge" :title="p.version">v{{ p.version }}</span>
+                    <span v-if="p.version" class="badge pkg-ver" :title="p.version">v{{ p.version }}</span>
+                    <!-- 有新版：只在真探测到时显示，并给出「现→新」两个版本；
+                         用 warn 色而非 danger（升级是常规维护，不是危险态）。 -->
+                    <span v-if="upgradableMap.get(p.name)" class="badge badge-warn nowrap"
+                          :title="`可更新：v${upgradableMap.get(p.name)!.current} → v${upgradableMap.get(p.name)!.candidate}`">
+                      有新版 v{{ upgradableMap.get(p.name)!.candidate }}
+                    </span>
                     <!-- 原这里有「包管理器」徽标（apt / dnf / apk…）：那是实现细节，
                          普通用户看不懂且换发行版还变字，纯噪音，已移除。 -->
                     <!-- 服务状态徽标：随 meta 行一起换行，不再挤占包名空间 -->
@@ -656,7 +710,13 @@ col.w-acts { width: 96px; }
 /* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行，
    而不是显示省略号。 */
 .pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pkg-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.pkg-meta { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; min-width: 0; }
+/* 版本号是唯一可收缩项：本机版本号可很长（如 8.0.36-0ubuntu0.22.04.1），
+   加「有新版」徽标后三者常超卡片宽度 → flex-wrap 把徽标折到第二行，
+   导致相邻卡片高度参差。故让版本号独自承担收缩并截断（title 已给全值），
+   「有新版」/「运行中」等语义徽标一律不压缩、不换行。 */
+.pkg-meta .pkg-ver { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pkg-meta .nowrap { flex: none; white-space: nowrap; }
 
 /* 表格行可点 */
 tr.rowlink { cursor: pointer; }
