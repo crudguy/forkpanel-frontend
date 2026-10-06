@@ -612,8 +612,11 @@ async function doConfirmed() {
           <div v-if="installableByCat.length" class="card">
             <!-- 版本选择已移到「点安装 → 弹窗选版本」。此处刻意不再放任何开关或说明：
                  开关/说明放在区块头容易被略过，而弹窗就在点击路径上，用户必然看见。 -->
+            <!-- 标题图标：用本区最具代表性的服务器软件 logo（Docker），
+                 与下方每行的软件图标同族。原`plus` 是"新增"通用符号，
+                 但这一行的身份是"软件"，用通用加号会与页面其它新增按钮混淆。 -->
             <div class="sec-head">
-              <Icon name="plus" :size="16" /> 安装软件
+              <PkgIcon name="docker" label="Docker" :size="16" /> 安装软件
             </div>
             <template v-for="cat in installableByCat" :key="cat.key">
               <div class="cat-head">
@@ -625,7 +628,10 @@ async function doConfirmed() {
                   <button class="btn-ghost" :disabled="!canPkg || !!loadingPkg || !!task"
                           :title="needsExternalSource(p) ? `安装 ${labelOf(p)}：官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败` : `安装 ${labelOf(p)}（可选择版本）`"
                           @click="askInstall(p)">
-                    {{ loadingPkg === p ? '提交中…' : '+ ' + labelOf(p) }}
+                    <!-- 安装行同样用软件图标，与上方已安装卡片视觉统一；
+                         提交中时换文案（此时按钮 disabled，图标无意义反而占位）。 -->
+                    <PkgIcon v-if="loadingPkg !== p" :name="p" :label="labelOf(p)" :size="16" />
+                    {{ loadingPkg === p ? '提交中…' : labelOf(p) }}
                     <span v-if="needsExternalSource(p)" class="ext-hint" title="需第三方软件源">需配源</span>
                   </button>
                 </div>
