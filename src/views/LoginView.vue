@@ -50,9 +50,22 @@ async function submit() {
     await auth.login(username.value, password.value, needTotp.value ? totp.value : undefined)
     await router.replace('/')
   } catch (e) {
-    error.value = errorText(e)
-    // 后端在开启 MFA 时返回特定码，此处引导输入动态口令
-    if ((e as { code?: number }).code === 10010) needTotp.value = true
+    const code = (e as { code?: number }).code
+    if (code === 10010) {
+      // 后端在开启 MFA 时返回特定码，此处引导输入动态口令
+      needTotp.value = true
+      error.value = '该账户已启用两步验证，请输入动态口令'
+    } else if (code === 10002) {
+      // 后端对"用户名不存在 / 口令错 / 动态口令错"一律返回 401 + 10002（防用户名
+      // 枚举），而通用 errorText 把 10002 翻成"登录已过期，请重新登录"——在登录页
+      // 上这话是错的：人已经站在登录页，"重新登录"只会让他反复输同一个错口令。
+      // 此处按上下文改说凭据问题，并区分是否已在输动态口令。
+      error.value = needTotp.value
+        ? '动态口令不正确，或恢复码已被使用'
+        : '用户名或口令不正确（用户名不存在与口令错误不会区分）'
+    } else {
+      error.value = errorText(e)
+    }
   } finally {
     busy.value = false
   }

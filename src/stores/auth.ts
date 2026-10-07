@@ -68,7 +68,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(username: string, password: string, totp?: string) {
-    await api.post(API.auth.login(), { username, password, totp })
+    // skipAuthRedirect：凭据错误返回 401，但**不是**"会话过期"——不能触发全局
+    // `panel:unauthorized`（它会清会话并 push 登录路由，而人就站在登录页上）。
+    // 同页首启向导已这么做，登录请求此前遗漏。
+    await api.post(API.auth.login(), { username, password, totp }, { skipAuthRedirect: true })
     await loadMe()
   }
 
