@@ -1,136 +1,186 @@
 <script setup lang="ts">
 /**
- * 通用目录选择器：复用 /api/v1/files/list 在服务器端浏览目录树，
- * 仅列出目录，供「选目录」类场景使用（如新建站点根目录）。
+ * 通用目录选择器（树形，全文件系统浏览）：复用 /api/v1/files/list，
+ * 树根固定在服务器根目录 `/`，可逐级展开任意层级、选择任意目录。
  *
- * 不在这里强制 site_root 约束——那是后端 resolve_site_root 的职责，
- * 保存越界时后端会报错并在上层弹窗显示。这里只给出导航与提示。
+ * 打开时自动展开到 initialPath（通常是站点根目录，方便着陆），
+ * 但用户可一路回退到 `/`、再进入任意目录——不受 site_root 约束。
+ * 越界保存时由后端 resolve_site_root 报错，并在上层弹窗呈现。
  */
-import { ref, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
 
-interface DirEntry { name: string; kind: string; modified: number }
-interface ListResp { path: string; entries: DirEntry[]; truncated: boolean }
+interface Node {
+  path: string
+  name: string
+  kind: 'dir' | 'symlink'
+  expanded: boolean
+  loaded: boolean
+  loading: boolean
+  error: string
+  children: string[] // 子路径列表
+}
 
 const props = defineProps<{ open: boolean; initialPath?: string }>()
 const emit = defineEmits<{ (e: 'select', p: string): void; (e: 'cancel'): void }>()
 
-const DEFAULT_ROOT = '/'
-const curPath = ref(DEFAULT_ROOT)
-const dirs = ref<DirEntry[]>([])
-const loading = ref(false)
-const error = ref('')
-const selected = ref<string | null>(null)
-const newName = ref('')
-let seq = 0
-
 const norm = (p: string) => p.replace(/\/+$/, '') || '/'
+const basename = (p: string) => (p === '/' ? '/' : p.slice(p.lastIndexOf('/') + 1) || '/')
+const parentOf = (p: string) => {
+  if (p === '/') return null
+  const i = p.lastIndexOf('/')
+  return i <= 0 ? '/' : p.slice(0, i)
+}
 const joinDir = (base: string, name: string) => norm(base) + '/' + name
 
-async function load() {
-  const s = ++seq
-  loading.value = true; error.value = ''
+const ROOT = '/'
+const nodes = reactive<Record<string, Node>>({})
+const selected = ref<string | null>(null)
+const newName = ref('')
+const formError = ref('')
+
+function mkNode(path: string, name: string, kind: 'dir' | 'symlink'): Node {
+  return { path, name, kind, expanded: false, loaded: false, loading: false, error: '', children: [] }
+}
+
+async function loadChildren(path: string) {
+  const n = nodes[path] ?? (nodes[path] = mkNode(path, basename(path), 'dir'))
+  if (n.kind !== 'dir' || n.loading) return
+  n.loading = true; n.error = ''
   try {
-    const r = await api.get<ListResp>(API.files.list(), {
-      params: { path: curPath.value, hidden: false },
-    })
-    if (s !== seq) return
-    curPath.value = r.path || curPath.value
-    // 只保留目录（symlink 也允许选中，但不可进入，避免后端沙箱之外的误判）
-    dirs.value = (r.entries ?? [])
+    const r = await api.get<{ entries: { name: string; kind: string; modified: number }[] }>(
+      API.files.list(), { params: { path, hidden: false } })
+    const kids = (r.entries ?? [])
       .filter((e) => e.kind === 'dir' || e.kind === 'symlink')
       .sort((a, b) => a.name.localeCompare(b.name))
-    selected.value = null
+      .map((e) => {
+        const cp = joinDir(path, e.name)
+        if (!nodes[cp]) nodes[cp] = mkNode(cp, e.name, e.kind === 'symlink' ? 'symlink' : 'dir')
+        return cp
+      })
+    n.children = kids
+    n.loaded = true
+    n.expanded = true // 加载即展开，使展开链路保持可见
   } catch (e) {
-    if (s !== seq) return
-    error.value = errorText(e)
-    dirs.value = []
-  } finally { if (s === seq) loading.value = false }
+    n.error = errorText(e)
+  } finally { n.loading = false }
 }
 
-function open_(p: string) { curPath.value = norm(p); load() }
-function enter(d: DirEntry) { if (d.kind === 'dir') open_(joinDir(curPath.value, d.name)) }
-function up() {
-  const p = norm(curPath.value)
-  const i = p.lastIndexOf('/')
-  open_(i <= 0 ? '/' : p.slice(0, i))
-}
-function crumbs() {
-  const p = norm(curPath.value)
-  if (p === '/') return [{ name: '/', path: '/' }]
-  const parts = p.split('/').filter(Boolean)
-  const out: { name: string; path: string }[] = [{ name: '/', path: '/' }]
+// 从根目录逐层展开到 target，使 target 在打开时即处于可见路径上
+async function expandTo(target: string) {
+  const t = norm(target)
+  await loadChildren(ROOT)
+  if (t === ROOT) return
+  const segs = t.split('/').filter(Boolean)
   let acc = ''
-  for (const x of parts) { acc += '/' + x; out.push({ name: x, path: acc }) }
-  return out
+  for (const s of segs) {
+    acc += '/' + s
+    await loadChildren(acc)
+  }
 }
-function goto(p: string) { open_(p) }
-function pick(d: DirEntry) { selected.value = d.name }
-function confirm() { if (selected.value) emit('select', joinDir(curPath.value, selected.value)) }
+
+function toggle(path: string) {
+  const n = nodes[path]
+  if (!n || n.kind !== 'dir') return
+  if (n.expanded) { n.expanded = false; return }
+  if (!n.loaded) loadChildren(path)
+  else n.expanded = true
+}
+
+function select(path: string) { selected.value = path; formError.value = '' }
+
+function ensureRoot() {
+  for (const k in nodes) delete nodes[k] // 每次打开重新拉，避免陈旧缓存
+  nodes[ROOT] = mkNode(ROOT, '/', 'dir')
+  selected.value = null
+  newName.value = ''
+  formError.value = ''
+  const ip = norm(props.initialPath || ROOT)
+  expandTo(ip).then(() => {
+    const n = nodes[ip]
+    // 初始路径真实存在则预选中，方便直接确认
+    if (n && n.loaded && !n.error) selected.value = ip
+  })
+}
+
+// 深度优先展平：只收集「已展开」节点的子级，得到当前可见行 + 层级深度
+const visibleRows = computed(() => {
+  const rows: { node: Node; depth: number }[] = []
+  const walk = (path: string, depth: number) => {
+    const n = nodes[path]
+    if (!n) return
+    rows.push({ node: n, depth })
+    if (n.expanded) for (const c of n.children) walk(c, depth + 1)
+  }
+  walk(ROOT, 0)
+  return rows
+})
 
 async function doMkdir() {
+  const base = selected.value ?? ROOT
   const n = newName.value.trim()
   if (!n) return
+  formError.value = ''
   try {
-    await api.post(API.files.mkdir(), { path: joinDir(curPath.value, n) })
+    await api.post(API.files.mkdir(), { path: joinDir(base, n) })
     newName.value = ''
-    await load()
-    selected.value = n
-  } catch (e) { error.value = errorText(e) }
+    const bn = nodes[base]
+    if (bn && bn.kind === 'dir') {
+      if (!bn.loaded) await loadChildren(base)
+      else { bn.expanded = true; await loadChildren(base) }
+    }
+    selected.value = joinDir(base, n)
+  } catch (e) { formError.value = errorText(e) }
 }
 
-watch(() => props.open, (v) => {
-  if (v) {
-    curPath.value = norm(props.initialPath || DEFAULT_ROOT)
-    selected.value = null
-    newName.value = ''
-    load()
-  }
-})
+watch(() => props.open, (v) => { if (v) ensureRoot() })
 </script>
 
 <template>
   <div v-if="open" class="mask" @click.self="emit('cancel')">
     <div class="modal" role="dialog" aria-modal="true">
-      <h3>选择目录 <span class="dim tiny">（仅显示目录）</span></h3>
+      <h3>选择目录 <span class="dim tiny">（可浏览服务器任意目录，仅显示目录）</span></h3>
 
-      <div class="crumbs">
-        <button v-for="(c, i) in crumbs()" :key="c.path" class="crumb"
-          :class="{ cur: i === crumbs().length - 1 }" @click="goto(c.path)">{{ c.name }}</button>
+      <div class="tree">
+        <div v-if="!visibleRows.length" class="dim empty">读取中…</div>
+        <template v-for="row in visibleRows" :key="row.node.path">
+          <div class="row" :class="{ sel: selected === row.node.path }"
+            :style="{ paddingLeft: 8 + row.depth * 16 + 'px' }"
+            @click="select(row.node.path)">
+            <button v-if="row.node.kind === 'dir'" class="tw" :class="{ open: row.node.expanded }"
+              @click.stop="toggle(row.node.path)" :aria-label="row.node.expanded ? '折叠' : '展开'">
+              <Icon name="chevron" :size="13" />
+            </button>
+            <span v-else class="tw ph" />
+            <Icon name="folder" :size="15" />
+            <span class="nm">{{ row.node.name }}</span>
+            <span v-if="row.node.kind === 'symlink'" class="dim tiny link">链接</span>
+            <Icon v-if="selected === row.node.path" class="check" name="check" :size="14" />
+          </div>
+          <p v-if="row.node.error" class="err" :style="{ paddingLeft: 8 + (row.depth + 1) * 16 + 'px' }">
+            {{ row.node.error }}
+          </p>
+        </template>
       </div>
 
-      <div class="bar">
-        <button class="btn-ghost btn-sm" :disabled="curPath === '/'" @click="up">
-          <Icon name="chevron-left" :size="13" /> 上级
-        </button>
-        <span class="dim tiny">须选择服务器站点根目录之内的目录</span>
-      </div>
-
-      <div class="list">
-        <div v-if="loading" class="skeleton" />
-        <p v-else-if="error" class="err">{{ error }}</p>
-        <p v-else-if="!dirs.length" class="dim empty-dir">此目录没有子目录</p>
-        <button v-for="d in dirs" :key="d.name" class="row" :class="{ sel: selected === d.name }"
-          @click="pick(d)" @dblclick="enter(d)">
-          <Icon name="folder" :size="15" />
-          <span class="nm">{{ d.name }}</span>
-          <span v-if="d.kind === 'symlink'" class="dim tiny">链接</span>
-          <Icon v-if="selected === d.name" class="check" name="check" :size="14" />
-        </button>
-      </div>
+      <p v-if="formError" class="err form-err">{{ formError }}</p>
 
       <div class="newdir">
-        <input v-model="newName" placeholder="新建子目录名" @keyup.enter="doMkdir" />
+        <input v-model="newName" placeholder="在所选目录内新建子目录" @keyup.enter="doMkdir" />
         <button class="btn-ghost btn-sm" :disabled="!newName.trim()" @click="doMkdir">
           <Icon name="plus" :size="13" /> 新建
         </button>
       </div>
 
+      <div class="selpath dim tiny">
+        已选：<code>{{ selected || '（未选择）' }}</code>
+      </div>
+
       <div class="modal-actions">
         <button class="btn-ghost" @click="emit('cancel')">取消</button>
-        <button class="btn-primary" :disabled="!selected" @click="confirm">选择此目录</button>
+        <button class="btn-primary" :disabled="!selected" @click="emit('select', selected!)">选择此目录</button>
       </div>
     </div>
   </div>
@@ -139,36 +189,33 @@ watch(() => props.open, (v) => {
 <style scoped>
 .mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .55);
   display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal { width: min(520px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+.modal { width: min(540px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
   background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; }
 .modal h3 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 6px; }
 
-.crumbs { display: flex; flex-wrap: wrap; gap: 2px; font-size: 12px; padding: 6px 8px;
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 8px; }
-.crumb { background: none; border: none; color: var(--c-primary); cursor: pointer; padding: 2px 4px;
-  border-radius: 5px; font-size: 12px; }
-.crumb:hover { background: rgba(255, 138, 76, .12); }
-.crumb.cur { color: var(--c-text); cursor: default; font-weight: 600; }
-
-.bar { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
-
-.list { flex: 1; overflow-y: auto; min-height: 140px; max-height: 40vh;
+.tree { flex: 1; overflow-y: auto; min-height: 160px; max-height: 44vh;
   border: 1px solid var(--c-border); border-radius: 8px; padding: 4px; background: var(--c-surface); }
-.list .row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-  background: none; border: none; color: var(--c-text); padding: 8px 10px; border-radius: 6px;
+.tree .empty { padding: 18px; text-align: center; }
+.tree .row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--c-text); padding: 7px 10px 7px 8px; border-radius: 6px;
   cursor: pointer; font-size: 13px; }
-.list .row:hover { background: rgba(255, 138, 76, .1); }
-.list .row.sel { background: rgba(255, 138, 76, .18); outline: 1px solid var(--c-primary); }
-.list .row .nm { flex: 1; }
-.list .row .check { color: var(--c-primary); margin-left: auto; }
-.empty-dir { padding: 18px; text-align: center; }
-.skeleton { height: 140px; border-radius: 8px;
-  background: linear-gradient(90deg, var(--c-surface) 25%, var(--c-surface-2) 37%, var(--c-surface) 63%);
-  background-size: 400% 100%; animation: sk 1.2s infinite; }
-@keyframes sk { 0% { background-position: 100% 0 } 100% { background-position: -100% 0 } }
+.tree .row:hover { background: rgba(255, 138, 76, .1); }
+.tree .row.sel { background: rgba(255, 138, 76, .18); outline: 1px solid var(--c-primary); }
+.tree .row .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree .row .tw { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  flex: 0 0 18px; background: none; border: none; color: var(--c-text-dim); cursor: pointer; border-radius: 4px; }
+.tree .row .tw:hover { background: rgba(255, 138, 76, .15); color: var(--c-text); }
+.tree .row .tw.ph { visibility: hidden; }
+.tree .row .tw.open { transform: rotate(90deg); transition: transform .12s ease; }
+.tree .row .link { margin-left: 2px; }
+.tree .row .check { color: var(--c-primary); margin-left: 4px; flex: 0 0 auto; }
+.tree .err { color: var(--c-danger, #f85149); font-size: 12px; margin: 2px 0 4px; }
 
 .newdir { display: flex; gap: 8px; margin: 10px 0 4px; }
 .newdir input { flex: 1; }
+.selpath { margin: 2px 0 6px; word-break: break-all; }
+.selpath code { color: var(--c-text); background: var(--c-surface); padding: 1px 5px; border-radius: 4px; }
+.form-err { margin: 0 0 8px; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 </style>
