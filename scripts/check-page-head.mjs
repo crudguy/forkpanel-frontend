@@ -1,0 +1,118 @@
+#!/usr/bin/env node
+/**
+ * 「每个页面头部至多一个主操作」的结构性守卫。
+ * 用法：`pnpm check:ui`（与 check-sidenav.mjs 串联）；退出码非 0 即有违规。
+ *
+ * 为什么需要一道纯文本检查：`btn-primary` 是橙色渐变 + 外发光，一页的
+ * `.page-head` 里出现两个就是两块发光并排——主次被拉平，用户看不出该点哪个
+ * （站点页曾把「刷新」与「新建站点」都写成 btn-primary）。这纯粹是模板层的
+ * 视觉层级问题：`vue-tsc` 看不见、`vite build` 照常成功、页面照常渲染，
+ * 所以只能显式断言。
+ *
+ * 断言口径（刻意收窄，避免误报）：
+ *   [1] 至少要扫描到 N 个视图、且真的从每个视图里**抠出了** page-head 块
+ *       ——抠不到就必须失败。否则目录改名/模板改写法都会让下面那条恒绿。
+ *   [2] 每个 page-head 块内 btn-primary 出现次数 ≤ 1。
+ *
+ * 为什么只数 btn-primary：`.btn-ghost`（工具动作）、`.btn-danger`（危险动作）、
+ * `.btn-sm`（表格内小按钮）都按语义着色，不限个数——FilesView 的头部一列四个
+ * ghost 就是正确写法。只有"橙色实心 CTA"才代表主操作。
+ */
+import { readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+// 可传入目录覆盖（负向验证用：拿一份故意改坏的副本跑，确认守卫真的会红）
+const DIR = process.argv[2] ? process.argv[2] : join(root, 'src/views')
+
+const failures = []
+function fail(id, msg) {
+  console.log(`  ✗ [${id}] ${msg}`)
+  failures.push(id)
+}
+function pass(id, msg) {
+  console.log(`  ✓ [${id}] ${msg}`)
+}
+
+console.log(`（检查 ${DIR}）`)
+console.log('== 页面头部主操作守卫 ==')
+
+// 目录不存在必须立刻失败，不能静默扫 0 个文件后报 PASS
+let files
+try {
+  files = readdirSync(DIR).filter((f) => f.endsWith('.vue'))
+} catch (e) {
+  fail('0a', `视图目录不可读：${DIR}（${e.code ?? e.message}）`)
+  console.log(`\nFAIL：无法完成扫描（0a）`)
+  process.exit(1)
+}
+if (!files.length) {
+  fail('0b', `视图目录里没有 .vue：${DIR}——路径写错时这道守卫会恒绿`)
+  console.log(`\nFAIL：未扫描到任何视图（0b）`)
+  process.exit(1)
+}
+
+/** 把所有 HTML 注释整段替换成等长空格，保证索引不偏移（注释里可能含 <div）。 */
+const blankComments = (s) => s.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '))
+
+/** 从 `<div` 的起始下标开始做深度配对，返回整个元素文本。 */
+function elementAt(src, startIdx) {
+  const re = /<div\b|<\/div\s*>/g
+  re.lastIndex = startIdx
+  let depth = 0
+  let m
+  while ((m = re.exec(src))) {
+    if (m[0] === '</div>') {
+      depth -= 1
+      if (depth === 0) return src.slice(startIdx, m.index + m[0].length)
+    } else {
+      depth += 1
+    }
+  }
+  return null
+}
+
+const offenders = []
+const scanned = []
+for (const f of files) {
+  const raw = readFileSync(join(DIR, f), 'utf8')
+  const src = blankComments(raw)
+  const marker = '<div class="page-head">'
+  let idx = src.indexOf(marker)
+  let found = 0
+  while (idx >= 0) {
+    const block = elementAt(src, idx)
+    if (!block) break
+    found += 1
+    const n = (block.match(/btn-primary/g) ?? []).length
+    if (n > 1) {
+      // 只取"开标签里带 btn-primary"的 <button>，再剥标签留文案，用于定位：
+      const names = [...block.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]
+        .filter((m) => /btn-primary/.test(m[0].slice(0, m[0].indexOf('>'))))
+        .map((m) => m[0].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
+      offenders.push(`${f}: ${n} 个 btn-primary${names.length ? `（${names.join(' / ')}）` : ''}`)
+    }
+    idx = src.indexOf(marker, idx + block.length)
+  }
+  scanned.push([f, found])
+}
+
+const withHead = scanned.filter(([, n]) => n > 0)
+if (!withHead.length) {
+  fail('1', `扫过 ${files.length} 个视图，但一个 page-head 都没抠出来——模板写法变了，下面的检查会恒绿`)
+} else {
+  pass('1', `扫过 ${files.length} 个视图，从 ${withHead.length} 个中抠出 ${withHead.reduce((a, [, n]) => a + n, 0)} 个 page-head 块`)
+}
+
+if (offenders.length) {
+  fail('2', `每个 page-head 至多一个橙色主操作，违规 ${offenders.length} 处：\n      - ${offenders.join('\n      - ')}`)
+} else {
+  pass('2', '每个 page-head 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
+}
+
+if (failures.length) {
+  console.log(`\nFAIL：页面头部主操作有 ${failures.length} 条违规（${failures.join(', ')}）`)
+  process.exit(1)
+}
+console.log('\nPASS：页面头部主操作不变量全部满足')

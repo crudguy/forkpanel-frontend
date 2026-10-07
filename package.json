@@ -9,7 +9,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "size": "node scripts/size-report.mjs",
-    "check:ui": "node scripts/check-sidenav.mjs"
+    "check:ui": "node scripts/check-sidenav.mjs && node scripts/check-page-head.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
