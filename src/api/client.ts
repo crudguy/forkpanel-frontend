@@ -150,6 +150,12 @@ export function errorText(e: unknown): string {
     case 10007: return '面板处于只读模式，无法执行写操作'
     case 10008: return '页面已过期，请刷新后重试'
     case 10011: return '引导令牌无效或已过期，请在服务器终端重启 panel serve 重新获取'
+    // 10009 = 能力未接入（后端 `ApiError::unsupported`）。它的 message 是**内部能力键名**
+    // （如 `firewall.manage`），直接回显等于把内部标识甩给用户——站点/服务/专业快照三页
+    // 各自用 isUnsupported 给过具体文案，其余视图没有，于是用户看到的就是 `firewall.manage`
+    // 这种不知所云的字符串。补一条通用兜底，全项目一次生效；需要更具体说法的视图仍可
+    // 用 isUnsupported 在自己的 catch 里覆盖。
+    case 10009: return '当前环境未接入该能力（缺少依赖或后端未实装）'
     case 40002: return '配置校验未通过，已自动回滚'
     case 50001: return '路径超出允许范围'
     case 80003: return '操作超时'
