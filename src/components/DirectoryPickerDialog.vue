@@ -7,7 +7,7 @@
  * 但用户可一路回退到 `/`、再进入任意目录——不受 site_root 约束。
  * 越界保存时由后端 resolve_site_root 报错，并在上层弹窗呈现。
  */
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
@@ -33,11 +33,16 @@ const parentOf = (p: string) => {
   const i = p.lastIndexOf('/')
   return i <= 0 ? '/' : p.slice(0, i)
 }
-const joinDir = (base: string, name: string) => norm(base) + '/' + name
+// 注意 base 为 `/` 时的拼接：`norm('/')` 仍是 `/`，直接 `+ '/' + name` 会得到 `//bin`
+// 这种双斜杠路径。它照样能过一次网络请求，但 `visibleRows` 的 walk 是沿 children
+// 里的路径字符串找节点的，`//home` 与 expandTo 展开的 `/home` 是两个不同 key，
+// 于是展开链在根的子级处断掉——树只显示一层，且看不出任何报错。
+const joinDir = (base: string, name: string) => (norm(base) === '/' ? '' : norm(base)) + '/' + name
 
 const ROOT = '/'
 const nodes = reactive<Record<string, Node>>({})
 const selected = ref<string | null>(null)
+const treeEl = ref<HTMLElement | null>(null)
 const newName = ref('')
 const formError = ref('')
 
@@ -63,9 +68,25 @@ async function loadChildren(path: string) {
     n.children = kids
     n.loaded = true
     n.expanded = true // 加载即展开，使展开链路保持可见
+    ensureChildVisible(path) // 被 hidden 过滤掉的层显式接回树上，见函数注释
   } catch (e) {
     n.error = errorText(e)
   } finally { n.loading = false }
+}
+
+/// 把 `path` 接回父节点的 children（若缺失）。
+///
+/// 存在的理由：列表接口一律带 `hidden=false`，隐藏目录（如 `.workbuddy`）不会出现
+/// 在父级结果里。可站点根目录完全可能落在隐藏目录下——此时 walk 走到父级就断了，
+/// 整条**已经展开**的链在视觉上凭空消失。expandTo 既已显式加载这一层，就把它接回
+/// 树上，否则"自动展开到 site_root"只是后台白干活。
+function ensureChildVisible(path: string) {
+  const par = parentOf(path)
+  if (!par) return
+  const pn = nodes[par]
+  if (!pn || !pn.loaded || pn.children.includes(path)) return
+  pn.children.push(path)
+  pn.children.sort((a, b) => basename(a).localeCompare(basename(b)))
 }
 
 // 从根目录逐层展开到 target，使 target 在打开时即处于可见路径上
@@ -98,10 +119,14 @@ function ensureRoot() {
   newName.value = ''
   formError.value = ''
   const ip = norm(props.initialPath || ROOT)
-  expandTo(ip).then(() => {
+  expandTo(ip).then(async () => {
     const n = nodes[ip]
     // 初始路径真实存在则预选中，方便直接确认
     if (n && n.loaded && !n.error) selected.value = ip
+    // 把选中行滚进视野：树默认停在最顶层，不滚动的话"展开到 site_root"
+    // 等于把人送到楼下就走了——看得见路径才算着陆。
+    await nextTick()
+    treeEl.value?.querySelector('.row.sel')?.scrollIntoView({ block: 'center' })
   })
 }
 
@@ -143,7 +168,7 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
     <div class="modal" role="dialog" aria-modal="true">
       <h3>选择目录 <span class="dim tiny">（可浏览服务器任意目录，仅显示目录）</span></h3>
 
-      <div class="tree">
+      <div class="tree" ref="treeEl">
         <div v-if="!visibleRows.length" class="dim empty">读取中…</div>
         <template v-for="row in visibleRows" :key="row.node.path">
           <div class="row" :class="{ sel: selected === row.node.path }"
