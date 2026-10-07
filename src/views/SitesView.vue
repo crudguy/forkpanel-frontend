@@ -171,7 +171,7 @@ async function save() {
     } else {
       if (!name) throw new Error('name required')
       if (!domains.length) throw new Error('domains required')
-      await api.post(API.sites.create(), { name, domains, root })
+      await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
       notice.value = `已创建站点 ${name}`
     }
     closeModal(); await load()
@@ -477,6 +477,9 @@ async function doDeleteCert() {
         <label class="blk row-inline">
           <input type="checkbox" v-model="form.enabled" /> 启用（纳入 Web 服务器配置）
         </label>
+        <p class="hint-line">{{ editing
+          ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
+          : '新建时仅记录初始状态——站点要在列表里点「应用」后才会真正对外服务。' }}</p>
         <p v-if="error" class="err" role="alert">{{ error }}</p>
         <div class="modal-actions">
           <button class="btn-ghost" @click="closeModal">取消</button>
@@ -555,6 +558,8 @@ async function doDeleteCert() {
 .dir-row input { flex: 1; margin-top: 0; }
 .dir-row .btn-sm { flex: none; white-space: nowrap; }
 .row-inline { display: flex; align-items: center; gap: 6px; }
+/* 「启用」开关的后果说明：停用是**真停用**（摘配置 + reload），必须让用户看见代价 */
+.hint-line { margin: -4px 0 14px; font-size: 12px; color: var(--c-text-mute); line-height: 1.6; }
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { width: min(460px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 20px; }
