@@ -25,6 +25,7 @@ import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type S
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 
 // Site 已移入 src/api/types.ts（WafView 此前另存一份删减副本，必然漂移）
 interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string | null; source: string }
@@ -38,6 +39,8 @@ const error = ref('')
 const notice = ref('')
 const busy = ref(false)
 const loading = ref(false)
+/** 站点托管根目录（后端只读下发）。目录选择器的初始定位——不可硬编码，config 可覆盖。 */
+const siteRoot = ref('')
 
 // 数据模型 CRUD 仅看 RBAC 权限点（角色维度，与平台能力无关，owner/admin 恒有）
 const canManage = computed(() => auth.can('site.manage'))
@@ -59,6 +62,8 @@ async function load(silent = false) {
     certs.value = await api.get<Cert[]>(API.certs.list())
     try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
     catch { /* 扫描状态缺失不阻断证书列表 */ }
+    try { siteRoot.value = (await api.get<{ site_root: string }>(API.sites.root())).site_root }
+    catch { /* 旧后端无此端点：选择器降级为默认起始目录，不阻断站点功能 */ }
     if (silent) error.value = '' // 自愈：轮询成功清旧错（站点页不轮询，保留一致语义）
   } catch (e) {
     if (!silent) error.value = errorText(e)
@@ -86,6 +91,12 @@ function sweepSummary(): string {
 
 // ── 新建 / 编辑弹窗 ──
 const modalOpen = ref(false)
+/** 根目录选择器（复用 /files/list 在服务器浏览目录树）。 */
+const pickerOpen = ref(false)
+function onPickRoot(p: string) {
+  form.value.root = p
+  pickerOpen.value = false
+}
 // 站点编辑弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const modalBox = ref<HTMLElement | null>(null)
 useModal(() => modalOpen.value, modalBox, closeModal)
@@ -456,7 +467,12 @@ async function doDeleteCert() {
           <input v-model="form.domains" placeholder="example.com, www.example.com" />
         </label>
         <label class="blk">根目录（留空用站点名，须落在站点根目录内）
-          <input v-model="form.root" placeholder="留空则用站点名" />
+          <div class="dir-row">
+            <input v-model="form.root" placeholder="留空则用站点名" />
+            <button type="button" class="btn-ghost btn-sm" @click="pickerOpen = true">
+              <Icon name="folder" :size="13" /> 浏览…
+            </button>
+          </div>
         </label>
         <label class="blk row-inline">
           <input type="checkbox" v-model="form.enabled" /> 启用（纳入 Web 服务器配置）
@@ -476,6 +492,9 @@ async function doDeleteCert() {
     <ConfirmDialog :open="!!delCert" danger title="删除证书"
       :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
       confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
+
+    <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
+      @select="onPickRoot" @cancel="pickerOpen = false" />
 
     <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱 -->
     <div v-if="sslModal" class="mask" @click.self="sslModal = null">
@@ -532,6 +551,9 @@ async function doDeleteCert() {
 .badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
+.dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.dir-row input { flex: 1; margin-top: 0; }
+.dir-row .btn-sm { flex: none; white-space: nowrap; }
 .row-inline { display: flex; align-items: center; gap: 6px; }
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { width: min(460px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);

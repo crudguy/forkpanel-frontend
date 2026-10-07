@@ -77,6 +77,7 @@ export const API = {
     list: () => '/api/v1/sites',
     create: () => '/api/v1/sites',
     apply: () => '/api/v1/sites/apply',
+    root: () => '/api/v1/sites/root',
     get: (id: number) => `/api/v1/sites/${id}`,
     patch: (id: number) => `/api/v1/sites/${id}`,
     remove: (id: number) => `/api/v1/sites/${id}`,
