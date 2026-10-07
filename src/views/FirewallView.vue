@@ -107,8 +107,14 @@ async function doDelete() {
   <div>
     <div class="page-head">
       <div>
-        <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
-        <span class="badge">后端：{{ fwBackendLabel(backend) }}</span>
+        <!-- 无可用后端时 `active/backend` 从未被赋值（请求被门控挡掉），此时若照常渲染
+             「未启用 / 后端：—」，会被读成"防火墙关了，点『启用』就行"——而真实情况是
+             根本没有受支持的后端。故不支持时给出「不可用」，原因交给下方 EmptyState 说明。 -->
+        <template v-if="auth.supported(CAP.FIREWALL_MANAGE)">
+          <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
+          <span class="badge">后端：{{ fwBackendLabel(backend) }}</span>
+        </template>
+        <span v-else class="badge">不可用</span>
       </div>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy || !canManage" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>

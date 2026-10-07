@@ -183,7 +183,7 @@ function closeBrowse() { browse.value = null }
           </label>
           <button class="btn-primary" :disabled="!canManage || busy || !form.name || (form.engine !== 'sqlite' && !form.user.trim())" @click="create">添加</button>
         </div>
-        <p class="tip">仅提供列表 / 只读浏览 / 备份，<b>不提供 Web SQL 终端</b>（安全与资源隔离考虑）。</p>
+        <p class="tip">SQLite 为内建引擎，可<b>只读浏览与查询</b>（SQL 控制台仅接受只读语句）；MySQL / PostgreSQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
       </section>
 
       <div class="card flush" v-if="conns.length">
