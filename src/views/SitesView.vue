@@ -294,7 +294,10 @@ async function doDeleteCert() {
   <div>
     <div class="page-head">
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy" @click="load()"><Icon name="refresh" :size="15" /> 刷新</button>
+      <!-- 刷新是通用工具动作，不是本页目的：与 FilesView / AuditView 一致用 ghost，
+           把唯一的橙色实心留给「新建站点」。此前两个 btn-primary 并排，两块发光渐变
+           把主次拉平了，页面没有视觉焦点。 -->
+      <button class="btn-ghost" :disabled="busy" @click="load()"><Icon name="refresh" :size="15" /> 刷新</button>
       <button class="btn-primary" :disabled="!canManage || busy" @click="openCreate">
         <Icon name="plus" :size="15" /> 新建站点
       </button>
@@ -370,7 +373,7 @@ async function doDeleteCert() {
     </section>
 
     <!-- 站点列表 -->
-    <div class="sec-head"><Icon name="globe" :size="16" /> 站点</div>
+    <div class="sec-head block"><Icon name="globe" :size="16" /> 站点</div>
     <div v-if="loading && !sites.length" class="skeleton box" />
     <div v-else-if="sites.length" class="card flush">
       <table class="fixed">
@@ -406,7 +409,7 @@ async function doDeleteCert() {
     <EmptyState v-else title="暂无站点" hint="点击右上角「新建站点」添加虚拟主机" />
 
     <!-- 证书列表 -->
-    <div class="sec-head"><Icon name="lock" :size="16" /> 证书</div>
+    <div class="sec-head block"><Icon name="lock" :size="16" /> 证书</div>
     <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
     <div v-if="loading && !certs.length" class="skeleton box" />
     <div v-else-if="certs.length" class="card flush">
@@ -510,9 +513,20 @@ async function doDeleteCert() {
 .waf label.inline input { width: auto; }
 .tiny { font-size: 11.5px; }
 .cert-sweep { margin: 0 0 10px; padding-left: 2px; }
-.notice { color: var(--c-ok, #3fb950); background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3);
+/* 「横幅」语言（与 WafView / LoginView 的 .notice / .warn 同一套）：
+   内边距 + 圆角 + 描边，颜色一律走主题变量。
+   此前 .notice 硬编码绿色、.tip.warn 硬编码暗琥珀，亮色主题下不随 --c-ok / --c-warn
+   切换；.tip.warn 更只覆写了 color/background/border-color 三项，而 .tip 自身
+   padding/border-width/border-radius 全为 0，于是「警示条」实测渲染成
+   padding:0 / border:0 / radius:0、高仅 19px 的一条裸色带，且 margin:0 导致它
+   与下方卡片严丝合缝贴合（实测 0px），文字还顶到内容区左边缘。 */
+.notice { color: var(--c-ok); background: var(--c-ok-soft);
+  border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent);
   padding: 8px 12px; border-radius: 8px; font-size: 13px; }
-.tip.warn { color: #d29922; background: rgba(210,153,34,.12); border-color: rgba(210,153,34,.3); }
+.tip.warn { color: var(--c-warn); background: var(--c-warn-bg);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
+  padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6;
+  margin: 0 0 14px; }
 .card.disabled { opacity: .6; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }

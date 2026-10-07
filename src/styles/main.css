@@ -176,6 +176,11 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
 .spacer { flex: 1; }
 .muted { color: var(--c-text-dim); }
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+/* 页面级区块标题（`站点` / `证书` 这类直接排在卡片流之间的标题）加 .block。
+   卡片内的 .sec-head 是卡片标题，不能加上间距——它会顶掉卡片 padding；
+   而顶层标题若只有下间距，就与上方块级元素贴合（实测 0px），看上去比它自己的
+   内容还近，层级是反的。故用显式修饰类补间距，只加在需要的地方。 */
+.sec-head.block { margin-top: 26px; }
 .sec-head .icon { color: var(--c-primary); }
 .mono { font-family: var(--mono); }
 
