@@ -4,9 +4,13 @@
  *
  * 设计边界（与后端一致）：
  * - 站点的「定义」(sites 表) 与「下发到 Web 服务器的配置」是两件事。
- *   列表 / 新建 / 编辑 / 删除 只读写数据模型，无需 Web 服务器在场，始终可用。
- * - 「应用配置」/「重载」需要 webserver.manage 能力（本机装了 nginx/caddy 才行）；
- *   未检测到时按钮置灰并给出原因，绝不伪造成功。
+ * - **建站需要 Web 服务器底座**：未检测到 nginx 时「新建站点」置灰，后端 create
+ *   同样返回 501（webserver.manage）——否则只会造出「建好了但永远打不开」的
+ *   空中楼阁。列表 / 编辑 / 删除 仍只读写数据模型，不依赖底座。
+ * - 「应用配置」/「重载」需要 webserver.manage 能力；未检测到时按钮置灰并给出
+ *   原因，绝不伪造成功。
+ * - 列表「状态」的判据是 `deployed`（配置是否真下发）而非 `enabled`（期望状态）：
+ *   新建后 enabled 即为 true，但此刻 Web 服务器里并无此站点，显示「运行中」就是撒谎。
  * - SSL 的 ACME 签发/续期同理受 ssl.acme 能力门禁；证书「删除」是纯数据操作，随时可用。
  * - 站点 WAF 与站点配置**同一次 apply** 下发（它本来就是 nginx 配置的一部分）。
  *   两条与后端严格对齐的语义：`waf` 缺省 = 保留库中现值（不是关闭）、
@@ -54,6 +58,26 @@ const sslReady = computed(() => (sslSupported.value || selfSignedSupported.value
 const sslHint = computed(() => (sslReady.value ? '' : (canSsl.value ? '需 openssl 或 ACME' : '无 ssl.manage 权限')))
 const canApply = computed(() => webSupported.value && canManage.value)
 const canReload = computed(() => webSupported.value && canManage.value)
+// 建站与配置下发同源：没有底座就不许建（后端 create 亦 501，前端只是提前挡住并说明原因）
+const canCreate = computed(() => webSupported.value && canManage.value)
+const createHint = computed(() => {
+  if (!canManage.value) return '无 site.manage 权限'
+  return webSupported.value ? '' : '需先安装并启动 Web 服务器（nginx）——否则站点建了也无法访问'
+})
+
+/**
+ * 站点状态三态。判据是 `deployed`（配置是否真下发）而不是 `enabled`（期望状态）：
+ * 后者在新建后即为 true，但此刻 Web 服务器里根本没有这个站点。
+ */
+function siteState(s: Site): { label: string; cls: string; title: string } {
+  if (!s.enabled) {
+    return { label: '已停用', cls: '', title: '已从 Web 服务器摘除配置（或从未启用）' }
+  }
+  if (!s.deployed) {
+    return { label: '未下发', cls: 'badge-warn', title: '已登记，但配置尚未下发到 Web 服务器；点「应用」后才会对外服务' }
+  }
+  return { label: '运行中', cls: 'badge-ok', title: '配置已下发到 Web 服务器并已 reload' }
+}
 
 async function load(silent = false) {
   if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
@@ -314,7 +338,7 @@ async function doDeleteCert() {
            把唯一的橙色实心留给「新建站点」。此前两个 btn-primary 并排，两块发光渐变
            把主次拉平了，页面没有视觉焦点。 -->
       <button class="btn-ghost" :disabled="busy" @click="load()"><Icon name="refresh" :size="15" /> 刷新</button>
-      <button class="btn-primary" :disabled="!canManage || busy" @click="openCreate">
+      <button class="btn-primary" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
         <Icon name="plus" :size="15" /> 新建站点
       </button>
     </div>
@@ -323,7 +347,8 @@ async function doDeleteCert() {
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
     <div v-if="!webSupported" class="tip warn">
-      未检测到受支持的 Web 服务器（nginx / caddy）：站点「定义」可正常管理，但「应用配置 / 重载」暂不可用。
+      未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
+      请先在主机上安装并启动 nginx，再回到此页刷新。
     </div>
 
     <!-- 应用站点配置（受 webserver 能力门禁） -->
@@ -410,7 +435,7 @@ async function doDeleteCert() {
               </template>
               <span v-else class="dim">—</span>
             </td>
-            <td><span class="badge" :class="s.enabled ? 'badge-ok' : 'badge-warn'">{{ s.enabled ? '启用' : '停用' }}</span></td>
+            <td><span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span></td>
             <td><span class="badge" :class="s.tls ? 'badge-ok' : 'badge-danger'">{{ s.tls ? '已配置' : '无' }}</span></td>
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(s)"><Icon name="edit" :size="13" /> 编辑</button>

@@ -88,7 +88,10 @@ export interface Site {
   root: string
   /** API 口径：static | proxy | php */
   kind: string
+  /** 期望状态：是否已纳入 Web 服务器配置（新建默认 true）。**不**代表正在服务 */
   enabled: boolean
+  /** 配置是否已真实下发到 Web 服务器（apply 写入 conf_path 后为 true） */
+  deployed: boolean
   tls: boolean
   created_at?: number
   waf_enabled: boolean
