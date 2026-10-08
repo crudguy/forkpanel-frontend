@@ -200,7 +200,7 @@ async function applyConfig() {
     const kind = form.value.kind
     if (kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
     if (kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
-    await api.post(API.sites.apply(), {
+    const r = await api.post<{ deployed?: boolean }>(API.sites.apply(), {
       name,
       domains,
       root: form.value.root.trim() || name,
@@ -212,7 +212,12 @@ async function applyConfig() {
       fpm: kind === 'php' ? form.value.fpm.trim() : undefined,
       waf: wafPayload(),
     })
-    notice.value = `已应用配置 ${name}${form.value.wafOn ? `（WAF ${form.value.wafProfile}）` : ''}`
+    // 后端对停用态站点只存配置不下发：按返回的 deployed 标志给不同提示，不伪造成功。
+    if (r && r.deployed === false) {
+      notice.value = `站点 ${name} 处于停用状态：配置已保存但未下发，启用后才会生效`
+    } else {
+      notice.value = `已应用配置 ${name}${form.value.wafOn ? `（WAF ${form.value.wafProfile}）` : ''}`
+    }
     form.value = emptyForm()
     await load()
   } catch (e) {

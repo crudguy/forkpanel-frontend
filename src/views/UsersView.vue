@@ -127,7 +127,11 @@ onMounted(load)
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.username }}</td>
-              <td><span class="badge badge-primary">{{ roleLabel(u.role) }}</span></td>
+              <td>
+                <span class="badge badge-primary">{{ roleLabel(u.role) }}</span>
+                <span v-if="u.role === 'owner'" class="badge badge-soft"
+                      title="首启向导创建的初始管理员账号，受保护：不可删除、不可禁用">引导账号</span>
+              </td>
               <td class="muted">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
               <td><span class="badge" :class="u.disabled ? 'badge-danger' : 'badge-ok'">{{ u.disabled ? '已禁用' : '正常' }}</span></td>
               <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : ''">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
@@ -139,7 +143,6 @@ onMounted(load)
                 <button v-if="u.role !== 'owner'" class="btn-danger btn-sm" :disabled="!canManage" @click="askDelete(u)">
                   <Icon name="trash" :size="14" /> 删除
                 </button>
-                <span v-else class="badge">引导账号</span>
               </td>
             </tr>
             <!-- colspan 必须等于表头列数（用户名/角色/权限范围/状态/MFA/最后登录/操作 = 7）。
@@ -207,6 +210,7 @@ onMounted(load)
 .muted { color: var(--c-text-dim); }
 .badge-ok { color: var(--c-ok); }
 .badge-danger { color: var(--c-danger); }
+.badge-soft { color: var(--c-text-dim); background: rgba(139,148,158,.15); border-color: transparent; }
 
 /* 弹窗（与 ServicesView/CronView 一致） */
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center;
