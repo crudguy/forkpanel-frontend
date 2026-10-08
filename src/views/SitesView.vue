@@ -430,10 +430,10 @@ async function doDeleteCert() {
             <td><span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span></td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <td class="actions">
-              <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(s)"><Icon name="edit" :size="13" /> 编辑</button>
-              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /> 重载</button>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /> SSL</button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="delTarget = s"><Icon name="trash" :size="13" /> 删除</button>
+              <button class="btn-ghost btn-sm" :disabled="!canManage" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /></button>
+              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /></button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /></button>
+              <button class="btn-ghost btn-sm danger" :disabled="!canManage" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /></button>
             </td>
           </tr>
         </tbody>
