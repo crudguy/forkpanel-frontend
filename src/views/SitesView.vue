@@ -224,7 +224,9 @@ async function save() {
     }
     // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
     if (editing.value) {
-      await api.patch(API.sites.patch(editing.value.id), { domains, root, enabled: form.value.enabled })
+      // name 一并提交：后端 patch 自本次起支持改名（nginx 配置按域名派生、
+      // root 已是绝对路径、证书按 domain，改名都不影响，也不会重新下发配置）
+      await api.patch(API.sites.patch(editing.value.id), { name, domains, root, enabled: form.value.enabled })
     } else {
       if (!name) throw new Error('name required')
       if (!domains.length) throw new Error('domains required')
@@ -443,7 +445,7 @@ async function doDeleteCert() {
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">
-      <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
+      <div ref="modalBox" class="modal wide site-modal" role="dialog" aria-modal="true">
         <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
@@ -452,18 +454,7 @@ async function doDeleteCert() {
             下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
         </div>
         <label class="blk">名称
-          <input v-model="form.name" :disabled="!!editing" placeholder="my-site" />
-        </label>
-        <label class="blk">域名（逗号分隔）
-          <input v-model="form.domains" placeholder="example.com, www.example.com" />
-        </label>
-        <label class="blk">根目录（留空用站点名，须落在站点根目录内）
-          <div class="dir-row">
-            <input v-model="form.root" placeholder="留空则用站点名" />
-            <button type="button" class="btn-ghost btn-sm" @click="pickerOpen = true">
-              <Icon name="folder" :size="13" /> 浏览…
-            </button>
-          </div>
+          <input v-model="form.name" placeholder="my-site" />
         </label>
         <label class="blk">类型
           <select v-model="form.kind" :disabled="!webSupported">
@@ -472,11 +463,22 @@ async function doDeleteCert() {
             <option value="php">PHP (php-fpm)</option>
           </select>
         </label>
-        <label v-if="form.kind === 'proxy'" class="blk">后端（逗号分隔）
+        <label class="blk full">域名（逗号分隔）
+          <input v-model="form.domains" placeholder="example.com, www.example.com" />
+        </label>
+        <label class="blk full">根目录（留空用站点名，须落在站点根目录内）
+          <div class="dir-row">
+            <input v-model="form.root" placeholder="留空则用站点名" />
+            <button type="button" class="btn-ghost btn-sm" @click="pickerOpen = true">
+              <Icon name="folder" :size="13" /> 浏览…
+            </button>
+          </div>
+        </label>
+        <label v-if="form.kind === 'proxy'" class="blk full">后端（逗号分隔）
           <input v-model="form.upstreams" :disabled="!webSupported"
             placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" />
         </label>
-        <label v-if="form.kind === 'php'" class="blk">php-fpm
+        <label v-if="form.kind === 'php'" class="blk full">php-fpm
           <input v-model="form.fpm" :disabled="!webSupported"
             placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
         </label>
@@ -706,7 +708,19 @@ sudo update-ca-certificates</pre>
 .modal h3 { margin: 0 0 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 /* 根证书引导弹窗：比普通弹窗宽——内含分步说明与命令块，窄了命令会折行难读 */
-.modal.wide { width: min(760px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
+.modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
+/* 新建/编辑站点弹窗：字段两列网格（仅作用于站点弹窗，不影响 CA 指引弹窗）。
+   h3 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
+.modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
+.modal.wide.site-modal > h3 { grid-column: 1 / -1; margin-bottom: 2px; }
+.modal.wide.site-modal > .modal-actions { grid-column: 1 / -1; }
+.modal.wide.site-modal > .blk.full,
+.modal.wide.site-modal > .waf,
+.modal.wide.site-modal > .ssl,
+.modal.wide.site-modal > .hint-note,
+.modal.wide.site-modal > .tip,
+.modal.wide.site-modal > .err,
+.modal.wide.site-modal > .row-inline { grid-column: 1 / -1; }
 /* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
    .modal.wide 自身即滚动容器，sticky 相对它的 padding box 生效；弹窗下内边距改由
    操作条自己承担（故 .modal.wide 的 padding-bottom 归零），负左右外边距让操作条通栏。 */
