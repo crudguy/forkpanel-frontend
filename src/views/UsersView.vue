@@ -155,7 +155,7 @@ onMounted(load)
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="showModal" class="mask" @click.self="showModal = false">
-      <div class="box">
+      <div class="modal">
         <div class="m-head">
           <Icon :name="editing ? 'edit' : 'user-plus'" :size="16" />
           <span>{{ editing ? '编辑用户' : '新建用户' }}</span>
@@ -202,7 +202,7 @@ onMounted(load)
 
 <style scoped>
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
-.box { height: auto; }
+/* 弹窗外观统一取 main.css 的公共 .mask / .modal（原 .box 是本页独有的一套，已废弃） */
 .tip p { font-size: 13.5px; color: var(--c-text-dim); line-height: 1.7; margin: 6px 0; }
 .cmd { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm);
        padding: 12px 14px; font-family: var(--mono); font-size: 13px; color: var(--c-primary); margin: 10px 0; }
@@ -212,10 +212,6 @@ onMounted(load)
 .badge-danger { color: var(--c-danger); }
 .badge-soft { color: var(--c-text-dim); background: rgba(139,148,158,.15); border-color: transparent; }
 
-/* 弹窗（与 ServicesView/CronView 一致） */
-/* 遮罩取 main.css 的公共 .mask；弹窗主体是 .box，保留本页式样 */
-.box { width: 420px; max-width: 92vw; background: var(--c-surface); border: 1px solid var(--c-border);
-       border-radius: var(--radius); padding: 18px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
 .m-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 14px; }
 .m-acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .field { margin-bottom: 14px; }

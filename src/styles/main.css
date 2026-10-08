@@ -277,3 +277,8 @@ tbody tr:last-child td { border-bottom: none; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 /* 宽弹窗变体：多字段表单（站点编辑）与分步说明（根证书指引）用 */
 .modal.wide { width: min(620px, 94vw); }
+/* 纵向流式派生：内部子元素依次竖排并留缝。用于**没有 .blk 字段块**的弹窗
+   （确认框 / 安装包 / 计划任务编辑这类自己用 .m-head、.detail、.acts 排的）。
+   外观仍由 .modal 提供，此处只补排布——写成单独的 .stack 而不是给 .modal
+   再加一条规则，是为了让 check-modal.mjs 能守住"外观只有一个来源"。 */
+.modal.stack { display: flex; flex-direction: column; gap: 12px; }

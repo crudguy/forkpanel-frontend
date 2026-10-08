@@ -53,7 +53,7 @@ useModal(() => props.open, box, cancel)
 
 <template>
   <div v-if="open" class="mask" @click.self="cancel">
-    <div ref="box" class="box" role="dialog" aria-modal="true">
+    <div ref="box" class="modal stack" role="dialog" aria-modal="true">
       <!-- 已安装的软件也能打开此弹窗（换版本），此时标题要说清是"切换"而非"安装" -->
       <h3>{{ installed ? '切换版本' : '安装' }} {{ label || name }}</h3>
       <p class="detail">
@@ -89,9 +89,7 @@ useModal(() => props.open, box, cancel)
 </template>
 
 <style scoped>
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 50; }
-.box { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius);
-       padding: 20px; width: min(440px, 92vw); display: flex; flex-direction: column; gap: 12px; }
+/* 遮罩与弹窗外观统一取 main.css 的公共 .mask / .modal；.stack 只补内部纵向排布 */
 h3 { margin: 0; font-size: 16px; }
 .detail { margin: 0; font-size: 13px; color: var(--c-text-dim); line-height: 1.6; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }

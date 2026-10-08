@@ -198,7 +198,7 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
 
       <!-- 编辑弹窗：PATCH /cron/jobs/{id} -->
       <div v-if="edit" class="mask" @click.self="closeEdit">
-        <div class="box" role="dialog" aria-modal="true">
+        <div class="modal wide stack" role="dialog" aria-modal="true">
           <header class="m-head">
             <div style="flex:1;min-width:0">
               <h3 class="mono">{{ edit.id }}</h3>
@@ -245,10 +245,7 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
 
 <style scoped>
 /* 编辑弹窗（与 ServicesView 弹窗样式保持一致） */
-/* 遮罩取 main.css 的公共 .mask；弹窗主体是 .box（较宽的多字段表单），保留本页式样 */
-.box { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius);
-       padding: 20px; width: min(680px, 94vw); max-height: 86vh; overflow: auto;
-       display: flex; flex-direction: column; gap: 14px; }
+/* 弹窗取公共 .modal.wide + .stack（纵向流式）；本页只保留 .m-* 结构式样 */
 .m-head { display: flex; align-items: flex-start; gap: 10px; }
 .m-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .m-desc { margin: 4px 0 0; font-size: 13px; color: var(--c-text-dim); }

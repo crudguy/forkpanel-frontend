@@ -38,7 +38,7 @@ useModal(() => props.open, box, cancel)
 
 <template>
   <div v-if="open" class="mask" @click.self="cancel">
-    <div ref="box" class="box" role="dialog" aria-modal="true">
+    <div ref="box" class="modal stack" role="dialog" aria-modal="true">
       <h3 :class="{ danger }">{{ title }}</h3>
       <p v-if="detail" class="detail">{{ detail }}</p>
 
@@ -58,9 +58,7 @@ useModal(() => props.open, box, cancel)
 </template>
 
 <style scoped>
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 50; }
-.box { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius);
-       padding: 20px; width: min(420px, 92vw); display: flex; flex-direction: column; gap: 12px; }
+/* 遮罩与弹窗外观统一取 main.css 的公共 .mask / .modal；.stack 只补内部纵向排布 */
 h3 { margin: 0; font-size: 16px; }
 h3.danger { color: var(--c-danger); }
 .detail { margin: 0; font-size: 13px; color: var(--c-text-dim); line-height: 1.6; }
