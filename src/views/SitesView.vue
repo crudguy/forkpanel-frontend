@@ -702,13 +702,11 @@ sudo update-ca-certificates</pre>
 .hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
 .hint-note.is-warn { border-left-color: var(--c-warn); }
 .hint-note.is-warn .ic { color: var(--c-warn); }
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { width: min(460px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-radius: 12px; padding: 20px; }
-.modal h3 { margin: 0 0 16px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-/* 根证书引导弹窗：比普通弹窗宽——内含分步说明与命令块，窄了命令会折行难读 */
-.modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
+/* 遮罩 / 弹窗框 / 标题 / 操作条基础式样统一取 main.css 的公共 .mask / .modal / .modal-actions */
+
+/* 根证书引导与站点编辑都用宽版（宽度与滚动见公共 .modal.wide）；此处只补
+   sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
+.modal.wide { padding-bottom: 0; }
 /* 新建/编辑站点弹窗：字段两列网格（仅作用于站点弹窗，不影响 CA 指引弹窗）。
    h3 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
 .modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }

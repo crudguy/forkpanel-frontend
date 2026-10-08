@@ -251,3 +251,29 @@ tbody tr:last-child td { border-bottom: none; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .row > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); flex: 1; min-width: 140px; }
 .row > label input, .row > label select { width: 100%; }
+
+/* ── 弹窗（公共基础）─────────────────────────────────────────
+   此前 .mask/.modal 在 Sites / Certs / Databases / Files / Security / Cron /
+   Users 里**各抄一份且参数互不相同**：宽度 400/440/460、圆角 12/14、背景
+   --c-surface 与 --c-surface-2 混用、遮罩透明度 .45/.5、z-index 50/60——
+   同一个弹窗在不同页面长得不一样。统一到此处，杜绝继续漂移。
+   ⭐层级约定：**一级弹窗 mask = 50**；二级浮层（目录选择器 / SQL 控制台 /
+   回收站面板）固定为 60，保证它们始终压在弹窗之上。此前 Files / Databases /
+   Security 把一级弹窗也设成 60，与二级浮层同级，叠放顺序退化成由 DOM 顺序
+   决定（有可能反过来被浮层盖住），故统一降到 50。 */
+.mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal {
+  width: min(440px, 92vw); max-height: 86vh; overflow: auto;
+  background: var(--c-surface-2); border: 1px solid var(--c-border);
+  border-radius: 12px; padding: 20px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.modal h3 { margin: 0 0 12px; font-size: 16px; }
+.modal .blk { display: block; margin: 12px 0; font-size: 13px; color: var(--c-text-dim); }
+.modal .blk select, .modal .blk input {
+  width: 100%; margin-top: 6px; padding: 8px 10px;
+  border: 1px solid var(--c-border); border-radius: 8px;
+  background: var(--c-surface); color: var(--c-text); font-size: 14px; font-family: inherit;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+/* 宽弹窗变体：多字段表单（站点编辑）与分步说明（根证书指引）用 */
+.modal.wide { width: min(620px, 94vw); }

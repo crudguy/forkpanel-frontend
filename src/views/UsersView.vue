@@ -213,8 +213,7 @@ onMounted(load)
 .badge-soft { color: var(--c-text-dim); background: rgba(139,148,158,.15); border-color: transparent; }
 
 /* 弹窗（与 ServicesView/CronView 一致） */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center;
-        justify-content: center; z-index: 50; }
+/* 遮罩取 main.css 的公共 .mask；弹窗主体是 .box，保留本页式样 */
 .box { width: 420px; max-width: 92vw; background: var(--c-surface); border: 1px solid var(--c-border);
        border-radius: var(--radius); padding: 18px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
 .m-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 14px; }

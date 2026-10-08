@@ -325,11 +325,7 @@ async function doDisable() {
 .inp { padding: 4px 8px; border: 1px solid var(--c-border, #444); border-radius: var(--radius, 6px); background: transparent; color: inherit; font-family: var(--mono); }
 .break { word-break: break-all; }
 /* 关闭 MFA 输入弹窗（与其他视图同形态） */
-.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal { background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: 12px; padding: 20px 24px; width: min(400px, 92vw); }
-.modal h3 { margin: 0 0 10px; font-size: 16px; }
-.modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
-.modal .blk input { margin-top: 6px; }
+/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .muted { color: var(--c-text-dim); }
 </style>

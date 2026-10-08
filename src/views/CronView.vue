@@ -245,7 +245,7 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
 
 <style scoped>
 /* 编辑弹窗（与 ServicesView 弹窗样式保持一致） */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; }
+/* 遮罩取 main.css 的公共 .mask；弹窗主体是 .box（较宽的多字段表单），保留本页式样 */
 .box { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius);
        padding: 20px; width: min(680px, 94vw); max-height: 86vh; overflow: auto;
        display: flex; flex-direction: column; gap: 14px; }

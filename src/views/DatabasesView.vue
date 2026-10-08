@@ -311,11 +311,7 @@ function closeBrowse() { browse.value = null }
 .sep { color: var(--c-text-dim); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .ok-note { color: var(--c-ok, #3fb950); }
-.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal { background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 12px; padding: 20px 24px; width: min(440px, 92vw); }
-.modal h3 { margin: 0 0 10px; font-size: 16px; }
-.modal .blk { display: block; margin-bottom: 12px; font-size: 13px; }
-.modal .blk input { margin-top: 6px; }
+/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 .restore-warn { font-size: 13px; color: var(--c-text-dim); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .danger-btn { background: #C73E1F; }

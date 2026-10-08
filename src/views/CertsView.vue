@@ -301,12 +301,7 @@ table.fixed { table-layout: fixed; width: 100%; }
 .switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
 .switch input:disabled + i { opacity: .5; cursor: not-allowed; }
 
-/* 弹窗（复用 SitesView 的 .mask/.modal 结构） */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; }
-.modal { width: 440px; max-width: calc(100vw - 32px); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
-.modal h3 { margin: 0 0 14px; font-size: 16px; }
-.modal .blk { display: block; font-size: 13px; color: var(--c-text-dim); margin: 12px 0; }
-.modal .blk select, .modal .blk input { width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-surface); color: var(--c-text); font-size: 14px; font-family: inherit; }
+/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: 10px; cursor: pointer; font-size: 13px; }
 .radios label.on { border-color: var(--c-primary); background: var(--c-active); }
