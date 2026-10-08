@@ -92,6 +92,9 @@ export const API = {
 
   certs: {
     list: () => '/api/v1/certs',
+    // 面板本地根证书（ca.crt，PEM 包装的 X.509，供系统/浏览器信任库导入）。
+    // 自签 leaf 全部由它签发：用户导入一次，此后全部本地 HTTPS 不再报「非私密连接」。
+    ca: () => '/api/v1/ssl/ca',
     renewSweep: () => '/api/v1/certs/renew-sweep',
     renew: (id: number) => `/api/v1/certs/${id}/renew`,
     autoRenew: (id: number) => `/api/v1/certs/${id}/auto-renew`,
