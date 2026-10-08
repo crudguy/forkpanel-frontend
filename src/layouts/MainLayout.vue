@@ -230,8 +230,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .mi:hover { background: var(--c-hover); }
 
-.content { flex: 1; padding: 24px 28px 40px; }
-.wrap { max-width: 1360px; margin: 0 auto; }
+/* 内容区随视口填满：左内边距与顶栏保持一致（同为 22px），两者左边缘因此对齐。 */
+.content { flex: 1; padding: 22px 22px 40px; }
+/* 不设 max-width。原先 `max-width:1360px; margin:0 auto` 会让视口超过 ~1650px 后
+   内容停止增长并居中，1920 下左右各空 163px、2560 下各空 483px——宽屏上大片是死的。
+   面板以表格/卡片为主，填满比"限制行长"更实用，故直接铺满可用宽度。 */
+.wrap { width: 100%; }
 
 @media (max-width: 720px) {
   .sysinfo { display: none; }
