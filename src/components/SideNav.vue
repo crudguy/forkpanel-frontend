@@ -47,7 +47,7 @@ const items = computed(() => [
   // 门禁用 METRICS_READ 兜底而非 WEBSERVER_MANAGE：站点 CRUD（静态站）不依赖
   // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
   // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
-  { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
+  { to: '/sites', label: '网站', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
   // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
   { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
   // 证书与 WAF 同族：单站 SSL 在「编辑站点」弹窗配，本页统一总览/申请/续期/信任根证书。
