@@ -51,6 +51,7 @@ const ICONS: Record<string, string> = {
   'user-plus': '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/>',
   check: '<path d="M5 12l4.5 4.5L19 7"/>',
   alert: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   download: '<path d="M12 3v12M7 11l5 5 5-5M4 21h16"/>',
   chart: '<path d="M4 4v16h16"/><path d="M7 14l3-4 3 2 4-6"/>',
   gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-4"/>',

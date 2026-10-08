@@ -480,11 +480,15 @@ async function doDeleteCert() {
           </div>
         </label>
         <label class="blk row-inline">
-          <input type="checkbox" v-model="form.enabled" /> 启用（纳入 Web 服务器配置）
+          <input type="checkbox" v-model="form.enabled" />
+          <span>启用（纳入 Web 服务器配置）</span>
         </label>
-        <p class="hint-line">{{ editing
-          ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
-          : '新建时仅记录初始状态——站点要在列表里点「应用」后才会真正对外服务。' }}</p>
+        <div class="hint-note" :class="{ 'is-warn': !!editing }">
+          <Icon name="info" :size="15" class="ic" />
+          <span>{{ editing
+            ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
+            : '新建时仅记录初始状态——站点要在列表里点「应用」后才会真正对外服务。' }}</span>
+        </div>
         <p v-if="error" class="err" role="alert">{{ error }}</p>
         <div class="modal-actions">
           <button class="btn-ghost" @click="closeModal">取消</button>
@@ -562,9 +566,23 @@ async function doDeleteCert() {
 .dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .dir-row input { flex: 1; margin-top: 0; }
 .dir-row .btn-sm { flex: none; white-space: nowrap; }
-.row-inline { display: flex; align-items: center; gap: 6px; }
-/* 「启用」开关的后果说明：停用是**真停用**（摘配置 + reload），必须让用户看见代价 */
-.hint-line { margin: -4px 0 14px; font-size: 12px; color: var(--c-text-mute); line-height: 1.6; }
+.row-inline { display: flex; align-items: flex-start; gap: 7px; }
+/* 文字可能折行，勾选框对齐首行而非整体垂直居中；并复位 width——
+   全局 `input{width:100%}` 会把原生勾选框拉成宽盒子，勾选框与文字之间出现大段空隙、
+   文字被挤到右侧折行（与 .waf label.inline input / .chk input 同一处坑，故同样复位）。 */
+.row-inline input[type="checkbox"] { width: auto; margin: 4px 0 0; }
+/* 「启用」开关的后果说明：停用是**真停用**（摘配置 + reload），必须让用户看见代价。
+   原 .hint-line（12px + --c-text-mute）太小太淡、又用负 margin 紧贴勾选框，读起来像
+   "被禁用的残留文字"；改为带 info 图标的信息条：13px + --c-text-dim，柔和底 +
+   左侧主色描边，与勾选框拉开间距。编辑态（真停用后果）转琥珀色强调。 */
+.hint-note { display: flex; gap: 8px; align-items: flex-start;
+  margin: 0 0 14px; padding: 9px 11px; border-radius: 8px;
+  font-size: 13px; line-height: 1.6; color: var(--c-text-dim);
+  background: var(--c-hover); border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-primary); }
+.hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
+.hint-note.is-warn { border-left-color: var(--c-warn); }
+.hint-note.is-warn .ic { color: var(--c-warn); }
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { width: min(460px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: 12px; padding: 20px; }
