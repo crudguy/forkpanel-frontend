@@ -699,7 +699,12 @@ sudo update-ca-certificates</pre>
 /* 根证书入口：证书区标题右侧（.sec-head 是 flex，margin-left:auto 把它推到最右） */
 .ca-btn { margin-left: auto; }
 /* 根证书引导弹窗：比普通弹窗宽——内含分步说明与命令块，窄了命令会折行难读 */
-.modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; }
+.modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
+/* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
+   .modal.wide 自身即滚动容器，sticky 相对它的 padding box 生效；弹窗下内边距改由
+   操作条自己承担（故 .modal.wide 的 padding-bottom 归零），负左右外边距让操作条通栏。 */
+.modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
+  padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
 .ca-lede { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: var(--c-text-dim); }
 .ca-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 9px 11px;
   border-radius: 8px; font-size: 12.5px; line-height: 1.6; color: var(--c-text-dim);
