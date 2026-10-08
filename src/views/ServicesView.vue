@@ -62,7 +62,8 @@ function labelOf(n: string): string { return labelMap.value.get(n) ?? n }
 const externalPkgs = ref<Set<string>>(new Set())
 /**
  * 可升级清单（探测结果）。
- * 独立于 pkgs 软新鲜度单独存：它要跑一次 apt list --upgradable（秒级子进程），
+ * 独立于 pkgs 软新鲜度单独存：它要对白名单跑一次 apt-cache policy（秒级子进程），
+ * 判定取版本表最高版（跨源）而非 apt 的 Candidate，避免 pin 压低时漏报更新。
  * 失败时**不写 error**（否则常驻卡片抖动），空数组=无可升级项，属正常状态。
  */
 const upgradable = ref<UpgradablePkg[]>([])
