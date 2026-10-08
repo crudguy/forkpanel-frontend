@@ -53,9 +53,13 @@ const canSsl = computed(() => auth.can('ssl.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
 const sslSupported = computed(() => auth.supported(CAP.SSL_ACME))
 const selfSignedSupported = computed(() => auth.supported(CAP.SSL_SELFSIGNED))
-// SSL 任一渠道可用即可点（自签离线可用；ACME 需公网+客户端）
-const sslReady = computed(() => (sslSupported.value || selfSignedSupported.value) && canSsl.value)
-const sslHint = computed(() => (sslReady.value ? '' : (canSsl.value ? '需 openssl 或 ACME' : '无 ssl.manage 权限')))
+// SSL 需基础设施齐备：① 底座（nginx）能加载证书 ② 签发渠道（自签/ACME）③ 权限
+const sslReady = computed(() => webSupported.value && (sslSupported.value || selfSignedSupported.value) && canSsl.value)
+const sslHint = computed(() => {
+  if (!canSsl.value) return '无 ssl.manage 权限'
+  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx）——证书没有进程可加载'
+  return '需 openssl 或 ACME'
+})
 const canApply = computed(() => webSupported.value && canManage.value)
 const canReload = computed(() => webSupported.value && canManage.value)
 // 建站与配置下发同源：没有底座就不许建（后端 create 亦 501，前端只是提前挡住并说明原因）
@@ -77,6 +81,20 @@ function siteState(s: Site): { label: string; cls: string; title: string } {
     return { label: '未下发', cls: 'badge-warn', title: '已登记，但配置尚未下发到 Web 服务器；点「应用」后才会对外服务' }
   }
   return { label: '运行中', cls: 'badge-ok', title: '配置已下发到 Web 服务器并已 reload' }
+}
+
+/**
+ * TLS 徽章三态。判据是"证书存在 **且** 配置已下发"——只看 `ssl_certs` 有无记录，
+ * 会把"签了但没生效"显示成"已配置"，与同行的站点状态自相矛盾。
+ */
+function tlsState(s: Site): { label: string; cls: string; title: string } {
+  if (!s.tls) {
+    return { label: '无', cls: '', title: '尚未为该站点签发证书（点本行「SSL」申请）' }
+  }
+  if (!s.deployed) {
+    return { label: '已签发·未生效', cls: 'badge-warn', title: '证书已生成并落盘，但站点配置尚未下发到 Web 服务器，HTTPS 还没生效' }
+  }
+  return { label: '已启用', cls: 'badge-ok', title: '证书已随站点配置在 Web 服务器生效' }
 }
 
 async function load(silent = false) {
@@ -436,7 +454,7 @@ async function doDeleteCert() {
               <span v-else class="dim">—</span>
             </td>
             <td><span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span></td>
-            <td><span class="badge" :class="s.tls ? 'badge-ok' : 'badge-danger'">{{ s.tls ? '已配置' : '无' }}</span></td>
+            <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(s)"><Icon name="edit" :size="13" /> 编辑</button>
               <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /> 重载</button>
