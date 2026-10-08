@@ -728,14 +728,17 @@ sudo update-ca-certificates</pre>
 .ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
 .ssl-opt input { width: auto; margin-top: 2px; }
 .btn-sm.danger { color: #ff7b72; }
-/* 自动续期开关（与 CronView 的 .switch 视觉保持一致） */
-.switch { position: relative; width: 34px; height: 19px; display: inline-block; vertical-align: middle; }
+/* 自动续期开关：与 ServiceDetailView 的开机自启开关同款——实心主色底 + 白滑块、42×24。
+   旧版是 --c-primary-soft 浅色底 + 主色滑块，开销/关都偏「浅橙」，用户反馈看不出选中。
+   CronView 同步升级，三处一套。 */
+.switch { position: relative; width: 42px; height: 24px; display: inline-block; vertical-align: middle; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s; }
-.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--c-text-dim); transition: all .15s; }
-.switch input:checked + i { background: var(--c-primary-soft); border-color: var(--c-primary); }
-.switch input:checked + i::after { left: 17px; background: var(--c-primary); }
-.switch input:disabled + i { opacity: .45; cursor: not-allowed; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
+.switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
+.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:disabled + i { opacity: .5; cursor: not-allowed; }
+.switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
