@@ -396,7 +396,7 @@ async function doDeleteCert() {
          与真正作用的列表隔了一层，页面顶部还为它们白占一行。
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
     <div class="sec-head block">
-      <Icon name="globe" :size="16" /> 站点
+      <Icon name="globe" :size="16" /> 网站
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
       <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
@@ -439,7 +439,7 @@ async function doDeleteCert() {
         </tbody>
       </table>
     </div>
-    <EmptyState v-else title="暂无站点" hint="点击上方「站点」右侧的「新建站点」添加虚拟主机" />
+    <EmptyState v-else title="暂无站点" hint="点击上方「网站」右侧的「新建站点」添加虚拟主机" />
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">

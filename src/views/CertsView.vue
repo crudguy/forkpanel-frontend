@@ -2,7 +2,7 @@
 /**
  * 证书总览（全局统一管理入口）。
  *
- * 与 WAF 同构：单站 SSL 配置入口在「网站与 SSL → 编辑站点」弹窗里，本页把全部站点的
+ * 与 WAF 同构：单站 SSL 配置入口在「网站 → 编辑站点」弹窗里，本页把全部站点的
  * 证书收到一屏——可就地续期 / 删除 / 开关自动续期，并提供全局「申请证书」（选站点 + 方式）
  * 与「信任根证书」入口（全局动作，零站点也能进，修复此前根 CA 被埋进站点弹窗的短板）。
  *
@@ -168,7 +168,7 @@ async function execSsl() {
 
     <div v-if="loading && !certs.length" class="skeleton box" />
     <EmptyState v-else-if="!certs.length && !error" title="暂无证书"
-      desc="先在「网站与 SSL」建站并申请证书，或点上方「申请证书」" />
+      desc="先在「网站」建站并申请证书，或点上方「申请证书」" />
 
     <div v-else-if="certs.length" class="card flush">
       <table class="fixed">
@@ -207,7 +207,7 @@ async function execSsl() {
     </div>
 
     <p class="tip">
-      证书是<b>站点维度</b>的资源：单站申请 / 查看在「网站与 SSL → 编辑站点」弹窗里；
+      证书是<b>站点维度</b>的资源：单站申请 / 查看在「网站 → 编辑站点」弹窗里；
       本页把<b>全部站点</b>的证书汇总到一屏，便于统一巡检到期与续期。「信任根证书」是
       一次性全局动作——导入面板本地根 CA 后，所有自签 HTTPS 站点不再报「非私密连接」，
       首次部署、尚未建站时也应先完成这步。

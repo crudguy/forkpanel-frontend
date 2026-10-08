@@ -3,7 +3,7 @@
  * WAF 总览（统一管理入口）。
  *
  * 站点 WAF 本来就是 nginx 配置的一部分——与站点配置**同一次 apply** 下发，
- * 真正的配置项入口在「网站与 SSL → 编辑站点」弹窗里。本页只是把各站的 WAF
+ * 真正的配置项入口在「网站 → 编辑站点」弹窗里。本页只是把各站的 WAF
  * 状态收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。
  *
  * 与后端严格对齐的两条语义（与 SitesView 一致，勿改）：
@@ -130,7 +130,7 @@ onMounted(load)
     </div>
 
     <EmptyState v-if="!sites.length && !error" title="暂无站点"
-      desc="先在「网站与 SSL」建站，再回来统一配置 WAF" />
+      desc="先在「网站」建站，再回来统一配置 WAF" />
 
     <div v-else-if="sites.length" class="card flush">
       <table>

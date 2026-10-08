@@ -31,7 +31,7 @@ const SUBTITLES: Record<string, string> = {
   'system-procs': '服务器全部进程 · 点表头可按 CPU / 内存 / 用户排序 · 可结束异常进程',
   'services-software': '白名单软件包的安装与卸载',
   'services-units': '服务启停 · 日志 · 配置',
-  sites: '虚拟主机站点与证书管理',
+  sites: '虚拟主机站点管理',
   databases: '连接管理 · 只读浏览 · 备份任务',
   logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
   'logs-audit': '关键操作追踪',
