@@ -399,9 +399,11 @@ export const fwBackendLabel = enumLabel({
   firewalld: 'firewalld', pf: 'pf', windows: 'Windows', None: '无',
 })
 
-/** 证书来源。注：ssl_apply 的**入参**用连字符形式（self-signed），与此处输出不同。 */
+/** 证书来源（`ssl_certs.source` 落库值）。注意：申请接口的 **入参** method 用连字符形式
+ *  （self-signed），落库后统一为 `selfsigned`——标签表必须按落库值建键，否则漏配会把
+ *  生英文 `selfsigned` 直接渲染到「来源」列。 */
 export const certSourceLabel = enumLabel({
-  acme: 'ACME 签发', 'self-signed': '自签', manual: '手动上传',
+  acme: 'ACME 签发', selfsigned: '自签', manual: '手动上传',
 })
 
 /** 证书自动续期扫描状态。 */
