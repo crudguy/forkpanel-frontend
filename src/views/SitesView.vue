@@ -706,7 +706,7 @@ sudo update-ca-certificates</pre>
 .modal h3 { margin: 0 0 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 /* 根证书引导弹窗：比普通弹窗宽——内含分步说明与命令块，窄了命令会折行难读 */
-.modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
+.modal.wide { width: min(760px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
 /* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
    .modal.wide 自身即滚动容器，sticky 相对它的 padding box 生效；弹窗下内边距改由
    操作条自己承担（故 .modal.wide 的 padding-bottom 归零），负左右外边距让操作条通栏。 */
