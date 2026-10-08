@@ -398,8 +398,12 @@ async function doDeleteCert() {
     <div v-if="loading && !sites.length" class="skeleton box" />
     <div v-else-if="sites.length" class="card flush">
       <table class="fixed">
+        <!-- 站点表列宽独立于证书表：两表的内容分布完全不同（站点表 4 个操作按钮、
+             根目录是长路径；证书表 2 个按钮、签发者是长文本），共用一套宽度必然顾此失彼。
+             故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
+             证书表 w-dom/w-iss/…/w-cst/w-acts（含同为「状态」列的 w-cst），互不影响。 -->
         <colgroup>
-          <col class="w-name" /><col class="w-dom" /><col class="w-root" /><col class="w-kind" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-acts" />
+          <col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
         </colgroup>
         <thead><tr><th>名称</th><th>域名</th><th>根目录</th><th>类型</th><th>WAF</th><th>状态</th><th>TLS</th><th>操作</th></tr></thead>
         <tbody>
@@ -442,7 +446,7 @@ async function doDeleteCert() {
     <div v-else-if="certs.length" class="card flush">
       <table class="fixed">
         <colgroup>
-          <col class="w-dom" /><col class="w-iss" /><col class="w-src" /><col class="w-exp" /><col class="w-left" /><col class="w-auto" /><col class="w-st" /><col class="w-acts" />
+          <col class="w-dom" /><col class="w-iss" /><col class="w-src" /><col class="w-exp" /><col class="w-left" /><col class="w-auto" /><col class="w-cst" /><col class="w-acts" />
         </colgroup>
         <thead><tr><th>域名</th><th>签发者</th><th>来源</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
@@ -730,25 +734,37 @@ sudo update-ca-certificates</pre>
 .switch input:disabled + i { opacity: .45; cursor: not-allowed; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
-   长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。 */
+   长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
+   两表宽度完全独立（各自一套 class），改一张绝不会波及另一张。 */
 table.fixed { table-layout: fixed; width: 100%; }
 table.fixed th, table.fixed td { overflow: hidden; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 站点表 */
-col.w-name { width: 14%; }
-col.w-dom { width: 24%; }
-col.w-root { width: 20%; }
-col.w-kind { width: 10%; }
-col.w-waf { width: 12%; }
-col.w-st { width: 8%; }
+/* 站点表：短内容列给「够用即止」的宽度，剩余宽度全部让给唯一弹性列「根目录」。
+   若按百分比均摊，宽屏下多出的空间会平摊到每一列白占——正是「该宽的没宽、该窄的没窄」。
+   下列百分比按**最长取值 + 单元格内边距 26px** 用 canvas 按真实字体实测反推
+   （@1920 / 表宽 1640 / 正文 13.5px / 徽章 12px / 等宽 13.5px）：
+     名称 94 ／ 域名两条 226 ／ 类型「反向代理」80 ／ WAF「basic · 10/s」112 ／
+     状态 82 ／ TLS「已签发·未生效」122 ／ 操作 4 个带文字按钮 309 ／ 根目录 68 字符 465。
+   合计 1490 < 1640，故 1920 下各列均不裁剪，余量（约 150px）全部落给根目录（弹性列）。 */
+col.w-name { width: 7%; }
+col.w-sdom { width: 15%; }
+col.w-sroot { width: auto; }   /* 唯一弹性列：table-layout:fixed 把剩余宽度全部给它 */
+col.w-kind { width: 6%; }
+col.w-waf { width: 8%; }
+col.w-st { width: 6%; }
 col.w-tls { width: 8%; }
+col.w-sacts { width: 19%; }    /* 4 个带文字按钮并排，不折行 */
+/* 证书表：内容分布与站点表不同（2 个操作按钮、签发者是长文本），宽度自成一套。
+   w-cst（状态）与站点表的 w-st 名字相近但各自取值——证书表的徽章更短
+   （空闲/续期中/成功/失败），故沿用原有 8%，令证书表渲染与本次改动前逐像素一致。 */
+col.w-dom { width: 24%; }
 col.w-acts { width: 12%; }
-/* 证书表 */
 col.w-iss { width: 14%; }
 col.w-src { width: 10%; }
 col.w-exp { width: 12%; }
 col.w-left { width: 9%; }
 col.w-auto { width: 12%; }
+col.w-cst { width: 8%; }
 /* 骨架（观感与列表页统一；keyframes 独立命名避免全局冲突） */
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: site-sk 1.4s ease infinite; border-radius: var(--radius); }
 .box { height: 300px; }
