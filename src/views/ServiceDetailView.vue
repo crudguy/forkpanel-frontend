@@ -48,7 +48,10 @@ const actError = ref('')
 const busy = ref('')            // `${name}:${action}`
 const notFound = ref(false)
 
-/** 后端没有单服务 GET：列表里有全部字段（含 enabled/description/managed），故取列表再定位 */
+// 优先用单服务端点（GET /services/{unit}）：它用 `systemctl show` 按需加载单元，
+// 绕开 list 的 `list-units --all` 全量枚举——后者只含已加载进运行时的单元，
+// 把 enabled 但从未启动（dead）的服务（典型：刚装好还没 start 的 nginx）整体漏掉，
+// 之前导致这类服务点进详情就报"未找到该服务"。
 // 请求序号：换 unit（路由参数变化）时前后两次加载会并发，
 // 旧的那个若后到，会把新服务的详情覆盖掉（页面显示 A 的名字却配着 B 的数据）。
 let svcSeq = 0
@@ -56,13 +59,26 @@ async function loadSvc() {
   const seq = ++svcSeq
   loading.value = true; error.value = ''
   try {
-    const r = await api.get<{ init_system: string; services: ServiceInfo[] }>(API.services.list())
+    const r = await api.get<{ init_system: string; service: ServiceInfo }>(
+      API.services.show(unit.value),
+    )
     if (seq !== svcSeq) return
     init.value = r.init_system
-    const found = (r.services ?? []).find(s => s.name === unit.value) ?? null
-    svc.value = found
-    notFound.value = !found
-  } catch (e) { if (seq === svcSeq) error.value = errorText(e) }
+    svc.value = r.service
+    notFound.value = false
+  } catch (e) {
+    // 单服务端点失败（单元名非法 / 真不存在 / 网络抖）时退回列表反查兜底，
+    // 保证 active 服务的老路径仍可用，且 notFound 语义不变。
+    if (seq !== svcSeq) return
+    try {
+      const r2 = await api.get<{ init_system: string; services: ServiceInfo[] }>(API.services.list())
+      if (seq !== svcSeq) return
+      init.value = r2.init_system
+      const found = (r2.services ?? []).find(s => s.name === unit.value) ?? null
+      svc.value = found
+      notFound.value = !found
+    } catch (e2) { if (seq === svcSeq) error.value = errorText(e2) }
+  }
   finally { if (seq === svcSeq) loading.value = false }
 }
 

@@ -47,6 +47,9 @@ export const API = {
 
   services: {
     list: () => '/api/v1/services',
+    // 按单元名直接查单个服务（绕开 list 的全量枚举；dead 服务也能查到）。
+    // 详情页用它在列表里反查不到时（如刚装好还没启动的 nginx）兜底加载。
+    show: (unit: string) => `/api/v1/services/${enc(unit)}`,
     status: (unit: string) => `/api/v1/services/${enc(unit)}/status`,
     start: (unit: string) => `/api/v1/services/${enc(unit)}/start`,
     stop: (unit: string) => `/api/v1/services/${enc(unit)}/stop`,
