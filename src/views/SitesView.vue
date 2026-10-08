@@ -5,7 +5,7 @@
  * 设计边界（与后端一致）：
  * - 站点的「定义」(sites 表) 与「下发到 Web 服务器的配置」是两件事。
  * - **建站需要 Web 服务器底座**：未检测到 nginx 时「新建站点」置灰，后端 create
- *   同样返回 501（webserver.manage）——否则只会造出「建好了但永远打不开」的
+ *   同样返回 501（webserver.manage）——否则只会造出「建好了但永远打不开的
  *   空中楼阁。列表 / 编辑 / 删除 仍只读写数据模型，不依赖底座。
  * - 「应用配置」/「重载」需要 webserver.manage 能力；未检测到时按钮置灰并给出
  *   原因，绝不伪造成功。
@@ -15,6 +15,8 @@
  * - 站点 WAF 与站点配置**同一次 apply** 下发（它本来就是 nginx 配置的一部分）。
  *   两条与后端严格对齐的语义：`waf` 缺省 = 保留库中现值（不是关闭）、
  *   `rate_per_sec: 0` = 不限速。
+ * - SSL 证书管理已并入站点编辑弹窗（与应用站点配置同理）：证书列表 / 签发 / 续期 /
+ *   删除 / 自动续期 / 信任根证书，全部在「编辑站点」弹窗内完成，不再另设独立区块。
  *
  * ⚠️ 已知边界（如实写在界面上，不藏着）：`upstreams` / `fpm` 不落库，
  * 所以「编辑」一个反代 / PHP 站时那两个输入框是空的，**必须重填**才能再应用
@@ -88,7 +90,7 @@ function siteState(s: Site): { label: string; cls: string; title: string } {
  */
 function tlsState(s: Site): { label: string; cls: string; title: string } {
   if (!s.tls) {
-    return { label: '无', cls: '', title: '尚未为该站点签发证书（点本行「SSL」申请）' }
+    return { label: '无', cls: '', title: '尚未为该站点签发证书（在「编辑站点」里点「申请证书」）' }
   }
   if (!s.deployed) {
     return { label: '已签发·未生效', cls: 'badge-warn', title: '证书已生成并落盘，但站点配置尚未下发到 Web 服务器，HTTPS 还没生效' }
@@ -121,7 +123,7 @@ function certLevel(d: number | null) {
   return 'bad'
 }
 
-// 自动续期扫描状态摘要：供证书区表头展示"上次/下次扫描"
+// 自动续期扫描状态摘要：供编辑弹窗内 SSL 区展示"上次/下次扫描"
 function sweepSummary(): string {
   const s = sweep.value
   if (!s.last_at) return '尚未运行 · 每日约 04:05 自动扫描'
@@ -207,7 +209,7 @@ function closeModal() { modalOpen.value = false; editing.value = null }
  * `enabled` 的**真同步**：停用=摘配置+reload），`apply` 管渲染下发。
  * 此前它们被拆成页面上两个卡片（顶部「应用站点配置」+ 本弹窗），字段重复、
  * 同一份信息要填两遍，且「新建」按钮建出来的站点还得再去顶部点一次应用才能访问
- * ——现在合并为：**保存即下发**。
+ * ——现在合并为：**保存即下发**。SSL 证书管理同理并入本弹窗（见下方 .ssl 区块）。
  */
 async function save() {
   busy.value = true; error.value = ''; notice.value = ''
@@ -292,7 +294,11 @@ async function reloadSite(s: Site) {
   } finally { busy.value = false; await load() }
 }
 
-// ── 申请 SSL（自签优先，否则走 ACME；受对应能力门禁）──
+// ── SSL：证书管理已并入「编辑站点」弹窗 ──
+/** 编辑弹窗内展示「当前站点」的证书：按域名过滤全局证书列表（证书以 domain 归属站点）。 */
+const siteCerts = computed<Cert[]>(() =>
+  editing.value ? certs.value.filter(c => (editing.value as Site).domains.includes(c.domain)) : [])
+
 /** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。 */
 const sslModal = ref<{ site: Site; method: 'self-signed' | 'http-01'; email: string } | null>(null)
 
@@ -308,14 +314,18 @@ function downloadCa() {
   window.location.href = API.certs.ca()
 }
 
+/** 行内「SSL」快捷入口：直接开签发弹窗（仅一种渠道可用时立即执行，不给"必败选项"）。 */
 function applySsl(s: Site) {
   error.value = ''; notice.value = ''
-  // 只有**一种**渠道可用时直接执行，不给"选了必然失败"的余地
   if (!(selfSignedSupported.value && sslSupported.value)) {
     execSsl(s, selfSignedSupported.value ? 'self-signed' : 'http-01', '')
     return
   }
   sslModal.value = { site: s, method: 'self-signed', email: '' }
+}
+/** 编辑弹窗内「申请证书」：作用对象即当前正在编辑的站点。 */
+function applySslEditing() {
+  if (editing.value) applySsl(editing.value)
 }
 
 async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string) {
@@ -432,49 +442,6 @@ async function doDeleteCert() {
     </div>
     <EmptyState v-else title="暂无站点" hint="点击上方「站点」右侧的「新建站点」添加虚拟主机" />
 
-    <!-- 证书列表 -->
-    <div class="sec-head block">
-      <Icon name="lock" :size="16" /> 证书
-      <!-- 自签 leaf 由面板本地根 CA 签发；不把根证书装进信任库，浏览器必然报不可信 -->
-      <button class="btn-ghost btn-sm ca-btn" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="caHelp = true">
-        <Icon name="lock" :size="13" /> 信任根证书
-      </button>
-    </div>
-    <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
-    <div v-if="loading && !certs.length" class="skeleton box" />
-    <div v-else-if="certs.length" class="card flush">
-      <table class="fixed">
-        <colgroup>
-          <col class="w-dom" /><col class="w-iss" /><col class="w-src" /><col class="w-exp" /><col class="w-left" /><col class="w-auto" /><col class="w-cst" /><col class="w-acts" />
-        </colgroup>
-        <thead><tr><th>域名</th><th>签发者</th><th>来源</th><th>到期</th><th>剩余</th><th>自动续期</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr v-for="c in certs" :key="c.id">
-            <td class="ellipsis" :title="c.domain">{{ c.domain }}</td>
-            <td class="dim ellipsis" :title="c.issuer ?? ''">{{ c.issuer ?? '—' }}</td>
-            <!-- 列序必须与表头「域名|签发者|来源|到期|剩余」一致。此前来源与到期/剩余
-                 错位：「来源」列显示到期日、「剩余」列显示来源，证书到期日被看错。 -->
-            <td class="dim">{{ certSourceLabel(c.source) }}</td>
-            <td>{{ fmtDate(c.not_after) }}</td>
-            <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
-            <td>
-              <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
-                <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy"
-                       @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
-              </span>
-              <span v-else class="dim tiny">仅 ACME</span>
-            </td>
-            <td><span class="badge" :class="(c.renew_state === 'failed') ? 'badge-danger' : (c.renew_state === 'ok' ? 'badge-ok' : 'badge-warn')">{{ certRenewStateLabel(c.renew_state) }}</span></td>
-            <td class="actions">
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为这张证书续期' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canSsl" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <EmptyState v-else title="暂无证书" hint="在站点行点击「SSL」申请证书（需 ACME 支持）" />
-
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">
       <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
@@ -536,6 +503,40 @@ async function doDeleteCert() {
                 :disabled="!webSupported || !form.wafRate" />
             </label>
           </template>
+        </div>
+
+        <!-- SSL 证书：站点配置的一部分，与站点同处一个编辑弹窗
+             （此前是页面下方独立的「证书」区块——与应用站点配置同理，单独成块既多余、
+              又让「该站点的证书」与「编辑该站点」割裂在两处；现在合并进来，
+              申请 / 续期 / 删除 / 自动续期 / 信任根证书全在弹窗内完成）。
+              仅编辑既有站点时出现：新建站点尚未落库、无法归属证书。 -->
+        <div v-if="editing" class="ssl">
+          <div class="ssl-head">
+            <span class="ssl-title"><Icon name="lock" :size="14" /> SSL 证书</span>
+            <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为当前站点申请证书' : sslHint" @click="applySslEditing">
+              <Icon name="plus" :size="13" /> 申请证书
+            </button>
+          </div>
+          <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
+          <div v-if="siteCerts.length" class="ssl-list">
+            <div v-for="c in siteCerts" :key="c.id" class="ssl-row">
+              <div class="ssl-meta">
+                <span class="mono">{{ c.domain }}</span>
+                <span class="dim tiny">{{ certSourceLabel(c.source) }} · 到期 {{ fmtDate(c.not_after) }} · <span :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</span></span>
+              </div>
+              <div class="ssl-ops">
+                <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
+                  <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy" @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
+                </span>
+                <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '续期这张证书' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canSsl" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
+              </div>
+            </div>
+          </div>
+          <EmptyState v-else title="暂无证书" hint="点上方「申请证书」为该站点签发（需 openssl 或 ACME）" />
+          <button class="btn-ghost btn-sm ca-link" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="caHelp = true">
+            <Icon name="lock" :size="13" /> 信任根证书
+          </button>
         </div>
 
         <label class="blk row-inline">
@@ -620,13 +621,13 @@ sudo update-ca-certificates</pre>
       </div>
     </div>
 
-    <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱 -->
+    <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱；行内「SSL」与编辑弹窗「申请证书」共用 -->
     <div v-if="sslModal" class="mask" @click.self="sslModal = null">
       <div class="modal" role="dialog" aria-modal="true">
         <h3>为「{{ sslModal.site.name }}」申请证书</h3>
         <label class="ssl-opt">
           <input type="radio" value="self-signed" v-model="sslModal.method" />
-          <span><b>面板自签</b><br /><span class="dim">离线可用、立即可得；需先导入面板根证书浏览器才受信（见上方「信任根证书」）</span></span>
+          <span><b>面板自签</b><br /><span class="dim">离线可用、立即可得；需先导入面板根证书浏览器才受信（见「信任根证书」）</span></span>
         </label>
         <label class="ssl-opt">
           <input type="radio" value="http-01" v-model="sslModal.method" />
@@ -648,9 +649,10 @@ sudo update-ca-certificates</pre>
 </template>
 
 <style scoped>
-/* 「站点」是页面首个区块：`.sec-head.block` 的 26px 上间距是给「证书」块与上方表格
-   分界用的，页面首块再叠这 26px 就与 .content 的 24px 上内边距重复留白。
-   首个 div 是它时归零；若上方出现错误/提示条（同为 div），它便退回 26px 正常分界。 */
+/* 「站点」是页面首个（也是唯一）区块头：`.sec-head.block` 的 26px 上间距是给
+   后续区块与上方表格分界用的，页面首块再叠这 26px 就与 .content 的 24px 上内边距
+   重复留白。首个 div 是它时归零；若上方出现错误/提示条（同为 div），它便退回
+   26px 正常分界。SSL 证书管理已并入编辑弹窗，页面下方不再有独立「证书」区块。 */
 .sec-head.block:first-of-type { margin-top: 0; }
 
 /* WAF 区块：位于站点编辑弹窗内，用虚线分隔以表明它是站点配置的一部分而非并列项 */
@@ -704,8 +706,6 @@ sudo update-ca-certificates</pre>
   border-radius: 12px; padding: 20px; }
 .modal h3 { margin: 0 0 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-/* 根证书入口：证书区标题右侧（.sec-head 是 flex，margin-left:auto 把它推到最右） */
-.ca-btn { margin-left: auto; }
 /* 根证书引导弹窗：比普通弹窗宽——内含分步说明与命令块，窄了命令会折行难读 */
 .modal.wide { width: min(620px, 94vw); max-height: 86vh; overflow: auto; padding-bottom: 0; }
 /* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
@@ -740,6 +740,18 @@ sudo update-ca-certificates</pre>
 .switch input:disabled + i { opacity: .5; cursor: not-allowed; }
 .switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
 
+/* SSL 证书区块：位于「编辑站点」弹窗内，与 WAF 同用虚线分隔，表明它是站点配置的一部分 */
+.ssl { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
+.ssl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.ssl-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
+.ssl-list { display: flex; flex-direction: column; gap: 8px; }
+.ssl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px;
+  border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-hover); }
+.ssl-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ssl-meta .mono { font-family: var(--mono); font-size: 13px; }
+.ssl-ops { display: flex; align-items: center; gap: 6px; flex: none; }
+.ca-link { margin-top: 10px; }
+
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
    两表宽度完全独立（各自一套 class），改一张绝不会波及另一张。 */
@@ -761,9 +773,8 @@ col.w-waf { width: 8%; }
 col.w-st { width: 6%; }
 col.w-tls { width: 8%; }
 col.w-sacts { width: 19%; }    /* 4 个带文字按钮并排，不折行 */
-/* 证书表：内容分布与站点表不同（2 个操作按钮、签发者是长文本），宽度自成一套。
-   w-cst（状态）与站点表的 w-st 名字相近但各自取值——证书表的徽章更短
-   （空闲/续期中/成功/失败），故沿用原有 8%，令证书表渲染与本次改动前逐像素一致。 */
+/* 证书表（编辑弹窗内「SSL 证书」区块复用同款列宽思路，此处保留历史列宽定义，
+   若后续在弹窗内恢复完整证书表格可直接复用；当前弹窗内改用紧凑卡片列表。 */
 col.w-dom { width: 24%; }
 col.w-acts { width: 12%; }
 col.w-iss { width: 14%; }
