@@ -374,17 +374,6 @@ async function doDeleteCert() {
 
 <template>
   <div>
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 刷新是通用工具动作，不是本页目的：与 FilesView / AuditView 一致用 ghost，
-           把唯一的橙色实心留给「新建站点」。此前两个 btn-primary 并排，两块发光渐变
-           把主次拉平了，页面没有视觉焦点。 -->
-      <button class="btn-ghost" :disabled="busy" @click="load()"><Icon name="refresh" :size="15" /> 刷新</button>
-      <button class="btn-primary" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
-        <Icon name="plus" :size="15" /> 新建站点
-      </button>
-    </div>
-
     <p v-if="error" class="err" role="alert">{{ error }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
@@ -393,8 +382,18 @@ async function doDeleteCert() {
       请先在主机上安装并启动 nginx，再回到此页刷新。
     </div>
 
-    <!-- 站点列表 -->
-    <div class="sec-head block"><Icon name="globe" :size="16" /> 站点</div>
+    <!-- 站点列表。刷新与新建收进本区块头：它们是「对这张表」的动作，紧贴其操作对象
+         （与 ProcessesView 把工具条收进卡片顶栏同范式）。此前二者悬在页面级 page-head，
+         与真正作用的列表隔了一层，页面顶部还为它们白占一行。
+         刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
+    <div class="sec-head block">
+      <Icon name="globe" :size="16" /> 站点
+      <span class="spacer" />
+      <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
+      <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
+        <Icon name="plus" :size="13" /> 新建站点
+      </button>
+    </div>
     <div v-if="loading && !sites.length" class="skeleton box" />
     <div v-else-if="sites.length" class="card flush">
       <table class="fixed">
@@ -423,15 +422,15 @@ async function doDeleteCert() {
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(s)"><Icon name="edit" :size="13" /> 编辑</button>
-              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /> 重载</button>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /> SSL</button>
+              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /> 重载</button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /> SSL</button>
               <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="delTarget = s"><Icon name="trash" :size="13" /> 删除</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <EmptyState v-else title="暂无站点" hint="点击右上角「新建站点」添加虚拟主机" />
+    <EmptyState v-else title="暂无站点" hint="点击上方「站点」右侧的「新建站点」添加虚拟主机" />
 
     <!-- 证书列表 -->
     <div class="sec-head block">
@@ -467,7 +466,7 @@ async function doDeleteCert() {
             </td>
             <td><span class="badge" :class="(c.renew_state === 'failed') ? 'badge-danger' : (c.renew_state === 'ok' ? 'badge-ok' : 'badge-warn')">{{ certRenewStateLabel(c.renew_state) }}</span></td>
             <td class="actions">
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为这张证书续期' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
               <button class="btn-ghost btn-sm danger" :disabled="!canSsl" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
             </td>
           </tr>
@@ -649,6 +648,11 @@ sudo update-ca-certificates</pre>
 </template>
 
 <style scoped>
+/* 「站点」是页面首个区块：`.sec-head.block` 的 26px 上间距是给「证书」块与上方表格
+   分界用的，页面首块再叠这 26px 就与 .content 的 24px 上内边距重复留白。
+   首个 div 是它时归零；若上方出现错误/提示条（同为 div），它便退回 26px 正常分界。 */
+.sec-head.block:first-of-type { margin-top: 0; }
+
 /* WAF 区块：位于站点编辑弹窗内，用虚线分隔以表明它是站点配置的一部分而非并列项 */
 .waf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px;
   border-top: 1px dashed var(--c-border); padding-top: 10px; }

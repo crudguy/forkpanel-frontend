@@ -10,9 +10,14 @@
  * 所以只能显式断言。
  *
  * 断言口径（刻意收窄，避免误报）：
- *   [1] 至少要扫描到 N 个视图、且真的从每个视图里**抠出了** page-head 块
- *       ——抠不到就必须失败。否则目录改名/模板改写法都会让下面那条恒绿。
- *   [2] 每个 page-head 块内 btn-primary 出现次数 ≤ 1。
+ *   [1] 至少要扫描到 N 个视图、且 page-head 与 sec-head **两类块各自**都真的被
+ *       **抠出来过**——某一类抠不到就必须失败。否则目录改名/模板改写法都会让
+ *       下面那条对那一类恒绿。
+ *   [2] 每个 page-head / sec-head 块内 btn-primary 出现次数 ≤ 1。
+ *
+ * 为什么 sec-head 也算「页面头部」：主操作不一定挂在页面最上面那行。站点页就把
+ * 「新建站点」收进了「站点」列表的区块头（紧贴它操作的表格）。约束若只认
+ * page-head，主操作一搬家就没人看着了。
  *
  * 为什么只数 btn-primary：`.btn-ghost`（工具动作）、`.btn-danger`（危险动作）、
  * `.btn-sm`（表格内小按钮）都按语义着色，不限个数——FilesView 的头部一列四个
@@ -73,42 +78,59 @@ function elementAt(src, startIdx) {
   return null
 }
 
+/** 施加「至多一个橙色主操作」约束的块。
+ *  sec-head 必须一起扫：站点页已把主操作从 page-head 搬到列表区块头（「站点」右侧），
+ *  只盯 page-head 会留下盲区——主操作换了位置，约束却还看着旧位置。
+ *  用 `<div … class="… x …">` 的宽松匹配（属性顺序、`class="sec-head block"` 这类
+ *  多 class 都要覆盖），否则改个写法这条就静默失效。 */
+const HEAD_MARKERS = [
+  { label: 'page-head', re: /<div\b[^>]*\bclass="[^"]*\bpage-head\b[^"]*"[^>]*>/g },
+  { label: 'sec-head', re: /<div\b[^>]*\bclass="[^"]*\bsec-head\b[^"]*"[^>]*>/g },
+]
+
 const offenders = []
 const scanned = []
 for (const f of files) {
   const raw = readFileSync(join(DIR, f), 'utf8')
   const src = blankComments(raw)
-  const marker = '<div class="page-head">'
-  let idx = src.indexOf(marker)
-  let found = 0
-  while (idx >= 0) {
-    const block = elementAt(src, idx)
-    if (!block) break
-    found += 1
-    const n = (block.match(/btn-primary/g) ?? []).length
-    if (n > 1) {
-      // 只取"开标签里带 btn-primary"的 <button>，再剥标签留文案，用于定位：
-      const names = [...block.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]
-        .filter((m) => /btn-primary/.test(m[0].slice(0, m[0].indexOf('>'))))
-        .map((m) => m[0].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
-      offenders.push(`${f}: ${n} 个 btn-primary${names.length ? `（${names.join(' / ')}）` : ''}`)
+  const counts = {}
+  for (const mk of HEAD_MARKERS) {
+    counts[mk.label] = 0
+    mk.re.lastIndex = 0
+    let mm
+    while ((mm = mk.re.exec(src))) {
+      const block = elementAt(src, mm.index)
+      if (!block) break
+      counts[mk.label] += 1
+      const n = (block.match(/btn-primary/g) ?? []).length
+      if (n > 1) {
+        // 只取"开标签里带 btn-primary"的 <button>，再剥标签留文案，用于定位：
+        const names = [...block.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]
+          .filter((b) => /btn-primary/.test(b[0].slice(0, b[0].indexOf('>'))))
+          .map((b) => b[0].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
+        offenders.push(`${f} [${mk.label}]: ${n} 个 btn-primary${names.length ? `（${names.join(' / ')}）` : ''}`)
+      }
+      mk.re.lastIndex = mm.index + block.length
     }
-    idx = src.indexOf(marker, idx + block.length)
   }
-  scanned.push([f, found])
+  scanned.push([f, counts])
 }
 
-const withHead = scanned.filter(([, n]) => n > 0)
-if (!withHead.length) {
-  fail('1', `扫过 ${files.length} 个视图，但一个 page-head 都没抠出来——模板写法变了，下面的检查会恒绿`)
-} else {
-  pass('1', `扫过 ${files.length} 个视图，从 ${withHead.length} 个中抠出 ${withHead.reduce((a, [, n]) => a + n, 0)} 个 page-head 块`)
+// 每类块都必须真的被抠出来过：某一类改了写法后 total=0，那道约束就会恒绿
+for (const mk of HEAD_MARKERS) {
+  const withIt = scanned.filter(([, c]) => c[mk.label] > 0)
+  const total = withIt.reduce((a, [, c]) => a + c[mk.label], 0)
+  if (!total) {
+    fail('1', `扫过 ${files.length} 个视图，但一个 ${mk.label} 都没抠出来——模板写法变了，下面的检查会恒绿`)
+  } else {
+    pass('1', `扫过 ${files.length} 个视图，从 ${withIt.length} 个中抠出 ${total} 个 ${mk.label} 块`)
+  }
 }
 
 if (offenders.length) {
-  fail('2', `每个 page-head 至多一个橙色主操作，违规 ${offenders.length} 处：\n      - ${offenders.join('\n      - ')}`)
+  fail('2', `每个 page-head / sec-head 至多一个橙色主操作，违规 ${offenders.length} 处：\n      - ${offenders.join('\n      - ')}`)
 } else {
-  pass('2', '每个 page-head 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
+  pass('2', '每个 page-head / sec-head 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
 }
 
 if (failures.length) {
