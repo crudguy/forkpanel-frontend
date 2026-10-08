@@ -42,6 +42,9 @@ export const router = createRouter({
         { path: 'sites', name: 'sites', component: () => import('@/views/SitesView.vue'), meta: { title: '网站与 SSL' } },
         // WAF 是站点配置的一部分（同一次 apply 下发），单独开一页只为统一查看/批量调整
         { path: 'waf', name: 'waf', component: () => import('@/views/WafView.vue'), meta: { title: 'WAF' } },
+        // 证书总览：与 WAF 同理——证书按 domain 归属站点，但需跨站统一巡检/续期/装根 CA，
+        // 故单列一项做全局视角（申请/续期/删除的快捷入口仍保留在「编辑站点」弹窗内）。
+        { path: 'certs', name: 'certs', component: () => import('@/views/CertsView.vue'), meta: { title: '证书' } },
         { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue'), meta: { title: '文件' } },
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: '数据库' } },
         { path: 'containers', name: 'containers', component: () => import('@/views/ContainersView.vue'), meta: { title: '容器' } },

@@ -408,6 +408,23 @@ export const fwBackendLabel = enumLabel({
   firewalld: 'firewalld', pf: 'pf', windows: 'Windows', None: '无',
 })
 
+/** 证书（ssl_certs 行）。列表 / 续期 / 删除 / 自动续期在 CertsView 与 SitesView 共用，
+ *  故提为全局类型，避免两处各存删减副本而漂移（Site 已如此处理）。 */
+export interface Cert {
+  id: number
+  domain: string
+  /** 签发者：自签为面板本地根 CA 的 CN；ACME 为 Let's Encrypt 等。 */
+  issuer: string | null
+  /** 到期时间（Unix 秒）。 */
+  not_after: number | null
+  /** 距到期天数（后端计算，可能为 null）。 */
+  days_left: number | null
+  auto_renew: boolean
+  renew_state?: string | null
+  /** 落库来源：acme / selfsigned / manual（见 certSourceLabel）。 */
+  source: string
+}
+
 /** 证书来源（`ssl_certs.source` 落库值）。注意：申请接口的 **入参** method 用连字符形式
  *  （self-signed），落库后统一为 `selfsigned`——标签表必须按落库值建键，否则漏配会把
  *  生英文 `selfsigned` 直接渲染到「来源」列。 */

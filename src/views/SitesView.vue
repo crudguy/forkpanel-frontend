@@ -27,14 +27,13 @@ import { useModal } from '@/composables/useModal'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Site } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 
-// Site 已移入 src/api/types.ts（WafView 此前另存一份删减副本，必然漂移）
-interface Cert { id: number; domain: string; issuer: string | null; not_after: number | null; days_left: number | null; auto_renew: boolean; renew_state?: string | null; source: string }
+// Site / Cert 已移入 src/api/types.ts（跨视图共享类型，避免各存删减副本而漂移）
 
 const auth = useAuthStore()
 const sites = ref<Site[]>([])

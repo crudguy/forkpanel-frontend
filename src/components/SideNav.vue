@@ -50,6 +50,10 @@ const items = computed(() => [
   { to: '/sites', label: '网站与 SSL', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
   // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
   { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
+  // 证书与 WAF 同族：单站 SSL 在「编辑站点」弹窗配，本页统一总览/申请/续期/信任根证书。
+  // 权限点复用 site.view（后端只有 ssl.manage、无 ssl.view；证书归属站点、菜单恒可达），
+  // 页内动作再按 ssl.manage 置灰——与 WAF 用 site.view 同理。
+  { to: '/certs', label: '证书', icon: 'lock', cap: CAP.METRICS_READ, perm: 'site.view' },
   { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
   { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_VIEW, perm: 'container.view' },
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
