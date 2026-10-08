@@ -172,6 +172,9 @@ export interface PackageInfo {
   label?: string
   version: string | null
   manager: string
+  /** 该软件包对应的主服务单元（后端由 dpkg -L 推导，enabled 但当前未运行的服务也能关联）。
+   *  为 null 表示该软件没有可管理的服务（如 certbot/ufw），UI 据此不渲染「服务管理」入口。 */
+  unit?: ServiceRef | null
 }
 /** 可升级条目（GET /api/v1/packages/upgradable 的 items[]）。
     name 是**逻辑包名**（与 PackageInfo.name 同域），UI 按它匹配已安装卡片；
@@ -196,6 +199,12 @@ export interface ServiceInfo {
   description: string | null
   /** 是否受面板托管（未托管服务的停止需二次确认） */
   managed: boolean
+}
+/** 软件包关联的服务单元（精简版，仅软件卡片入口所需；不含 ServiceInfo 的完整字段）。
+ *  name 是完整单元名（含 .service 后缀），state 是 systemd 口径状态字符串。 */
+export interface ServiceRef {
+  name: string
+  state: string
 }
 export interface ServiceJournal {
   name: string

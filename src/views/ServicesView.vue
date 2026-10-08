@@ -16,7 +16,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported, ApiError } from '@/api/client'
 import { API } from '@/api/endpoints'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
-import { CAP, PackageInfo, UpgradablePkg, ServiceInfo as Svc, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
+import { CAP, PackageInfo, UpgradablePkg, ServiceInfo as Svc, ServiceRef, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -133,12 +133,15 @@ const UNIT_HINTS: Record<string, string[]> = {
   ufw: [],       // 规则由「防火墙」页管理
 }
 
-/** 找该软件包对应的服务单元；找不到返回 null（调用方据此决定是否渲染入口）。 */
-function unitFor(pkg: string): Svc | null {
+/** 从「服务列表」兜底找该软件包对应的服务单元；找不到返回 null。
+ *  主路径是后端在 /packages 里随包下发的 `unit`（绕过 systemctl list-units 对
+ * enabled-but-dead 单元的遗漏）；这里是兜底：已运行/已加载的服务也照样能关联。
+ *  返回 ServiceRef（只含 name/state），与后端下发形状一致。 */
+function svcRefFor(pkg: string): ServiceRef | null {
   for (const cand of [pkg, ...(UNIT_HINTS[pkg] ?? [])]) {
     // 后端服务的 name 是完整单元名（带 .service 后缀），也兼容无后缀形态
     const hit = svcs.value.find(s => s.name === `${cand}.service` || s.name === cand)
-    if (hit) return hit
+    if (hit) return { name: hit.name, state: hit.state }
   }
   return null
 }
@@ -151,7 +154,7 @@ const installedByCat = computed(() => {
     // unit 为 null 表示该软件没有可管理的服务（如 certbot/ufw）——UI 据此不渲染入口
     items: c.pkgs.map(n => all.find(x => x.name === n))
       .filter((x): x is PackageInfo => !!x)
-      .map(p => ({ ...p, unit: unitFor(p.name) })),
+      .map(p => ({ ...p, unit: p.unit ?? svcRefFor(p.name) })),
   })).filter(c => c.items.length)
 })
 
@@ -509,7 +512,7 @@ function goDetail(s: Svc) {
   router.push({ name: 'service-detail', params: { unit: s.name } })
 }
 /** 软件卡片 → 对应服务的详情页（与点服务行走的是同一个入口）。 */
-function goUnit(s: Svc) { router.push({ name: 'service-detail', params: { unit: s.name } }) }
+function goUnit(s: ServiceRef) { router.push({ name: 'service-detail', params: { unit: s.name } }) }
 
 // 状态徽标统一走共享 serviceStateBadge（src/api/types.ts），与任务中心口径一致
 
