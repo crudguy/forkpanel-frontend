@@ -315,12 +315,13 @@ onUnmounted(closeFollow)
               {{ busy === svc.name + ':restart' ? '执行中…' : '重启' }}
             </button>
             <span class="spacer" />
-            <label class="switch-row">
-              <span>开机自启</span>
+            <label class="switch-row" :class="{ on: svc.enabled }">
+              <span class="sl-label">开机自启</span>
               <span class="switch">
                 <input type="checkbox" :checked="svc.enabled"
                   :disabled="!canManage || !!busy" @change="toggleEnable" /><i />
               </span>
+              <span class="sl-state">{{ svc.enabled ? '已启用' : '已关闭' }}</span>
             </label>
           </div>
 
@@ -453,12 +454,18 @@ onUnmounted(closeFollow)
        border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
        white-space: pre-wrap; word-break: break-all; max-height: 420px; overflow: auto; }
 
-.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; }
-.switch { position: relative; width: 34px; height: 19px; display: inline-block; }
+.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
+.switch-row.on { color: var(--c-primary); font-weight: 600; }
+.switch { position: relative; width: 42px; height: 24px; display: inline-block; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s; }
-.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--c-text-dim); transition: all .15s; }
-.switch input:checked + i { background: var(--c-primary-soft); border-color: var(--c-primary); }
-.switch input:checked + i::after { left: 17px; background: var(--c-primary); }
-.switch input:disabled + i { opacity: .5; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
+.switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
+.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:disabled + i { opacity: .5; cursor: not-allowed; }
+.switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
+.sl-label { line-height: 1; }
+.sl-state { font-size: 12px; padding: 2px 9px; border-radius: 999px; line-height: 1.4; white-space: nowrap; }
+.switch-row.on .sl-state { color: var(--c-primary); background: var(--c-primary-soft); }
+.switch-row:not(.on) .sl-state { color: var(--c-text-dim); background: var(--c-hover); }
 </style>
