@@ -5,9 +5,12 @@
  * 为什么不再用行内输入框 / 右上角「指定版本」总开关：
  * ① 让用户手输版本号极易出错——Debian 版本号形如 `1.26.3-3+deb13u9`（含 epoch 与
  *    修订号），凭记忆写几乎必错，错了只能等 apt 报错；
- * ② 总开关放在区块右上角容易被看漏，用户直接点「+ 安装」就装了最新版，
+ * ② 总开关放在区块右上角容易被看漏，用户直接点「+ 安装」就按源默认装上了，
  *    等于版本能力形同虚设。
  * 现在改成「点安装 → 弹窗选版本 → 确认」，选择入口就在操作路径上，不会漏。
+ *
+ * 默认值：下拉**默认选中可用版本里最新的一个**（`versions` 由后端按新→旧下发，
+ * 首项即跨源最高版本），不再提供「最新版本」这类占位选项——用户要换版本自己选即可。
  *
  * 版本列表由父组件按需拉取（打开弹窗时才查，避免列表页为 25 个包各跑一次 apt）。
  */
@@ -25,15 +28,20 @@ const props = defineProps<{
   external?: boolean    // 官方仓库通常不含，需先配第三方源
 }>()
 const emit = defineEmits<{
-  (e: 'confirm', version: string | undefined): void   // undefined = 装最新版
+  (e: 'confirm', version: string | undefined): void   // undefined = 无版本可选，交后端按源默认装
   (e: 'cancel'): void
 }>()
 
-// '' 代表「最新版本」：不向后端传 version，让 apt 自己选候选版本
+// 默认选中最新版：`versions` 已按版本从新到旧下发（apt 的输出顺序即如此，且跨源排序），
+// 首项就是"官方源/系统源里更新的那个"。列表为空（查不到 / 非 apt）时留空，
+// 确认时传 undefined，交后端按软件源当前版本安装。
 const picked = ref('')
 
-// 每次打开都重置为最新版——否则上次选的版本会残留，用户以为这次也是最新版
-watch(() => props.open, (v) => { if (v) picked.value = '' })
+// 打开时、以及版本列表异步到达时都同步默认值——列表是"弹窗先开、随后到达"的。
+// 加载期间下拉是 disabled 的，故此刻覆盖 picked 不会打断用户已经开始的选择。
+function syncDefaultVersion() { picked.value = props.versions[0] ?? '' }
+watch(() => props.open, (v) => { if (v) syncDefaultVersion() })
+watch(() => props.versions, () => { if (props.open) syncDefaultVersion() })
 
 function confirm() { emit('confirm', picked.value || undefined) }
 function cancel() { emit('cancel') }
@@ -49,20 +57,24 @@ useModal(() => props.open, box, cancel)
       <!-- 已安装的软件也能打开此弹窗（换版本），此时标题要说清是"切换"而非"安装" -->
       <h3>{{ installed ? '切换版本' : '安装' }} {{ label || name }}</h3>
       <p class="detail">
-        {{ installed ? '选择要切换到的版本，当前版本已在下拉中标注。' : '选择要安装的版本，默认「最新版本」。' }}
+        {{ installed
+          ? '选择要切换到的版本，当前版本已在下拉中标注；默认选中可用的最新版本。'
+          : '选择要安装的版本，默认选中软件源里可用的最新版本。' }}
       </p>
 
       <label>
         <span>版本</span>
-        <select v-model="picked" :disabled="loading">
-          <option value="">最新版本（软件源默认）</option>
+        <select v-model="picked" :disabled="loading || !versions.length">
+          <!-- 列表未就绪时的占位：加载中显示"查询中"，查完仍为空才说明确实查不到。
+               列表就绪后此处被 v-for 的真实版本取代，默认选中首项（最新）。 -->
+          <option v-if="!versions.length" value="" disabled>{{ loading ? '正在查询…' : '（未查到可用版本）' }}</option>
           <option v-for="v in versions" :key="v" :value="v">{{ v === installed ? v + '（已安装）' : v }}</option>
         </select>
       </label>
 
       <p v-if="loading" class="hint">正在查询可用版本…</p>
       <p v-else-if="!versions.length" class="hint">
-        未查到可用版本列表，将按软件源最新版安装。
+        未查到可用版本列表，将安装软件源当前提供的版本。
       </p>
       <p v-if="external" class="warn">
         该软件官方仓库通常不含，需先在目标机配置第三方软件源，否则安装会失败。

@@ -446,8 +446,8 @@ function taskStateText(s: string) { return taskStateLabel(s) }
 
 // ─────────────── 软件安装 / 卸载 ───────────────
 
-// 点「+ 安装」：先开弹窗并按需拉该包的可用版本（不阻塞——查不到也能装最新版）。
-// 版本查询失败不当错误：那只会让用户没法选版本，但装最新版仍然可用。
+// 点「+ 安装」：先开弹窗并按需拉该包的可用版本（不阻塞——查不到列表也能交后端按源默认装）。
+// 版本查询失败不当错误：那只会让用户没法选具体版本，但按源当前版本安装仍然可用。
 async function askInstall(p: string) {
   error.value = ''
   dlgPkg.value = p
@@ -459,13 +459,13 @@ async function askInstall(p: string) {
     dlgVersions.value = r.versions ?? []
     dlgInstalled.value = r.installed ?? null
   } catch {
-    dlgVersions.value = []   // 查不到就只提供「最新版本」，弹窗仍可用
+    dlgVersions.value = []   // 查不到列表：弹窗无版本可选，确认时交后端按源默认装
   } finally { dlgLoading.value = false }
 }
 
 function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = []; dlgInstalled.value = null }
 
-// 弹窗确认后真正提交（version 为 undefined 表示装最新版）。
+// 弹窗确认后真正提交（version 为 undefined 表示未选具体版本，交后端按源当前版本装）。
 // 已装包选到跨主版本时，后端同样会 409 强制二次确认（install 语义上等于升级），
 // 此处须与 doUpgrade 一致地拦截弹窗，否则会落到通用错误文案、装不成。
 async function doInstall(v: string | undefined, confirmed = false) {
