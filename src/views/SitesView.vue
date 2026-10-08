@@ -60,7 +60,6 @@ const sslHint = computed(() => {
   if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx）——证书没有进程可加载'
   return '需 openssl 或 ACME'
 })
-const canApply = computed(() => webSupported.value && canManage.value)
 const canReload = computed(() => webSupported.value && canManage.value)
 // 建站与配置下发同源：没有底座就不许建（后端 create 亦 501，前端只是提前挡住并说明原因）
 const canCreate = computed(() => webSupported.value && canManage.value)
@@ -201,24 +200,74 @@ function wafPayload() {
 }
 function closeModal() { modalOpen.value = false; editing.value = null }
 
+/**
+ * 保存站点 = ① 写数据模型 ② 下发配置（环境支持时）。
+ *
+ * 这两步与后端的职责划分一一对应：`create`/`patch` 管 `sites` 表（`patch` 还负责
+ * `enabled` 的**真同步**：停用=摘配置+reload），`apply` 管渲染下发。
+ * 此前它们被拆成页面上两个卡片（顶部「应用站点配置」+ 本弹窗），字段重复、
+ * 同一份信息要填两遍，且「新建」按钮建出来的站点还得再去顶部点一次应用才能访问
+ * ——现在合并为：**保存即下发**。
+ */
 async function save() {
   busy.value = true; error.value = ''; notice.value = ''
   const name = form.value.name.trim()
   const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
   const root = form.value.root.trim() || undefined
   try {
+    // 目标值的必填校验。proxy/php 的目标会**直接进 nginx 配置文本**，注入校验在后端；
+    // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
+    if (webSupported.value) {
+      if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
+      if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
+    }
+    // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
     if (editing.value) {
       await api.patch(API.sites.patch(editing.value.id), { domains, root, enabled: form.value.enabled })
-      notice.value = `已更新站点 ${name}`
     } else {
       if (!name) throw new Error('name required')
       if (!domains.length) throw new Error('domains required')
       await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
-      notice.value = `已创建站点 ${name}`
+    }
+    // ② 下发。**停用态也照样调 apply**——它只落库不下发（与后端「停用守恒」一致），
+    //    但类型 / 反代后端 / php-fpm / WAF 只有 apply 才会写进库。
+    if (webSupported.value) {
+      const r = await deploy(name, domains)
+      notice.value = r && r.deployed === false
+        ? `已保存站点 ${name}：当前为停用状态，配置已登记但未下发`
+        : `已保存站点 ${name} 并下发配置`
+    } else {
+      notice.value = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
     }
     closeModal(); await load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
+}
+
+/** 站点类型 → apply 载荷里的目标值（proxy / php 的目标会直接进 nginx 配置文本）。 */
+function kindTargets() {
+  const kind = form.value.kind
+  if (kind === 'proxy') return { upstreams: form.value.upstreams.split(/[,\s]+/).filter(Boolean) }
+  if (kind === 'php') return { fpm: form.value.fpm.trim() }
+  return {}
+}
+
+/**
+ * 渲染并下发站点配置（「保存站点」的第二步；受 webserver 能力门禁）。
+ *
+ * 与列表行「重载」的区别：重载只是让 nginx 重读**磁盘上已有的**配置，不会重新渲染；
+ * 改了域名 / 类型 / WAF 后必须走这里才会生效。
+ */
+async function deploy(name: string, domains: string[]) {
+  return api.post<{ deployed?: boolean }>(API.sites.apply(), {
+    name,
+    domains,
+    root: form.value.root.trim() || name,
+    force_https: true,
+    kind: form.value.kind,
+    ...kindTargets(),
+    waf: wafPayload(),
+  })
 }
 
 // ── 删除站点 ──
@@ -229,43 +278,6 @@ async function doDelete() {
   try { await api.del(API.sites.remove(delTarget.value.id)); delTarget.value = null; await load() }
   catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
-}
-
-// 把站点配置渲染并下发到 Web 服务器（受 webserver 能力门禁）
-async function applyConfig() {
-  busy.value = true; error.value = ''; notice.value = ''
-  const name = form.value.name.trim()
-  const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
-  try {
-    // 站点类型。proxy/php 的目标值会**直接进 nginx 配置文本**，注入校验在后端；
-    // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
-    const kind = form.value.kind
-    if (kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
-    if (kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
-    const r = await api.post<{ deployed?: boolean }>(API.sites.apply(), {
-      name,
-      domains,
-      root: form.value.root.trim() || name,
-      force_https: true,
-      kind,
-      upstreams: kind === 'proxy'
-        ? form.value.upstreams.split(/[,\s]+/).filter(Boolean)
-        : undefined,
-      fpm: kind === 'php' ? form.value.fpm.trim() : undefined,
-      waf: wafPayload(),
-    })
-    // 后端对停用态站点只存配置不下发：按返回的 deployed 标志给不同提示，不伪造成功。
-    if (r && r.deployed === false) {
-      notice.value = `站点 ${name} 处于停用状态：配置已保存但未下发，启用后才会生效`
-    } else {
-      notice.value = `已应用配置 ${name}${form.value.wafOn ? `（WAF ${form.value.wafProfile}）` : ''}`
-    }
-    form.value = emptyForm()
-    await load()
-  } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入 Web 服务器，无法应用配置'
-    else error.value = errorText(e)
-  } finally { busy.value = false }
 }
 
 // ── 重载（受 webserver 能力门禁）──
@@ -381,68 +393,6 @@ async function doDeleteCert() {
       请先在主机上安装并启动 nginx，再回到此页刷新。
     </div>
 
-    <!-- 应用站点配置（受 webserver 能力门禁） -->
-    <section class="card" :class="{ disabled: !webSupported }">
-      <div class="sec-head"><Icon name="globe" :size="16" /> 应用站点配置</div>
-      <div class="row">
-        <label>名称<input v-model="form.name" :disabled="!canApply" placeholder="my-site" /></label>
-        <label>域名（逗号分隔）<input v-model="form.domains" :disabled="!canApply" placeholder="example.com, www.example.com" /></label>
-        <label>根目录<input v-model="form.root" :disabled="!canApply" placeholder="留空则用站点名" /></label>
-        <label>类型
-          <select v-model="form.kind" :disabled="!canApply">
-            <option value="static">静态</option>
-            <option value="proxy">反向代理 / 负载均衡</option>
-            <option value="php">PHP (php-fpm)</option>
-          </select>
-        </label>
-        <label v-if="form.kind === 'proxy'">后端（逗号分隔）
-          <input v-model="form.upstreams" :disabled="!canApply" placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" />
-        </label>
-        <label v-if="form.kind === 'php'">php-fpm
-          <input v-model="form.fpm" :disabled="!canApply" placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
-        </label>
-        <button class="btn-primary" :disabled="!canApply || busy || !form.name || !form.domains"
-          @click="applyConfig">
-          {{ busy ? '应用中…' : '应用' }}
-        </button>
-      </div>
-
-      <div class="waf">
-        <label class="inline" title="在被管理站点前生成拦截规则；规则集由系统内置，此处只能选档位与数值">
-          <input type="checkbox" v-model="form.wafOn" :disabled="!canApply" /> 启用 WAF
-        </label>
-        <template v-if="form.wafOn">
-          <label>档位
-            <select v-model="form.wafProfile" :disabled="!canApply">
-              <option value="basic">基础（SQLi / XSS / 穿越 / 敏感文件 / 恶意 UA）</option>
-              <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
-            </select>
-          </label>
-          <label>CC 限速（次/秒，0 = 不限）
-            <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!canApply" />
-          </label>
-          <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'">
-            突发桶（0 = 自动）
-            <input v-model.number="form.wafBurst" type="number" min="0" max="10000"
-              :disabled="!canApply || !form.wafRate" />
-          </label>
-        </template>
-      </div>
-
-      <p class="tip">
-        流程：渲染 → 语法校验 → 原子替换 → reload → 入库。校验失败时旧配置不受影响。
-        多个后端由 nginx <code>upstream</code>（least_conn）轮询；后端只接受
-        <code>http(s)://host:port</code>，不接受路径或查询串。
-      </p>
-      <p class="tip">
-        WAF 与站点配置<b>同一次下发</b>（它本来就是 nginx 配置的一部分）。
-        超限返回 <code>429</code>；<code>/.well-known</code> 始终放行——ACME 挑战文件在那里，
-        一刀切会把证书续期打死。
-        <b>「编辑」不会回填后端 / php-fpm 地址</b>（后端未持久化它们），
-        它会以 400 要求重填，而<b>不会</b>把站点悄悄改成静态。
-      </p>
-    </section>
-
     <!-- 站点列表 -->
     <div class="sec-head block"><Icon name="globe" :size="16" /> 站点</div>
     <div v-if="loading && !sites.length" class="skeleton box" />
@@ -524,8 +474,14 @@ async function doDeleteCert() {
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">
-      <div ref="modalBox" class="modal" role="dialog" aria-modal="true">
+      <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
         <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
+        <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
+        <div v-if="!webSupported" class="hint-note is-warn">
+          <Icon name="alert" :size="15" class="ic" />
+          <span>未接入 Web 服务器（nginx）：<b>只能保存站点登记信息，无法下发配置</b>；
+            下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
+        </div>
         <label class="blk">名称
           <input v-model="form.name" :disabled="!!editing" placeholder="my-site" />
         </label>
@@ -540,6 +496,45 @@ async function doDeleteCert() {
             </button>
           </div>
         </label>
+        <label class="blk">类型
+          <select v-model="form.kind" :disabled="!webSupported">
+            <option value="static">静态</option>
+            <option value="proxy">反向代理 / 负载均衡</option>
+            <option value="php">PHP (php-fpm)</option>
+          </select>
+        </label>
+        <label v-if="form.kind === 'proxy'" class="blk">后端（逗号分隔）
+          <input v-model="form.upstreams" :disabled="!webSupported"
+            placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" />
+        </label>
+        <label v-if="form.kind === 'php'" class="blk">php-fpm
+          <input v-model="form.fpm" :disabled="!webSupported"
+            placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
+        </label>
+
+        <!-- WAF：站点配置的一部分，与其它字段**同一次下发**，故同处一个表单 -->
+        <div class="waf">
+          <label class="inline" title="在被管理站点前生成拦截规则；规则集由系统内置，此处只能选档位与数值">
+            <input type="checkbox" v-model="form.wafOn" :disabled="!webSupported" /> 启用 WAF
+          </label>
+          <template v-if="form.wafOn">
+            <label>档位
+              <select v-model="form.wafProfile" :disabled="!webSupported">
+                <option value="basic">基础（SQLi / XSS / 穿越 / 敏感文件 / 恶意 UA）</option>
+                <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
+              </select>
+            </label>
+            <label>CC 限速（次/秒，0 = 不限）
+              <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported" />
+            </label>
+            <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'">
+              突发桶（0 = 自动）
+              <input v-model.number="form.wafBurst" type="number" min="0" max="10000"
+                :disabled="!webSupported || !form.wafRate" />
+            </label>
+          </template>
+        </div>
+
         <label class="blk row-inline">
           <input type="checkbox" v-model="form.enabled" />
           <span>启用（纳入 Web 服务器配置）</span>
@@ -548,12 +543,18 @@ async function doDeleteCert() {
           <Icon name="info" :size="15" class="ic" />
           <span>{{ editing
             ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
-            : '新建时仅记录初始状态——站点要在列表里点「应用」后才会真正对外服务。' }}</span>
+            : '保存即下发：站点会立即对外服务。取消勾选则只登记站点、不下发配置。' }}</span>
         </div>
+        <p class="tip">
+          流程：渲染 → 语法校验 → 原子替换 → reload → 入库；校验失败时旧配置不受影响。
+          反代后端由 nginx <code>upstream</code>（least_conn）轮询，只接受
+          <code>http(s)://host:port</code>；WAF 与站点配置同一次下发。
+        </p>
         <p v-if="error" class="err" role="alert">{{ error }}</p>
         <div class="modal-actions">
           <button class="btn-ghost" @click="closeModal">取消</button>
-          <button class="btn-primary" :disabled="busy" @click="save">{{ busy ? '保存中…' : '保存' }}</button>
+          <button class="btn-primary" :disabled="busy" @click="save">
+            {{ busy ? '保存中…' : (editing ? '保存并应用' : '创建并应用') }}</button>
         </div>
       </div>
     </div>
@@ -644,7 +645,7 @@ sudo update-ca-certificates</pre>
 </template>
 
 <style scoped>
-/* WAF 区块：与 .row 同一套排布，用虚线分隔以表明它是站点配置的一部分而非并列项 */
+/* WAF 区块：位于站点编辑弹窗内，用虚线分隔以表明它是站点配置的一部分而非并列项 */
 .waf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px;
   border-top: 1px dashed var(--c-border); padding-top: 10px; }
 .waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
@@ -666,7 +667,6 @@ sudo update-ca-certificates</pre>
   border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
   padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6;
   margin: 0 0 14px; }
-.card.disabled { opacity: .6; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
