@@ -251,8 +251,9 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
         </div>
       </section>
 
-      <!-- 系统信息 + 告警 -->
-      <div class="grid cols-3">
+      <!-- 系统信息 + 告警。两列：此处只有 2 张卡，原用 cols-3 会让第三列**永远空着**
+           （>1180px 时白占 1/3 行宽；≤1180px 的 cols-3 本就退化成两列，故窄屏无变化）。 -->
+      <div class="grid cols-2">
         <section class="card info">
           <div class="sec-head"><Icon name="server" :size="16" /><span>系统信息</span></div>
           <dl>
