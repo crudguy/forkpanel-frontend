@@ -22,9 +22,9 @@
  * 所以「编辑」一个反代 / PHP 站时那两个输入框是空的，**必须重填**才能再应用
  * （后端会以 400 拒绝空值，不会静默把站点改成静态）。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useModal } from '@/composables/useModal'
-import { api, errorText, isUnsupported, ValidationError } from '@/api/client'
+import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type Site } from '@/api/types'
@@ -40,7 +40,18 @@ const sites = ref<Site[]>([])
 const certs = ref<Cert[]>([])
 interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
+/**
+ * **页面级**错误（列表加载 / 删除站点 / 重载等非弹窗操作）。
+ *
+ * ⚠ 弹窗表单的错误**一律不走这里**，而走 formError / fieldErrs：此前二者共用一个
+ * ref，于是"编辑站点保存失败"会同时点亮页面顶部那条 `<p class="err">`（实机确认），
+ * 用户看到消息像是"跑回上级页面的顶部"去了，还得自己把它和弹窗里的红条对上。
+ */
 const error = ref('')
+/** 弹窗内的**非字段**错误（网络失败 / 服务端异常等，归属不到某个输入框）。 */
+const formError = ref('')
+/** 弹窗内的**字段级**错误：键 = 表单字段名，值 = 给用户看的中文说明。 */
+const fieldErrs = ref<Record<string, string>>({})
 /**
  * 错误序号：每次保存失败自增，用作错误条的 `:key`。
  * 元素因此被重建，「抖动」动画才能**重复播放**——否则同一文案下 v-if 恒为 true、
@@ -217,7 +228,56 @@ function wafPayload() {
   if (form.value.wafRate > 0 && form.value.wafBurst > 0) p.burst = form.value.wafBurst
   return p
 }
-function closeModal() { modalOpen.value = false; editing.value = null }
+function closeModal() {
+  modalOpen.value = false; editing.value = null
+  // 关闭即清理：下次打开弹窗一定是干净的，不会"什么都还没提交就顶着上次的红条"。
+  formError.value = ''; fieldErrs.value = {}
+}
+
+// ── 错误定位：把报错落到**出问题的那个输入框旁边** ──
+/** 与后端 is_valid_domain 的语法段同口径（TLD 真实性只由后端校验，前端不内嵌列表）。 */
+const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
+/** 与后端 is_valid_site_name 同口径：字母数字开头，后可接字母数字与 . _ -，长度 1~63。 */
+const SITE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/
+/**
+ * 后端 400 的字段名 → 表单字段 key + 中文兜底文案（见 panel-api `ApiError::bad_request`）。
+ * 后端 reason 已是中文时优先用它（更具体），否则回退到这里的兜底（避免把英文甩给用户）。
+ */
+const BACKEND_FIELD: Record<string, { key: string; msg: string }> = {
+  name: { key: 'name', msg: '站点名称格式不正确' },
+  domains: { key: 'domains', msg: '域名格式不正确' },
+  root: { key: 'root', msg: '根目录不合法' },
+  upstreams: { key: 'upstreams', msg: '后端地址不合法' },
+  fpm: { key: 'fpm', msg: 'php-fpm 目标不合法' },
+  redirect_target: { key: 'redirectTarget', msg: '重定向目标 URL 不合法' },
+  redirect_code: { key: 'redirectCode', msg: '重定向状态码不合法' },
+  'waf.profile': { key: 'wafProfile', msg: 'WAF 档位不合法' },
+  'waf.rate_per_sec': { key: 'wafRate', msg: '限速取值不合法' },
+  'waf.burst': { key: 'wafBurst', msg: '突发桶取值不合法' },
+}
+/** 后端 reason 是否已是给人看的中文——是则原样透出（更具体），否则用前端中文兜底。 */
+function fieldMsg(fallback: string, reason: string) {
+  return /[\u4e00-\u9fff]/.test(reason) ? reason : fallback
+}
+/** 用户一改动该字段就撤掉它的红字提示：问题正在被修，不该继续吓人。 */
+function clearFieldErr(key: string) {
+  if (fieldErrs.value[key]) delete fieldErrs.value[key]
+}
+/**
+ * 把出问题的字段滚进视野。用 `nearest`——**已在视野内则纹丝不动**，
+ * 只有真的看不见时才最小幅度滚动，避免"错误一出现页面就跳"。
+ */
+function revealField(key: string) {
+  nextTick(() => {
+    modalBox.value?.querySelector<HTMLElement>(`[data-f="${key}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+}
+/** 错误归位：编辑弹窗开着就进弹窗（绝不当页面级错误），否则才留在页面顶部的提示条。 */
+function showErr(msg: string) {
+  if (modalOpen.value) { formError.value = msg; errSeq.value++ }
+  else error.value = msg
+}
 
 /**
  * 保存站点 = ① 写数据模型 ② 下发配置（环境支持时）。
@@ -229,28 +289,44 @@ function closeModal() { modalOpen.value = false; editing.value = null }
  * ——现在合并为：**保存即下发**。SSL 证书管理同理并入本弹窗（见下方 .ssl 区块）。
  */
 async function save() {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''; notice.value = ''; formError.value = ''; fieldErrs.value = {}
   const name = form.value.name.trim()
   const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
   const root = form.value.root.trim() || undefined
   try {
-    // 目标值的必填校验。proxy/php 的目标会**直接进 nginx 配置文本**，注入校验在后端；
-    // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
-    // ⚠ 一律用 ValidationError 抛：普通 Error 会被 errorText 兜底成「请求失败，请稍后重试」，
-    //    用户根本看不到真正原因（本次修复的核心）。
-    if (webSupported.value) {
-      if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) throw new ValidationError('反向代理需要填写至少一个后端地址')
-      if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new ValidationError('PHP 站点需要填写 php-fpm 目标')
-      if (form.value.kind === 'redirect' && !form.value.redirectTarget.trim()) throw new ValidationError('整站重定向需要填写目标 URL')
-    }
-    // 域名格式前置提示（后端仍为准）：拒绝单词级乱填，避免递上去才 400。
-    // **TLD 真实性只由后端校验**——前端刻意不内嵌 IANA 列表，避免两处列表漂移
-    // （同约束放两处必漂移）；此处只挡语法上明显不合法者。
-    if (webSupported.value) {
+    // ── 前置校验：**逐字段收集**，而非抛出第一个就中断 ──
+    // 好处有二：① 一次把所有问题都标出来，用户改一轮即可；② 每条都挂在**对应输入框旁**
+    // （靠模板上的 data-f 定位），"域名错就提示在域名处、根目录错就提示在根目录处"，
+    // 而不是所有错误统一堆在弹窗底部、让用户自己去猜哪个框填错了。
+    const errs: Record<string, string> = {}
+    if (!name) errs.name = '请填写站点名称'
+    else if (!SITE_NAME_RE.test(name)) errs.name = '名称需以字母或数字开头，只能含字母、数字、. _ -，长度 1~63'
+    if (!domains.length) errs.domains = '至少需要填写一个域名'
+    else {
       for (const d of domains) {
-        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d.toLowerCase()))
-          throw new ValidationError(`域名「${d}」格式不正确：需至少两级、顶级域须真实存在，如 example.com`)
+        if (!DOMAIN_RE.test(d.toLowerCase())) {
+          errs.domains = `域名「${d}」格式不正确：需至少两级，如 example.com`
+          break
+        }
       }
+    }
+    if (webSupported.value) {
+      // 目标值的必填校验。proxy/php 的目标会**直接进 nginx 配置文本**，注入校验在后端；
+      // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
+      if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) errs.upstreams = '反向代理需要填写至少一个后端地址'
+      if (form.value.kind === 'php' && !form.value.fpm.trim()) errs.fpm = 'PHP 站点需要填写 php-fpm 目标'
+      if (form.value.kind === 'redirect') {
+        const t = form.value.redirectTarget.trim()
+        if (!t) errs.redirectTarget = '整站重定向需要填写目标 URL'
+        else if (!/^https?:\/\/\S+/i.test(t)) errs.redirectTarget = '目标 URL 必须以 http:// 或 https:// 开头'
+      }
+    }
+    const firstBad = Object.keys(errs)[0]
+    if (firstBad) {
+      fieldErrs.value = errs
+      errSeq.value++             // 红字重建 → 抖动动画重播：连点保存也总有可见反馈
+      revealField(firstBad)      // 把第一个出错的字段（含其红字）滚进视野
+      return
     }
     // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
     if (editing.value) {
@@ -258,8 +334,6 @@ async function save() {
       // root 已是绝对路径、证书按 domain，改名都不影响，也不会重新下发配置）
       await api.patch(API.sites.patch(editing.value.id), { name, domains, root, enabled: form.value.enabled })
     } else {
-      if (!name) throw new ValidationError('站点名称不能为空')
-      if (!domains.length) throw new ValidationError('至少需要填写一个域名')
       await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
     }
     // ② 下发。**停用态也照样调 apply**——它只落库不下发（与后端「停用守恒」一致），
@@ -276,9 +350,27 @@ async function save() {
     // ⚠ 顺序不能颠倒：load() 开头会把 notice 清空（它同时负责清掉上一轮的旧提示），
     //   若先赋 notice 再 load，成功提示会被**立刻冲掉**——用户看不到任何"保存成功"的反馈。
     closeModal(); await load(); notice.value = msg
-  // 失败时递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
-  } catch (e) { error.value = errorText(e); errSeq.value++ }
-  finally { busy.value = false }
+  } catch (e) {
+    // 失败：**能定位到字段就挂在字段旁**；定位不到（网络/服务端异常）才用通用错误条。
+    const fd = errorFieldDetail(e)
+    if (fd) {
+      const m = BACKEND_FIELD[fd.field]
+      if (m) {
+        fieldErrs.value = { [m.key]: fieldMsg(m.msg, fd.reason) }
+        revealField(m.key)
+      } else {
+        formError.value = fieldMsg('提交内容有误，请检查后重试', fd.reason)
+      }
+    } else if ((e as { code?: number } | null)?.code === 50001) {
+      // 50001 = 路径越界。本表单里唯一的路径输入就是根目录，落到它旁边。
+      fieldErrs.value = { root: errorText(e) }
+      revealField('root')
+    } else {
+      formError.value = errorText(e)
+    }
+    // 递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
+    errSeq.value++
+  } finally { busy.value = false }
 }
 
 /** 站点类型 → apply 载荷里的目标值（proxy / php / redirect 的目标会直接进 nginx 配置文本）。 */
@@ -339,6 +431,14 @@ const siteCerts = computed<Cert[]>(() =>
 
 /** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。 */
 const sslModal = ref<{ site: Site; method: 'self-signed' | 'http-01'; email: string } | null>(null)
+/**
+ * 签发弹窗**自己**的错误位。
+ *
+ * 签发弹窗是叠在站点弹窗之上的第二层遮罩，此时页面级的 error/notice 会被两层遮罩
+ * 挡在后面——用户什么都看不见，只看到点「申请」没反应。所以这一层的报错必须落在
+ * 它自己的可见区域里。
+ */
+const sslErr = ref('')
 
 /** 根证书安装指引弹窗。自签证书能被浏览器信任的**唯一**前提是把根 CA 装进信任库。 */
 const caHelp = ref(false)
@@ -352,6 +452,17 @@ function downloadCa() {
   window.location.href = API.certs.ca()
 }
 
+/**
+ * 把签发类错误放到**用户当下真正看得见的那一层**：签发弹窗 > 站点编辑弹窗 > 页面级。
+ * 此前一律写页面级 error/notice，弹窗开着时全被遮罩挡在后面 → 表现为"点了没反应"。
+ * `asNotice`：能力未接入（还没装上）属提示而非报错，沿用绿色语义。
+ */
+function sslErrTo(msg: string, asNotice = false) {
+  if (sslModal.value) { sslErr.value = msg; return }
+  if (asNotice && !modalOpen.value) { notice.value = msg; return }
+  showErr(msg)
+}
+
 /** 行内「SSL」快捷入口：直接开签发弹窗（仅一种渠道可用时立即执行，不给"必败选项"）。 */
 function applySsl(s: Site) {
   error.value = ''; notice.value = ''
@@ -359,6 +470,7 @@ function applySsl(s: Site) {
     execSsl(s, selfSignedSupported.value ? 'self-signed' : 'http-01', '')
     return
   }
+  sslErr.value = ''
   sslModal.value = { site: s, method: 'self-signed', email: '' }
 }
 /** 编辑弹窗内「申请证书」：作用对象即当前正在编辑的站点。 */
@@ -367,10 +479,10 @@ function applySslEditing() {
 }
 
 async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''; notice.value = ''; sslErr.value = ''
   // ACME 必须有账户邮箱：CA 靠它发到期/异常通知，缺了就明确报错，不代填假地址
   if (method === 'http-01' && !email.trim()) {
-    error.value = 'ACME 签发需要账户邮箱'
+    sslErrTo('ACME 签发需要账户邮箱')
     busy.value = false
     return
   }
@@ -383,8 +495,9 @@ async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string
     sslModal.value = null
     if (method === 'self-signed') await load()
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入证书签发能力（需 openssl 或 ACME）'
-    else error.value = errorText(e)
+    // 能力未接入属于"还没装上"，沿用绿色提示语义；真出错才是红色。
+    if (isUnsupported(e)) sslErrTo('当前环境未接入证书签发能力（需 openssl 或 ACME）', true)
+    else sslErrTo(errorText(e))
   } finally { busy.value = false }
 }
 
@@ -392,13 +505,15 @@ async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string
 const delCert = ref<Cert | null>(null)
 async function renewCert(c: Cert) {
   busy.value = true; error.value = ''; notice.value = ''
+  let ok = ''
   try {
     await api.post(API.certs.renew(c.id), {})
-    notice.value = `已续期 ${c.domain} 的证书`
+    ok = `已续期 ${c.domain} 的证书`
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入证书续期能力'
-    else error.value = errorText(e)
-  } finally { busy.value = false; await load() }
+    if (isUnsupported(e)) sslErrTo('当前环境未接入证书续期能力', true)
+    else sslErrTo(errorText(e))
+    // ⚠ 与 save() 同一个坑：load() 开头会把 notice 清空，先赋再 load 等于没赋。
+  } finally { busy.value = false; await load(); if (ok) notice.value = ok }
 }
 async function setAutoRenew(c: Cert, val: boolean) {
   busy.value = true; error.value = ''; notice.value = ''
@@ -407,15 +522,15 @@ async function setAutoRenew(c: Cert, val: boolean) {
     c.auto_renew = val
     notice.value = `${c.domain} 自动续期已${val ? '开启' : '关闭'}`
   } catch (e) {
-    if (isUnsupported(e)) error.value = '当前环境未接入 ACME，无法自动续期'
-    else error.value = errorText(e)
+    if (isUnsupported(e)) sslErrTo('当前环境未接入 ACME，无法自动续期')
+    else sslErrTo(errorText(e))
   } finally { busy.value = false }
 }
 async function doDeleteCert() {
   if (!delCert.value) return
   busy.value = true; error.value = ''
   try { await api.del(API.certs.remove(delCert.value.id)); delCert.value = null; await load() }
-  catch (e) { error.value = errorText(e) }
+  catch (e) { sslErrTo(errorText(e)) }
   finally { busy.value = false }
 }
 </script>
@@ -423,7 +538,9 @@ async function doDeleteCert() {
 <template>
   <div>
     <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <p v-else-if="notice" class="notice">{{ notice }}</p>
+    <!-- 弹窗打开时页面级提示会藏在遮罩后面（等于没有），此刻改由弹窗顶部展示同一句
+         notice——同一句话不在遮罩前后重复出现。error 已与弹窗解耦，不会在此被弹窗点亮。 -->
+    <p v-else-if="notice && !modalOpen" class="notice">{{ notice }}</p>
 
     <div v-if="!webSupported" class="tip warn">
       未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
@@ -483,6 +600,15 @@ async function doDeleteCert() {
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="closeModal">
       <div ref="modalBox" class="modal wide site-modal" role="dialog" aria-modal="true">
+        <!-- 通用消息条（吸顶，故置于网格首项）：只承载**归属不到具体输入框**的错误，
+             以及弹窗内的成功提示。字段级错误各自挂在对应输入框旁（靠各 label 的 data-f
+             定位），不在这里重复——此前所有错误一律压在弹窗最底部，用户在中部滚动时
+             点保存根本看不到，只能反复点。
+             `:key` 绑 errSeq：连点保存时元素重建，抖动动画得以重播，不会"点了没反应"。 -->
+        <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
+        </p>
+        <p v-else-if="notice" class="notice form-msg" role="status">{{ notice }}</p>
         <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
@@ -490,8 +616,10 @@ async function doDeleteCert() {
           <span>未接入 Web 服务器（nginx）：<b>只能保存站点登记信息，无法下发配置</b>；
             下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
         </div>
-        <label class="blk">名称
-          <input v-model="form.name" placeholder="my-site" />
+        <label class="blk" :class="{ 'has-err': fieldErrs.name }" data-f="name">名称
+          <input v-model="form.name" placeholder="my-site" :aria-invalid="!!fieldErrs.name"
+            @input="clearFieldErr('name')" />
+          <span v-if="fieldErrs.name" :key="'name' + errSeq" class="field-err">{{ fieldErrs.name }}</span>
         </label>
         <label class="blk">类型
           <select v-model="form.kind" :disabled="!webSupported">
@@ -501,24 +629,30 @@ async function doDeleteCert() {
             <option value="redirect">整站重定向</option>
           </select>
         </label>
-        <label class="blk full">域名（逗号分隔）
-          <input v-model="form.domains" placeholder="example.com, www.example.com" />
+        <label class="blk full" :class="{ 'has-err': fieldErrs.domains }" data-f="domains">域名（逗号分隔）
+          <input v-model="form.domains" placeholder="example.com, www.example.com"
+            :aria-invalid="!!fieldErrs.domains" @input="clearFieldErr('domains')" />
+          <span v-if="fieldErrs.domains" :key="'domains' + errSeq" class="field-err">{{ fieldErrs.domains }}</span>
         </label>
-        <label class="blk full">根目录（留空用站点名，须落在站点根目录内）
+        <label class="blk full" :class="{ 'has-err': fieldErrs.root }" data-f="root">根目录（留空用站点名，须落在站点根目录内）
           <div class="dir-row">
-            <input v-model="form.root" placeholder="留空则用站点名" />
+            <input v-model="form.root" placeholder="留空则用站点名" :aria-invalid="!!fieldErrs.root"
+              @input="clearFieldErr('root')" />
             <button type="button" class="btn-ghost btn-sm" @click="pickerOpen = true">
               <Icon name="folder" :size="13" /> 浏览…
             </button>
           </div>
+          <span v-if="fieldErrs.root" :key="'root' + errSeq" class="field-err">{{ fieldErrs.root }}</span>
         </label>
-        <label v-if="form.kind === 'proxy'" class="blk full">后端（逗号分隔）
-          <input v-model="form.upstreams" :disabled="!webSupported"
-            placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" />
+        <label v-if="form.kind === 'proxy'" class="blk full" :class="{ 'has-err': fieldErrs.upstreams }" data-f="upstreams">后端（逗号分隔）
+          <input v-model="form.upstreams" :disabled="!webSupported" :aria-invalid="!!fieldErrs.upstreams"
+            placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" @input="clearFieldErr('upstreams')" />
+          <span v-if="fieldErrs.upstreams" :key="'upstreams' + errSeq" class="field-err">{{ fieldErrs.upstreams }}</span>
         </label>
-        <label v-if="form.kind === 'php'" class="blk full">php-fpm
-          <input v-model="form.fpm" :disabled="!webSupported"
-            placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
+        <label v-if="form.kind === 'php'" class="blk full" :class="{ 'has-err': fieldErrs.fpm }" data-f="fpm">php-fpm
+          <input v-model="form.fpm" :disabled="!webSupported" :aria-invalid="!!fieldErrs.fpm"
+            placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" @input="clearFieldErr('fpm')" />
+          <span v-if="fieldErrs.fpm" :key="'fpm' + errSeq" class="field-err">{{ fieldErrs.fpm }}</span>
         </label>
         <!-- SPA history 路由回退：仅 static 类型有意义。开启后 nginx 用
              `try_files $uri $uri/ /index.html` 兜底，配合前端 history 模式单页应用。
@@ -530,17 +664,19 @@ async function doDeleteCert() {
         <!-- 整站重定向：仅 redirect 类型有意义。目标须 http(s):// 开头（后端校验），
              状态码限 301/302/307/308；$request_uri 自动追加，无需手填路径。 -->
         <template v-if="form.kind === 'redirect'">
-          <label class="blk full">重定向目标 URL
-            <input v-model="form.redirectTarget" :disabled="!webSupported"
-              placeholder="https://example.com" />
+          <label class="blk full" :class="{ 'has-err': fieldErrs.redirectTarget }" data-f="redirectTarget">重定向目标 URL
+            <input v-model="form.redirectTarget" :disabled="!webSupported" :aria-invalid="!!fieldErrs.redirectTarget"
+              placeholder="https://example.com" @input="clearFieldErr('redirectTarget')" />
+            <span v-if="fieldErrs.redirectTarget" :key="'rt' + errSeq" class="field-err">{{ fieldErrs.redirectTarget }}</span>
           </label>
-          <label class="blk">状态码
-            <select v-model.number="form.redirectCode" :disabled="!webSupported">
+          <label class="blk" :class="{ 'has-err': fieldErrs.redirectCode }" data-f="redirectCode">状态码
+            <select v-model.number="form.redirectCode" :disabled="!webSupported" @change="clearFieldErr('redirectCode')">
               <option :value="301">301 永久</option>
               <option :value="302">302 临时</option>
               <option :value="307">307 临时（保留方法）</option>
               <option :value="308">308 永久（保留方法）</option>
             </select>
+            <span v-if="fieldErrs.redirectCode" :key="'rc' + errSeq" class="field-err">{{ fieldErrs.redirectCode }}</span>
           </label>
         </template>
 
@@ -550,19 +686,25 @@ async function doDeleteCert() {
             <input type="checkbox" v-model="form.wafOn" :disabled="!webSupported" /> 启用 WAF
           </label>
           <template v-if="form.wafOn">
-            <label>档位
-              <select v-model="form.wafProfile" :disabled="!webSupported">
+            <label :class="{ 'has-err': fieldErrs.wafProfile }" data-f="wafProfile">档位
+              <select v-model="form.wafProfile" :disabled="!webSupported" @change="clearFieldErr('wafProfile')">
                 <option value="basic">基础（SQLi / XSS / 穿越 / 敏感文件 / 恶意 UA）</option>
                 <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
               </select>
+              <span v-if="fieldErrs.wafProfile" :key="'wp' + errSeq" class="field-err">{{ fieldErrs.wafProfile }}</span>
             </label>
-            <label>CC 限速（次/秒，0 = 不限）
-              <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported" />
+            <label :class="{ 'has-err': fieldErrs.wafRate }" data-f="wafRate">CC 限速（次/秒，0 = 不限）
+              <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported"
+                :aria-invalid="!!fieldErrs.wafRate" @input="clearFieldErr('wafRate')" />
+              <span v-if="fieldErrs.wafRate" :key="'wr' + errSeq" class="field-err">{{ fieldErrs.wafRate }}</span>
             </label>
-            <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'">
+            <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'"
+              :class="{ 'has-err': fieldErrs.wafBurst }" data-f="wafBurst">
               突发桶（0 = 自动）
               <input v-model.number="form.wafBurst" type="number" min="0" max="10000"
-                :disabled="!webSupported || !form.wafRate" />
+                :disabled="!webSupported || !form.wafRate" :aria-invalid="!!fieldErrs.wafBurst"
+                @input="clearFieldErr('wafBurst')" />
+              <span v-if="fieldErrs.wafBurst" :key="'wb' + errSeq" class="field-err">{{ fieldErrs.wafBurst }}</span>
             </label>
           </template>
         </div>
@@ -616,14 +758,10 @@ async function doDeleteCert() {
           反代后端由 nginx <code>upstream</code>（least_conn）轮询，只接受
           <code>http(s)://host:port</code>；WAF 与站点配置同一次下发。
         </p>
+        <!-- 操作条吸底：弹窗比视口高时，按钮不会随内容滚走，矮窗口下也点得到。
+             错误条**不再**挤在这里——它已上移到弹窗顶部吸顶（见上方 .form-msg），
+             字段级错误则各自挂在出问题的输入框旁。 -->
         <div class="modal-foot">
-          <!-- 错误条与操作条**同处吸底区**：弹窗内容比视口高时，独立摆在表单最底部的
-               错误会被滚出视野——用户点「保存并应用」只见按钮无反应、不知错在哪，只能
-               反复点。吸底后它恒出现在按钮正上方，配合抖动动画即时抓住视线。
-               `:key` 绑 errSeq：连点保存时元素被重建，动画得以重播而不是只响一次。 -->
-          <p v-if="error" :key="errSeq" class="err err-bar" role="alert">
-            <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
-          </p>
           <div class="modal-actions">
             <button class="btn-ghost" @click="closeModal">取消</button>
             <button class="btn-primary" :disabled="busy" @click="save">
@@ -695,6 +833,11 @@ sudo update-ca-certificates</pre>
     <div v-if="sslModal" class="mask" @click.self="sslModal = null">
       <div class="modal" role="dialog" aria-modal="true">
         <h3>为「{{ sslModal.site.name }}」申请证书</h3>
+        <!-- 签发弹窗是叠在站点弹窗之上的第二层遮罩：这里出的错若写页面级 error/notice，
+             会被两层遮罩挡在后面，用户只觉得"点了申请没反应"。故在弹窗内自带错误位。 -->
+        <p v-if="sslErr" class="err-bar" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ sslErr }}</span>
+        </p>
         <label class="ssl-opt">
           <input type="radio" value="self-signed" v-model="sslModal.method" />
           <span><b>面板自签</b><br /><span class="dim">离线可用、立即可得；需先导入面板根证书浏览器才受信（见「信任根证书」）</span></span>
@@ -793,10 +936,8 @@ sudo update-ca-certificates</pre>
 .modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
   padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
 
-/* 站点弹窗的底部吸底区：**错误条与操作条合为同一个 sticky 容器**。
-   此前错误条是表单末尾的独立一行、只有操作条吸底——弹窗内容（字段 + WAF + SSL）
-   比视口高时，用户在中部滚动位置点「保存并应用」，报错被留在视野之外，于是
-   "看不到原因、一直点保存"。合并后错误恒出现在按钮正上方（结构见模板 .modal-foot）。 */
+/* 站点弹窗的操作条吸底：弹窗内容（字段 + WAF + SSL）比视口高时按钮不随内容滚走，
+   矮窗口下也点得到。错误条**不再**挤在这里，改到弹窗顶部吸顶（见下方 .form-msg）。 */
 .modal.wide.site-modal > .modal-foot { position: sticky; bottom: 0; z-index: 2;
   margin: 14px -20px 0; padding: 12px 20px; background: var(--c-surface-2);
   border-top: 1px solid var(--c-border); }
@@ -804,13 +945,25 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .modal-foot .modal-actions { position: static; margin: 0;
   padding: 0; border-top: 0; background: none; }
 
-/* 错误条：从「裸红字」升级为带底色 + 描边的警示条，并抖一下把视线拉过来。
-   文案由 api/client 的 errorText 统一给出（含具体原因），此处只负责让它"看得见"。 */
-.err-bar { display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
-  border-radius: 8px; line-height: 1.6; background: var(--c-danger-soft);
-  border: 1px solid var(--c-danger); }
-.err-bar .ic { flex: none; margin-top: 1px; }
-.modal-foot .err-bar { margin: 0 0 10px; }
+/* ── 弹窗内的报错：通用条吸顶 + 字段级红字，两者分工明确 ── */
+/* 通用消息条：**吸顶**而非沉底——沉底时用户在中部滚动位置点保存就看不到。
+   只装"归属不到某个输入框"的错误（网络 / 服务端异常）与弹窗内的成功提示；
+   字段级错误有自己的位置（见 .field-err），不在这里重复。 */
+/* 通用消息条：**吸顶**而非沉底——沉底时用户在中部滚动位置点保存就看不到。
+   两处讲究：① 它是**网格首项**并用负边距抵消弹窗上内边距，才真正贴住弹窗顶边；
+   ② 底色必须**不透明**，否则半透明底会让堆在它下面的字段文字透上来。 */
+.modal.wide.site-modal > .form-msg { grid-column: 1 / -1; position: sticky; top: 0; z-index: 3;
+  margin: -20px -24px 12px; padding: 11px 24px; border-radius: 12px 12px 0 0;
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface-2)); }
+.modal.wide.site-modal > .form-msg.notice {
+  background: color-mix(in srgb, var(--c-ok) 14%, var(--c-surface-2));
+  border-color: color-mix(in srgb, var(--c-ok) 40%, transparent); }
+/* 字段级错误：挂在**出问题的那个输入框**正下方（模板里紧跟其 input / select）。
+   此前所有错误统一堆在弹窗底部，用户得自己逐个框去猜哪儿填错了。 */
+.field-err { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5;
+  color: var(--c-danger); animation: site-shake .3s ease; }
+/* 出错的输入框 / 下拉本身也标红：扫一眼就知道是哪个框（默认描边是 --c-border-strong）。 */
+label.has-err input, label.has-err select { border-color: var(--c-danger); }
 @keyframes site-shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-4px); }
@@ -818,8 +971,12 @@ sudo update-ca-certificates</pre>
   60% { transform: translateX(-3px); }
   80% { transform: translateX(3px); }
 }
-.err-bar { animation: site-shake .3s ease; }
-@media (prefers-reduced-motion: reduce) { .err-bar { animation: none; } }
+/* 错误条：带底色 + 描边的警示条，并抖一下把视线拉过来。文案由 errorText / 视图校验给出。 */
+.err-bar { display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
+  border-radius: 8px; line-height: 1.6; background: var(--c-danger-soft);
+  border: 1px solid var(--c-danger); animation: site-shake .3s ease; }
+.err-bar .ic { flex: none; margin-top: 1px; }
+@media (prefers-reduced-motion: reduce) { .err-bar, .field-err { animation: none; } }
 .ca-lede { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: var(--c-text-dim); }
 .ca-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 9px 11px;
   border-radius: 8px; font-size: 12.5px; line-height: 1.6; color: var(--c-text-dim);

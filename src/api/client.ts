@@ -150,6 +150,22 @@ export function isUnsupported(e: unknown): boolean {
   return e instanceof ApiError && e.code === 10009
 }
 
+/**
+ * 后端 400 的**字段级**校验信息（`detail = { field, reason }`，见 panel-api 的
+ * `ApiError::bad_request`）。
+ *
+ * 存在的理由：后端已经把"错在哪个字段"告诉了我们（`domains` / `name` /
+ * `upstreams` / `fpm` / `redirect_target` / `waf.*`…），若把它压成一句笼统的
+ * 「保存失败」堆在弹窗底部，用户得自己逐个输入框猜哪儿填错了。取出来后可以
+ * 精确落到对应表单项旁边——"域名错就提示在域名处"。
+ */
+export function errorFieldDetail(e: unknown): { field: string; reason: string } | null {
+  if (!(e instanceof ApiError)) return null
+  const d = e.detail as { field?: unknown; reason?: unknown } | undefined
+  if (!d || typeof d.field !== 'string') return null
+  return { field: d.field, reason: typeof d.reason === 'string' ? d.reason : '' }
+}
+
 /** 人类可读的错误文案（按错误码分段，避免把英文原文直接丢给用户） */
 export function errorText(e: unknown): string {
   // 视图主动抛的校验文案（ValidationError）**原样透出**：它就是写给用户看的，
@@ -171,6 +187,9 @@ export function errorText(e: unknown): string {
     // 这种不知所云的字符串。补一条通用兜底，全项目一次生效；需要更具体说法的视图仍可
     // 用 isUnsupported 在自己的 catch 里覆盖。
     case 10009: return '当前环境未接入该能力（缺少依赖或后端未实装）'
+    // 10005 = 冲突（重名等）。后端 message 是内部英文串（如 "conflict: site name exists"），
+    // 直接透出等于把内部报错甩给用户——给一句中文，别让用户去猜英文。
+    case 10005: return '已有同名资源，请换一个名称'
     case 40002: return '配置校验未通过，已自动回滚'
     case 50001: return '路径超出允许范围'
     case 80003: return '操作超时'
@@ -178,6 +197,9 @@ export function errorText(e: unknown): string {
       if (seg === 5) return '文件操作失败'
       if (seg === 6) return '数据库操作失败'
       if (seg === 7) return '防火墙操作失败'
-      return e.message || '请求失败'
+      if (e.code === 10001) return '提交内容有误，请检查后重试'
+      // 后端 message 多为内部英文（如 "invalid input" / "not found"）——不甩给用户；
+      // 已是中文的后端文案（部分校验原因）则原样透出，保住"具体"这一价值。
+      return /[\u4e00-\u9fff]/.test(e.message) ? e.message : '请求失败，请稍后重试'
   }
 }
