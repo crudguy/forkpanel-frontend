@@ -230,6 +230,15 @@ async function save() {
       if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
       if (form.value.kind === 'redirect' && !form.value.redirectTarget.trim()) throw new Error('整站重定向需要目标 URL')
     }
+    // 域名格式前置提示（后端仍为准）：拒绝单词级乱填，避免递上去才 400。
+    // **TLD 真实性只由后端校验**——前端刻意不内嵌 IANA 列表，避免两处列表漂移
+    // （同约束放两处必漂移）；此处只挡语法上明显不合法者。
+    if (webSupported.value) {
+      for (const d of domains) {
+        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d.toLowerCase()))
+          throw new Error(`域名「${d}」格式不正确：需至少两级、顶级域真实存在，如 example.com`)
+      }
+    }
     // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
     if (editing.value) {
       // name 一并提交：后端 patch 自本次起支持改名（nginx 配置按域名派生、
