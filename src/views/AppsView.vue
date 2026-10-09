@@ -411,9 +411,13 @@ onMounted(() => { void load(); void loadCatalog() })
           <span v-if="fieldErrs.port" class="field-err">{{ fieldErrs.port }}</span>
         </label>
 
-        <label class="blk">
-          运行用户（留空 = root）
-          <input v-model="form.runUser" placeholder="留空则 root" />
+        <label class="blk" data-f="run_user">
+          运行用户
+          <input v-model="form.runUser" placeholder="留空则自动分配 site-&lt;应用名&gt;" />
+          <span class="hint-inline">留空由面板创建 <b>系统用户</b> <code>site-&lt;应用名&gt;</code>
+            （禁止登录），应用不再以 root 运行；填已存在的用户名（如 www-data）则直接复用，
+            填错名字会报错而不会凭空建号。</span>
+          <span v-if="fieldErrs.run_user" class="field-err">{{ fieldErrs.run_user }}</span>
         </label>
 
         <label class="blk full" data-f="domains">
@@ -478,6 +482,13 @@ onMounted(() => { void load(); void loadCatalog() })
 .app-acts { width: 18%; }
 
 .field-err { display: block; color: var(--c-danger); font-size: 12px; margin-top: 4px; }
+/* 字段下的补充说明（非错误）。与 .hint-note 不同：没有底色/图标，
+   只是把「这个字段留空会发生什么」讲清楚，避免用户误以为留空 = root。 */
+.hint-inline { display: block; margin-top: 4px; font-size: 12px; line-height: 1.6;
+  color: var(--c-text-dim); }
+.hint-inline b { font-weight: 500; color: var(--c-text); }
+.hint-inline code { font-size: 11.5px; padding: 0 3px; border-radius: 4px;
+  background: var(--c-surface-2); border: 1px solid var(--c-border); }
 /* 5 个操作按钮必须**单行**：flex-wrap 换行会让行高突然变高、表格错位 */
 .app-acts-cell { display: flex; gap: 4px; flex-wrap: nowrap; }
 .app-acts-cell .btn-sm { flex: none; padding: 4px 7px; }
