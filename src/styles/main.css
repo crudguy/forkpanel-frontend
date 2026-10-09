@@ -283,6 +283,19 @@ tbody tr:last-child td { border-bottom: none; }
    再加一条规则，是为了让 check-modal.mjs 能守住"外观只有一个来源"。 */
 .modal.stack { display: flex; flex-direction: column; gap: 12px; }
 
+/* 开关（switch）：**公共控件，勿在各视图重复定义**。
+   此前 `.switch` 只存在于各视图的 scoped 样式里，跨文件用就成了未定义元素——
+   实机症状：滑块 <i> 宽度 0、单元格看起来完全空白（不报错、vue-tsc 与 build 全绿）。
+   判据：任何新视图直接写 class="switch" 即可，不要再抄一份。 */
+.switch { position: relative; width: 42px; height: 24px; display: inline-block; vertical-align: middle; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
+.switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
+.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:disabled + i { opacity: .5; cursor: not-allowed; }
+.switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
+
 /* ── 全局浮层提示（toast）──────────────────────────────────────────────
    为什么不复用页面内的 .notice：.notice 是**文档流内**元素，插进去会把下方内容
    整体下推——每次保存成功页面就抖一下，用户看到的是"结构不稳"。toast 用

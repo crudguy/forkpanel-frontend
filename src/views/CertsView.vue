@@ -291,13 +291,6 @@ table.fixed { table-layout: fixed; width: 100%; }
 .tip { color: var(--c-text-dim); font-size: 12.5px; line-height: 1.7; }
 
 /* switch（与 SitesView 同款 42×24 实心主色） */
-.switch { position: relative; width: 42px; height: 24px; display: inline-block; vertical-align: middle; flex: none; }
-.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
-.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
-.switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
-.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-.switch input:disabled + i { opacity: .5; cursor: not-allowed; }
 
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }

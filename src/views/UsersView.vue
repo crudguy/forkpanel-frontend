@@ -221,6 +221,9 @@ onMounted(load)
   border-radius: var(--radius-sm); padding: 9px 11px; font-size: 13.5px; font-family: inherit; }
 .field textarea { resize: vertical; }
 .field.row { display: flex; align-items: center; }
+/* ⚠ 本页的 .switch **不是** main.css 里那个 input+i 结构的开关，而是把 .switch 直接
+   当滑块本体（靠 input:checked + .switch 上色），故此处保留自有实现、不并入公共式样。
+   两种结构混用会导致「改了公共样式本页却没变」或反之——动手前先看 DOM。 */
 .switch-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .switch-row input { display: none; }
 .switch { width: 38px; height: 20px; border-radius: 20px; background: var(--c-border); position: relative; transition: .15s; }

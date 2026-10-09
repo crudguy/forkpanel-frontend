@@ -77,6 +77,19 @@ export const API = {
     upgrade: () => '/api/v1/packages/upgrade',
   },
 
+  apps: {
+    list: () => '/api/v1/apps',
+    create: () => '/api/v1/apps',
+    // 运行时目录：**前端下拉的唯一数据源**。后端 AppRuntime 是单一事实来源，
+    // 前端不再硬编码语言表——两处各写一份必然漂移（新增运行时时前端静默缺项）。
+    catalog: () => '/api/v1/apps/catalog',
+    get: (id: number) => `/api/v1/apps/${id}`,
+    patch: (id: number) => `/api/v1/apps/${id}`,
+    remove: (id: number) => `/api/v1/apps/${id}`,
+    // 启停/重启合并在一个端点（act=start|stop|restart），故只有一条路径
+    act: (id: number) => `/api/v1/apps/${id}/act`,
+  },
+
   sites: {
     list: () => '/api/v1/sites',
     create: () => '/api/v1/sites',

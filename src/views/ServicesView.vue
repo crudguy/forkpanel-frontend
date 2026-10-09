@@ -110,7 +110,7 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
   { key: 'db', label: '数据库', pkgs: ['mariadb-server', 'postgresql'] },
   { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached', 'valkey-server'] },
-  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'nodejs', 'default-jdk'] },
+  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'nodejs', 'default-jdk', 'golang-go', 'cargo'] },
   { key: 'storage', label: '存储', pkgs: ['minio'] },
   { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata'] },
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },

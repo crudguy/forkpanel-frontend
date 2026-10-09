@@ -1137,14 +1137,6 @@ label.has-err input, label.has-err select { border-color: var(--c-danger); }
 /* 自动续期开关：与 ServiceDetailView 的开机自启开关同款——实心主色底 + 白滑块、42×24。
    旧版是 --c-primary-soft 浅色底 + 主色滑块，开销/关都偏「浅橙」，用户反馈看不出选中。
    CronView 同步升级，三处一套。 */
-.switch { position: relative; width: 42px; height: 24px; display: inline-block; vertical-align: middle; flex: none; }
-.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
-.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
-.switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
-.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-.switch input:disabled + i { opacity: .5; cursor: not-allowed; }
-.switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
 
 /* SSL 证书区块：位于「编辑站点」弹窗内，与 WAF 同用虚线分隔，表明它是站点配置的一部分 */
 .ssl { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }

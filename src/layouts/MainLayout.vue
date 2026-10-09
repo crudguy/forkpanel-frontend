@@ -33,6 +33,7 @@ const SUBTITLES: Record<string, string> = {
   'services-software': '白名单软件包的安装与卸载',
   'services-units': '服务启停 · 日志 · 配置',
   sites: '虚拟主机站点管理',
+  apps: 'systemd 托管进程 · 自动反代站点 · 构建请自行完成',
   databases: '连接管理 · 只读浏览 · 备份任务',
   logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
   'logs-audit': '关键操作追踪',

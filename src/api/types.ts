@@ -173,6 +173,43 @@ export interface ProcessInfo {
 }
 
 // ── 软件与服务（对应后端 /api/v1/packages、/api/v1/services/{unit}/journal）──
+/** 面板托管的应用（后端 AppRuntime 的镜像；枚举文案一律用后端给的 label）。 */
+export interface AppInfo {
+  id: number
+  name: string
+  runtime: string
+  /** 展示名由后端给出（`runtimeLabel`），前端不自行翻译 */
+  runtime_label: string
+  workdir: string
+  exec_start: string
+  run_user: string | null
+  /** 环境变量 [[k, v], ...]。⚠ 后端不加密存储，敏感值勿填 */
+  env: [string, string][]
+  port: number
+  auto_restart: boolean
+  enabled: boolean
+  domains: string[]
+  created_at: number
+  /** systemd 单元名，可拿去服务日志页看输出 */
+  unit: string
+  /** systemd 状态；探测失败为 null（**不是** 'unknown'——两者含义不同） */
+  state: string | null
+}
+
+/** 运行时元数据（`GET /api/v1/apps/catalog`）。前端下拉的唯一数据源。 */
+export interface AppRuntimeInfo {
+  key: string
+  label: string
+  default_port: number
+  /** 面板包白名单里的系统包名；null = 面板不托管该运行时。
+   *  **null 时不显示安装状态**——不做「你没有 X」这种面板无权判断的断言。 */
+  runtime_pkg: string | null
+  default_exec: string
+  typical: string
+  /** 构建步骤提示（纯文案，面板不执行构建） */
+  build_hint: string
+}
+
 export interface PackageInfo {
   name: string
   label?: string

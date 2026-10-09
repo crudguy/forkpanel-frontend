@@ -48,6 +48,8 @@ const items = computed(() => [
   // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
   // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
   { to: '/sites', label: '网站', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
+  // 门禁用 service.view：应用本质是 systemd 单元托管，后端复用该权限点（不新造 app.*）
+  { to: '/apps', label: '应用', icon: 'bolt', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
   // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
   { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
   // 证书与 WAF 同族：单站 SSL 在「编辑站点」弹窗配，本页统一总览/申请/续期/信任根证书。
