@@ -86,7 +86,7 @@ export interface Site {
   name: string
   domains: string[]
   root: string
-  /** API 口径：static | proxy | php */
+  /** API 口径：static | proxy | php | redirect | routed */
   kind: string
   /** 期望状态：是否已纳入 Web 服务器配置（新建默认 true）。**不**代表正在服务 */
   enabled: boolean
@@ -109,6 +109,33 @@ export interface Site {
   redirect_target: string | null
   /** 整站重定向状态码（301/302/307/308，kind=redirect 时存在）；其余为 null */
   redirect_code: number | null
+  /** 多路由表（kind=routed 时非空）。⚠ 后端保证非 routed 时为 `[]` 而非 null */
+  routes: SiteRoute[]
+}
+
+/**
+ * 单条路由（对应后端 SiteRoute / panel_os::SiteRoute）。
+ *
+ * `prefix` 会**直接进 nginx 配置文本**，后端已做注入白名单校验；
+ * 前端只做「以 / 开头」这类即时提示，不复制注入规则（同约束放两处必漂移）。
+ */
+export interface SiteRoute {
+  /** URL 前缀，须以 / 开头；/ 为兜底（最多且必须有一条） */
+  prefix: string
+  kind: 'proxy' | 'static' | 'php'
+  /** kind=proxy：后端列表（至少 1 个） */
+  upstreams?: string[]
+  /** kind=static：未命中是否回退 /index.html */
+  spa?: boolean
+  /** kind=php：php-fpm 目标 */
+  fpm?: string
+  /**
+   * kind=php：**入口脚本（必填，相对站点根、须以 / 开头）**。
+   *
+   * 多路由下一律用 front controller 形式——`location ^~` 会屏蔽 `~ \.php$`，
+   * 没它就没有任何入口（Laravel/ThinkPHP 的标准部署姿势是 /public/index.php）。
+   */
+  front_controller?: string
 }
 
 // ── 专业监控页：完整系统快照（对应后端 panel_os::SystemSnapshot）──

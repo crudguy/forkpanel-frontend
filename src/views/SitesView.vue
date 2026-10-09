@@ -28,7 +28,7 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type PackageInfo, type Site } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -213,8 +213,53 @@ function emptyForm() {
     name: '', domains: '', root: '', enabled: true,
     kind: 'static', upstreams: '', fpm: '',
     spa: false, redirectTarget: '', redirectCode: 301,
+    // 多路由表。**新建时给一条 `/` 静态兜底**——不是默认值，是必要条件：
+    // 缺兜底的路由表会被后端拒（漏掉的路径会落到别的站点去，用户无从预期）。
+    routes: [newRoute('/', 'static')] as RouteRow[],
     wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
   }
+}
+
+/** 表单里的一条路由（`upstreams` 存成逗号分隔的字符串，便于 v-model 绑定）。 */
+interface RouteRow {
+  prefix: string
+  kind: 'proxy' | 'static' | 'php'
+  upstreams: string
+  spa: boolean
+  fpm: string
+  frontController: string
+}
+
+function newRoute(prefix: string, kind: RouteRow['kind']): RouteRow {
+  return { prefix, kind, upstreams: '', spa: false, fpm: '', frontController: '' }
+}
+
+/**
+ * 新增一条路由。前缀给一个**不与现有重复**的默认值（`/api`、`/api2`…），
+ * 免得用户点一下就撞上「前缀重复」报错还要自己想名字。
+ */
+function addRoute() {
+  const used = new Set(form.value.routes.map((r) => r.prefix.trim()))
+  let p = '/api'
+  for (let i = 2; used.has(p) && i < 50; i++) p = `/api${i}`
+  form.value.routes.push(newRoute(p, 'proxy'))
+}
+
+/** 删除一条路由。**至少保留一条**——空表无法保存，且用户多半只是想改不是想删光。 */
+function removeRoute(i: number) {
+  if (form.value.routes.length <= 1) return
+  form.value.routes.splice(i, 1)
+}
+
+/** `RouteRow` → API 口径（只填该 kind 需要的字段，其余留空由后端忽略）。 */
+function rowToRoute(r: RouteRow): SiteRoute {
+  if (r.kind === 'proxy') {
+    return { prefix: r.prefix.trim(), kind: 'proxy', upstreams: r.upstreams.split(/[,\s]+/).filter(Boolean) }
+  }
+  if (r.kind === 'php') {
+    return { prefix: r.prefix.trim(), kind: 'php', fpm: r.fpm.trim(), front_controller: r.frontController.trim() }
+  }
+  return { prefix: r.prefix.trim(), kind: 'static', spa: !!r.spa }
 }
 const form = ref(emptyForm())
 
@@ -235,7 +280,19 @@ function openEdit(s: Site) {
     name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled,
     // 类型**从站点真实值预填**。此前写死 'static'，于是「编辑反代站 → 应用」
     // 会把它静默改写成静态站（后端当时也没存真实类型，两侧一起错）。
-    kind: s.kind === 'proxy' || s.kind === 'php' || s.kind === 'redirect' ? s.kind : 'static',
+    kind: ['proxy', 'php', 'redirect', 'routed'].includes(s.kind) ? s.kind : 'static',
+    // 多路由回填：后端已校验并归一化过（末尾 / 已去重），可直接编辑。
+    // 兜底缺失时补一条——正常不会发生（写入方已拦），但避免打开就是空表无从下手。
+    routes: s.kind === 'routed' && (s.routes ?? []).length
+      ? (s.routes ?? []).map((r): RouteRow => ({
+          prefix: r.prefix,
+          kind: r.kind,
+          upstreams: (r.upstreams ?? []).join(', '),
+          spa: !!r.spa,
+          fpm: r.fpm ?? '',
+          frontController: r.front_controller ?? '',
+        }))
+      : [newRoute('/', 'static')],
     // 后端已把 upstreams/fpm 落库（migration 009），编辑时回填真实值：
     // 否则编辑反代/PHP 站再应用，后端配置会被静默清空。
     upstreams: (s.upstreams ?? []).join(', '),
@@ -328,6 +385,7 @@ function kindLabel(k: string) {
   if (k === 'proxy') return '反向代理'
   if (k === 'php') return 'PHP'
   if (k === 'redirect') return '整站重定向'
+  if (k === 'routed') return '多路由'
   return '静态'
 }
 
@@ -436,6 +494,29 @@ async function save() {
         if (!t) errs.redirectTarget = '整站重定向需要填写目标 URL'
         else if (!/^https?:\/\/\S+/i.test(t)) errs.redirectTarget = '目标 URL 必须以 http:// 或 https:// 开头'
       }
+      if (form.value.kind === 'routed') {
+        // 逐条收集（与整体校验同风格：一次把所有问题标出来，而不是抛第一个就中断）
+        const rs = form.value.routes
+        if (!rs.length) errs.routes = '至少需要一条路由'
+        else {
+          const seen = new Set<string>()
+          for (let i = 0; i < rs.length; i++) {
+            const r = rs[i]
+            const p = r.prefix.trim()
+            if (!p.startsWith('/')) { errs.routes = `第 ${i + 1} 条路由的前缀「${r.prefix}」必须以 / 开头`; break }
+            if (seen.has(p)) { errs.routes = `路由前缀「${p}」重复`; break }
+            seen.add(p)
+            if (r.kind === 'proxy' && !r.upstreams.trim()) { errs.routes = `第 ${i + 1} 条路由（${p}）的反代需要后端地址`; break }
+            if (r.kind === 'php') {
+              if (!r.fpm.trim()) { errs.routes = `第 ${i + 1} 条路由（${p}）需要 php-fpm 目标`; break }
+              if (!r.frontController.trim().startsWith('/')) {
+                errs.routes = `第 ${i + 1} 条路由（${p}）的入口脚本必须以 / 开头（如 /public/index.php）`; break
+              }
+            }
+          }
+          if (!errs.routes && !seen.has('/')) errs.routes = '必须有一条前缀为 / 的兜底路由（否则漏掉的路径会落到别的站点）'
+        }
+      }
     }
     const firstBad = Object.keys(errs)[0]
     if (firstBad) {
@@ -495,6 +576,8 @@ function kindTargets() {
   if (kind === 'proxy') return { upstreams: form.value.upstreams.split(/[,\s]+/).filter(Boolean) }
   if (kind === 'php') return { fpm: form.value.fpm.trim() }
   if (kind === 'redirect') return { redirect_target: form.value.redirectTarget.trim(), redirect_code: form.value.redirectCode }
+  // 多路由：整表下发。省略 ≠ 清空（后端 `routes` 缺省 = 保留库中现有表）。
+  if (kind === 'routed') return { routes: form.value.routes.map(rowToRoute) }
   return {}
 }
 
@@ -739,6 +822,7 @@ async function doDeleteCert() {
             <option value="proxy">反向代理 / 负载均衡</option>
             <option value="php">PHP (php-fpm)</option>
             <option value="redirect">整站重定向</option>
+            <option value="routed">多路由（按前缀分派）</option>
           </select>
         </label>
         <label class="blk full" :class="{ 'has-err': fieldErrs.domains }" data-f="domains">域名（逗号分隔）
@@ -809,6 +893,46 @@ async function doDeleteCert() {
             <span v-if="fieldErrs.redirectCode" :key="'rc' + errSeq" class="field-err">{{ fieldErrs.redirectCode }}</span>
           </label>
         </template>
+
+        <!-- 多路由：一个站点内按 URL 前缀分派。渲染为多条 `location ^~ <前缀>`——
+             用 ^~（而非正则）是刻意的：前缀一旦 ^~ 就永不再走正则，于是「用户写的
+             前缀」与「deny/WAF 的正则规则」的优先级变得确定，不取决于书写顺序。 -->
+        <div v-if="form.kind === 'routed'" class="routes" data-f="routes" :class="{ 'has-err': fieldErrs.routes }">
+          <div class="routes-head">
+            <span class="routes-title">路由表<em>按前缀长度降序匹配；必须有一条 / 兜底</em></span>
+            <button type="button" class="btn-ghost btn-sm" @click="addRoute()">
+              <Icon name="plus" :size="13" /> 添加路由
+            </button>
+          </div>
+          <div v-for="(r, i) in form.routes" :key="i" class="route-row">
+            <input v-model="r.prefix" class="rt-prefix" placeholder="/api" :aria-label="`第 ${i + 1} 条路由的前缀`" />
+            <select v-model="r.kind" class="rt-kind" :aria-label="`第 ${i + 1} 条路由的类型`">
+              <option value="static">静态</option>
+              <option value="proxy">反向代理</option>
+              <option value="php">PHP</option>
+            </select>
+            <input v-if="r.kind === 'proxy'" v-model="r.upstreams" class="rt-target"
+              placeholder="http://127.0.0.1:3000" :aria-label="`第 ${i + 1} 条路由的后端`" />
+            <input v-else-if="r.kind === 'php'" v-model="r.fpm" class="rt-target"
+              placeholder="unix:/run/php/php8.2-fpm.sock" :aria-label="`第 ${i + 1} 条路由的 php-fpm`" />
+            <label v-else class="rt-spa" :title="'未命中文件时回退到 /index.html（history 路由单页应用）'">
+              <input type="checkbox" v-model="r.spa" /> SPA
+            </label>
+            <input v-if="r.kind === 'php'" v-model="r.frontController" class="rt-target"
+              placeholder="/public/index.php" :aria-label="`第 ${i + 1} 条路由的入口脚本`" />
+            <button type="button" class="btn-ghost btn-sm rt-del" title="删除该路由"
+              :disabled="form.routes.length <= 1" @click="removeRoute(i)">
+              <Icon name="trash" :size="13" />
+            </button>
+          </div>
+          <p class="field-err" v-if="fieldErrs.routes">{{ fieldErrs.routes }}</p>
+          <p class="hint-note routes-note">
+            <Icon name="info" :size="14" class="ic" />
+            <span>典型用法：<b>/</b> 静态（SPA）+ <b>/api</b> 反代到后端。PHP 路由需填
+              <b>入口脚本</b>（如 <code>/public/index.php</code>）——多路由下不用
+              <code>.php</code> 后缀匹配，而是把整个前缀交给该入口，由框架自己路由。</span>
+          </p>
+        </div>
 
         <!-- WAF：站点配置的一部分，与其它字段**同一次下发**，故同处一个表单 -->
         <div class="waf">
@@ -1024,6 +1148,25 @@ sudo update-ca-certificates</pre>
 .dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .dir-row input { flex: 1; margin-top: 0; }
 .dir-row .btn-sm { flex: none; white-space: nowrap; }
+/* 多路由表：一个站点内多条 `location ^~ <前缀>`。逐行一条，窄屏自然换行。 */
+.routes { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.routes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.routes-title { font-size: 12.5px; color: var(--c-text); }
+.routes-title em { font-style: normal; margin-left: 8px; color: var(--c-text-dim); font-size: 12px; }
+.route-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* 前缀列固定宽：它是这张表的主键，太宽会让后面的目标字段被挤出视野 */
+.route-row .rt-prefix { flex: 0 0 130px; min-width: 0; }
+.route-row .rt-kind   { flex: 0 0 92px; }
+.route-row .rt-target { flex: 1 1 220px; min-width: 0; }
+.route-row .rt-spa { flex: none; display: flex; align-items: center; gap: 5px;
+  font-size: 12.5px; color: var(--c-text-dim); white-space: nowrap; }
+/* 原生勾选框必须复位 width——全局 `input { width: 100% }` 会让它撑满整行 */
+.route-row .rt-spa input { width: auto; }
+.route-row .rt-del { flex: none; }
+.routes.has-err .rt-prefix, .routes.has-err .rt-kind { border-color: var(--c-danger); }
+.routes-note { margin: 2px 0 0; }
+.routes-note code { font-size: 12px; }
+
 /* 反向代理的「应用模板」选择条。Node/Java/Python/.NET 的接入方式相同（都是
    proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填模板而非新类型。 */
 .tpl-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px;
