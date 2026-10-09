@@ -24,7 +24,7 @@
  */
 import { ref, onMounted, computed } from 'vue'
 import { useModal } from '@/composables/useModal'
-import { api, errorText, isUnsupported } from '@/api/client'
+import { api, errorText, isUnsupported, ValidationError } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type Site } from '@/api/types'
@@ -41,6 +41,12 @@ const certs = ref<Cert[]>([])
 interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 const error = ref('')
+/**
+ * 错误序号：每次保存失败自增，用作错误条的 `:key`。
+ * 元素因此被重建，「抖动」动画才能**重复播放**——否则同一文案下 v-if 恒为 true、
+ * 元素不重建，动画只播一次，用户连点「保存」得不到任何新反馈（正是要修的场景）。
+ */
+const errSeq = ref(0)
 const notice = ref('')
 const busy = ref(false)
 const loading = ref(false)
@@ -157,6 +163,9 @@ const form = ref(emptyForm())
 function openCreate() {
   editing.value = null
   form.value = emptyForm()
+  // 清掉上一次遗留的报错：否则上次保存失败的红条会在重新打开弹窗时**立即**出现，
+  // 让人误以为这次什么都还没提交就已经出错了。
+  error.value = ''; notice.value = ''
   modalOpen.value = true
 }
 function openEdit(s: Site) {
@@ -181,6 +190,8 @@ function openEdit(s: Site) {
     wafRate: s.waf_rate_per_sec ?? 0,
     wafBurst: s.waf_burst ?? 0,
   }
+  // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
+  error.value = ''; notice.value = ''
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
 }
@@ -225,10 +236,12 @@ async function save() {
   try {
     // 目标值的必填校验。proxy/php 的目标会**直接进 nginx 配置文本**，注入校验在后端；
     // 这里只做"别把空值递上去"的提示，不做安全判断（前端判断等于没有判断）。
+    // ⚠ 一律用 ValidationError 抛：普通 Error 会被 errorText 兜底成「请求失败，请稍后重试」，
+    //    用户根本看不到真正原因（本次修复的核心）。
     if (webSupported.value) {
-      if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
-      if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
-      if (form.value.kind === 'redirect' && !form.value.redirectTarget.trim()) throw new Error('整站重定向需要目标 URL')
+      if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) throw new ValidationError('反向代理需要填写至少一个后端地址')
+      if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new ValidationError('PHP 站点需要填写 php-fpm 目标')
+      if (form.value.kind === 'redirect' && !form.value.redirectTarget.trim()) throw new ValidationError('整站重定向需要填写目标 URL')
     }
     // 域名格式前置提示（后端仍为准）：拒绝单词级乱填，避免递上去才 400。
     // **TLD 真实性只由后端校验**——前端刻意不内嵌 IANA 列表，避免两处列表漂移
@@ -236,7 +249,7 @@ async function save() {
     if (webSupported.value) {
       for (const d of domains) {
         if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d.toLowerCase()))
-          throw new Error(`域名「${d}」格式不正确：需至少两级、顶级域真实存在，如 example.com`)
+          throw new ValidationError(`域名「${d}」格式不正确：需至少两级、顶级域须真实存在，如 example.com`)
       }
     }
     // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
@@ -245,22 +258,26 @@ async function save() {
       // root 已是绝对路径、证书按 domain，改名都不影响，也不会重新下发配置）
       await api.patch(API.sites.patch(editing.value.id), { name, domains, root, enabled: form.value.enabled })
     } else {
-      if (!name) throw new Error('name required')
-      if (!domains.length) throw new Error('domains required')
+      if (!name) throw new ValidationError('站点名称不能为空')
+      if (!domains.length) throw new ValidationError('至少需要填写一个域名')
       await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
     }
     // ② 下发。**停用态也照样调 apply**——它只落库不下发（与后端「停用守恒」一致），
     //    但类型 / 反代后端 / php-fpm / WAF 只有 apply 才会写进库。
+    let msg: string
     if (webSupported.value) {
       const r = await deploy(name, domains)
-      notice.value = r && r.deployed === false
+      msg = r && r.deployed === false
         ? `已保存站点 ${name}：当前为停用状态，配置已登记但未下发`
         : `已保存站点 ${name} 并下发配置`
     } else {
-      notice.value = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
+      msg = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
     }
-    closeModal(); await load()
-  } catch (e) { error.value = errorText(e) }
+    // ⚠ 顺序不能颠倒：load() 开头会把 notice 清空（它同时负责清掉上一轮的旧提示），
+    //   若先赋 notice 再 load，成功提示会被**立刻冲掉**——用户看不到任何"保存成功"的反馈。
+    closeModal(); await load(); notice.value = msg
+  // 失败时递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
+  } catch (e) { error.value = errorText(e); errSeq.value++ }
   finally { busy.value = false }
 }
 
@@ -599,11 +616,19 @@ async function doDeleteCert() {
           反代后端由 nginx <code>upstream</code>（least_conn）轮询，只接受
           <code>http(s)://host:port</code>；WAF 与站点配置同一次下发。
         </p>
-        <p v-if="error" class="err" role="alert">{{ error }}</p>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="closeModal">取消</button>
-          <button class="btn-primary" :disabled="busy" @click="save">
-            {{ busy ? '保存中…' : (editing ? '保存并应用' : '创建并应用') }}</button>
+        <div class="modal-foot">
+          <!-- 错误条与操作条**同处吸底区**：弹窗内容比视口高时，独立摆在表单最底部的
+               错误会被滚出视野——用户点「保存并应用」只见按钮无反应、不知错在哪，只能
+               反复点。吸底后它恒出现在按钮正上方，配合抖动动画即时抓住视线。
+               `:key` 绑 errSeq：连点保存时元素被重建，动画得以重播而不是只响一次。 -->
+          <p v-if="error" :key="errSeq" class="err err-bar" role="alert">
+            <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
+          </p>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeModal">取消</button>
+            <button class="btn-primary" :disabled="busy" @click="save">
+              {{ busy ? '保存中…' : (editing ? '保存并应用' : '创建并应用') }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -755,19 +780,46 @@ sudo update-ca-certificates</pre>
    h3 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
 .modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
 .modal.wide.site-modal > h3 { grid-column: 1 / -1; margin-bottom: 2px; }
-.modal.wide.site-modal > .modal-actions { grid-column: 1 / -1; }
 .modal.wide.site-modal > .blk.full,
 .modal.wide.site-modal > .waf,
 .modal.wide.site-modal > .ssl,
 .modal.wide.site-modal > .hint-note,
 .modal.wide.site-modal > .tip,
-.modal.wide.site-modal > .err,
-.modal.wide.site-modal > .row-inline { grid-column: 1 / -1; }
+.modal.wide.site-modal > .row-inline,
+.modal.wide.site-modal > .modal-foot { grid-column: 1 / -1; }
 /* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
    .modal.wide 自身即滚动容器，sticky 相对它的 padding box 生效；弹窗下内边距改由
    操作条自己承担（故 .modal.wide 的 padding-bottom 归零），负左右外边距让操作条通栏。 */
 .modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
   padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
+
+/* 站点弹窗的底部吸底区：**错误条与操作条合为同一个 sticky 容器**。
+   此前错误条是表单末尾的独立一行、只有操作条吸底——弹窗内容（字段 + WAF + SSL）
+   比视口高时，用户在中部滚动位置点「保存并应用」，报错被留在视野之外，于是
+   "看不到原因、一直点保存"。合并后错误恒出现在按钮正上方（结构见模板 .modal-foot）。 */
+.modal.wide.site-modal > .modal-foot { position: sticky; bottom: 0; z-index: 2;
+  margin: 14px -20px 0; padding: 12px 20px; background: var(--c-surface-2);
+  border-top: 1px solid var(--c-border); }
+/* 内部操作条不再自行吸底（避免两层 sticky 叠加），吸底与背景统一由父容器承担。 */
+.modal.wide.site-modal > .modal-foot .modal-actions { position: static; margin: 0;
+  padding: 0; border-top: 0; background: none; }
+
+/* 错误条：从「裸红字」升级为带底色 + 描边的警示条，并抖一下把视线拉过来。
+   文案由 api/client 的 errorText 统一给出（含具体原因），此处只负责让它"看得见"。 */
+.err-bar { display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
+  border-radius: 8px; line-height: 1.6; background: var(--c-danger-soft);
+  border: 1px solid var(--c-danger); }
+.err-bar .ic { flex: none; margin-top: 1px; }
+.modal-foot .err-bar { margin: 0 0 10px; }
+@keyframes site-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.err-bar { animation: site-shake .3s ease; }
+@media (prefers-reduced-motion: reduce) { .err-bar { animation: none; } }
 .ca-lede { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: var(--c-text-dim); }
 .ca-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 9px 11px;
   border-radius: 8px; font-size: 12.5px; line-height: 1.6; color: var(--c-text-dim);

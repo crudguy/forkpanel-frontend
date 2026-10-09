@@ -21,6 +21,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 前端主动抛出的**面向用户**的校验错误（非 HTTP 错误）。
+ *
+ * 存在理由：`errorText` 出于「不把内部报错甩给用户」的纪律，对普通 Error 一律
+ * 兜底成「请求失败，请稍后重试」。于是视图里的 `throw new Error('域名格式不正确…')`
+ * 这类**已经写好的人话文案会被静默吞掉**，用户只看到一句无信息量的兜底——
+ * 不知道错在哪，只能反复点保存。用本类显式标记后，`errorText` 原样透出 message，
+ * 同时运行时异常（TypeError 等）仍走兜底，不会泄露技术细节。
+ */
+export class ValidationError extends Error {}
+
 function readCookie(name: string): string | null {
   const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
   return m ? decodeURIComponent(m[1]) : null
@@ -141,6 +152,10 @@ export function isUnsupported(e: unknown): boolean {
 
 /** 人类可读的错误文案（按错误码分段，避免把英文原文直接丢给用户） */
 export function errorText(e: unknown): string {
+  // 视图主动抛的校验文案（ValidationError）**原样透出**：它就是写给用户看的，
+  // 吞掉等于让用户面对一句「请求失败」反复点保存却不知错在哪。
+  if (e instanceof ValidationError) return e.message || '提交内容有误，请检查后重试'
+  // 其余非 HTTP 异常（多为运行时 TypeError 等）仍走兜底，不把技术细节泄露给用户。
   if (!(e instanceof ApiError)) return '请求失败，请稍后重试'
   const seg = Math.floor(e.code / 10000)
   switch (e.code) {
