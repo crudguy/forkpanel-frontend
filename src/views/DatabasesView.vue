@@ -23,6 +23,7 @@ import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import SqlConsole from '@/components/SqlConsole.vue'
+import { toast } from '@/composables/useToast'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
@@ -46,7 +47,6 @@ function emptyForm() {
 const form = ref(emptyForm())
 
 /** 成功类提示走独立通道（此前备份成功却写 error，被渲染成红色错误条）。 */
-const notice = ref('')
 
 async function load() {
   error.value = ''
@@ -58,7 +58,7 @@ onMounted(load)
 const canManage = computed(() => auth.enabled(CAP.DBMS_MANAGE, 'db.manage'))
 
 async function create() {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     const ext = form.value.engine !== 'sqlite'
     await api.post(API.db.connections(), {
@@ -70,19 +70,19 @@ async function create() {
       password: ext && form.value.password ? form.value.password : undefined,
     })
     form.value = emptyForm()
-    notice.value = '连接已创建'
+    toast('连接已创建')
     load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
 
 async function backup(c: Conn) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     const r = await api.post<{ task_id: number }>(API.db.backup(c.id), {
       id: c.id, out: `backup-${c.name}-${Date.now()}.sql`,
     })
-    notice.value = `已提交备份任务 #${r.task_id}（请在任务面板查看）`
+    toast(`已提交备份任务 #${r.task_id}（请在任务面板查看）`)
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
@@ -103,13 +103,13 @@ useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = 
 
 async function doRestore() {
   const c = restoreTarget.value; if (!c) return
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     const r = await api.post<{ task_id?: number }>(API.db.restore(c.id), {
       file: restoreForm.value.file.trim(),
       confirm_token: restoreForm.value.confirm,
     })
-    notice.value = r.task_id ? `已提交恢复任务 #${r.task_id}（请在任务面板查看）` : '恢复完成'
+    toast(r.task_id ? `已提交恢复任务 #${r.task_id}（请在任务面板查看）` : '恢复完成')
     restoreTarget.value = null
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
@@ -159,7 +159,6 @@ function closeBrowse() { browse.value = null }
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <p v-if="notice" class="note ok-note">{{ notice }}</p>
 
       <section class="card">
         <div class="sec-head"><Icon name="database" :size="16" /> 新增连接</div>
@@ -310,7 +309,6 @@ function closeBrowse() { browse.value = null }
 .crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
 .sep { color: var(--c-text-dim); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
-.ok-note { color: var(--c-ok, #3fb950); }
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 .restore-warn { font-size: 13px; color: var(--c-text-dim); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }

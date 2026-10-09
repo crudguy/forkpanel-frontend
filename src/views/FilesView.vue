@@ -21,6 +21,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
+import { toast } from '@/composables/useToast'
 
 interface Entry {
   name: string; kind: 'dir' | 'file' | 'symlink' | 'other'
@@ -50,7 +51,6 @@ const batchErr = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
 /** 软删除的反馈（"已移入回收站"），与 error 分开：它不是错误 */
-const notice = ref('')
 const showTrash = ref(false)
 
 // 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
@@ -137,7 +137,7 @@ async function doDelete() {
     // 回收站里的「彻底删除」才是不可逆的那一步——两步分开，责任清晰。
     // 也正因如此这里不再需要 allow_dir：软的，可撤销。
     await api.post(API.files.trash(), { path: full(name) })
-    notice.value = `已移入回收站：${name}`
+    toast(`已移入回收站：${name}`)
     confirmDel.value = null
     load()
   } catch (e) { error.value = errorText(e) }
@@ -181,7 +181,7 @@ async function onUploadFiles(ev: Event) {
   const files = Array.from(input.files ?? [])
   input.value = '' // 允许重复选同一文件
   if (!files.length || !canWrite.value) return
-  uploading.value = true; error.value = ''; notice.value = ''
+  uploading.value = true; error.value = ''
   const failed: string[] = []
   const usedMultipart = files.some(f => f.size > MULTIPART_THRESHOLD)
   try {
@@ -200,7 +200,7 @@ async function onUploadFiles(ev: Event) {
       finally { uploadLabel.value = '' }
     }
     if (failed.length) error.value = `部分上传失败 — ${failed.join('；')}`
-    else if (usedMultipart) notice.value = `已上传 ${files.length} 个文件（大文件走了分片通道）`
+    else if (usedMultipart) toast(`已上传 ${files.length} 个文件（大文件走了分片通道）`)
     await load()
   } finally { uploading.value = false; uploadLabel.value = '' }
 }
@@ -237,7 +237,7 @@ function askMkdir() {
     okText: '创建',
     onOk: (v) => {
       api.post(API.files.mkdir(), { path: full(v) })
-        .then(() => { notice.value = `已创建 ${v}`; load() })
+        .then(() => { toast(`已创建 ${v}`); load() })
         .catch((e) => { error.value = errorText(e) })
     },
   }
@@ -249,7 +249,7 @@ function askRename(e: Entry) {
     validate: (v) => (!v.trim() ? '名称不能为空' : null),
     onOk: (v) => {
       api.post(API.files.rename(), { from: full(e.name), to: full(v) })
-        .then(() => { notice.value = `已重命名为 ${v}`; load() })
+        .then(() => { toast(`已重命名为 ${v}`); load() })
         .catch((err) => { error.value = errorText(err) })
     },
   }
@@ -262,7 +262,7 @@ function askChmod(e: Entry) {
     validate: (v) => (/^[0-7]{3,4}$/.test(v.trim()) ? null : '必须是 3-4 位八进制数，如 644'),
     onOk: (v) => {
       api.post(API.files.chmod(), { path: full(e.name), mode: v })
-        .then(() => { notice.value = `已修改 ${e.name} 权限为 ${v}`; load() })
+        .then(() => { toast(`已修改 ${e.name} 权限为 ${v}`); load() })
         .catch((err) => { error.value = errorText(err) })
     },
   }
@@ -292,7 +292,6 @@ function runBatch(op: 'trash' | 'move' | 'copy') {
   const paths = selectedEntries.value.map(e => full(e.name))
   if (!paths.length || batchBusy.value) return
   batchErr.value = ''
-  notice.value = ''
   if (op !== 'trash') {
     // 目标目录改走统一弹窗（审计 U5：替代 window.prompt）
     ask.value = {
@@ -316,7 +315,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
         r.results.filter(x => !x.ok).slice(0, 3).map(x => `${x.path}: ${x.error}`).join('；')
     }
     if (op === 'trash' && r.ok_count > 0) {
-      notice.value = `已移入回收站（${r.ok_count} 项），可在回收站恢复`
+      toast(`已移入回收站（${r.ok_count} 项），可在回收站恢复`)
     }
     selected.value = new Set()
     await load()
@@ -353,7 +352,6 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <p v-if="notice" class="ok-msg" role="status">{{ notice }}</p>
     <!-- batchErr 是批量操作失败，与 error 同类 → 同用红色错误通道（审计 U14）；
          truncated / hasMore 是提示性警告，保留黄色 -->
     <p v-if="batchErr" class="err" role="alert">{{ batchErr }}</p>
@@ -455,7 +453,6 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 <style scoped>
 .cwd { font-family: var(--mono); font-size: 12.5px; color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
 .hid { display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0; color: var(--c-text-dim); }
-.ok-msg { color: var(--c-ok, #3fb950); font-size: 12.5px; margin: 6px 0; }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
 .batch { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }

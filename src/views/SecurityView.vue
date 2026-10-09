@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { toast } from '@/composables/useToast'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -88,7 +89,6 @@ function blText(c: BaselineItem) {
 // ─────────────── 基线一键修复 ───────────────
 // 后端白名单：仅 sshd 三项可自动修（其余写入系统配置风险过高，不做）
 const FIXABLE = ['ssh.permit_root_login', 'ssh.password_auth', 'ssh.pubkey_auth']
-const notice = ref('')
 const acting = ref(false)
 
 function canFix(c: BaselineItem): boolean {
@@ -100,14 +100,14 @@ const pendingFix = ref<BaselineItem | null>(null)
 function askFix(c: BaselineItem) { pendingFix.value = c }
 
 async function fix(c: BaselineItem) {
-  error.value = ''; notice.value = ''
+  error.value = ''
   acting.value = true
   try {
     const r = await api.post<{ changed: boolean; backup: string | null; validated: boolean }>(
       API.security.baselineApply(), { key: c.key, confirm_token: '确认修复' })
-    notice.value = r.changed
+    toast(r.changed
       ? `已修复${r.backup ? `；原文件备份：${r.backup}` : ''}`
-      : '该项已符合预期，未做改动'
+      : '该项已符合预期，未做改动')
     pendingFix.value = null
     await load()
   } catch (e) { error.value = errorText(e) }
@@ -125,7 +125,7 @@ const mfaCode = ref('')
 const mfaEnabled = ref(auth.me?.mfa_enabled ?? false)
 
 async function doEnroll() {
-  error.value = ''; notice.value = ''
+  error.value = ''
   acting.value = true
   try {
     mfaEnrolling.value = await api.post<MfaEnroll>(API.auth.mfaEnroll())
@@ -134,7 +134,7 @@ async function doEnroll() {
 }
 
 async function doVerify() {
-  error.value = ''; notice.value = ''
+  error.value = ''
   acting.value = true
   try {
     await api.post(API.auth.mfaVerify(), { code: mfaCode.value.trim() })
@@ -142,7 +142,7 @@ async function doVerify() {
     if (auth.me) auth.me.mfa_enabled = true
     mfaEnrolling.value = null
     mfaCode.value = ''
-    notice.value = 'MFA 已启用：下次登录需额外输入动态口令。'
+    toast('MFA 已启用：下次登录需额外输入动态口令。')
   } catch (e) { error.value = errorText(e) }
   finally { acting.value = false }
 }
@@ -155,13 +155,13 @@ const mfaDisableCode = ref('')
 async function doDisable() {
   const code = mfaDisableCode.value.trim()
   if (!code) return
-  error.value = ''; notice.value = ''
+  error.value = ''
   acting.value = true
   try {
     await api.post(API.auth.mfaDisable(), { code })
     mfaEnabled.value = false
     if (auth.me) auth.me.mfa_enabled = false
-    notice.value = 'MFA 已关闭。'
+    toast('MFA 已关闭。')
     disableMfa.value = false
     mfaDisableCode.value = ''
   } catch (e) { error.value = errorText(e) }
@@ -177,7 +177,6 @@ async function doDisable() {
     </div>
 
     <p v-if="error" class="err">{{ error }}</p>
-    <p v-if="notice" class="notice">{{ notice }}</p>
     <div v-if="loading" class="skeleton box" />
     <div v-else class="grid cols-2">
       <section class="card">
@@ -315,7 +314,6 @@ async function doDisable() {
 .muted { color: var(--c-text-mute); }
 .mono { font-family: var(--mono); }
 .nowrap { white-space: nowrap; }
-.notice { color: var(--c-ok, #3fb950); font-size: 13px; margin: 0 0 12px; }
 .ops-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .small { font-size: 12px; }
 .mfa-box { margin-top: 8px; }

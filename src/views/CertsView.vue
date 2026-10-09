@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { toast } from '@/composables/useToast'
 
 interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 
@@ -25,7 +26,6 @@ const certs = ref<Cert[]>([])
 const sites = ref<Site[]>([])
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 const error = ref('')
-const notice = ref('')
 const busy = ref(false)
 const loading = ref(false)
 
@@ -43,7 +43,7 @@ const sslHint = computed(() => {
 })
 
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
+  if (!silent) { loading.value = true; error.value = '' }
   try {
     const [cs, ss] = await Promise.all([
       api.get<Cert[]>(API.certs.list()),
@@ -79,21 +79,21 @@ function downloadCa() { window.location.href = API.certs.ca() }
 // 续期 / 自动续期 / 删除
 const delCert = ref<Cert | null>(null)
 async function renewCert(c: Cert) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.post(API.certs.renew(c.id), {})
-    notice.value = `已续期 ${c.domain} 的证书`
+    toast(`已续期 ${c.domain} 的证书`)
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入证书续期能力'
+    if (isUnsupported(e)) toast('当前环境未接入证书续期能力', 'info')
     else error.value = errorText(e)
   } finally { busy.value = false; await load() }
 }
 async function setAutoRenew(c: Cert, val: boolean) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.patch(API.certs.autoRenew(c.id), { enabled: val })
     c.auto_renew = val
-    notice.value = `${c.domain} 自动续期已${val ? '开启' : '关闭'}`
+    toast(`${c.domain} 自动续期已${val ? '开启' : '关闭'}`)
   } catch (e) {
     if (isUnsupported(e)) error.value = '当前环境未接入 ACME，无法自动续期'
     else error.value = errorText(e)
@@ -122,17 +122,17 @@ async function execSsl() {
   if (!m || !m.siteId) return
   const site = sites.value.find(s => s.id === m.siteId)
   if (!site) return
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.post(API.sites.sslApply(site.id),
       { domains: site.domains, method: m.method, email: m.method === 'http-01' ? m.email.trim() : undefined })
-    notice.value = m.method === 'self-signed'
+    toast(m.method === 'self-signed'
       ? `已为 ${site.name} 签发面板自签证书`
-      : `已提交 ${site.name} 的 ACME 签发任务`
+      : `已提交 ${site.name} 的 ACME 签发任务`)
     sslModal.value = null
     if (m.method === 'self-signed') await load()
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入证书签发能力（需 openssl 或 ACME）'
+    if (isUnsupported(e)) toast('当前环境未接入证书签发能力（需 openssl 或 ACME）', 'info')
     else error.value = errorText(e)
   } finally { busy.value = false }
 }
@@ -141,7 +141,6 @@ async function execSsl() {
 <template>
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <p v-if="notice" class="notice">{{ notice }}</p>
 
     <div class="sec-head">
       <Icon name="lock" :size="16" /> 站点证书
@@ -289,7 +288,6 @@ table.fixed { table-layout: fixed; width: 100%; }
 .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 .btn-primary.danger { background: var(--c-danger); }
 .err { color: var(--c-danger); font-size: 13px; }
-.notice { color: var(--c-ok); background: var(--c-ok-soft); border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .tip { color: var(--c-text-dim); font-size: 12.5px; line-height: 1.7; }
 
 /* switch（与 SitesView 同款 42×24 实心主色） */

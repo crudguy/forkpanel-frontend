@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { SettingsReport } from '@/api/types'
 import Icon from '@/components/Icon.vue'
+import { toast } from '@/composables/useToast'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -40,7 +41,6 @@ const report = ref<SettingsReport | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const formError = ref('')
-const notice = ref('')
 const llmEndpoint = ref('')
 const llmModel = ref('')
 const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
@@ -111,7 +111,6 @@ async function save() {
   if (saving.value) return
   saving.value = true
   formError.value = ''
-  notice.value = ''
   try {
     const patch: Record<string, string | null> = {
       'assistant.llm_endpoint': llmEndpoint.value.trim() || null,
@@ -120,7 +119,7 @@ async function save() {
     if (llmKey.value.trim()) patch['assistant.llm_api_key'] = llmKey.value.trim()
     report.value = await api.patch<SettingsReport>(API.settings.patch(), { settings: patch })
     llmKey.value = ''
-    notice.value = '设置已保存并即时生效'
+    toast('设置已保存并即时生效')
   } catch (e) {
     formError.value = errorText(e)
   } finally { saving.value = false }
@@ -130,13 +129,12 @@ async function clearKey() {
   if (saving.value) return
   saving.value = true
   formError.value = ''
-  notice.value = ''
   try {
     report.value = await api.patch<SettingsReport>(API.settings.patch(), {
       settings: { 'assistant.llm_api_key': null },
     })
     llmKey.value = ''
-    notice.value = 'API 密钥已清除'
+    toast('API 密钥已清除')
   } catch (e) {
     formError.value = errorText(e)
   } finally { saving.value = false }
@@ -186,7 +184,6 @@ onMounted(async () => {
           </div>
           <p class="sec-note">密钥经主密钥 AES-GCM 加密落库，界面与接口均不回显明文。</p>
           <p v-if="formError" class="err" role="alert">{{ formError }}</p>
-          <p v-if="notice" class="ok" role="status">{{ notice }}</p>
           <div class="actions">
             <button class="btn-primary" :disabled="saving" @click="save">
               <Icon name="check" :size="15" /> {{ saving ? '保存中…' : '保存' }}
@@ -333,7 +330,6 @@ onMounted(async () => {
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
 .perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
 .err { color: var(--c-danger); font-size: 13px; margin: 8px 0 0; }
-.ok { color: var(--c-ok); font-size: 13px; margin: 8px 0 0; }
 .kv { display: flex; flex-direction: column; }
 .kv-row { display: flex; gap: 12px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--c-border); }
 .kv-row:last-child { border-bottom: none; }

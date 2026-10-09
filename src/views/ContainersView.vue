@@ -23,6 +23,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import TabBar from '@/components/TabBar.vue'
+import { toast } from '@/composables/useToast'
 
 interface Container {
   id: string; name: string; image: string; state: string
@@ -43,7 +44,6 @@ const tabs = [
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
 const error = ref('')
-const notice = ref('')
 const busy = ref(false)
 const loading = ref(false)
 const delTarget = ref<Container | null>(null)
@@ -90,7 +90,7 @@ async function doInstall() {
     const r = await api.post<{ task_id: string; package: string }>(
       API.containers.install(), { confirm_token: '安装 Docker' })
     installTaskId.value = r.task_id
-    notice.value = `已提交安装任务（${r.package}），可在"任务"页查看进度。装完后请把面板运行用户加入 docker 组并重启面板。`
+    toast(`已提交安装任务（${r.package}），可在"任务"页查看进度。装完后请把面板运行用户加入 docker 组并重启面板。`)
   } catch (e) { installError.value = errorText(e) }
   finally { installBusy.value = false; installOpen.value = false }
 }
@@ -131,7 +131,7 @@ async function restartPanel() {
 }
 
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
+  if (!silent) { loading.value = true; error.value = '' }
   if (!supported.value) { if (!silent) loading.value = false; return }
   try {
     if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
@@ -176,11 +176,11 @@ async function switchTab(t: string) {
 
 /** 生命周期动作的三种入口共用同一实现（后端是 204，无响应体）。 */
 async function act(c: Container, op: 'start' | 'stop' | 'restart') {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   const labels = { start: '启动', stop: '停止', restart: '重启' } as const
   try {
     await api.post(API.containers[op](c.id), {})
-    notice.value = `已${labels[op]}容器 ${c.name}`
+    toast(`已${labels[op]}容器 ${c.name}`)
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false; await load() }
 }
@@ -188,10 +188,10 @@ async function act(c: Container, op: 'start' | 'stop' | 'restart') {
 async function doRemove() {
   const c = delTarget.value
   if (!c) return
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.del(API.containers.remove(c.id))
-    notice.value = `已删除容器 ${c.name}`
+    toast(`已删除容器 ${c.name}`)
     delTarget.value = null
   } catch (e) { error.value = errorText(e); delTarget.value = null }
   finally { busy.value = false; await load() }
@@ -257,7 +257,6 @@ function canStop(c: Container) { return c.state === 'running' }
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
-      <p v-if="notice" class="ok-note">{{ notice }}</p>
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />

@@ -13,6 +13,7 @@ import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import { fmtDateTime, fmtSize } from '@/api/types'
+import { toast } from '@/composables/useToast'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
 
@@ -29,7 +30,6 @@ const items = ref<TrashEntry[]>([])
 const loading = ref(false)
 const busy = ref('')
 const error = ref('')
-const notice = ref('')
 const confirmPurge = ref<TrashEntry | null>(null)
 const confirmAll = ref(false)
 
@@ -43,20 +43,20 @@ async function load() {
 }
 
 async function restore(t: TrashEntry) {
-  busy.value = t.id; error.value = ''; notice.value = ''
+  busy.value = t.id; error.value = ''
   try {
     await api.post(API.files.trashRestore(), { id: t.id })
-    notice.value = `已恢复到 ${t.original_path}`
+    toast(`已恢复到 ${t.original_path}`)
     await load(); emit('changed')
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = '' }
 }
 
 async function purge(t: TrashEntry) {
-  busy.value = t.id; error.value = ''; notice.value = ''
+  busy.value = t.id; error.value = ''
   try {
     await api.post(API.files.trashPurge(), { id: t.id })
-    notice.value = `已彻底删除 ${t.name}`
+    toast(`已彻底删除 ${t.name}`)
     confirmPurge.value = null
     await load(); emit('changed')
   } catch (e) { error.value = errorText(e) }
@@ -64,10 +64,10 @@ async function purge(t: TrashEntry) {
 }
 
 async function purgeAll() {
-  busy.value = '*'; error.value = ''; notice.value = ''
+  busy.value = '*'; error.value = ''
   try {
     const r = await api.post<{ purged: number }>(API.files.trashPurge(), {})
-    notice.value = `已清空回收站（${r.purged} 项）`
+    toast(`已清空回收站（${r.purged} 项）`)
     confirmAll.value = false
     await load(); emit('changed')
   } catch (e) { error.value = errorText(e) }
@@ -92,7 +92,6 @@ onMounted(load)
         <button class="btn-ghost btn-sm" @click="emit('close')">关闭</button>
       </div>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
-      <p v-if="notice" class="ok-msg">{{ notice }}</p>
       <div v-if="loading" class="muted">加载中…</div>
       <EmptyState v-else-if="!items.length" title="回收站为空" />
       <ul v-else class="tp-list">
@@ -164,5 +163,4 @@ onMounted(load)
   border-radius: 9px; padding: 11px 13px;
 }
 .tp-confirm p { margin: 0 0 9px; font-size: 13px; }
-.ok-msg { color: var(--c-ok, #3fb950); font-size: 12.5px; margin: 6px 0; }
 </style>

@@ -22,6 +22,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { toast } from '@/composables/useToast'
 
 /** 每站点一份草稿：就地编辑，点「应用」才下发 */
 interface Draft { on: boolean; profile: string; rate: number; burst: number }
@@ -30,7 +31,6 @@ const auth = useAuthStore()
 const sites = ref<Site[]>([])
 const drafts = ref<Record<number, Draft>>({})
 const error = ref('')
-const notice = ref('')
 const busyId = ref<number | null>(null)
 
 const canManage = computed(() => auth.can('site.manage'))
@@ -48,7 +48,7 @@ function toDraft(s: Site): Draft {
 }
 
 async function load() {
-  error.value = ''; notice.value = ''
+  error.value = ''
   try {
     sites.value = await api.get<Site[]>(API.sites.list())
     // 每次加载都重置草稿：下拉/输入是"当前生效值"的镜像，不留上次未应用的脏值
@@ -67,7 +67,7 @@ function dirty(s: Site): boolean {
 
 async function applyWaf(s: Site) {
   const d = drafts.value[s.id]; if (!d) return
-  busyId.value = s.id; error.value = ''; notice.value = ''
+  busyId.value = s.id; error.value = ''
   try {
     const waf = !d.on
       ? { enabled: false }
@@ -92,10 +92,10 @@ async function applyWaf(s: Site) {
       fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
       waf,
     })
-    notice.value = d.on ? `已为 ${s.name} 应用 WAF（${d.profile}）` : `已关闭 ${s.name} 的 WAF`
+    toast(d.on ? `已为 ${s.name} 应用 WAF（${d.profile}）` : `已关闭 ${s.name} 的 WAF`)
     await load()
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入 Web 服务器，无法应用配置'
+    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法应用配置', 'info')
     else error.value = errorText(e)
   } finally { busyId.value = null }
 }
@@ -119,7 +119,6 @@ onMounted(load)
 <template>
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <p v-if="notice" class="notice">{{ notice }}</p>
 
     <div class="sec-head">
       <Icon name="firewall" :size="16" /> 站点 WAF
@@ -211,10 +210,5 @@ onMounted(load)
 }
 .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 .err { color: var(--c-danger); font-size: 13px; }
-.notice {
-  color: var(--c-ok); background: var(--c-ok-soft);
-  border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent);
-  padding: 8px 12px; border-radius: 8px; font-size: 13px;
-}
 .tip { color: var(--c-text-dim); font-size: 12.5px; line-height: 1.7; }
 </style>
