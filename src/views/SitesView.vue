@@ -28,7 +28,7 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type Site } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type PackageInfo, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -63,6 +63,53 @@ const busy = ref(false)
 const loading = ref(false)
 /** 站点托管根目录（后端只读下发）。目录选择器的初始定位——不可硬编码，config 可覆盖。 */
 const siteRoot = ref('')
+
+// ── 应用模板（仅反向代理） ──
+//
+// Node / Java / Python / .NET 在 nginx 这一层**接入方式完全相同**——都是
+// `proxy_pass` 到本机端口，渲染出的配置逐字节一致（见 panel-os 的 render_nginx）。
+// 它们的差异只在「装什么运行时、用什么命令把进程拉起来」，所以做成**预填模板**，
+// 而不是新的 `SiteKind` 变体：加 4 个类型 = 4 份产出同一份配置的 match 分支。
+// 真正够格独立成类型的只有**协议不同**者（PHP 走 fastcgi_pass、将来的 gRPC 走 grpc_pass）。
+interface AppTemplate {
+  key: string
+  label: string
+  /** 应用默认监听端口（仅作预填，用户可改） */
+  port: number
+  /** 面板包白名单里的运行时包名，用于「已装/未装」检测；null = 面板不托管该运行时 */
+  runtimePkg: string | null
+  /** 启动命令示例。**纯提示文案**，不进 nginx 配置——进程本身由 systemd / Docker 托管 */
+  startCmd: string
+  /** 典型框架，帮用户确认自己没选错 */
+  typical: string
+}
+const APP_TEMPLATES: AppTemplate[] = [
+  { key: 'node', label: 'Node.js', port: 3000, runtimePkg: 'nodejs',
+    startCmd: 'node server.js', typical: 'Express / NestJS / Next.js' },
+  { key: 'java', label: 'Java', port: 8080, runtimePkg: 'default-jdk',
+    startCmd: 'java -jar app.jar', typical: 'Spring Boot（内置 Tomcat）' },
+  { key: 'python', label: 'Python', port: 8000, runtimePkg: null,
+    startCmd: 'gunicorn app:app -b 127.0.0.1:8000', typical: 'Django / Flask / FastAPI' },
+  { key: 'dotnet', label: '.NET', port: 5000, runtimePkg: null,
+    startCmd: 'dotnet App.dll --urls http://127.0.0.1:5000', typical: 'ASP.NET Core（Kestrel）' },
+]
+
+/** 当前选中的应用模板 key；空串 = 未用模板（自定义后端） */
+const appTpl = ref('')
+/** 上一次由模板写进 `upstreams` 的值——用于判断用户是否手改过（手改过就不再覆盖） */
+const tplFilled = ref('')
+/** 已安装的运行时包名集合（仅在 runtimeDetectable 为真时有意义） */
+const runtimeInstalled = ref<Set<string>>(new Set())
+/** 运行时检测是否可用：需 package.install 能力位 + package.manage 权限点，缺一即失败 */
+const runtimeDetectable = ref(false)
+/** 是否已尝试探测过（避免每次打开弹窗都发一次请求） */
+const runtimeProbed = ref(false)
+const curTpl = computed(() => APP_TEMPLATES.find(t => t.key === appTpl.value) ?? null)
+/** 选中的模板其运行时**未安装**——用于把该 chip 与提示标成警示色 */
+const tplRuntimeMissing = computed(() => {
+  const t = curTpl.value
+  return !!(t && t.runtimePkg && runtimeDetectable.value && !runtimeInstalled.value.has(t.runtimePkg))
+})
 
 // 数据模型 CRUD 仅看 RBAC 权限点（角色维度，与平台能力无关，owner/admin 恒有）
 const canManage = computed(() => auth.can('site.manage'))
@@ -174,9 +221,11 @@ const form = ref(emptyForm())
 function openCreate() {
   editing.value = null
   form.value = emptyForm()
+  resetTemplate()
   // 清掉上一次遗留的报错：否则上次保存失败的红条会在重新打开弹窗时**立即**出现，
   // 让人误以为这次什么都还没提交就已经出错了。
   error.value = ''
+  void probeRuntime()
   modalOpen.value = true
 }
 function openEdit(s: Site) {
@@ -203,8 +252,75 @@ function openEdit(s: Site) {
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
   error.value = ''
+  // 反推模板选中态：后端是 3000/8080/8000/5000 就点亮对应 chip（仅供辨识，不改数据）
+  resetTemplate()
+  detectTemplateFromUpstreams()
+  void probeRuntime()
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
+}
+
+/**
+ * 复位应用模板选中态。每次打开弹窗都要做——否则上次的选择会残留在下一次新建里。
+ */
+function resetTemplate() {
+  appTpl.value = ''
+  tplFilled.value = ''
+}
+
+/**
+ * 套用应用模板：把反代目标预填为 `http://127.0.0.1:<port>`。
+ *
+ * **刻意不覆盖用户手输的内容**——只在「后端」为空、或仍等于上次由模板写入的值时才填。
+ * 否则用户先手填了 `http://10.0.0.5:9000` 再点一下模板，输入就被静默吞掉（很难发现）。
+ * 再点一次同一个 chip 表示取消选择。
+ */
+function useTemplate(t: AppTemplate) {
+  if (appTpl.value === t.key) { resetTemplate(); return }
+  const cur = form.value.upstreams.trim()
+  if (cur === '' || cur === tplFilled.value) {
+    const v = `http://127.0.0.1:${t.port}`
+    form.value.upstreams = v
+    tplFilled.value = v
+  }
+  appTpl.value = t.key
+  clearFieldErr('upstreams')
+}
+
+/**
+ * 拉运行时安装状态，只为在模板提示里显示「已装 / 未装」。
+ *
+ * 双重门控：能力位 `package.install`（决定枚举端点是否可用）+ 权限点 `package.manage`
+ * （后端 packages_list 正是按它签发的）——两者分属**两套命名空间**，写错不会报错、
+ * 只会静默 disable（守卫 ci/check-permissions.sh）。
+ * 失败**静默降级**：这只是锦上添花的提示，不该影响站点编辑主流程。
+ *
+ * ⚠ **口径是「包管理器里的系统包」**（apt 的 `nodejs` / `default-jdk`），**不等于**
+ * 「这台机器上有没有 Node」——用 nvm / 官方安装包装好的运行时不在这里出现
+ * （实测本机 `PATH` 有 node 22 而 apt 未装 nodejs）。故文案一律写「系统包 xxx 未装」，
+ * 不做「你没有 Node」这种断言；`runtimePkg: null` 的语言干脆不显示状态。
+ */
+async function probeRuntime() {
+  if (runtimeProbed.value) return
+  runtimeProbed.value = true
+  if (!auth.enabled(CAP.PACKAGE_INSTALL, 'package.manage')) return
+  try {
+    const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
+    runtimeInstalled.value = new Set((r.packages ?? []).map(x => x.name))
+    runtimeDetectable.value = true
+  } catch { runtimeDetectable.value = false }
+}
+
+/**
+ * 编辑已有站点时，若其后端**恰好**是某个模板的默认端口，就把该模板点亮——
+ * 让用户一眼看出"这是个 Node 应用"，不必回想当初选了什么。
+ * 只在「单一后端且完全匹配」时命中，多后端（负载均衡）不强猜。
+ */
+function detectTemplateFromUpstreams() {
+  const list = form.value.upstreams.split(/[,\s]+/).filter(Boolean)
+  if (list.length !== 1) return
+  const hit = APP_TEMPLATES.find(t => list[0] === `http://127.0.0.1:${t.port}`)
+  if (hit) appTpl.value = hit.key
 }
 
 /** 站点类型的中文名（列表与提示共用一份）。 */
@@ -640,6 +756,24 @@ async function doDeleteCert() {
           </div>
           <span v-if="fieldErrs.root" :key="'root' + errSeq" class="field-err">{{ fieldErrs.root }}</span>
         </label>
+        <!-- 应用模板：Node / Java / Python / .NET 在 nginx 这一层接入方式完全相同
+             （都是 proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填
+             模板，而不是给 SiteKind 加 4 个产出同一份配置的变体。
+             再点同一个 chip 可取消选择；手改过「后端」后切模板不会覆盖你填的内容。 -->
+        <div v-if="form.kind === 'proxy'" class="tpl-row">
+          <span class="tpl-label">应用模板</span>
+          <button v-for="t in APP_TEMPLATES" :key="t.key" type="button" class="tpl-chip"
+            :class="{ 'is-on': appTpl === t.key, 'is-warn': appTpl === t.key && tplRuntimeMissing }"
+            :disabled="!webSupported" :title="`默认端口 ${t.port}｜启动命令 ${t.startCmd}`"
+            @click="useTemplate(t)">{{ t.label }}<em>:{{ t.port }}</em></button>
+        </div>
+        <p v-if="form.kind === 'proxy' && curTpl" class="hint-note tpl-note">
+          <Icon name="info" :size="14" class="ic" />
+          <span>启动命令 <b>{{ curTpl.startCmd }}</b>（{{ curTpl.typical }}）<template
+            v-if="curTpl.runtimePkg && runtimeDetectable">；系统包 <b :class="{ 'is-warn': tplRuntimeMissing }">{{
+            curTpl.runtimePkg }}{{ tplRuntimeMissing ? ' 未装，可到「软件」页装' : ' 已装' }}</b></template>。
+            模板只预填反代目标，<b>不会创建应用进程</b>——进程请到「服务」页托管（systemd），或用「容器」页跑 Docker。</span>
+        </p>
         <label v-if="form.kind === 'proxy'" class="blk full" :class="{ 'has-err': fieldErrs.upstreams }" data-f="upstreams">后端（逗号分隔）
           <input v-model="form.upstreams" :disabled="!webSupported" :aria-invalid="!!fieldErrs.upstreams"
             placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" @input="clearFieldErr('upstreams')" />
@@ -890,6 +1024,24 @@ sudo update-ca-certificates</pre>
 .dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .dir-row input { flex: 1; margin-top: 0; }
 .dir-row .btn-sm { flex: none; white-space: nowrap; }
+/* 反向代理的「应用模板」选择条。Node/Java/Python/.NET 的接入方式相同（都是
+   proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填模板而非新类型。 */
+.tpl-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: center; margin-top: 2px; }
+.tpl-label { font-size: 12.5px; color: var(--c-text-dim); }
+.tpl-chip { font: inherit; font-size: 12.5px; line-height: 1; padding: 6px 13px;
+  cursor: pointer; border-radius: 999px; border: 1px solid var(--c-border);
+  background: var(--c-surface-2); color: var(--c-text);
+  transition: border-color .15s, background .15s; }
+.tpl-chip em { font-style: normal; color: var(--c-text-mute); }
+.tpl-chip:hover:not(:disabled) { border-color: var(--c-primary); }
+.tpl-chip.is-on { border-color: var(--c-primary); background: var(--c-primary-soft); }
+.tpl-chip.is-warn { border-color: var(--c-warn); background: var(--c-warn-bg); }
+.tpl-chip:disabled { opacity: .5; cursor: not-allowed; }
+/* 紧跟在模板条之后：收掉 .hint-note 默认的 14px 下边距，与相邻输入行的间距对齐 */
+.tpl-note { margin-top: 2px; margin-bottom: 10px; }
+.tpl-note b { font-weight: 500; }
+.tpl-note b.is-warn { color: var(--c-warn); }
 .row-inline { display: flex; align-items: flex-start; gap: 7px; }
 /* 文字可能折行，勾选框对齐首行而非整体垂直居中；并复位 width——
    全局 `input{width:100%}` 会把原生勾选框拉成宽盒子，勾选框与文字之间出现大段空隙、
