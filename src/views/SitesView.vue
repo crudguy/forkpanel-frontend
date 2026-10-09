@@ -148,6 +148,7 @@ function emptyForm() {
   return {
     name: '', domains: '', root: '', enabled: true,
     kind: 'static', upstreams: '', fpm: '',
+    spa: false, redirectTarget: '', redirectCode: 301,
     wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
   }
 }
@@ -165,11 +166,16 @@ function openEdit(s: Site) {
     name: s.name, domains: s.domains.join(', '), root: s.root, enabled: s.enabled,
     // 类型**从站点真实值预填**。此前写死 'static'，于是「编辑反代站 → 应用」
     // 会把它静默改写成静态站（后端当时也没存真实类型，两侧一起错）。
-    kind: s.kind === 'proxy' || s.kind === 'php' ? s.kind : 'static',
+    kind: s.kind === 'proxy' || s.kind === 'php' || s.kind === 'redirect' ? s.kind : 'static',
     // 后端已把 upstreams/fpm 落库（migration 009），编辑时回填真实值：
     // 否则编辑反代/PHP 站再应用，后端配置会被静默清空。
     upstreams: (s.upstreams ?? []).join(', '),
     fpm: s.fpm ?? '',
+    // SPA 回退仅 static 类型有意义：编辑时回填真实值，其余类型恒 false。
+    spa: s.kind === 'static' && s.spa,
+    // 整站重定向：编辑时回填目标 URL 与状态码（kind=redirect 时才有意义）。
+    redirectTarget: s.redirect_target ?? '',
+    redirectCode: s.redirect_code ?? 301,
     wafOn: s.waf_enabled,
     wafProfile: s.waf_profile ?? 'basic',
     wafRate: s.waf_rate_per_sec ?? 0,
@@ -183,6 +189,7 @@ function openEdit(s: Site) {
 function kindLabel(k: string) {
   if (k === 'proxy') return '反向代理'
   if (k === 'php') return 'PHP'
+  if (k === 'redirect') return '整站重定向'
   return '静态'
 }
 
@@ -221,6 +228,7 @@ async function save() {
     if (webSupported.value) {
       if (form.value.kind === 'proxy' && !form.value.upstreams.trim()) throw new Error('反代需要至少一个后端')
       if (form.value.kind === 'php' && !form.value.fpm.trim()) throw new Error('PHP 站点需要 php-fpm 目标')
+      if (form.value.kind === 'redirect' && !form.value.redirectTarget.trim()) throw new Error('整站重定向需要目标 URL')
     }
     // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
     if (editing.value) {
@@ -247,11 +255,12 @@ async function save() {
   finally { busy.value = false }
 }
 
-/** 站点类型 → apply 载荷里的目标值（proxy / php 的目标会直接进 nginx 配置文本）。 */
+/** 站点类型 → apply 载荷里的目标值（proxy / php / redirect 的目标会直接进 nginx 配置文本）。 */
 function kindTargets() {
   const kind = form.value.kind
   if (kind === 'proxy') return { upstreams: form.value.upstreams.split(/[,\s]+/).filter(Boolean) }
   if (kind === 'php') return { fpm: form.value.fpm.trim() }
+  if (kind === 'redirect') return { redirect_target: form.value.redirectTarget.trim(), redirect_code: form.value.redirectCode }
   return {}
 }
 
@@ -268,6 +277,8 @@ async function deploy(name: string, domains: string[]) {
     root: form.value.root.trim() || name,
     force_https: true,
     kind: form.value.kind,
+    // SPA 回退仅对 static 类型有意义：其余类型强制 false，避免误带入反代/重定向。
+    spa: form.value.kind === 'static' ? !!form.value.spa : false,
     ...kindTargets(),
     waf: wafPayload(),
   })
@@ -461,6 +472,7 @@ async function doDeleteCert() {
             <option value="static">静态</option>
             <option value="proxy">反向代理 / 负载均衡</option>
             <option value="php">PHP (php-fpm)</option>
+            <option value="redirect">整站重定向</option>
           </select>
         </label>
         <label class="blk full">域名（逗号分隔）
@@ -482,6 +494,29 @@ async function doDeleteCert() {
           <input v-model="form.fpm" :disabled="!webSupported"
             placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" />
         </label>
+        <!-- SPA history 路由回退：仅 static 类型有意义。开启后 nginx 用
+             `try_files $uri $uri/ /index.html` 兜底，配合前端 history 模式单页应用。
+             对反代 / PHP / 重定向类型无意义，故仅 static 时显示。 -->
+        <label v-if="form.kind === 'static'" class="blk row-inline">
+          <input type="checkbox" v-model="form.spa" :disabled="!webSupported" />
+          <span>SPA 回退（history 路由兜底到 index.html）</span>
+        </label>
+        <!-- 整站重定向：仅 redirect 类型有意义。目标须 http(s):// 开头（后端校验），
+             状态码限 301/302/307/308；$request_uri 自动追加，无需手填路径。 -->
+        <template v-if="form.kind === 'redirect'">
+          <label class="blk full">重定向目标 URL
+            <input v-model="form.redirectTarget" :disabled="!webSupported"
+              placeholder="https://example.com" />
+          </label>
+          <label class="blk">状态码
+            <select v-model.number="form.redirectCode" :disabled="!webSupported">
+              <option :value="301">301 永久</option>
+              <option :value="302">302 临时</option>
+              <option :value="307">307 临时（保留方法）</option>
+              <option :value="308">308 永久（保留方法）</option>
+            </select>
+          </label>
+        </template>
 
         <!-- WAF：站点配置的一部分，与其它字段**同一次下发**，故同处一个表单 -->
         <div class="waf">

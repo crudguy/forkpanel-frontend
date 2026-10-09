@@ -79,7 +79,7 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
 
 /** 站点类型。**注意** 库内值是 `static|reverse_proxy|php`，API 呈现为 `static|proxy|php`
  *  （换算在后端 kind_to_api/kind_to_db）。 */
-export const siteKindLabel = enumLabel({ static: '静态站点', proxy: '反向代理', php: 'PHP 站点' })
+export const siteKindLabel = enumLabel({ static: '静态站点', proxy: '反向代理', php: 'PHP 站点', redirect: '整站重定向' })
 
 export interface Site {
   id: number
@@ -103,6 +103,12 @@ export interface Site {
   upstreams: string[] | null
   /** php-fpm 目标（kind=php 时存在）；其余为 null */
   fpm: string | null
+  /** SPA history 路由回退：仅 static 类型生效（try_files 兜底 /index.html）。其余类型恒 false */
+  spa: boolean
+  /** 整站重定向目标 URL（kind=redirect 时存在）；其余为 null。后端校验须 http(s):// 开头 */
+  redirect_target: string | null
+  /** 整站重定向状态码（301/302/307/308，kind=redirect 时存在）；其余为 null */
+  redirect_code: number | null
 }
 
 // ── 专业监控页：完整系统快照（对应后端 panel_os::SystemSnapshot）──
