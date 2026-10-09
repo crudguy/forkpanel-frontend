@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
+import ToastHost from '@/components/ToastHost.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
@@ -161,6 +162,8 @@ function logout() {
       </div>
     </main>
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
+    <!-- 全站唯一的浮层提示宿主（脱离文档流，不影响任何页面布局） -->
+    <ToastHost />
   </div>
 </template>
 

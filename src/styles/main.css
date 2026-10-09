@@ -282,3 +282,28 @@ tbody tr:last-child td { border-bottom: none; }
    外观仍由 .modal 提供，此处只补排布——写成单独的 .stack 而不是给 .modal
    再加一条规则，是为了让 check-modal.mjs 能守住"外观只有一个来源"。 */
 .modal.stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── 全局浮层提示（toast）──────────────────────────────────────────────
+   为什么不复用页面内的 .notice：.notice 是**文档流内**元素，插进去会把下方内容
+   整体下推——每次保存成功页面就抖一下，用户看到的是"结构不稳"。toast 用
+   position:fixed 脱离文档流，出现/消失都不改变任何元素的布局。
+   z-index 100 高于 .mask(50) 与 .topbar(30)：弹窗开着时也能看见（如签发成功）。
+   top:70px 落在顶栏（高 58px）之下，既不压标题也不挡弹窗主体。 */
+.toast-host { position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none; }
+.toast { display: flex; align-items: flex-start; gap: 8px; pointer-events: auto;
+  max-width: min(560px, 92vw); padding: 10px 14px; border-radius: 10px;
+  font-size: 13px; line-height: 1.55; color: var(--c-text);
+  background: var(--c-surface-2); border: 1px solid var(--c-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28); cursor: pointer;
+  animation: toast-in .18s ease-out; }
+.toast .ic { flex: none; margin-top: 1px; }
+.toast .tx { min-width: 0; }
+.toast-ok { border-color: color-mix(in srgb, var(--c-ok) 45%, transparent); }
+.toast-ok .ic { color: var(--c-ok); }
+.toast-err { border-color: color-mix(in srgb, var(--c-danger) 50%, transparent); }
+.toast-err .ic { color: var(--c-danger); }
+.toast-info .ic { color: var(--c-primary); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }

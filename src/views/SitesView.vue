@@ -24,6 +24,7 @@
  */
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useModal } from '@/composables/useModal'
+import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -58,7 +59,6 @@ const fieldErrs = ref<Record<string, string>>({})
  * 元素不重建，动画只播一次，用户连点「保存」得不到任何新反馈（正是要修的场景）。
  */
 const errSeq = ref(0)
-const notice = ref('')
 const busy = ref(false)
 const loading = ref(false)
 /** 站点托管根目录（后端只读下发）。目录选择器的初始定位——不可硬编码，config 可覆盖。 */
@@ -115,7 +115,7 @@ function tlsState(s: Site): { label: string; cls: string; title: string } {
 }
 
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = ''; notice.value = '' }
+  if (!silent) { loading.value = true; error.value = '' }
   try {
     sites.value = await api.get<Site[]>(API.sites.list())
     certs.value = await api.get<Cert[]>(API.certs.list())
@@ -176,7 +176,7 @@ function openCreate() {
   form.value = emptyForm()
   // 清掉上一次遗留的报错：否则上次保存失败的红条会在重新打开弹窗时**立即**出现，
   // 让人误以为这次什么都还没提交就已经出错了。
-  error.value = ''; notice.value = ''
+  error.value = ''
   modalOpen.value = true
 }
 function openEdit(s: Site) {
@@ -202,7 +202,7 @@ function openEdit(s: Site) {
     wafBurst: s.waf_burst ?? 0,
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
-  error.value = ''; notice.value = ''
+  error.value = ''
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
 }
@@ -289,7 +289,7 @@ function showErr(msg: string) {
  * ——现在合并为：**保存即下发**。SSL 证书管理同理并入本弹窗（见下方 .ssl 区块）。
  */
 async function save() {
-  busy.value = true; error.value = ''; notice.value = ''; formError.value = ''; fieldErrs.value = {}
+  busy.value = true; error.value = ''; formError.value = ''; fieldErrs.value = {}
   const name = form.value.name.trim()
   const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
   const root = form.value.root.trim() || undefined
@@ -347,9 +347,9 @@ async function save() {
     } else {
       msg = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
     }
-    // ⚠ 顺序不能颠倒：load() 开头会把 notice 清空（它同时负责清掉上一轮的旧提示），
-    //   若先赋 notice 再 load，成功提示会被**立刻冲掉**——用户看不到任何"保存成功"的反馈。
-    closeModal(); await load(); notice.value = msg
+    // 成功提示走浮层 toast（脱离文档流）：写成页面级 notice 会把下方内容整体下推，
+    //   每次保存页面都抖一下，观感不稳——这正是本次改 toast 的原因。
+    closeModal(); await load(); toast(msg)
   } catch (e) {
     // 失败：**能定位到字段就挂在字段旁**；定位不到（网络/服务端异常）才用通用错误条。
     const fd = errorFieldDetail(e)
@@ -414,12 +414,12 @@ async function doDelete() {
 
 // ── 重载（受 webserver 能力门禁）──
 async function reloadSite(s: Site) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.post(API.sites.reload(s.id), {})
-    notice.value = `已重载 ${s.name}`
+    toast(`已重载 ${s.name}`)
   } catch (e) {
-    if (isUnsupported(e)) notice.value = '当前环境未接入 Web 服务器，无法重载配置'
+    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法重载配置', 'info')
     else error.value = errorText(e)
   } finally { busy.value = false; await load() }
 }
@@ -455,17 +455,18 @@ function downloadCa() {
 /**
  * 把签发类错误放到**用户当下真正看得见的那一层**：签发弹窗 > 站点编辑弹窗 > 页面级。
  * 此前一律写页面级 error/notice，弹窗开着时全被遮罩挡在后面 → 表现为"点了没反应"。
- * `asNotice`：能力未接入（还没装上）属提示而非报错，沿用绿色语义。
+ * `asNotice`：能力未接入（还没装上）属提示而非报错，改走中性 toast。
+ * toast 是浮层、恒在遮罩之上，故不再需要"弹窗开着就降级到页面级"的分支。
  */
 function sslErrTo(msg: string, asNotice = false) {
   if (sslModal.value) { sslErr.value = msg; return }
-  if (asNotice && !modalOpen.value) { notice.value = msg; return }
+  if (asNotice) { toast(msg, 'info'); return }
   showErr(msg)
 }
 
 /** 行内「SSL」快捷入口：直接开签发弹窗（仅一种渠道可用时立即执行，不给"必败选项"）。 */
 function applySsl(s: Site) {
-  error.value = ''; notice.value = ''
+  error.value = ''
   if (!(selfSignedSupported.value && sslSupported.value)) {
     execSsl(s, selfSignedSupported.value ? 'self-signed' : 'http-01', '')
     return
@@ -479,7 +480,7 @@ function applySslEditing() {
 }
 
 async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string) {
-  busy.value = true; error.value = ''; notice.value = ''; sslErr.value = ''
+  busy.value = true; error.value = ''; sslErr.value = ''
   // ACME 必须有账户邮箱：CA 靠它发到期/异常通知，缺了就明确报错，不代填假地址
   if (method === 'http-01' && !email.trim()) {
     sslErrTo('ACME 签发需要账户邮箱')
@@ -489,9 +490,9 @@ async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string
   try {
     const r = await api.post<{ task_id?: string }>(
       API.sites.sslApply(s.id), { domains: s.domains, method, email: method === 'http-01' ? email.trim() : undefined })
-    notice.value = method === 'self-signed'
+    toast(method === 'self-signed'
       ? `已为 ${s.name} 签发面板自签证书（记得「重载」使配置生效）`
-      : `已提交 ${s.name} 的 ACME 签发任务${r?.task_id ? `（${r.task_id}）` : ''}，可在任务中心查看进度`
+      : `已提交 ${s.name} 的 ACME 签发任务${r?.task_id ? `（${r.task_id}）` : ''}，可在任务中心查看进度`)
     sslModal.value = null
     if (method === 'self-signed') await load()
   } catch (e) {
@@ -504,7 +505,7 @@ async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string
 // ── 证书续期（自签同步 / ACME 任务化）/ 删除（纯数据操作）──
 const delCert = ref<Cert | null>(null)
 async function renewCert(c: Cert) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   let ok = ''
   try {
     await api.post(API.certs.renew(c.id), {})
@@ -512,15 +513,14 @@ async function renewCert(c: Cert) {
   } catch (e) {
     if (isUnsupported(e)) sslErrTo('当前环境未接入证书续期能力', true)
     else sslErrTo(errorText(e))
-    // ⚠ 与 save() 同一个坑：load() 开头会把 notice 清空，先赋再 load 等于没赋。
-  } finally { busy.value = false; await load(); if (ok) notice.value = ok }
+  } finally { busy.value = false; await load(); if (ok) toast(ok) }
 }
 async function setAutoRenew(c: Cert, val: boolean) {
-  busy.value = true; error.value = ''; notice.value = ''
+  busy.value = true; error.value = ''
   try {
     await api.patch(API.certs.autoRenew(c.id), { enabled: val })
     c.auto_renew = val
-    notice.value = `${c.domain} 自动续期已${val ? '开启' : '关闭'}`
+    toast(`${c.domain} 自动续期已${val ? '开启' : '关闭'}`)
   } catch (e) {
     if (isUnsupported(e)) sslErrTo('当前环境未接入 ACME，无法自动续期')
     else sslErrTo(errorText(e))
@@ -538,9 +538,6 @@ async function doDeleteCert() {
 <template>
   <div>
     <p v-if="error" class="err" role="alert">{{ error }}</p>
-    <!-- 弹窗打开时页面级提示会藏在遮罩后面（等于没有），此刻改由弹窗顶部展示同一句
-         notice——同一句话不在遮罩前后重复出现。error 已与弹窗解耦，不会在此被弹窗点亮。 -->
-    <p v-else-if="notice && !modalOpen" class="notice">{{ notice }}</p>
 
     <div v-if="!webSupported" class="tip warn">
       未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
@@ -608,7 +605,6 @@ async function doDeleteCert() {
         <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
         </p>
-        <p v-else-if="notice" class="notice form-msg" role="status">{{ notice }}</p>
         <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
@@ -883,9 +879,6 @@ sudo update-ca-certificates</pre>
    padding/border-width/border-radius 全为 0，于是「警示条」实测渲染成
    padding:0 / border:0 / radius:0、高仅 19px 的一条裸色带，且 margin:0 导致它
    与下方卡片严丝合缝贴合（实测 0px），文字还顶到内容区左边缘。 */
-.notice { color: var(--c-ok); background: var(--c-ok-soft);
-  border: 1px solid color-mix(in srgb, var(--c-ok) 35%, transparent);
-  padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .tip.warn { color: var(--c-warn); background: var(--c-warn-bg);
   border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
   padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6;
@@ -955,9 +948,6 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .form-msg { grid-column: 1 / -1; position: sticky; top: 0; z-index: 3;
   margin: -20px -24px 12px; padding: 11px 24px; border-radius: 12px 12px 0 0;
   background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface-2)); }
-.modal.wide.site-modal > .form-msg.notice {
-  background: color-mix(in srgb, var(--c-ok) 14%, var(--c-surface-2));
-  border-color: color-mix(in srgb, var(--c-ok) 40%, transparent); }
 /* 字段级错误：挂在**出问题的那个输入框**正下方（模板里紧跟其 input / select）。
    此前所有错误统一堆在弹窗底部，用户得自己逐个框去猜哪儿填错了。 */
 .field-err { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5;
