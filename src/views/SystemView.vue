@@ -176,6 +176,10 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 
 <template>
   <div>
+    <div class="page-head">
+      <h2 class="page-title">实时趋势</h2>
+    </div>
+
     <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
     <!-- 当前快照读数（本页实时读数头，差异化在下方趋势） -->

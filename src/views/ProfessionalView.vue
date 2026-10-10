@@ -125,6 +125,10 @@ onUnmounted(() => {
 
 <template>
   <div>
+    <div class="page-head">
+      <h2 class="page-title">专业快照</h2>
+    </div>
+
     <p v-if="snapError" class="err" role="alert">{{ snapError }}</p>
 
     <div v-if="loading && !snap" class="card skeleton" style="height:280px" />

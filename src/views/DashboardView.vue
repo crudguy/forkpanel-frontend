@@ -189,6 +189,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <template>
   <div class="dash">
+    <div class="page-head">
+      <h2 class="page-title">概览</h2>
+    </div>
+
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
     </p>
