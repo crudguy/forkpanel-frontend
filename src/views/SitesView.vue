@@ -1216,7 +1216,7 @@ sudo update-ca-certificates</pre>
   border-top: 1px dashed var(--c-border); padding-top: 10px; }
 .waf > label.inline { grid-column: 1 / -1; }
 .waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
-.waf label.inline { flex-direction: row; align-items: center; cursor: help; }
+.waf label.inline { flex-direction: row; align-items: center; }
 .waf label.inline input { width: auto; }
 /* 窄窗（弹窗退到 94vw 后内容区不足 ~470px）：字段行退回单列堆叠，防止数值列挤没「档位」 */
 @media (max-width: 500px) {
@@ -1298,6 +1298,9 @@ sudo update-ca-certificates</pre>
 /* 根证书引导与站点编辑都用宽版（宽度与滚动见公共 .modal.wide）；此处只补
    sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
 .modal.wide { padding-bottom: 0; }
+/* 新建/编辑站点弹窗宽度：覆盖公共 .modal.wide 的 620px → 650px（仅作用于站点弹窗，
+   CA 指引等其它宽版弹窗仍保持 620px）。特异性 (0,3,1) 压过公共 (0,2,0)。 */
+.modal.wide.site-modal { width: min(650px, 94vw); }
 /* 新建/编辑站点弹窗：字段两列网格（仅作用于站点弹窗，不影响 CA 指引弹窗）。
    标题行 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
 .modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
