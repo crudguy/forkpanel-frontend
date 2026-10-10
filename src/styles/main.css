@@ -43,6 +43,8 @@
   --glow: 0 0 0 1px rgba(255, 106, 61, 0.35), 0 10px 30px -10px rgba(255, 106, 61, 0.35);
 
   --radius: 14px;
+  /* 弹窗专用：比卡片大一级，视觉上"浮起来"（.modal 使用它，勿再写死 12px） */
+  --radius-lg: 16px;
   --radius-sm: 10px;
   --radius-xs: 8px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC',
@@ -149,10 +151,22 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
 .btn-primary { background: var(--gradient); border-color: transparent; color: #fff; font-weight: 600; box-shadow: var(--glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-ghost { background: transparent; }
-.btn-danger { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); }
-.btn-danger:hover:not(:disabled) { background: var(--c-danger-soft); }
+/* 危险按钮**两级**，别再自造第三级（此前 Databases 有 `.danger-btn{background:#C73E1F}`、
+   Certs 有 `btn-primary danger`、其余各自用 btn-danger —— 同一个"删除"三种长相）：
+     .btn-danger        实心红，**弹窗里的危险主操作**（删除确认 / 覆盖恢复 / 关闭 MFA）
+     .btn-ghost.danger  透明底 + 红字，**表格内联**的危险小按钮（避免整片表格红压压）
+   判据：这个按钮是不是弹窗的底部主操作？是 →.btn-danger；否则 →.btn-ghost.danger。 */
+.btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: #fff; font-weight: 600; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-sm { padding: 4px 10px; font-size: 13px; border-radius: var(--radius-xs); }
 .btn-icon { padding: 7px; width: 34px; height: 34px; }
+/* 危险修饰（与既有 `.danger` 文字色工具类配合）：站点/容器/备份/证书等表内
+   删除按钮通用——之前散在 CertsView 私有样式里，提成全局避免各页漂移。
+   `.btn-ghost.danger` 维持透明底 + 红色文字；`.btn-primary.danger` 实心红底。 */
+.btn-ghost.danger { color: var(--c-danger); }
+.btn-ghost.danger:hover:not(:disabled) { color: var(--c-danger); border-color: color-mix(in srgb, var(--c-danger) 40%, transparent); background: transparent; }
+.btn-primary.danger { background: var(--c-danger); box-shadow: none; }
+.btn-primary.danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 
 /* ── 卡片 / 玻璃拟态 ── */
 .card {
@@ -252,36 +266,126 @@ tbody tr:last-child td { border-bottom: none; }
 .row > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); flex: 1; min-width: 140px; }
 .row > label input, .row > label select { width: 100%; }
 
-/* ── 弹窗（公共基础）─────────────────────────────────────────
-   此前 .mask/.modal 在 Sites / Certs / Databases / Files / Security / Cron /
-   Users 里**各抄一份且参数互不相同**：宽度 400/440/460、圆角 12/14、背景
-   --c-surface 与 --c-surface-2 混用、遮罩透明度 .45/.5、z-index 50/60——
-   同一个弹窗在不同页面长得不一样。统一到此处，杜绝继续漂移。
-   ⭐层级约定：**一级弹窗 mask = 50**；二级浮层（目录选择器 / SQL 控制台 /
-   回收站面板）固定为 60，保证它们始终压在弹窗之上。此前 Files / Databases /
-   Security 把一级弹窗也设成 60，与二级浮层同级，叠放顺序退化成由 DOM 顺序
-   决定（有可能反过来被浮层盖住），故统一降到 50。 */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal {
-  width: min(440px, 92vw); max-height: 86vh; overflow: auto;
-  background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-radius: 12px; padding: 20px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+/* 目录选择行：输入框 + 「浏览…」按钮并排（站点根目录 / 应用工作目录复用）。
+   提到全局，避免各视图各抄一份导致漂移。 */
+.dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.dir-row input { flex: 1; margin-top: 0; }
+.dir-row .btn-sm { flex: none; white-space: nowrap; }
+
+/* ══ 弹窗（Dialog / Modal）════════════════════════════════════════════════
+   全站弹窗的**唯一外观来源**。任何弹窗只写 `<div class="mask">` + `<div class="modal">`，
+   不得再自定宽度 / 圆角 / 阴影 / 背景 / 标题字号 / 操作条排布（守卫 check-modal.mjs）。
+
+   ── 层级总表（改任何 z-index 前先看这里）──
+   30 topbar │ 40/41 用户菜单 backdrop / menu │ 50 一级弹窗 .mask
+   59 移动端抽屉遮罩 .nav-backdrop │ 60 二级浮层（目录选择器 / SQL 控制台 / 回收站 / 抽屉本体）
+   100 toast（最高：弹窗开着时提示也要看得见）
+   此前 Files / Databases / Security 把一级弹窗也设成 60，与二级浮层同级，叠放顺序退化成
+   由 DOM 顺序决定（可能被浮层盖住），故统一降到 50。
+
+   ── 关闭三件套（每个弹窗都必须齐）──
+   右上角 .modal-close ＋ 点击遮罩（@click.self）＋ Esc（由 useModal 统一提供）。
+   三者**必须走同一个 close**（useModal 返回的那个），才会有一致的离场动画与焦点返还；
+   各写各的会出现「Esc 能关但焦点丢了」「点 X 有关动画、点遮罩没有」。 */
+.mask {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  /* 遮罩留内边距：矮窗口（如 1440×520）下弹窗不再顶死视口边缘 */
+  padding: clamp(16px, 4vh, 32px);
+  background: rgba(0, 0, 0, .5);
+  animation: overlay-in .16s ease-out;
 }
-.modal h3 { margin: 0 0 12px; font-size: 16px; }
+/* 弹窗内边距走**变量**：.sticky 的 .modal-head / .modal-foot 需要用等量的负边距
+   把背景补到弹窗边缘，硬编码就得在两处同步改。二级浮层（回收站 / SQL 控制台）
+   只需覆盖这对变量，就能复用同一套 head / 关闭按钮规则。 */
+.modal {
+  --modal-py: 20px;
+  --modal-px: 24px;
+  position: relative;                      /* .modal-close 的定位基准 */
+  display: flex; flex-direction: column;   /* 让 .modal-head / .modal-foot 的 sticky 生效 */
+  width: min(440px, 92vw); max-height: 88vh; overflow: auto;
+  padding: var(--modal-py) var(--modal-px);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: modal-in .18s cubic-bezier(.2, .8, .3, 1);
+}
+
+/* 标题行：sticky 吸顶，长表单滚动时标题与关闭按钮始终可见。
+   ⚠️ 负边距 = 上方 --modal-py / --modal-px，把标题行的背景补到容器边缘，
+      否则滚动内容会从它上方穿出来。改 .modal 的 padding 无需再动这里（走变量）。 */
+.modal-head {
+  position: sticky; top: calc(-1 * var(--modal-py)); z-index: 3;
+  display: flex; align-items: center; gap: 10px;
+  /* 允许"标题 + 关闭按钮"之后再换行放一条错误条（SitesView 的吸顶错误条即此用法），
+     这样错误条与标题**同一个** sticky 容器，不必再算 head 高度。 */
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--modal-py)) calc(-1 * var(--modal-px)) 12px;
+  padding: var(--modal-py) var(--modal-px) 12px;
+  background: var(--c-surface-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.modal-title { flex: 1; min-width: 0; }
+.modal-title, .modal h3 {
+  margin: 0; font-size: 16px; font-weight: 650; letter-spacing: .2px; color: var(--c-text);
+}
+/* 危险标题（删除类确认框）。⚠️ 必须写成 (0,2,1)：上面的 `.modal h3` 是 (0,1,1)，
+   会压过工具类 `.danger`（0,1,0），导致 danger 标题**静默不变红**。 */
+.modal h3.danger, .modal-title.danger { color: var(--c-danger); }
+/* 关闭按钮：统一 30×30、位置固定在标题行最右。用 <Icon name="close">，
+   不用文字符号 ✕——后者随字体渲染差异会有不同的字重与基线。 */
+/* 标题行里的副说明（如「修改将直接写入 crontab」）：紧跟着标题，不要 12px 的下边距 */
+.modal-head .modal-lead { margin: 2px 0 0; }
+.modal-close {
+  flex: none; width: 30px; height: 30px; padding: 0; margin: 0 -6px 0 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: var(--radius-xs);
+  background: transparent; color: var(--c-text-dim);
+}
+.modal-close:hover:not(:disabled) {
+  background: var(--c-hover); color: var(--c-text); border-color: var(--c-border-strong);
+}
+.modal-close:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 正文：弹窗内的说明段统一字号与次色，别再各自写 .detail / .muted / .ca-lede */
+.modal > p, .modal-lead { font-size: 13px; line-height: 1.65; color: var(--c-text-dim); margin: 0 0 12px; }
 .modal .blk { display: block; margin: 12px 0; font-size: 13px; color: var(--c-text-dim); }
 .modal .blk select, .modal .blk input {
   width: 100%; margin-top: 6px; padding: 8px 10px;
-  border: 1px solid var(--c-border); border-radius: 8px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs);
   background: var(--c-surface); color: var(--c-text); font-size: 14px; font-family: inherit;
 }
+
+/* 底部操作条：统一「次按钮在左、主 / 危险按钮在最右」。
+   危险动作一律用实心 .btn-danger（不再各处混用 .btn-primary.danger / .danger-btn /
+   .btn-ghost.danger——三者在删客体页面上长得各不相同）。 */
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+/* 高内容弹窗：操作条吸底（内容比视口高时按钮不随内容滚走），依赖 .modal 的 flex column */
+.modal-foot { margin-top: auto; }
 /* 宽弹窗变体：多字段表单（站点编辑）与分步说明（根证书指引）用 */
 .modal.wide { width: min(620px, 94vw); }
 /* 纵向流式派生：内部子元素依次竖排并留缝。用于**没有 .blk 字段块**的弹窗
-   （确认框 / 安装包 / 计划任务编辑这类自己用 .m-head、.detail、.acts 排的）。
+   （确认框 / 安装包 / 计划任务编辑这类自己用 .modal-head、.modal-lead、.modal-actions 排的）。
    外观仍由 .modal 提供，此处只补排布——写成单独的 .stack 而不是给 .modal
    再加一条规则，是为了让 check-modal.mjs 能守住"外观只有一个来源"。 */
 .modal.stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* 离场动画：useModal.close() 先给遮罩加 .is-closing 播完再卸载。
+   只用 CSS 动画做不到「卸载前播放」，所以这类必须是 <Transition> 或本方案。 */
+.mask.is-closing { animation: overlay-out .14s ease-in forwards; }
+/* 二级遮罩：从一级弹窗内部再弹出的浮层（目录选择器 / SQL 控制台 / 回收站面板）
+   必须压在一级 .mask(50) 之上，否则会被父弹窗盖住。用修饰类表达"我是第二层"，
+   而不是在组件里写死 z-index: 60。 */
+.mask.level-2 { z-index: 60; }
+.mask.is-closing > .modal { animation: modal-out .14s ease-in forwards; }
+@keyframes overlay-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes overlay-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: none } }
+@keyframes modal-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(4px) scale(.99) } }
+@media (prefers-reduced-motion: reduce) {
+  .mask, .modal, .mask.is-closing, .mask.is-closing > .modal { animation: none; }
+}
 
 /* 开关（switch）：**公共控件，勿在各视图重复定义**。
    此前 `.switch` 只存在于各视图的 scoped 样式里，跨文件用就成了未定义元素——
@@ -296,27 +400,139 @@ tbody tr:last-child td { border-bottom: none; }
 .switch input:disabled + i { opacity: .5; cursor: not-allowed; }
 .switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
 
-/* ── 全局浮层提示（toast）──────────────────────────────────────────────
+/* ══ 全局浮层提示（toast）════════════════════════════════════════════════
    为什么不复用页面内的 .notice：.notice 是**文档流内**元素，插进去会把下方内容
    整体下推——每次保存成功页面就抖一下，用户看到的是"结构不稳"。toast 用
    position:fixed 脱离文档流，出现/消失都不改变任何元素的布局。
-   z-index 100 高于 .mask(50) 与 .topbar(30)：弹窗开着时也能看见（如签发成功）。
-   top:70px 落在顶栏（高 58px）之下，既不压标题也不挡弹窗主体。 */
-.toast-host { position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-  z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px;
-  pointer-events: none; }
-.toast { display: flex; align-items: flex-start; gap: 8px; pointer-events: auto;
-  max-width: min(560px, 92vw); padding: 10px 14px; border-radius: 10px;
+
+   ── 四态（唯一取值，勿再自造 kind）──
+     ok   成功 · check        · --c-ok
+     err  失败 · alert-circle · --c-danger   ⚠ 与 warn 的三角区分开
+     warn 警告 · alert        · --c-warn
+     info 信息 · info         · --c-primary
+   位置：顶栏下方居中（top:70px = 顶栏 58px + 12px 呼吸位）；z-index 100 高于
+   .mask(50) 与 .topbar(30)，弹窗开着时也能看见（如证书签发成功）。
+   堆叠：column-reverse → **新提示在最上方**（离视口顶部最近 = 最新），
+   旧提示自然下移，不会把新提示推出可视区。 */
+.toast-host {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  z-index: 100; pointer-events: none;
+  display: flex; flex-direction: column-reverse; align-items: center; gap: 8px;
+  width: max-content; max-width: min(560px, 92vw);
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 8px; pointer-events: auto;
+  padding: 10px 14px; border-radius: var(--radius-sm);
   font-size: 13px; line-height: 1.55; color: var(--c-text);
   background: var(--c-surface-2); border: 1px solid var(--c-border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .28); cursor: pointer;
-  animation: toast-in .18s ease-out; }
+}
 .toast .ic { flex: none; margin-top: 1px; }
-.toast .tx { min-width: 0; }
-.toast-ok { border-color: color-mix(in srgb, var(--c-ok) 45%, transparent); }
+.toast .tx { min-width: 0; word-break: break-word; }
+
+/* 四态：统一的「左边色条 + 图标色 + 柔底色」三重区分，色弱用户也能靠图标分辨 */
+.toast-ok { border-color: color-mix(in srgb, var(--c-ok) 45%, transparent); background: color-mix(in srgb, var(--c-ok-soft) 40%, var(--c-surface-2)); border-left: 3px solid var(--c-ok); }
 .toast-ok .ic { color: var(--c-ok); }
-.toast-err { border-color: color-mix(in srgb, var(--c-danger) 50%, transparent); }
+.toast-err { border-color: color-mix(in srgb, var(--c-danger) 50%, transparent); background: color-mix(in srgb, var(--c-danger-soft) 45%, var(--c-surface-2)); border-left: 3px solid var(--c-danger); }
 .toast-err .ic { color: var(--c-danger); }
+.toast-warn { border-color: color-mix(in srgb, var(--c-warn) 50%, transparent); background: color-mix(in srgb, var(--c-warn-bg) 45%, var(--c-surface-2)); border-left: 3px solid var(--c-warn); }
+.toast-warn .ic { color: var(--c-warn); }
+.toast-info { border-color: color-mix(in srgb, var(--c-primary) 40%, transparent); border-left: 3px solid var(--c-primary); }
 .toast-info .ic { color: var(--c-primary); }
-@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* 出入场（ToastHost 用 <TransitionGroup name="toast">）；
+   leave 时脱离文档流(list conspirators 会跳) 以便其余项走 .toast-move 平滑补位 */
+.toast-enter-from { opacity: 0; transform: translateY(-10px) scale(.97); }
+.toast-enter-active { transition: opacity .2s ease, transform .2s cubic-bezier(.2, .8, .3, 1); }
+.toast-leave-active { transition: opacity .16s ease, transform .16s ease; position: absolute; left: 0; right: 0; }
+.toast-leave-to { opacity: 0; transform: translateX(14px) scale(.98); }
+.toast-move { transition: transform .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter-active, .toast-leave-active, .toast-move { transition: none; }
+}
+
+/* ══ 提示信息（内联通知 / 字段校验）══════════════════════════════════════
+   三种粒度、各司其职，**不要混用**：
+     .hint-note  常驻说明 / 后果预警（信息/ifno、警告 is-warn、危险 is-danger、成功 is-ok）
+     .err-bar    整段错误（归属不到某一个输入框的错误，如网络 / 服务端异常）
+     .field-err  字段级错误，挂在**出问题的那个输入框正下方**
+   此前 .hint-note / .err-bar / .field-err 只存在于 SitesView / AppsView 的 scoped
+   里（两套会漂移，且新视图用它们时 scoped 不生效＝没样式），现统一提到此处。
+   ⚠️ 视图里若还留着私有副本，scoped 特异性更高会把公共规则压掉——必须删掉。 */
+.hint-note {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin: 0 0 14px; padding: 9px 11px; border-radius: var(--radius-xs);
+  font-size: 13px; line-height: 1.6; color: var(--c-text-dim);
+  background: var(--c-hover); border: 1px solid var(--c-border);
+}
+.hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
+.hint-note.is-warn { border-left: 3px solid var(--c-warn); }
+.hint-note.is-warn .ic { color: var(--c-warn); }
+.hint-note.is-danger { border-left: 3px solid var(--c-danger); }
+.hint-note.is-danger .ic { color: var(--c-danger); }
+.hint-note.is-ok { border-left: 3px solid var(--c-ok); }
+.hint-note.is-ok .ic { color: var(--c-ok); }
+
+/* 整段错误条：红底柔色 + 红边 + 图标，配一次轻微抖动让人注意到"新出错了" */
+.err-bar {
+  display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
+  border-radius: var(--radius-xs); line-height: 1.6; color: var(--c-text);
+  background: var(--c-danger-soft); border: 1px solid var(--c-danger);
+  animation: panel-shake .3s ease;
+}
+.err-bar .ic { flex: none; margin-top: 1px; color: var(--c-danger); }
+
+/* 字段级错误 */
+.field-err {
+  display: block; margin-top: 4px; font-size: 12px; line-height: 1.5;
+  color: var(--c-danger); animation: panel-shake .3s ease;
+}
+/* 出错的输入框 / 下拉本身也标红：扫一眼就知道是哪个框 */
+label.has-err input, label.has-err select { border-color: var(--c-danger); }
+@keyframes panel-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) { .err-bar, .field-err { animation: none; } }
+
+/* ── 窄屏表格降级（审计 R2）────────────────────────────────────────────
+   站点 / WAF / 证书三张表宽屏 7~8 列，窄屏（<=720px）即使 ellipsis 也放不下
+   ——8 列已超出「截断 + title」能救的范围。降级策略是**隐藏次要列**（各表用
+   .col-opt 自行标记哪几列次要），而不是给表格加横向滚动：既守住既有约定
+   （窄屏不加横滚），又让主列（名称 / 域名 / 状态 / 操作）拿到全部可用宽度。
+   ⚠️ 与 colgroup 的配合（踩过的坑）：table-layout:fixed 的列宽由 colgroup
+   **按序**分配，而 display:none 的单元格不占列槽——于是后续可见单元格整体
+   前移，第 5 个可见列会落进第 3 个 col 的宽度槽。实测症状：WAF 列拿到根目录
+   的弹性宽度 203px、操作列只剩状态列的 39px，4 个按钮竖堆成 4 行（行高 247px）。
+   故窄屏一并转回 auto 布局让浏览器按内容分配；此时 .ellipsis 的 max-width:0
+   必须解除（否则弹性列被压成 0 宽），改由换行 + break-all 兜住超长域名。
+   ⚠️ 选择器必须压过各视图 scoped 里的 `table.fixed[data-v-*]`（0,2,1）：
+   组件样式后注入，平手时它赢——实测 `.card table.fixed`（同为 0,2,1）与裸
+   `table.fixed`（0,2,0）都**静默失效**，表现为 tableLayout 仍是 fixed、列照样
+   错位。故这里用 `.card.flush table.fixed`（0,3,1）。 */
+@media (max-width: 720px) {
+  th.col-opt, td.col-opt { display: none; }
+  .card.flush table.fixed { table-layout: auto; }
+  .card.flush table.fixed td.ellipsis {
+    max-width: none; white-space: normal; overflow: visible;
+    text-overflow: clip; word-break: break-all;
+    /* auto 布局按 min-content 分配，而 break-all 的 min-content 极小——主列
+       （名称 / 域名）会被压到 51px，长文本换成一列多行、行高 109px。
+       width 取 50% 让主列按比例瓜分剩余宽度：站点表有「名称+域名」两个主列
+       （各约 126px），证书表只有「域名」一个（独占 299px）。实测 width:100%
+       在站点表里会被第一列独吞（名称 201 / 域名 51），仍会换行。 */
+    width: 50%;
+  }
+  /* auto 布局下操作列会被压到只够 3 个按钮宽（第 4 个换行）。下限取
+     4 个图标按钮（各 29px）+ 3 个 6px 间距 = 134，**再加单元格左右内边距
+     （实测 34）** = 168。只写 134 时第 4 个仍会掉到第二行——min-width 管的是
+     border box，padding 要从里面扣。 */
+  .card.flush .actions { min-width: 168px; }
+  /* 表内按钮收成纯图标：窄列里 4 个带文字按钮会 flex-wrap 竖堆成 4 行
+     （实测行高 247px）。图标按钮靠 title/aria-label 仍可辨识，点击目标不变。 */
+  .btn-label { display: none; }
+  .actions .btn-sm { padding: 4px 7px; }
+}

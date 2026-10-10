@@ -18,6 +18,8 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, type AppInfo, type AppRuntimeInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 
@@ -26,6 +28,34 @@ const auth = useAuthStore()
 const modalOpen = ref(false)
 function open() { modalOpen.value = true }
 function close() { modalOpen.value = false }
+
+/**
+ * 目录 / 文件选择器（复用 /files/list 在服务器浏览目录树）。
+ * mode='dir' 选工作目录；mode='file' 选启动命令的可执行文件。
+ * 同一组件实例按 pickerTarget 分流，避免重复挂载。
+ */
+const pickerOpen = ref(false)
+const pickerMode = ref<'dir' | 'file'>('dir')
+const pickerTarget = ref<'workdir' | 'exec'>('workdir')
+function dirnameOf(p: string) {
+  const i = p.lastIndexOf('/')
+  return i <= 0 ? '/' : p.slice(0, i)
+}
+/** 文件模式着陆点：命令往往是「程序 参数」，取首个 token；绝对路径则展开到父目录。 */
+const pickerInitialPath = computed(() => {
+  if (pickerTarget.value === 'exec') {
+    const first = form.value.execStart.trim().split(/\s+/)[0]
+    if (first?.startsWith('/')) return dirnameOf(first)
+  }
+  return form.value.workdir || '/'
+})
+function openWorkdirPicker() { pickerTarget.value = 'workdir'; pickerMode.value = 'dir'; pickerOpen.value = true }
+function openExecPicker() { pickerTarget.value = 'exec'; pickerMode.value = 'file'; pickerOpen.value = true }
+function onPick(p: string) {
+  if (pickerTarget.value === 'workdir') { form.value.workdir = p; clearFieldErr('workdir') }
+  else { form.value.execStart = p; clearFieldErr('exec_start') }
+  pickerOpen.value = false
+}
 
 const apps = ref<AppInfo[]>([])
 const runtimes = ref<AppRuntimeInfo[]>([])
@@ -36,6 +66,17 @@ const pkgDetectable = ref(false)
 
 const error = ref('')
 const formError = ref('')
+
+// 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
+const systemUsers = ref<{ name: string; uid: number; login_allowed: boolean }[]>([])
+async function loadSystemUsers() {
+  try {
+    systemUsers.value =
+      (await api.get<{ name: string; uid: number; login_allowed: boolean }[]>(API.system.users())) ?? []
+  } catch {
+    // 拉取失败（权限不足 / 后端未接入）不阻断表单：用户仍可手填任意已存在账号
+  }
+}
 const fieldErrs = ref<Record<string, string>>({})
 const errSeq = ref(0)
 const busy = ref(false)
@@ -67,8 +108,10 @@ function emptyForm() {
 const form = ref(emptyForm())
 const editing = ref<AppInfo | null>(null)
 const modalBox = ref<HTMLElement | null>(null)
-// 弹窗统一行为：Esc 关闭 + 焦点陷阱（useModal 是副作用型，返回 void）
-useModal(() => modalOpen.value, modalBox, close)
+// 弹窗统一行为：Esc 关闭 + 焦点陷阱 + 关闭后焦点返还。
+// modalClose 是**统一关闭出口**（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮都走它，
+// 内部再调 close() 做状态清理。
+const { close: modalClose } = useModal(() => modalOpen.value, modalBox, close)
 
 async function load(silent = false) {
   if (!silent) { loading.value = true; error.value = '' }
@@ -109,6 +152,7 @@ function openCreate() {
   formError.value = ''
   open()
   void loadCatalog()
+  void loadSystemUsers()
 }
 
 function openEdit(a: AppInfo) {
@@ -129,6 +173,7 @@ function openEdit(a: AppInfo) {
   formError.value = ''
   open()
   void loadCatalog()
+  void loadSystemUsers()
 }
 
 /**
@@ -152,7 +197,14 @@ function onRuntimeChange() {
 }
 
 function addEnvRow() { form.value.env.push({ k: '', v: '' }) }
-function removeEnvRow(i: number) { form.value.env.splice(i, 1) }
+function removeEnvRow(i: number) {
+  form.value.env.splice(i, 1)
+  // 删除行后索引重排，旧 env${i} 错误 key 会错位——统一清空所有 env* 字段错误，
+  // 待用户下次保存时再逐字段校验，避免错误提示贴到错误行
+  const next = { ...fieldErrs.value }
+  for (const k of Object.keys(next)) if (k.startsWith('env')) delete next[k]
+  fieldErrs.value = next
+}
 
 async function save() {
   busy.value = true
@@ -211,12 +263,10 @@ async function save() {
   } catch (e) {
     // 后端 400 的 detail.field 落到对应输入框；其余归入弹窗顶部通用条
     const f = errorFieldDetail(e)
-    if (f && typeof f === 'string') {
-      fieldErrs.value = { ...fieldErrs.value, [f]: errorText(e) }
-      showErr(errorText(e))
-    } else {
-      showErr(errorText(e))
+    if (f?.field) {
+      fieldErrs.value = { ...fieldErrs.value, [f.field]: f.reason || errorText(e) }
     }
+    showErr(errorText(e))
   } finally {
     busy.value = false
   }
@@ -249,8 +299,13 @@ async function toggleEnabled(a: AppInfo, val: boolean) {
   }
 }
 
-async function remove(a: AppInfo) {
-  if (!window.confirm(`删除应用 ${a.name}？\n\n将同时：撤下反向代理站点、停止并删除 systemd 单元 ${a.unit}、删除面板登记。\n（不会删除你的项目代码与构建产物）`)) return
+/** 待删除应用：存 ref 驱动 ConfirmDialog，避免原生 confirm 阻塞且样式与 .modal 体系割裂。 */
+const pendingRemove = ref<AppInfo | null>(null)
+function askRemove(a: AppInfo) { pendingRemove.value = a }
+async function doRemove() {
+  const a = pendingRemove.value
+  pendingRemove.value = null
+  if (!a) return
   busy.value = true
   try {
     await api.del(API.apps.remove(a.id))
@@ -272,7 +327,7 @@ function stateBadge(s: string | null): { cls: string; text: string } {
   return { cls: 'dim', text: '已停止' }
 }
 
-onMounted(() => { void load(); void loadCatalog() })
+onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 </script>
 
 <template>
@@ -280,7 +335,9 @@ onMounted(() => { void load(); void loadCatalog() })
     <div class="page-head">
       <h2>应用</h2>
       <div class="head-acts">
-        <button class="btn-primary" :disabled="busy" @click="openCreate">
+        <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
+          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
+          @click="openCreate">
           <Icon name="plus" :size="14" /> 新建应用
         </button>
       </div>
@@ -338,10 +395,10 @@ onMounted(() => { void load(); void loadCatalog() })
                 @click="act(a, 'stop')"><Icon name="stop" :size="13" /></button>
               <button class="btn-ghost btn-sm" :disabled="!a.enabled || busy" title="重启"
                 @click="act(a, 'restart')"><Icon name="refresh" :size="13" /></button>
-              <button class="btn-ghost btn-sm" title="编辑" @click="openEdit(a)">
+              <button class="btn-ghost btn-sm" :disabled="busy" title="编辑" @click="openEdit(a)">
                 <Icon name="edit" :size="13" />
               </button>
-              <button class="btn-ghost btn-sm" :disabled="busy" title="删除" @click="remove(a)">
+              <button class="btn-ghost btn-sm" :disabled="busy" title="删除" @click="askRemove(a)">
                 <Icon name="trash" :size="13" />
               </button>
             </td>
@@ -351,9 +408,14 @@ onMounted(() => { void load(); void loadCatalog() })
     </div>
 
     <!-- 新建 / 编辑弹窗 -->
-    <div v-if="modalOpen" class="mask" @click.self="close">
+    <div v-if="modalOpen" class="mask" @click.self="modalClose">
       <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
-        <h3>{{ editing ? `编辑应用 ${editing.name}` : '新建应用' }}</h3>
+        <div class="modal-head">
+          <h3 class="modal-title">{{ editing ? `编辑应用 ${editing.name}` : '新建应用' }}</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
 
         <p v-if="editing" class="hint-note">
           <Icon name="info" :size="14" class="ic" />
@@ -393,15 +455,29 @@ onMounted(() => { void load(); void loadCatalog() })
           </span>
         </p>
 
-        <label class="blk full" data-f="workdir">
+        <label class="blk full" :class="{ 'has-err': fieldErrs.workdir }" data-f="workdir">
           工作目录（绝对路径，须已存在）
-          <input v-model="form.workdir" placeholder="/opt/blog" />
+          <div class="dir-row">
+            <input v-model="form.workdir" placeholder="/opt/blog" :aria-invalid="!!fieldErrs.workdir"
+              @input="clearFieldErr('workdir')" />
+            <button type="button" class="btn-ghost btn-sm" @click="openWorkdirPicker">
+              <Icon name="folder" :size="13" /> 浏览…
+            </button>
+          </div>
           <span v-if="fieldErrs.workdir" class="field-err">{{ fieldErrs.workdir }}</span>
         </label>
 
-        <label class="blk full" data-f="exec_start">
+        <label class="blk full" :class="{ 'has-err': fieldErrs.exec_start }" data-f="exec_start">
           启动命令（systemd ExecStart）
-          <input v-model="form.execStart" placeholder="app 或 /opt/blog/app" />
+          <div class="dir-row">
+            <input v-model="form.execStart" placeholder="app 或 /opt/blog/app"
+              :aria-invalid="!!fieldErrs.exec_start" @input="clearFieldErr('exec_start')" />
+            <button type="button" class="btn-ghost btn-sm" @click="openExecPicker">
+              <Icon name="file" :size="13" /> 浏览…
+            </button>
+          </div>
+          <span class="hint-inline">支持「程序名」（如 <code>node</code>）或绝对路径（如 <code>/opt/blog/app</code>）；
+            带参数时写 <code>node server.js --port 3000</code>，浏览只选程序本体。</span>
           <span v-if="fieldErrs.exec_start" class="field-err">{{ fieldErrs.exec_start }}</span>
         </label>
 
@@ -413,9 +489,13 @@ onMounted(() => { void load(); void loadCatalog() })
 
         <label class="blk" data-f="run_user">
           运行用户
-          <input v-model="form.runUser" placeholder="留空则自动分配 site-&lt;应用名&gt;" />
+          <input v-model="form.runUser" placeholder="留空则自动分配 site-&lt;应用名&gt;" list="app-run-user-suggest" />
+          <datalist id="app-run-user-suggest">
+            <option v-for="u in systemUsers" :key="u.name" :value="u.name"
+              :label="`${u.name} (uid ${u.uid})${u.login_allowed ? '' : ' · 禁止登录'}`" />
+          </datalist>
           <span class="hint-inline">留空由面板创建 <b>系统用户</b> <code>site-&lt;应用名&gt;</code>
-            （禁止登录），应用不再以 root 运行；填已存在的用户名（如 www-data）则直接复用，
+            （禁止登录），应用不再以 root 运行；下拉列出本机真实系统账户，也可手填任意已存在账号，
             填错名字会报错而不会凭空建号。</span>
           <span v-if="fieldErrs.run_user" class="field-err">{{ fieldErrs.run_user }}</span>
         </label>
@@ -459,13 +539,21 @@ onMounted(() => { void load(); void loadCatalog() })
 
         <div class="modal-foot">
           <div class="modal-actions">
-            <button class="btn-ghost" @click="close">取消</button>
+            <button class="btn-ghost" @click="modalClose">取消</button>
             <button class="btn-primary" :disabled="busy" @click="save">
               {{ busy ? '保存中…' : (editing ? '保存' : '创建并托管') }}
             </button>
           </div>
         </div>
       </div>
+
+      <DirectoryPickerDialog :open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath"
+        @select="onPick" @cancel="pickerOpen = false" />
+
+      <ConfirmDialog :open="!!pendingRemove" danger title="删除应用"
+        :detail="`将同时：撤下反向代理站点、停止并删除 systemd 单元 ${pendingRemove?.unit ?? ''}、删除面板登记。（不会删除你的项目代码与构建产物）`"
+        :confirm-word="pendingRemove ? pendingRemove.name : ''"
+        @confirm="doRemove" @cancel="pendingRemove = null" />
     </div>
   </div>
 </template>
@@ -499,12 +587,8 @@ onMounted(() => { void load(); void loadCatalog() })
 .modal > .form-msg {
   grid-column: 1 / -1; position: sticky; top: 0; z-index: 3; margin: 0;
 }
-.err-bar {
-  display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
-  border-radius: 8px; line-height: 1.6;
-  background: var(--c-danger-soft); border: 1px solid var(--c-danger);
-}
-.err-bar .ic { flex: none; margin-top: 1px; }
+/* .err-bar / .field-err 已提到 main.css 公共规则（此前这里与 SitesView 各抄一份，
+   且此处少了抖动动画和图标配色，两条错误条长得不一样） */
 
 /* 环境变量区 */
 .env-box { display: flex; flex-direction: column; gap: 8px; }

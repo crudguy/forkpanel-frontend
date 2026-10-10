@@ -28,7 +28,7 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, type Cert, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -205,7 +205,8 @@ function onPickRoot(p: string) {
 }
 // 站点编辑弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const modalBox = ref<HTMLElement | null>(null)
-useModal(() => modalOpen.value, modalBox, closeModal)
+// 统一关闭出口（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮 / Esc 都走它
+const { close: modalClose } = useModal(() => modalOpen.value, modalBox, closeModal)
 const editing = ref<Site | null>(null)
 /** 空表单。`wafRate: 0` / `wafBurst: 0` 与后端的"不限速 / 自动"语义一一对应。 */
 function emptyForm() {
@@ -618,7 +619,7 @@ async function reloadSite(s: Site) {
     await api.post(API.sites.reload(s.id), {})
     toast(`已重载 ${s.name}`)
   } catch (e) {
-    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法重载配置', 'info')
+    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法重载配置', 'warn')
     else error.value = errorText(e)
   } finally { busy.value = false; await load() }
 }
@@ -641,6 +642,13 @@ const sslErr = ref('')
 
 /** 根证书安装指引弹窗。自签证书能被浏览器信任的**唯一**前提是把根 CA 装进信任库。 */
 const caHelp = ref(false)
+
+// 另外两个弹窗同样接统一关闭出口（此前 CA 指引与 SSL 签发都只有点遮罩一种关法，
+// 没有 Esc，也没有焦点返还）
+const caBox = ref<HTMLElement | null>(null)
+const { close: closeCaHelp } = useModal(() => caHelp.value, caBox, () => { caHelp.value = false })
+const sslBox = ref<HTMLElement | null>(null)
+const { close: closeSslModal } = useModal(() => !!sslModal.value, sslBox, () => { sslModal.value = null })
 /**
  * 下载面板根证书（ca.crt）。
  *
@@ -757,7 +765,7 @@ async function doDeleteCert() {
     </div>
     <div v-if="loading && !sites.length" class="skeleton box" />
     <div v-else-if="sites.length" class="card flush">
-      <table class="fixed">
+      <table class="fixed" aria-label="站点列表">
         <!-- 站点表列宽独立于证书表：两表的内容分布完全不同（站点表 4 个操作按钮、
              根目录是长路径；证书表 2 个按钮、签发者是长文本），共用一套宽度必然顾此失彼。
              故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
@@ -765,27 +773,37 @@ async function doDeleteCert() {
         <colgroup>
           <col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
         </colgroup>
-        <thead><tr><th>名称</th><th>域名</th><th>根目录</th><th>类型</th><th>WAF</th><th>状态</th><th>TLS</th><th>操作</th></tr></thead>
+        <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
+             窄屏（<=720px）由 main.css 公共规则隐藏，8 列降到 6 列才放得下。 -->
+        <thead><tr>
+          <th scope="col">名称</th><th scope="col">域名</th><th scope="col" class="col-opt">根目录</th>
+          <th scope="col" class="col-opt">类型</th><th scope="col">WAF</th><th scope="col">状态</th>
+          <th scope="col">TLS</th><th scope="col">操作</th>
+        </tr></thead>
         <tbody>
           <tr v-for="s in sites" :key="s.id">
             <td class="ellipsis" :title="s.name">{{ s.name }}</td>
             <td class="ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
-            <td class="mono dim ellipsis" :title="s.root">{{ s.root }}</td>
-            <td>{{ kindLabel(s.kind) }}</td>
+            <td class="mono dim ellipsis col-opt" :title="s.root">{{ s.root }}</td>
+            <td class="col-opt">{{ kindLabel(s.kind) }}</td>
             <td>
               <template v-if="s.waf_enabled">
-                <span class="badge badge-ok">{{ s.waf_profile ?? 'basic' }}</span>
+                <span class="badge badge-ok">{{ wafProfileLabel(s.waf_profile ?? 'basic') }}</span>
                 <span v-if="s.waf_rate_per_sec" class="dim tiny">· {{ s.waf_rate_per_sec }}/s</span>
               </template>
               <span v-else class="dim">—</span>
             </td>
             <td><span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span></td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
+            <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
+                 新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
+                 文字装在 .btn-label 里：窄屏（<=720px）由 main.css 收起只留图标，
+                 否则 4 个按钮在窄列里会竖着堆成 4 行（实测行高 247px）。 -->
             <td class="actions">
-              <button class="btn-ghost btn-sm" :disabled="!canManage" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /></button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canManage" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /></button>
+              <button class="btn-ghost btn-sm" :disabled="!canManage" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">重载</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
+              <button class="btn-ghost btn-sm danger" :disabled="!canManage" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /><span class="btn-label">删除</span></button>
             </td>
           </tr>
         </tbody>
@@ -794,17 +812,24 @@ async function doDeleteCert() {
     <EmptyState v-else title="暂无站点" hint="点击上方「网站」右侧的「新建站点」添加虚拟主机" />
 
     <!-- 新建 / 编辑弹窗 -->
-    <div v-if="modalOpen" class="mask" @click.self="closeModal">
+    <div v-if="modalOpen" class="mask" @click.self="modalClose">
       <div ref="modalBox" class="modal wide site-modal" role="dialog" aria-modal="true">
-        <!-- 通用消息条（吸顶，故置于网格首项）：只承载**归属不到具体输入框**的错误，
-             以及弹窗内的成功提示。字段级错误各自挂在对应输入框旁（靠各 label 的 data-f
-             定位），不在这里重复——此前所有错误一律压在弹窗最底部，用户在中部滚动时
-             点保存根本看不到，只能反复点。
+        <!-- 标题行（公共 .modal-head，吸顶）里顺带承载通用错误条：只放**归属不到具体
+             输入框**的错误。字段级错误各自挂在对应输入框旁（靠各 label 的 data-f 定位），
+             不在这里重复——此前所有错误一律压在弹窗最底部，用户在中部滚动时点保存根本
+             看不到，只能反复点。
+             ⚠️ 错误条放在 head **内部**而不是做成另一个 sticky 元素：两个 sticky 都贴顶
+             会互相盖住；放进同一容器则整体吸顶，也不需要估算 head 高度的魔法数字。
              `:key` 绑 errSeq：连点保存时元素重建，抖动动画得以重播，不会"点了没反应"。 -->
-        <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
-          <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
-        </p>
-        <h3>{{ editing ? '编辑站点' : '新建站点' }}</h3>
+        <div class="modal-head">
+          <h3 class="modal-title">{{ editing ? '编辑站点' : '新建站点' }}</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+            <Icon name="close" :size="16" />
+          </button>
+          <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
+            <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
+          </p>
+        </div>
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
           <Icon name="alert" :size="15" class="ic" />
@@ -1017,7 +1042,7 @@ async function doDeleteCert() {
              字段级错误则各自挂在出问题的输入框旁。 -->
         <div class="modal-foot">
           <div class="modal-actions">
-            <button class="btn-ghost" @click="closeModal">取消</button>
+            <button class="btn-ghost" @click="modalClose">取消</button>
             <button class="btn-primary" :disabled="busy" @click="save">
               {{ busy ? '保存中…' : (editing ? '保存并应用' : '创建并应用') }}</button>
           </div>
@@ -1038,16 +1063,22 @@ async function doDeleteCert() {
 
     <!-- 根证书安装指引：自签 leaf 由面板本地根 CA 签发，不把根装进信任库浏览器必然报不可信。
          这是「自签证书没法在本地用」的正解——不是换证书，而是装根。 -->
-    <div v-if="caHelp" class="mask" @click.self="caHelp = false">
-      <div class="modal wide" role="dialog" aria-modal="true">
-        <h3>安装面板根证书</h3>
-        <p class="ca-lede">
+    <div v-if="caHelp" class="mask" @click.self="closeCaHelp">
+      <div ref="caBox" class="modal wide" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">安装面板根证书</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeCaHelp">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="modal-lead">
           面板自签的站点证书，全部由<b>本机这一张根 CA</b> 签发。浏览器只信任「已装进信任库的根 CA」，
           所以直接访问会提示「不受信任 / 非私密连接」——这是证书链原理，不是面板坏了。
           <b>导入一次</b>即可：这张 CA 签发的全部本地站点（含以后新建的）都直接受信，无需再点「继续前往」。
         </p>
-        <p class="ca-warn">
-          <Icon name="alert" :size="14" />
+        <!-- 公共 .hint-note.is-warn（此前 .ca-warn 私有复刻了一版警告样式） -->
+        <p class="hint-note is-warn">
+          <Icon name="alert" :size="14" class="ic" />
           <span>根证书仅用于本机开发。<b>不要</b>把它装到不受你控制的机器上——装上等于信任该 CA 签发的任何证书。</span>
         </p>
 
@@ -1077,18 +1108,26 @@ sudo update-ca-certificates</pre>
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="caHelp = false">关闭</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeCaHelp">关闭</button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱；行内「SSL」与编辑弹窗「申请证书」共用 -->
-    <div v-if="sslModal" class="mask" @click.self="sslModal = null">
-      <div class="modal" role="dialog" aria-modal="true">
-        <h3>为「{{ sslModal.site.name }}」申请证书</h3>
-        <!-- 签发弹窗是叠在站点弹窗之上的第二层遮罩：这里出的错若写页面级 error/notice，
-             会被两层遮罩挡在后面，用户只觉得"点了申请没反应"。故在弹窗内自带错误位。 -->
+    <!-- 签发弹窗叠在站点弹窗之上 → .level-2（此前与父弹窗同为 z-50，只靠 DOM 顺序压住） -->
+    <div v-if="sslModal" class="mask level-2" @click.self="closeSslModal">
+      <div ref="sslBox" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">为「{{ sslModal.site.name }}」申请证书</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeSslModal">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <!-- 这里出的错若写页面级 error/notice，会被两层遮罩挡在后面，
+             用户只觉得"点了申请没反应"。故在弹窗内自带错误位。 -->
         <p v-if="sslErr" class="err-bar" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ sslErr }}</span>
         </p>
@@ -1104,11 +1143,13 @@ sudo update-ca-certificates</pre>
           ACME 账户邮箱（必填，用于到期与异常通知）
           <input v-model="sslModal.email" type="email" placeholder="ops@example.com" autocomplete="email" />
         </label>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="sslModal = null">取消</button>
-          <button class="btn-primary" :disabled="busy || (sslModal.method === 'http-01' && !sslModal.email.trim())"
-            @click="execSsl(sslModal.site, sslModal.method, sslModal.email)">
-            {{ busy ? '提交中…' : '申请' }}</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeSslModal">取消</button>
+            <button class="btn-primary" :disabled="busy || (sslModal.method === 'http-01' && !sslModal.email.trim())"
+              @click="execSsl(sslModal.site, sslModal.method, sslModal.email)">
+              {{ busy ? '提交中…' : '申请' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1145,9 +1186,6 @@ sudo update-ca-certificates</pre>
 .badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
-.dir-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-.dir-row input { flex: 1; margin-top: 0; }
-.dir-row .btn-sm { flex: none; white-space: nowrap; }
 /* 多路由表：一个站点内多条 `location ^~ <前缀>`。逐行一条，窄屏自然换行。 */
 .routes { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
 .routes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1194,15 +1232,10 @@ sudo update-ca-certificates</pre>
    原 .hint-line（12px + --c-text-mute）太小太淡、又用负 margin 紧贴勾选框，读起来像
    "被禁用的残留文字"；改为带 info 图标的信息条：13px + --c-text-dim，柔和底 +
    左侧主色描边，与勾选框拉开间距。编辑态（真停用后果）转琥珀色强调。 */
-.hint-note { display: flex; gap: 8px; align-items: flex-start;
-  margin: 0 0 14px; padding: 9px 11px; border-radius: 8px;
-  font-size: 13px; line-height: 1.6; color: var(--c-text-dim);
-  background: var(--c-hover); border: 1px solid var(--c-border);
-  border-left: 3px solid var(--c-primary); }
-.hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
-.hint-note.is-warn { border-left-color: var(--c-warn); }
-.hint-note.is-warn .ic { color: var(--c-warn); }
-/* 遮罩 / 弹窗框 / 标题 / 操作条基础式样统一取 main.css 的公共 .mask / .modal / .modal-actions */
+/* ⚠️ .hint-note 已提到 main.css 公共规则。此前本页私有副本的特异性
+   （.hint-note[data-v-*] = 0,2,0）高于公共（0,1,0）会**静默压掉**公共定义，
+   导致别的视图用同一类名时拿不到样式——留着它就是埋雷，故删除。 */
+/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条基础式样统一取 main.css 公共类 */
 
 /* 根证书引导与站点编辑都用宽版（宽度与滚动见公共 .modal.wide）；此处只补
    sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
@@ -1233,40 +1266,13 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .modal-foot .modal-actions { position: static; margin: 0;
   padding: 0; border-top: 0; background: none; }
 
-/* ── 弹窗内的报错：通用条吸顶 + 字段级红字，两者分工明确 ── */
-/* 通用消息条：**吸顶**而非沉底——沉底时用户在中部滚动位置点保存就看不到。
-   只装"归属不到某个输入框"的错误（网络 / 服务端异常）与弹窗内的成功提示；
-   字段级错误有自己的位置（见 .field-err），不在这里重复。 */
-/* 通用消息条：**吸顶**而非沉底——沉底时用户在中部滚动位置点保存就看不到。
-   两处讲究：① 它是**网格首项**并用负边距抵消弹窗上内边距，才真正贴住弹窗顶边；
-   ② 底色必须**不透明**，否则半透明底会让堆在它下面的字段文字透上来。 */
-.modal.wide.site-modal > .form-msg { grid-column: 1 / -1; position: sticky; top: 0; z-index: 3;
-  margin: -20px -24px 12px; padding: 11px 24px; border-radius: 12px 12px 0 0;
-  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface-2)); }
-/* 字段级错误：挂在**出问题的那个输入框**正下方（模板里紧跟其 input / select）。
-   此前所有错误统一堆在弹窗底部，用户得自己逐个框去猜哪儿填错了。 */
-.field-err { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5;
-  color: var(--c-danger); animation: site-shake .3s ease; }
-/* 出错的输入框 / 下拉本身也标红：扫一眼就知道是哪个框（默认描边是 --c-border-strong）。 */
-label.has-err input, label.has-err select { border-color: var(--c-danger); }
-@keyframes site-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-4px); }
-  40% { transform: translateX(4px); }
-  60% { transform: translateX(-3px); }
-  80% { transform: translateX(3px); }
-}
-/* 错误条：带底色 + 描边的警示条，并抖一下把视线拉过来。文案由 errorText / 视图校验给出。 */
-.err-bar { display: flex; gap: 7px; align-items: flex-start; padding: 9px 11px;
-  border-radius: 8px; line-height: 1.6; background: var(--c-danger-soft);
-  border: 1px solid var(--c-danger); animation: site-shake .3s ease; }
-.err-bar .ic { flex: none; margin-top: 1px; }
-@media (prefers-reduced-motion: reduce) { .err-bar, .field-err { animation: none; } }
-.ca-lede { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: var(--c-text-dim); }
-.ca-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 9px 11px;
-  border-radius: 8px; font-size: 12.5px; line-height: 1.6; color: var(--c-text-dim);
-  background: var(--c-hover); border: 1px solid var(--c-border); border-left: 3px solid var(--c-warn); }
-.ca-warn .icon { color: var(--c-warn); margin-top: 2px; }
+/* ── 弹窗内的报错：标题行内的通用条（吸顶）+ 字段级红字，两者分工明确 ── */
+/* 通用消息条跟着公共 .modal-head **整体吸顶**（不再自己做第二个 sticky）：
+   ① flex-basis:100% 让它独占标题下方的第二行；② 底色必须**不透明**，
+   否则半透明底会让滚上来的字段文字透出；③ 外观取公共 .err-bar，此处只调排布。 */
+.modal.wide.site-modal > .modal-head > .form-msg { flex-basis: 100%; margin: 0; }
+/* .field-err / .err-bar（含抖动动画与 prefers-reduced-motion 降级）已提到 main.css
+   公共规则；本页只保留 CA 指引的步骤式样。 */
 .ca-actions { display: flex; gap: 10px; margin: 0 0 18px; }
 .ca-steps { display: flex; flex-direction: column; gap: 14px; }
 .ca-step-h { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--c-primary); }
@@ -1313,7 +1319,10 @@ col.w-kind { width: 6%; }
 col.w-waf { width: 8%; }
 col.w-st { width: 6%; }
 col.w-tls { width: 8%; }
-col.w-sacts { width: 19%; }    /* 4 个带文字按钮并排，不折行 */
+col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 间距 = 286，加单元格左右内边距 26
+                                  = 312；取 320 留 8px 余量。⚠️ 内边距要从里面扣——写 310 时内容区只有
+                                  284px，仍差 2px，第 4 个按钮照样掉到第二行（实测行高 91px）。
+                                  用固定 px 而非百分比：百分比随表宽缩放，1440 窗口下 19% 只剩 220px。 */
 /* 证书表（编辑弹窗内「SSL 证书」区块复用同款列宽思路，此处保留历史列宽定义，
    若后续在弹窗内恢复完整证书表格可直接复用；当前弹窗内改用紧凑卡片列表。 */
 col.w-dom { width: 24%; }

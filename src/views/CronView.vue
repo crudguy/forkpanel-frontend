@@ -14,6 +14,7 @@ import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useModal } from '@/composables/useModal'
 
 interface Job {
   id: string; expr: string; command: string; user: string
@@ -89,6 +90,11 @@ function openEdit(j: Job) {
   editError.value = ''
 }
 function closeEdit() { edit.value = null; editBusy.value = false }
+
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗只有点遮罩和 ✕）。
+// X / 点遮罩 / 取消按钮统一走 closeEditModal。
+const editBox = ref<HTMLElement | null>(null)
+const { close: closeEditModal } = useModal(() => !!edit.value, editBox, closeEdit)
 
 // ── 表达式预览：POST /cron/preview（纯计算零副作用，本地时区语义） ──
 const previewNext = ref<number[]>([])
@@ -184,7 +190,7 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
                   <Icon name="play" :size="14" /> {{ runBusy === j.id ? '提交中' : '执行' }}
                 </button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(j)">编辑</button>
-                <button class="btn-danger btn-sm" :disabled="!canManage" @click="del = j">删除</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="del = j">删除</button>
               </td>
             </tr>
           </tbody>
@@ -197,17 +203,20 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
         @confirm="doDelete" @cancel="del = null" />
 
       <!-- 编辑弹窗：PATCH /cron/jobs/{id} -->
-      <div v-if="edit" class="mask" @click.self="closeEdit">
-        <div class="modal wide stack" role="dialog" aria-modal="true">
-          <header class="m-head">
-            <div style="flex:1;min-width:0">
+      <div v-if="edit" class="mask" @click.self="closeEditModal">
+        <div ref="editBox" class="modal wide stack" role="dialog" aria-modal="true">
+          <div class="modal-head">
+            <div class="modal-title">
               <h3 class="mono">{{ edit.id }}</h3>
-              <p class="m-desc">修改将直接写入 crontab 并同步面板元数据</p>
+              <p class="modal-lead">修改将直接写入 crontab 并同步面板元数据</p>
             </div>
-            <button class="btn-ghost btn-sm" @click="closeEdit">✕</button>
-          </header>
+            <!-- 统一关闭按钮（此前是文字符号 ✕，字重与基线随字体漂移） -->
+            <button class="modal-close" type="button" aria-label="关闭" @click="closeEditModal">
+              <Icon name="close" :size="16" />
+            </button>
+          </div>
 
-          <p v-if="editError" class="err" role="alert">{{ editError }}</p>
+          <p v-if="editError" class="err-bar" role="alert">{{ editError }}</p>
 
           <div class="row">
             <label>表达式<input v-model="editForm.expr" placeholder="0 3 * * *" :disabled="editBusy" /></label>
@@ -226,8 +235,9 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
             下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmt).join('　') : '一年内无命中（检查日期字段）' }}</span>
           </p>
 
-          <div class="m-acts">
-            <button class="btn-ghost" :disabled="editBusy" @click="closeEdit">取消</button>
+          <div class="modal-foot">
+            <div class="modal-actions">
+              <button class="btn-ghost" :disabled="editBusy" @click="closeEditModal">取消</button>
             <button class="btn-ghost" :disabled="!editForm.expr || previewBusy" @click="doPreview(editForm.expr)">
               {{ previewBusy ? '计算中…' : '预览执行时刻' }}
             </button>
@@ -236,6 +246,7 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
                     @click="saveEdit">
               {{ editBusy ? '保存中…' : '保存' }}
             </button>
+            </div>
           </div>
         </div>
       </div>
@@ -244,12 +255,8 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
 </template>
 
 <style scoped>
-/* 编辑弹窗（与 ServicesView 弹窗样式保持一致） */
-/* 弹窗取公共 .modal.wide + .stack（纵向流式）；本页只保留 .m-* 结构式样 */
-.m-head { display: flex; align-items: flex-start; gap: 10px; }
-.m-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.m-desc { margin: 4px 0 0; font-size: 13px; color: var(--c-text-dim); }
-.m-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 弹窗取公共 .mask / .modal.wide.stack / .modal-head / .modal-close / .modal-actions；
+   本页不再保留 .m-head / .m-desc / .m-acts 私有结构式样（与全站弹窗漂移） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
 /* 实心主色底 + 白滑块、42×24：旧版 --c-primary-soft 浅色底开销/关都偏浅橙、对比弱。
    与 ServiceDetailView（开机自启）、SitesView（自动续期）保持同一套开关外观。 */

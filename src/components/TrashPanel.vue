@@ -14,6 +14,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import { fmtDateTime, fmtSize } from '@/api/types'
 import { toast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
 
@@ -78,20 +79,32 @@ function fmtTime(ts: number) {
   return fmtDateTime(ts)
 }
 
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本面板三者皆无）。
+// X / 点遮罩 / Esc 统一走 modalClose。
+// ⚠️ 本面板**没有 open prop**——由父组件 v-if 控制挂载，故传 () => true
+//    （useModal 用 immediate watch 处理"挂载即打开"）。
+const box = ref<HTMLElement | null>(null)
+const { close: modalClose } = useModal(() => true, box, () => emit('close'))
+
 onMounted(load)
 </script>
 
 <template>
-  <div class="trash-back" @click.self="emit('close')">
-    <div class="trash-panel">
-      <div class="tp-head">
+  <!-- 二级浮层（可从一级弹窗内再展开）→ .level-2；遮罩外观统一取公共 .mask -->
+  <div class="mask level-2" @click.self="modalClose">
+    <div ref="box" class="trash-panel">
+      <div class="modal-head">
         <Icon name="trash" :size="16" />
-        <span class="tp-title">回收站</span>
+        <span class="modal-title">回收站</span>
         <span class="spacer" />
         <button class="btn-ghost btn-sm" :disabled="!items.length || busy === '*'" @click="confirmAll = true">清空</button>
-        <button class="btn-ghost btn-sm" @click="emit('close')">关闭</button>
+        <!-- 关闭只留右上角 X（与全站弹窗一致）；「关闭」文字按钮与它重复 -->
+        <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+          <Icon name="close" :size="16" />
+        </button>
       </div>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <!-- 面板级错误统一 .err-bar（此前是纯红字 .err，与弹窗错误条不一致） -->
+      <p v-if="error" class="err-bar" role="alert">{{ error }}</p>
       <div v-if="loading" class="muted">加载中…</div>
       <EmptyState v-else-if="!items.length" title="回收站为空" />
       <ul v-else class="tp-list">
@@ -114,14 +127,15 @@ onMounted(load)
         <p>彻底删除 <b>{{ confirmPurge.name }}</b>？<span class="muted">此操作不可恢复。</span></p>
         <div class="tp-acts">
           <button class="btn-ghost btn-sm" @click="confirmPurge = null">取消</button>
-          <button class="btn-primary btn-sm" :disabled="busy === confirmPurge.id" @click="purge(confirmPurge)">确认删除</button>
+          <!-- 危险主操作 → 实心 .btn-danger（此前是 .btn-primary，与"删除"语义不符） -->
+          <button class="btn-danger btn-sm" :disabled="busy === confirmPurge.id" @click="purge(confirmPurge)">确认删除</button>
         </div>
       </div>
       <div v-if="confirmAll" class="tp-confirm">
         <p>清空回收站？<span class="muted">共 {{ items.length }} 项，将全部彻底删除且不可恢复。</span></p>
         <div class="tp-acts">
           <button class="btn-ghost btn-sm" @click="confirmAll = false">取消</button>
-          <button class="btn-primary btn-sm" :disabled="busy === '*'" @click="purgeAll">确认清空</button>
+          <button class="btn-danger btn-sm" :disabled="busy === '*'" @click="purgeAll">确认清空</button>
         </div>
       </div>
     </div>
@@ -129,19 +143,16 @@ onMounted(load)
 </template>
 
 <style scoped>
-.trash-back {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, .45);
-  display: flex; align-items: center; justify-content: center; padding: 24px;
-}
+/* 遮罩（.mask.level-2）与标题行 / 关闭按钮统一取 main.css；这里只留面板自身尺寸，
+   并通过 --modal-py/--modal-px 告诉公共 .modal-head 本面板的内边距是多少。 */
 .trash-panel {
+  --modal-py: 16px;
+  --modal-px: 18px;
   width: min(760px, 100%); max-height: 82vh; overflow: auto;
   background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-radius: 12px; padding: 16px 18px;
+  border-radius: var(--radius-lg); padding: var(--modal-py) var(--modal-px);
+  display: flex; flex-direction: column;
 }
-.tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.tp-title { font-weight: 600; }
-.tp-head .spacer { flex: 1; }
 .tp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .tp-list > li {
   display: flex; align-items: center; gap: 10px;

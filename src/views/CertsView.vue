@@ -18,6 +18,7 @@ import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 
 interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 
@@ -78,13 +79,14 @@ function downloadCa() { window.location.href = API.certs.ca() }
 
 // 续期 / 自动续期 / 删除
 const delCert = ref<Cert | null>(null)
+const delBox = ref<HTMLElement | null>(null)
 async function renewCert(c: Cert) {
   busy.value = true; error.value = ''
   try {
     await api.post(API.certs.renew(c.id), {})
     toast(`已续期 ${c.domain} 的证书`)
   } catch (e) {
-    if (isUnsupported(e)) toast('当前环境未接入证书续期能力', 'info')
+    if (isUnsupported(e)) toast('当前环境未接入证书续期能力', 'warn')
     else error.value = errorText(e)
   } finally { busy.value = false; await load() }
 }
@@ -109,6 +111,7 @@ async function doDeleteCert() {
 
 // 申请证书（选站点 + 方式 + email）。证书绑定 domain，故须先选站点。
 const sslModal = ref<{ siteId: number; method: 'self-signed' | 'http-01'; email: string } | null>(null)
+const sslBox = ref<HTMLElement | null>(null)
 function openApply() {
   const first = sites.value[0]
   sslModal.value = {
@@ -132,10 +135,16 @@ async function execSsl() {
     sslModal.value = null
     if (m.method === 'self-signed') await load()
   } catch (e) {
-    if (isUnsupported(e)) toast('当前环境未接入证书签发能力（需 openssl 或 ACME）', 'info')
+    if (isUnsupported(e)) toast('当前环境未接入证书签发能力（需 openssl 或 ACME）', 'warn')
     else error.value = errorText(e)
   } finally { busy.value = false }
 }
+
+// 两个弹窗统一行为：Esc 关闭 + Tab 焦点陷阱 + 打开自动聚焦（与 SitesView 同款，审计 U1）。
+// 证书页此前是裸 `v-if` + `@click.self`，键盘用户可 Tab 穿透且只能点「取消」关闭。
+// 返回的 close 是**统一关闭出口**（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮都走它
+const { close: closeSslModal } = useModal(() => !!sslModal.value, sslBox, () => (sslModal.value = null))
+const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (delCert.value = null))
 </script>
 
 <template>
@@ -170,19 +179,23 @@ async function execSsl() {
       desc="先在「网站」建站并申请证书，或点上方「申请证书」" />
 
     <div v-else-if="certs.length" class="card flush">
-      <table class="fixed">
+      <table class="fixed" aria-label="证书列表">
         <!-- 证书表列宽独立一套（与站点表互不干扰）：域名弹性吸收剩余，其余固定。 -->
         <colgroup>
           <col class="cert-dom" /><col class="cert-site" /><col class="cert-src" /><col class="cert-exp" /><col class="cert-left" /><col class="cert-auto" /><col class="cert-acts" />
         </colgroup>
+        <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
         <thead>
-          <tr><th>域名</th><th>站点</th><th>来源</th><th>到期</th><th>剩余</th><th>自动续期</th><th>操作</th></tr>
+          <tr>
+            <th scope="col">域名</th><th scope="col" class="col-opt">站点</th><th scope="col" class="col-opt">来源</th>
+            <th scope="col">到期</th><th scope="col">剩余</th><th scope="col">自动续期</th><th scope="col">操作</th>
+          </tr>
         </thead>
         <tbody>
           <tr v-for="c in certs" :key="c.id">
             <td class="mono ellipsis" :title="c.domain">{{ c.domain }}</td>
-            <td class="ellipsis" :title="siteOf(c.domain)">{{ siteOf(c.domain) }}</td>
-            <td>{{ certSourceLabel(c.source) }}</td>
+            <td class="ellipsis col-opt" :title="siteOf(c.domain)">{{ siteOf(c.domain) }}</td>
+            <td class="col-opt">{{ certSourceLabel(c.source) }}</td>
             <td class="mono dim">{{ fmtDate(c.not_after) }}</td>
             <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
             <td>
@@ -193,11 +206,11 @@ async function execSsl() {
               </label>
             </td>
             <td>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '' : sslHint" @click="renewCert(c)">
-                <Icon name="refresh" :size="13" /> 续期
+              <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '续期' : sslHint" @click="renewCert(c)">
+                <Icon name="refresh" :size="13" /><span class="btn-label">续期</span>
               </button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canSsl || busy" :title="canSsl ? '' : '无 ssl.manage 权限'" @click="delCert = c">
-                <Icon name="trash" :size="13" /> 删除
+              <button class="btn-ghost btn-sm danger" :disabled="!canSsl || busy" :title="canSsl ? '删除' : '无 ssl.manage 权限'" @click="delCert = c">
+                <Icon name="trash" :size="13" /><span class="btn-label">删除</span>
               </button>
             </td>
           </tr>
@@ -213,9 +226,14 @@ async function execSsl() {
     </p>
 
     <!-- 申请证书弹窗 -->
-    <div v-if="sslModal" class="mask" @click.self="sslModal = null">
-      <div class="modal">
-        <h3>申请证书</h3>
+    <div v-if="sslModal" class="mask" @click.self="closeSslModal">
+      <div ref="sslBox" class="modal" role="dialog" aria-modal="true" aria-label="申请证书">
+        <div class="modal-head">
+          <h3 class="modal-title">申请证书</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeSslModal">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
         <label class="blk">站点
           <select v-model.number="sslModal.siteId" :disabled="!sites.length">
             <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.name }}（{{ s.domains.join(', ') }}）</option>
@@ -234,22 +252,32 @@ async function execSsl() {
         <label v-if="sslModal.method === 'http-01'" class="blk">邮箱（ACME 注册）
           <input v-model="sslModal.email" type="email" placeholder="ops@example.com" autocomplete="email" />
         </label>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="sslModal = null">取消</button>
-          <button class="btn-primary" :disabled="busy || !sslModal.siteId || (sslModal.method === 'http-01' && !sslModal.email.trim())"
-            @click="execSsl">申请</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeSslModal">取消</button>
+            <button class="btn-primary" :disabled="busy || !sslModal.siteId || (sslModal.method === 'http-01' && !sslModal.email.trim())"
+              @click="execSsl">申请</button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 删除确认 -->
-    <div v-if="delCert" class="mask" @click.self="delCert = null">
-      <div class="modal">
-        <h3>删除证书</h3>
-        <p>将删除证书「<b>{{ delCert.domain }}</b>」。删除后该域名 HTTPS 将不可用，直至重新申请。</p>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="delCert = null">取消</button>
-          <button class="btn-primary danger" :disabled="busy" @click="doDeleteCert">删除</button>
+    <div v-if="delCert" class="mask" @click.self="closeDelCert">
+      <div ref="delBox" class="modal" role="dialog" aria-modal="true" aria-label="删除证书">
+        <div class="modal-head">
+          <h3 class="modal-title">删除证书</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeDelCert">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="modal-lead">将删除证书「<b>{{ delCert.domain }}</b>」。删除后该域名 HTTPS 将不可用，直至重新申请。</p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeDelCert">取消</button>
+            <!-- 危险主操作 → 实心 .btn-danger（此前 btn-primary danger 是第三套长相） -->
+            <button class="btn-danger" :disabled="busy" @click="doDeleteCert">删除</button>
+          </div>
         </div>
       </div>
     </div>
@@ -258,11 +286,7 @@ async function execSsl() {
 
 <style scoped>
 .view { display: flex; flex-direction: column; gap: 14px; }
-.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
-.spacer { flex: 1; }
 .sweep { display: flex; align-items: center; gap: 6px; color: var(--c-text-dim); font-size: 12.5px; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.dim { color: var(--c-text-dim); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0; }
 
 /* 表基础 + 列宽（独立一套，与站点表互不干扰） */
@@ -275,27 +299,11 @@ table.fixed { table-layout: fixed; width: 100%; }
 .cert-auto { width: 112px; }
 .cert-acts { width: 168px; }
 
-.ok { color: var(--c-ok); }
-.warn { color: var(--c-warn); }
-.bad { color: var(--c-danger); }
-
-.btn-ghost { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--c-border); border-radius: 8px; background: transparent; color: var(--c-text-dim); cursor: pointer; font-size: 13px; font-family: inherit; }
-.btn-ghost:hover:not(:disabled) { background: var(--c-hover); color: var(--c-text); }
-.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
-.btn-ghost.danger:hover:not(:disabled) { color: var(--c-danger); border-color: color-mix(in srgb, var(--c-danger) 40%, transparent); }
-.btn-sm { padding: 5px 9px; font-size: 12.5px; }
-.btn-primary { padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer; background: var(--gradient); color: #fff; font-size: 13px; font-family: inherit; font-weight: 600; }
-.btn-primary:disabled { opacity: .45; cursor: not-allowed; }
-.btn-primary.danger { background: var(--c-danger); }
-.err { color: var(--c-danger); font-size: 13px; }
-.tip { color: var(--c-text-dim); font-size: 12.5px; line-height: 1.7; }
-
-/* switch（与 SitesView 同款 42×24 实心主色） */
-
-/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
+/* 按钮 / 文字色 / 区块标题 / 弹窗 / 骨架屏 一律复用 main.css 公共类，
+   不再私有重定义（审计 V1：证书页自造按钮样式曾与全局漂移）。
+   状态色 .ok/.warn/.bad 取公共工具类；.skeleton 取公共基础，仅补高度。 */
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: 10px; cursor: pointer; font-size: 13px; }
 .radios label.on { border-color: var(--c-primary); background: var(--c-active); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .skeleton.box { height: 160px; }
 </style>

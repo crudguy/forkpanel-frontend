@@ -13,6 +13,7 @@ import { ref } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
+import { useModal } from '@/composables/useModal'
 
 const props = defineProps<{ conn: { id: number; name: string; engine?: string | null } }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -61,17 +62,26 @@ async function run() {
 function useSample(s: string) {
   sql.value = s
 }
+
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本面板三者皆无）。
+// 与回收站面板一样**没有 open prop**（父级 v-if 控制挂载）→ 传 () => true。
+const box = ref<HTMLElement | null>(null)
+const { close: modalClose } = useModal(() => true, box, () => emit('close'))
 </script>
 
 <template>
-  <div class="sql-back" @click.self="emit('close')">
-    <div class="sql-panel">
-      <div class="sp-head">
+  <!-- 二级浮层（从数据库连接卡片里展开）→ .level-2；遮罩外观统一取公共 .mask -->
+  <div class="mask level-2" @click.self="modalClose">
+    <div ref="box" class="sql-panel">
+      <div class="modal-head">
         <Icon name="database" :size="16" />
-        <span class="sp-title">只读 SQL · {{ conn.name }}</span>
+        <span class="modal-title">只读 SQL · {{ conn.name }}</span>
         <span class="badge">{{ conn.engine ?? 'sqlite' }}</span>
         <span class="spacer" />
-        <button class="btn-ghost btn-sm" @click="emit('close')">关闭</button>
+        <!-- 关闭只留右上角 X（与全站弹窗一致） -->
+        <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+          <Icon name="close" :size="16" />
+        </button>
       </div>
 
       <div class="sp-samples">
@@ -101,11 +111,14 @@ function useSample(s: string) {
         <span v-if="result" class="muted">{{ result.rows.length }} 行 · {{ elapsed }} ms</span>
       </div>
 
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <!-- 错误 / 截断提示统一用公共 .err-bar / .hint-note.is-warn
+           （此前 .err 纯红字、.warn 无图标，与弹窗里的提示条两套长相） -->
+      <p v-if="error" class="err-bar" role="alert">{{ error }}</p>
 
       <template v-if="result">
-        <p v-if="result.truncated" class="warn">
-          已达返回上限 {{ result.limit }} 行，结果被截断（收窄 WHERE 或调大上限）
+        <p v-if="result.truncated" class="hint-note is-warn">
+          <Icon name="alert" :size="14" class="ic" />
+          <span>已达返回上限 {{ result.limit }} 行，结果被截断（收窄 WHERE 或调大上限）</span>
         </p>
         <div v-if="result.columns.length" class="sp-scroll">
           <table>
@@ -132,19 +145,16 @@ function useSample(s: string) {
 </template>
 
 <style scoped>
-.sql-back {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, .45);
-  display: flex; align-items: center; justify-content: center; padding: 24px;
-}
+/* 遮罩（.mask.level-2）与标题行 / 关闭按钮统一取 main.css；这里只留面板自身尺寸，
+   并通过 --modal-py/--modal-px 告诉公共 .modal-head 本面板的内边距。 */
 .sql-panel {
+  --modal-py: 16px;
+  --modal-px: 18px;
   width: min(920px, 100%); max-height: 86vh; display: flex; flex-direction: column;
   background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-radius: 12px; padding: 16px 18px;
+  border-radius: var(--radius-lg); padding: var(--modal-py) var(--modal-px);
 }
-.sp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
-.sp-title { font-weight: 600; }
-.sp-head .spacer, .sp-samples .spacer, .sp-actions .spacer { flex: 1; }
+.sp-samples .spacer, .sp-actions .spacer { flex: 1; }
 .badge {
   font-size: 11px; padding: 1px 7px; border-radius: 999px;
   border: 1px solid var(--c-border); color: var(--c-text-mute);

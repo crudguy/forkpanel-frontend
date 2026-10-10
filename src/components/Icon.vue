@@ -60,6 +60,12 @@ const ICONS: Record<string, string> = {
   monitor: '<rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M12 16.5V20M8 20h8M7 8.5h10"/>',
   tasks: '<rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/><path d="M9 14l2.2 2.2L15.5 12"/>',
   archive: '<rect x="3.5" y="4" width="17" height="5" rx="1.2"/><path d="M5.5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/>',
+  // 统一关闭/反馈图标（全站弹窗关闭按钮、toast 四态）：
+  // close = 弹窗右上角关闭，此前各处用文字符号 ✕，字重与基线随字体漂移；
+  // alert-circle = **错误**（圆框感叹），与 alert（三角感叹=警告）分工——
+  // 两者此前共用 alert，导致「失败」和「警告」看起来一样。
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  'alert-circle': '<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>',
 }
 </script>
 

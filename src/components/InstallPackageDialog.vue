@@ -16,6 +16,7 @@
  */
 import { ref, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   open: boolean
@@ -46,17 +47,23 @@ watch(() => props.versions, () => { if (props.open) syncDefaultVersion() })
 function confirm() { emit('confirm', picked.value || undefined) }
 function cancel() { emit('cancel') }
 
-// Esc 关闭 + Tab 焦点陷阱 + 打开时聚焦（与 ConfirmDialog 同一套可访问性基线）
+// Esc 关闭 + Tab 焦点陷阱 + 打开时聚焦（与 ConfirmDialog 同一套可访问性基线）。
+// modalClose 是统一关闭出口（离场动画 + 焦点返还），X / 遮罩 / 取消都走它。
 const box = ref<HTMLElement | null>(null)
-useModal(() => props.open, box, cancel)
+const { close: modalClose } = useModal(() => props.open, box, cancel)
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="cancel">
+  <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="box" class="modal stack" role="dialog" aria-modal="true">
-      <!-- 已安装的软件也能打开此弹窗（换版本），此时标题要说清是"切换"而非"安装" -->
-      <h3>{{ installed ? '切换版本' : '安装' }} {{ label || name }}</h3>
-      <p class="detail">
+      <div class="modal-head">
+        <!-- 已安装的软件也能打开此弹窗（换版本），此时标题要说清是"切换"而非"安装" -->
+        <h3 class="modal-title">{{ installed ? '切换版本' : '安装' }} {{ label || name }}</h3>
+        <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+          <Icon name="close" :size="16" />
+        </button>
+      </div>
+      <p class="modal-lead">
         {{ installed
           ? '选择要切换到的版本，当前版本已在下拉中标注；默认选中可用的最新版本。'
           : '选择要安装的版本，默认选中软件源里可用的最新版本。' }}
@@ -76,22 +83,24 @@ useModal(() => props.open, box, cancel)
       <p v-else-if="!versions.length" class="hint">
         未查到可用版本列表，将安装软件源当前提供的版本。
       </p>
-      <p v-if="external" class="warn">
-        该软件官方仓库通常不含，需先在目标机配置第三方软件源，否则安装会失败。
+      <!-- 第三方源提示：公共 .hint-note.is-warn（此前是自造的 .warn 纯文字） -->
+      <p v-if="external" class="hint-note is-warn">
+        <Icon name="alert" :size="14" class="ic" />
+        <span>该软件官方仓库通常不含，需先在目标机配置第三方软件源，否则安装会失败。</span>
       </p>
 
-      <div class="acts">
-        <button @click="cancel">取消</button>
-        <button class="primary" :disabled="loading" @click="confirm">{{ installed ? '切换版本' : '安装' }}</button>
+      <div class="modal-foot">
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="modalClose">取消</button>
+          <button class="btn-primary" :disabled="loading" @click="confirm">{{ installed ? '切换版本' : '安装' }}</button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 遮罩与弹窗外观统一取 main.css 的公共 .mask / .modal；.stack 只补内部纵向排布 */
-h3 { margin: 0; font-size: 16px; }
-.detail { margin: 0; font-size: 13px; color: var(--c-text-dim); line-height: 1.6; }
+/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条 / 提示条统一取 main.css 公共类 */
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 /* 版本下拉：原先用 --c-border/--c-glass（弱边框弱背景），在弹窗里几乎看不出是个
    可点的控件。改对齐全站输入基线（--c-border-strong + --c-bg），并补一个明确的
@@ -114,10 +123,4 @@ select:focus-visible { outline: none; border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-soft); }
 select:disabled { opacity: .55; cursor: not-allowed; }
 .hint { margin: 0; font-size: 12.5px; color: var(--c-text-dim); }
-.warn { margin: 0; font-size: 12.5px; color: var(--c-text-dim);
-  padding: 7px 10px; border-left: 3px solid var(--gradient); background: var(--c-hover);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; line-height: 1.6; }
-.acts { display: flex; justify-content: flex-end; gap: 8px; }
-.primary { background: var(--gradient); color: #fff; border: none; }
-.primary:disabled { opacity: .55; cursor: not-allowed; }
 </style>

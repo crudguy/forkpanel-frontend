@@ -19,7 +19,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, type Site } from '@/api/types'
+import { CAP, wafProfileLabel, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
@@ -65,39 +65,85 @@ function dirty(s: Site): boolean {
     || d.burst !== (s.waf_burst ?? 0))
 }
 
+/**
+ * 下发体构造——**单站点「应用」与「应用全部」共用**。
+ *
+ * ⚠️ 抽成函数而不是各写一份：同一约束走两条路径必漏配（项目高频 bug）。
+ * 两处都要满足的约束（漏一个就出事故）：
+ * - 其余字段原样回传：apply 是「期望状态」覆盖，漏传 upstreams/fpm 会把
+ *   反代 / PHP 站的后端地址清空（migration 009 已落库，列表里拿得到真实值）；
+ * - `burst` 只在限速且有值时下发，缺省让后端按 rate×2 计算（不限速却带 burst
+ *   会被后端 400 —— 那属于「配了但没生效」的静默失败，后端刻意拒绝）。
+ */
+function applyBody(s: Site, d: Draft) {
+  const waf = !d.on
+    ? { enabled: false }
+    : {
+        enabled: true,
+        profile: d.profile,
+        rate_per_sec: d.rate,           // 0 = 不限速（后端语义）
+        ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
+      }
+  return {
+    name: s.name,
+    domains: s.domains,
+    // 后端 root 是必填 String（非 Option），恒有值；此前 `|| s.name` 的兜底
+    // 与 SitesView 的 `root: s.root` 不一致，且会静默把空 root 变成站点名
+    root: s.root,
+    force_https: true,
+    kind: s.kind,
+    upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
+    fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
+    waf,
+  }
+}
+
 async function applyWaf(s: Site) {
   const d = drafts.value[s.id]; if (!d) return
   busyId.value = s.id; error.value = ''
   try {
-    const waf = !d.on
-      ? { enabled: false }
-      : {
-          enabled: true,
-          profile: d.profile,
-          rate_per_sec: d.rate,           // 0 = 不限速（后端语义）
-          // burst 只在限速且有值时下发，缺省让后端按 rate×2 计算
-          ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
-        }
-    // 其余字段原样回传：apply 是"期望状态"覆盖，漏传 upstreams/fpm 会把反代/PHP
-    // 站的后端地址清空（migration 009 已落库，列表里拿得到真实值）。
-    await api.post(API.sites.apply(), {
-      name: s.name,
-      domains: s.domains,
-      // 后端 root 是必填 String（非 Option），恒有值；此前 `|| s.name` 的兜底
-      // 与 SitesView 的 `root: s.root` 不一致，且会静默把空 root 变成站点名
-      root: s.root,
-      force_https: true,
-      kind: s.kind,
-      upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
-      fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
-      waf,
-    })
-    toast(d.on ? `已为 ${s.name} 应用 WAF（${d.profile}）` : `已关闭 ${s.name} 的 WAF`)
+    await api.post(API.sites.apply(), applyBody(s, d))
+    toast(d.on ? `已为 ${s.name} 应用 WAF（${wafProfileLabel(d.profile)}）` : `已关闭 ${s.name} 的 WAF`)
     await load()
   } catch (e) {
-    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法应用配置', 'info')
+    if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法应用配置', 'warn')
     else error.value = errorText(e)
   } finally { busyId.value = null }
+}
+
+/** 「应用全部」的目标：已启用站点中确有改动、且当前环境可下发的那些。 */
+const pending = computed(() =>
+  sites.value.filter((s) => s.enabled && canApply.value && dirty(s)))
+/** 有改动但**不能**下发的（站点已停用）——如实计数并说明，不静默跳过。 */
+const blockedPending = computed(() =>
+  sites.value.filter((s) => s.enabled === false && dirty(s)).length)
+const batchBusy = ref(false)
+
+/**
+ * 逐个下发。刻意**不**复用 applyWaf：它每次成功都 `await load()`，而 load 会把
+ * 草稿重置成刚落库的值——循环到第二个站点时 drafts 已被换掉，后面的改动会丢失。
+ * 故批量走一条不重置草稿的路径，全部跑完再统一 load 一次。
+ */
+async function applyAll() {
+  const targets = pending.value.slice()
+  if (!targets.length) return
+  batchBusy.value = true; error.value = ''
+  let ok = 0
+  try {
+    for (const s of targets) {
+      const d = drafts.value[s.id]; if (!d) continue
+      try {
+        await api.post(API.sites.apply(), applyBody(s, d))
+        ok++
+      } catch (e) {
+        // 一个失败即停：多半是环境/权限类问题，继续跑只会把后面站点也刷成同样的错
+        if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法应用配置', 'warn')
+        else error.value = `${s.name} 下发失败：${errorText(e)}`
+        break
+      }
+    }
+    if (ok) toast(`已应用 ${ok} 个站点的 WAF 配置`)
+  } finally { batchBusy.value = false; await load() }
 }
 
 function kindLabel(k: string): string {
@@ -122,9 +168,19 @@ onMounted(load)
 
     <div class="sec-head">
       <Icon name="firewall" :size="16" /> 站点 WAF
+      <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
+      <span v-if="blockedPending" class="dim tiny"
+        :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
+        · {{ blockedPending }} 项因站点停用不可下发
+      </span>
       <span class="spacer" />
-      <button class="btn-ghost" :disabled="!sites.length" @click="load">
+      <button class="btn-ghost" :disabled="!sites.length || batchBusy" @click="load">
         <Icon name="refresh" :size="15" /> 刷新
+      </button>
+      <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
+      <button class="btn-primary" :disabled="!pending.length || batchBusy" @click="applyAll"
+        :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
+        <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
       </button>
     </div>
 
@@ -132,24 +188,26 @@ onMounted(load)
       desc="先在「网站」建站，再回来统一配置 WAF" />
 
     <div v-else-if="sites.length" class="card flush">
-      <table>
+      <table aria-label="站点 WAF 配置">
         <thead>
+          <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
           <tr>
-            <th>站点</th><th>域名</th><th>类型</th><th>WAF</th>
-            <th>档位</th><th>CC 限速</th><th>突发桶</th><th>操作</th>
+            <th scope="col">站点</th><th scope="col">域名</th><th scope="col" class="col-opt">类型</th><th scope="col">WAF</th>
+            <th scope="col">档位</th><th scope="col">CC 限速</th><th scope="col" class="col-opt">突发桶</th><th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="s in sites" :key="s.id">
             <td>{{ s.name }}</td>
             <td class="mono dim">{{ s.domains.join(', ') }}</td>
-            <td>{{ kindLabel(s.kind) }}</td>
+            <td class="col-opt">{{ kindLabel(s.kind) }}</td>
             <td>
-              <input type="checkbox" v-model="drafts[s.id].on"
+              <!-- aria-label 给出「哪个站点的什么开关」：读屏只念 checkbox 无法定位 -->
+              <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
                 :disabled="!canApply || !s.enabled" :title="blockedReason(s)" />
             </td>
             <td>
-              <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile"
+              <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile" :aria-label="`${s.name} 防护档位`"
                 :disabled="!canApply || !s.enabled">
                 <option value="basic">基础</option>
                 <option value="strict">严格</option>
@@ -158,19 +216,19 @@ onMounted(load)
             </td>
             <td>
               <input v-if="drafts[s.id].on" v-model.number="drafts[s.id].rate"
-                type="number" min="0" max="1000" class="num"
+                type="number" min="0" max="1000" class="num" :aria-label="`${s.name} CC 限速（每秒请求数）`"
                 :disabled="!canApply || !s.enabled" />
               <span v-else class="dim">—</span>
             </td>
-            <td>
+            <td class="col-opt">
               <input v-if="drafts[s.id].on" v-model.number="drafts[s.id].burst"
-                type="number" min="0" max="10000" class="num"
+                type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 突发桶`"
                 :disabled="!canApply || !s.enabled || !drafts[s.id].rate"
                 :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
               <span v-else class="dim">—</span>
             </td>
             <td>
-              <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id"
+              <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id || batchBusy"
                 :title="blockedReason(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
                 {{ busyId === s.id ? '应用中…' : '应用' }}
               </button>
@@ -192,23 +250,7 @@ onMounted(load)
 
 <style scoped>
 .view { display: flex; flex-direction: column; gap: 14px; }
-.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
-.spacer { flex: 1; }
+/* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类，
+   不再私有重定义（审计 V1：WAF 页自造按钮样式曾与全局漂移）。 */
 .num { width: 92px; }
-.dim { color: var(--c-text-dim); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.btn-ghost {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
-  border: 1px solid var(--c-border); border-radius: 8px; background: transparent;
-  color: var(--c-text-dim); cursor: pointer; font-size: 13px; font-family: inherit;
-}
-.btn-ghost:hover:not(:disabled) { background: var(--c-hover); color: var(--c-text); }
-.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary {
-  padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer;
-  background: var(--gradient); color: #fff; font-size: 13px; font-family: inherit; font-weight: 600;
-}
-.btn-primary:disabled { opacity: .45; cursor: not-allowed; }
-.err { color: var(--c-danger); font-size: 13px; }
-.tip { color: var(--c-text-dim); font-size: 12.5px; line-height: 1.7; }
 </style>

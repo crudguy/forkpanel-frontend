@@ -7,6 +7,7 @@
  */
 import { ref, computed } from 'vue'
 import { useModal } from '@/composables/useModal'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   open: boolean
@@ -31,25 +32,33 @@ function confirm() {
 function cancel() { typed.value = ''; emit('cancel') }
 
 // Esc 关闭 + Tab 焦点陷阱 + 打开时聚焦（审计 U1）：本组件被全项目危险操作复用，
-// 一处接入全部确认框受益
+// 一处接入全部确认框受益。返回值 `close` 是**统一关闭出口**（带离场动画 + 焦点返还），
+// X 按钮 / 点遮罩 / 取消按钮三条路径都必须走它。
 const box = ref<HTMLElement | null>(null)
-useModal(() => props.open, box, cancel)
+const { close } = useModal(() => props.open, box, cancel)
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="cancel">
+  <div v-if="open" class="mask" @click.self="close">
     <div ref="box" class="modal stack" role="dialog" aria-modal="true">
-      <h3 :class="{ danger }">{{ title }}</h3>
-      <p v-if="detail" class="detail">{{ detail }}</p>
+      <div class="modal-head">
+        <h3 class="modal-title" :class="{ danger }">{{ title }}</h3>
+        <button class="modal-close" type="button" aria-label="关闭" @click="close">
+          <Icon name="close" :size="16" />
+        </button>
+      </div>
+      <p v-if="detail" class="modal-lead">{{ detail }}</p>
 
       <label v-if="confirmWord">
         <span>请输入 <code>{{ confirmWord }}</code> 以确认</span>
         <input v-model="typed" :placeholder="confirmWord" />
       </label>
 
-      <div class="acts">
-        <button @click="cancel">取消</button>
-        <button :class="{ primary: danger }" :disabled="!ok" @click="confirm">
+      <div class="modal-actions">
+        <button class="btn-ghost" @click="close">取消</button>
+        <!-- 危险操作一律实心红 .btn-danger（此前这里手写 .primary 复刻红色，
+             与 Certs 的 btn-primary danger、Databases 的 .danger-btn 三足鼎立） -->
+        <button :class="danger ? 'btn-danger' : 'btn-primary'" :disabled="!ok" @click="confirm">
           {{ danger ? '确认执行' : '确定' }}
         </button>
       </div>
@@ -58,12 +67,8 @@ useModal(() => props.open, box, cancel)
 </template>
 
 <style scoped>
-/* 遮罩与弹窗外观统一取 main.css 的公共 .mask / .modal；.stack 只补内部纵向排布 */
-h3 { margin: 0; font-size: 16px; }
-h3.danger { color: var(--c-danger); }
-.detail { margin: 0; font-size: 13px; color: var(--c-text-dim); line-height: 1.6; }
+/* 遮罩 / 弹窗框 / 标题 / 关闭按钮 / 操作条统一取 main.css 公共类，
+   此处只留本组件独有的「确认词输入框」排布。 */
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
-.acts { display: flex; justify-content: flex-end; gap: 8px; }
-.primary { background: var(--c-danger); color: #fff; border-color: var(--c-danger); }
 </style>

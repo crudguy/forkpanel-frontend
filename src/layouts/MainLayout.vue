@@ -10,10 +10,14 @@ import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { roleLabel } from '@/api/types'
+import { navDrawerOpen, closeNav } from '@/composables/nav'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+// 移动端抽屉：路由切换即收起（审计 R1），避免停留在非当前页时抽屉仍开着
+watch(() => route.path, () => { if (navDrawerOpen.value) closeNav() })
 
 // 顶栏标题直接取路由 meta.title（单一事实源）。原先此处再维护一份 TITLES 映射，
 // 与 router 的 meta.title 重复且易漏项——漏了 terminal/assistant/containers/backups/
@@ -93,8 +97,15 @@ function logout() {
 <template>
   <div class="shell">
     <SideNav />
+    <!-- 移动端抽屉遮罩：点击收起（审计 R1）。桌面端不渲染（v-if）。 -->
+    <div v-if="navDrawerOpen" class="nav-backdrop" @click="closeNav" />
     <main>
       <header class="topbar">
+        <!-- 汉堡按钮：仅窄屏（<=900px）出现，打开侧栏抽屉 -->
+        <button class="hamburger" type="button" :aria-expanded="navDrawerOpen"
+          aria-label="打开导航菜单" @click="navDrawerOpen = true">
+          <Icon name="menu" :size="20" />
+        </button>
         <div class="title-block">
           <h1 class="title">{{ title }}</h1>
           <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
@@ -171,6 +182,21 @@ function logout() {
 <style scoped>
 .shell { display: flex; min-height: 100vh; }
 
+/* 汉堡按钮：默认隐藏，仅窄屏抽屉模式可见（审计 R1） */
+.hamburger {
+  display: none; width: 38px; height: 38px; padding: 0; flex: none;
+  border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-surface-2); color: var(--c-text);
+}
+.hamburger:hover { background: var(--c-hover); }
+/* 窄屏：显示汉堡、隐藏侧栏常驻形态（侧栏改由 SideNav 自身媒体查询变抽屉） */
+@media (max-width: 900px) {
+  .hamburger { display: inline-flex; align-items: center; justify-content: center; }
+  .content { padding: 16px; }
+}
+/* 抽屉遮罩：压在顶栏(30)之上、侧栏抽屉(60)之下，点击收起 */
+.nav-backdrop { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.45); }
+
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
@@ -244,6 +270,5 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 @media (max-width: 720px) {
   .sysinfo { display: none; }
-  .content { padding: 16px; }
 }
 </style>

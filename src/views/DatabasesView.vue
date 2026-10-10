@@ -99,7 +99,8 @@ function openRestore(c: Conn) {
 
 // 恢复弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const restoreBox = ref<HTMLElement | null>(null)
-useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = null })
+// 统一关闭出口：X / 点遮罩 / 取消按钮 / Esc 都走它（离场动画 + 焦点返还）
+const { close: closeRestore } = useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = null })
 
 async function doRestore() {
   const c = restoreTarget.value; if (!c) return
@@ -276,12 +277,19 @@ function closeBrowse() { browse.value = null }
     <SqlConsole v-if="sqlConn" :conn="sqlConn" @close="sqlConn = null" />
 
     <!-- 恢复弹窗（高危）：确认词与备份恢复同源（「覆盖恢复」） -->
-    <div v-if="restoreTarget" class="mask" @click.self="restoreTarget = null">
+    <div v-if="restoreTarget" class="mask" @click.self="closeRestore">
       <div ref="restoreBox" class="modal" role="dialog" aria-modal="true">
-        <h3>恢复「{{ restoreTarget.name }}」</h3>
-        <p class="restore-warn">
-          将用指定备份文件<b>覆盖当前库</b>，恢复过程中库不可用。仅支持
-          SQLite 立即恢复；文件必须位于文件管理允许根内。
+        <div class="modal-head">
+          <h3 class="modal-title">恢复「{{ restoreTarget.name }}」</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeRestore">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <!-- 覆盖库的后果预警：公共 .hint-note.is-warn（此前 .restore-warn 硬编码 #FF5A36） -->
+        <p class="hint-note is-warn">
+          <Icon name="alert" :size="14" class="ic" />
+          <span>将用指定备份文件<b>覆盖当前库</b>，恢复过程中库不可用。仅支持
+            SQLite 立即恢复；文件必须位于文件管理允许根内。</span>
         </p>
         <label class="blk">备份文件路径
           <input v-model="restoreForm.file" placeholder="/backups/myapp-2026.sql" />
@@ -289,13 +297,16 @@ function closeBrowse() { browse.value = null }
         <label class="blk">输入「覆盖恢复」以确认
           <input v-model="restoreForm.confirm" autocomplete="off" placeholder="覆盖恢复" />
         </label>
-        <div class="modal-actions">
-          <button class="btn-ghost" :disabled="busy" @click="restoreTarget = null">取消</button>
-          <button
-            class="btn-primary danger-btn"
-            :disabled="busy || !restoreForm.file.trim() || restoreForm.confirm.trim() !== '覆盖恢复'"
-            @click="doRestore"
-          >{{ busy ? '恢复中…' : '开始恢复' }}</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" :disabled="busy" @click="closeRestore">取消</button>
+            <!-- 危险主操作 → 实心 .btn-danger（此前 btn-primary + 硬编码 background:#C73E1F） -->
+            <button
+              class="btn-danger"
+              :disabled="busy || !restoreForm.file.trim() || restoreForm.confirm.trim() !== '覆盖恢复'"
+              @click="doRestore"
+            >{{ busy ? '恢复中…' : '开始恢复' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -309,8 +320,6 @@ function closeBrowse() { browse.value = null }
 .crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
 .sep { color: var(--c-text-dim); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
-/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
-.restore-warn { font-size: 13px; color: var(--c-text-dim); background: rgba(255, 90, 54, .08); border-left: 3px solid #FF5A36; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-.danger-btn { background: #C73E1F; }
+/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 字段 / 操作条 / 后果预警一律取 main.css 的公共式样。
+   此前这里私有复刻了 .restore-warn（硬编码 #FF5A36）、.modal-actions、.danger-btn（#C73E1F）。 */
 </style>

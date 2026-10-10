@@ -166,7 +166,7 @@ async function doDelete() {
                 <span v-else class="badge" title="面板不会删除用户自建规则">用户自建</span>
               </td>
               <td class="nowrap">
-                <button class="btn-danger btn-sm" :disabled="busy || !canManage || !r.panel_managed"
+                <button class="btn-ghost btn-sm danger" :disabled="busy || !canManage || !r.panel_managed"
                   :title="r.panel_managed ? '删除此规则' : '用户自建规则不可删除'"
                   @click="askDelete(r)">
                   <Icon name="trash" :size="14" /> 删除

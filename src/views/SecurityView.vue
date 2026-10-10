@@ -12,6 +12,7 @@ import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { toast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -150,6 +151,10 @@ async function doVerify() {
 /** 关闭 MFA 需出示第二因子（动态口令/恢复码）——这是真实凭据而非确认词，
  *  不能用 ConfirmDialog 确认词模式，用专用输入弹窗（审计 U5：替代 window.prompt） */
 const disableMfa = ref(false)
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗三者皆无）。
+// X / 点遮罩 / 取消按钮统一走 closeMfa。
+const mfaBox = ref<HTMLElement | null>(null)
+const { close: closeMfa } = useModal(() => disableMfa.value, mfaBox, () => { disableMfa.value = false })
 const mfaDisableCode = ref('')
 
 async function doDisable() {
@@ -218,7 +223,7 @@ async function doDisable() {
               <td class="muted" :title="fmtTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
               <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
               <td class="nowrap">
-                <button class="btn-danger btn-sm" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
+                <button class="btn-ghost btn-sm danger" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
               </td>
             </tr>
           </tbody>
@@ -260,7 +265,7 @@ async function doDisable() {
         </div>
 
         <div v-else class="ops-row">
-          <button class="btn-danger btn-sm" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
+          <button class="btn-ghost btn-sm danger" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
           <span class="muted small">关闭需出示动态口令或恢复码</span>
         </div>
       </section>
@@ -280,19 +285,28 @@ async function doDisable() {
     />
 
     <!-- 关闭 MFA：出示第二因子（动态口令或恢复码） -->
-    <div v-if="disableMfa" class="mask" @click.self="disableMfa = false">
-      <div class="modal" role="dialog" aria-modal="true">
-        <h3>关闭 MFA</h3>
-        <p class="muted" style="margin:0 0 12px">
+    <div v-if="disableMfa" class="mask" @click.self="closeMfa">
+      <div ref="mfaBox" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">关闭 MFA</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeMfa">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <!-- 内联 style 一律收进公共类（.modal-lead）：散落的 style 属性无法统一维护 -->
+        <p class="modal-lead">
           关闭需出示第二因子，否则一个被劫持的会话就能顺手关掉账户的 MFA。
         </p>
         <label class="blk">动态口令（6 位）或一次性恢复码
           <input v-model="mfaDisableCode" autocomplete="off" @keyup.enter="doDisable" />
         </label>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="disableMfa = false">取消</button>
-          <button class="btn-primary" :disabled="acting || !mfaDisableCode.trim()" @click="doDisable">
-            {{ acting ? '提交中…' : '确认关闭' }}</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeMfa">取消</button>
+            <!-- 关闭 MFA 是安全敏感动作 → 实心 .btn-danger -->
+            <button class="btn-danger" :disabled="acting || !mfaDisableCode.trim()" @click="doDisable">
+              {{ acting ? '提交中…' : '确认关闭' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -322,8 +336,6 @@ async function doDisable() {
 .warn-tip { margin: 8px 0 4px; font-size: 12.5px; color: var(--c-warn, #d29922); }
 .inp { padding: 4px 8px; border: 1px solid var(--c-border, #444); border-radius: var(--radius, 6px); background: transparent; color: inherit; font-family: var(--mono); }
 .break { word-break: break-all; }
-/* 关闭 MFA 输入弹窗（与其他视图同形态） */
-/* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-.muted { color: var(--c-text-dim); }
+/* 关闭 MFA 输入弹窗（与其他视图同形态）：遮罩 / 弹窗框 / 标题行 / 关闭按钮 /
+   字段 / 操作条一律取 main.css 的公共式样（.muted 也是公共工具类，不再私抄） */
 </style>

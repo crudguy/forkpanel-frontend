@@ -20,7 +20,13 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 // 弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const box = ref<HTMLElement | null>(null)
-useModal(() => props.open, box, () => { if (!busy.value && !done.value) emit('close') })
+// 统一关闭出口（Esc / 点遮罩 / X 按钮 / 取消按钮都走它）：沿用原本的约束——
+// 提交中不允许关（会留下半改状态），完成态只能点「完成」（要让用户确认看到结果）。
+const { close: modalClose } = useModal(
+  () => props.open,
+  box,
+  () => { if (!busy.value && !done.value) emit('close') },
+)
 
 const old = ref('')
 const nw = ref('')
@@ -69,11 +75,16 @@ async function submit() {
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="emit('close')">
+  <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="box" class="modal" role="dialog" aria-modal="true" aria-labelledby="pwd-title">
-      <h3 id="pwd-title">
-        <Icon name="key" :size="16" /> 修改密码
-      </h3>
+      <div class="modal-head">
+        <h3 id="pwd-title" class="modal-title">
+          <Icon name="key" :size="16" /> 修改密码
+        </h3>
+        <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+          <Icon name="close" :size="16" />
+        </button>
+      </div>
 
       <template v-if="!done">
         <label class="blk">当前密码
@@ -87,17 +98,28 @@ async function submit() {
           <input v-model="confirm2" type="password" autocomplete="new-password" :disabled="busy"
             @keyup.enter="submit" />
         </label>
-        <p v-if="error" class="err" role="alert">{{ error }}</p>
-        <div class="modal-actions">
-          <button class="btn-ghost" :disabled="busy" @click="emit('close')">取消</button>
-          <button class="btn-primary" :disabled="busy" @click="submit">{{ busy ? '提交中…' : '确认修改' }}</button>
+        <!-- 字段级 / 整段错误改用公共 .err-bar（此前 .err 只是纯红字，没有底色与图标，
+             与站点弹窗的错误条长得完全不同） -->
+        <p v-if="error" class="err-bar" role="alert">{{ error }}</p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" :disabled="busy" @click="modalClose">取消</button>
+            <button class="btn-primary" :disabled="busy" @click="submit">{{ busy ? '提交中…' : '确认修改' }}</button>
+          </div>
         </div>
       </template>
 
       <template v-else>
-        <p class="ok-note"><Icon name="check" :size="16" /> 密码已修改。其他设备的登录会话已退出，当前会话不受影响。</p>
-        <div class="modal-actions">
-          <button class="btn-primary" @click="emit('close')">完成</button>
+        <!-- 完成态是**非瞬态**信息（要一直看到用户点关闭），故不用 toast，
+             用公共 .hint-note.is-ok —— 与站点弹窗的成功态同一套视觉。 -->
+        <p class="hint-note is-ok">
+          <Icon name="check" :size="16" class="ic" />
+          <span>密码已修改。其他设备的登录会话已退出，当前会话不受影响。</span>
+        </p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-primary" @click="modalClose">完成</button>
+          </div>
         </div>
       </template>
     </div>
@@ -105,12 +127,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { width: min(400px, 92vw); background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-radius: 12px; padding: 20px; }
-.modal h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; }
-.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
-.blk input { width: 100%; margin-top: 4px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-.ok-note { display: flex; align-items: center; gap: 8px; color: var(--c-ok, #3fb950); font-size: 13.5px; margin: 4px 0 12px; }
+/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条 / 错误条 / 成功条全部取 main.css 公共类。
+   此前这里整套私有复制（宽 400、圆角 12、padding 20、z-index 50），与全局不一致——
+   守卫 check-modal 只扫 views 没扫 components，组件里因此长期漏网，现已无处可藏。 */
 </style>

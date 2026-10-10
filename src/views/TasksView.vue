@@ -113,7 +113,7 @@ onUnmounted(stopPoll)
               <td class="muted nowrap">{{ fmtTime(t.started_at) }}</td>
               <td class="nowrap">
                 <button class="btn-sm" @click.stop="open(t)"><Icon name="terminal" :size="14" /> 输出</button>
-                <button v-if="isLive(t)" class="btn-danger btn-sm" @click.stop="cancel(t)">取消</button>
+                <button v-if="isLive(t)" class="btn-ghost btn-sm danger" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
             <tr v-if="!tasks.length"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>

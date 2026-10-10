@@ -307,7 +307,7 @@ onUnmounted(closeFollow)
               @click="svcAct('start')">
               {{ busy === svc.name + ':start' ? '执行中…' : '启动' }}
             </button>
-            <button class="btn-danger" :disabled="!canManage || !!busy || stopDisabled(svc)"
+            <button class="btn-ghost danger" :disabled="!canManage || !!busy || stopDisabled(svc)"
               :title="stopDisabled(svc) ? '禁止停止 SSH 服务以防失联' : ''" @click="askStop">
               {{ busy === svc.name + ':stop' ? '执行中…' : '停止' }}
             </button>

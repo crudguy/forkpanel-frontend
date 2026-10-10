@@ -28,17 +28,25 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
-import { navCollapsed, toggleNav } from '@/composables/nav'
+import { navCollapsed, toggleNav, navDrawerOpen } from '@/composables/nav'
 import Icon from '@/components/Icon.vue'
 
 interface Item { to: string; label: string; icon: string; cap: string; perm: string }
+/**
+ * 渲染用菜单项 = 定义 + 预计算的禁用原因。
+ *
+ * 为什么不在模板里调 `why(it)`：原先每个 item 的 :class / :title / :aria-disabled /
+ * :tabindex 各调一次，一轮渲染每个菜单项把权限矩阵查 4 遍。权限矩阵在 auth 里是
+ * 稳定数据（不随渲染变化），放在 computed 里算一次即可（审计 P1-P3）。
+ */
+interface NavItem extends Item { off: string | null }
 
 const auth = useAuthStore()
 
 // 菜单项：扁平列表，不再分组。可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，
 // **禁止** isLinux / navigator.platform 之类平台判断。新模块 cap 复用既有常量兜底
 // （明细类用 METRICS_READ），仅 perm 区分可见性。
-const items = computed(() => [
+const items = computed<NavItem[]>(() => [
   { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
   // 「通知」不再占菜单位：topbar 常驻铃铛 + 未读徽标即入口
   { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
@@ -73,11 +81,8 @@ const items = computed(() => [
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage' },
   // 「审计日志」已并入日志页第二个 Tab（/logs/audit）
   { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage' },
-])
-
-function why(it: Item): string | null {
-  return auth.whyDisabled(it.cap, it.perm)
-}
+  // 定义与判定分离：定义在上方一目了然，禁用原因在这里统一算一次（模板只读 it.off）
+].map((it) => ({ ...it, off: auth.whyDisabled(it.cap, it.perm) })))
 
 const route = useRoute()
 // 含页内子 Tab 的菜单（主机监控 /system/*、软件与服务 /services/*、日志 /logs/audit、
@@ -89,7 +94,7 @@ function isOn(it: Item): boolean {
 </script>
 
 <template>
-  <aside class="side" :class="{ collapsed: navCollapsed }">
+  <aside class="side" :class="{ collapsed: navCollapsed, 'is-drawer': navDrawerOpen }">
     <div class="brand">
       <div class="logo"><Icon name="dog" :size="25" /></div>
       <span class="brand-name">ForkPanel</span>
@@ -101,10 +106,12 @@ function isOn(it: Item): boolean {
         :key="it.to"
         :to="it.to"
         class="item"
-        :class="{ disabled: !!why(it), on: isOn(it) }"
-        :title="why(it) ?? it.label"
-        :aria-disabled="why(it) ? 'true' : undefined"
-        :tabindex="why(it) ? -1 : undefined"
+        :class="{ disabled: !!it.off, on: isOn(it) }"
+        :title="it.off ?? it.label"
+        :aria-label="it.label"
+        :aria-current="isOn(it) ? 'page' : undefined"
+        :aria-disabled="it.off ? 'true' : undefined"
+        :tabindex="it.off ? -1 : undefined"
       >
         <Icon :name="it.icon" :size="19" class="ico" />
         <span class="label">{{ it.label }}</span>
@@ -192,4 +199,18 @@ function isOn(it: Item): boolean {
 .collapsed .chev { transform: rotate(0deg); }
 .collapsed .toggle { justify-content: center; padding: 8px; }
 .collapsed .toggle-label { display: none; }
+
+/* 移动端抽屉（审计 R1）：<=900px 侧栏脱离文档流、默认滑出视口左侧，
+   由顶栏汉堡按钮切换 .is-drawer 滑入。宽度强制 234px（不受桌面折叠态影响），
+   遮罩由 MainLayout 提供。桌面端这套规则不生效，侧栏照常 sticky 常驻。 */
+@media (max-width: 900px) {
+  .side, .side.collapsed {
+    position: fixed; top: 0; left: 0; z-index: 60; height: 100vh;
+    width: 234px; transform: translateX(-100%);
+    transition: transform .22s ease; box-shadow: var(--shadow-lg);
+  }
+  .side.is-drawer { transform: translateX(0); }
+  /* 抽屉内不再提供折叠开关：抽屉本身即全宽浮层，折叠无意义且会误导 */
+  .bottom { display: none; }
+}
 </style>

@@ -19,3 +19,16 @@ watch(navCollapsed, (v) => localStorage.setItem(KEY, v ? '1' : '0'))
 export function toggleNav() {
   navCollapsed.value = !navCollapsed.value
 }
+
+/**
+ * 移动端抽屉状态（审计 R1）。
+ *
+ * 窄屏（<=900px）侧栏改为浮层抽屉：顶栏汉堡按钮打开、遮罩点击 / 路由切换关闭。
+ * 与 `navCollapsed` 是两套独立状态——折叠是桌面长期偏好，抽屉是移动端临时态，
+ * 互不影响：桌面端折叠态照常生效，移动端抽屉默认收起、宽度强制 234px 不受折叠影响。
+ * 不写 localStorage：抽屉是一次性临时态，刷新回到收起即可。
+ */
+export const navDrawerOpen = ref(false)
+export function openNav() { navDrawerOpen.value = true }
+export function closeNav() { navDrawerOpen.value = false }
+export function toggleNavDrawer() { navDrawerOpen.value = !navDrawerOpen.value }

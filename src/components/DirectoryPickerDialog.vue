@@ -1,9 +1,14 @@
 <script setup lang="ts">
 /**
- * 通用目录选择器（树形，全文件系统浏览）：复用 /api/v1/files/list，
- * 树根固定在服务器根目录 `/`，可逐级展开任意层级、选择任意目录。
+ * 通用目录 / 文件选择器（树形，全文件系统浏览）：复用 /api/v1/files/list，
+ * 树根固定在服务器根目录 `/`，可逐级展开任意层级。
  *
- * 打开时自动展开到 initialPath（通常是站点根目录，方便着陆），
+ * mode:
+ * - 'dir'（默认）：只列目录，点行即选中某个目录（用于「工作目录」「站点根目录」）。
+ * - 'file'：目录仍可展开导航，同时列出文件；点文件即选中（用于「启动命令」选可执行文件）。
+ *           目录在文件模式下仅用于导航，点行会展开而非选中。
+ *
+ * 打开时自动展开到 initialPath（通常是工作目录，方便着陆），
  * 但用户可一路回退到 `/`、再进入任意目录——不受 site_root 约束。
  * 越界保存时由后端 resolve_site_root 报错，并在上层弹窗呈现。
  */
@@ -11,11 +16,12 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
+import { useModal } from '@/composables/useModal'
 
 interface Node {
   path: string
   name: string
-  kind: 'dir' | 'symlink'
+  kind: 'dir' | 'symlink' | 'file'
   expanded: boolean
   loaded: boolean
   loading: boolean
@@ -23,7 +29,7 @@ interface Node {
   children: string[] // 子路径列表
 }
 
-const props = defineProps<{ open: boolean; initialPath?: string }>()
+const props = defineProps<{ open: boolean; initialPath?: string; mode?: 'dir' | 'file' }>()
 const emit = defineEmits<{ (e: 'select', p: string): void; (e: 'cancel'): void }>()
 
 const norm = (p: string) => p.replace(/\/+$/, '') || '/'
@@ -46,9 +52,18 @@ const treeEl = ref<HTMLElement | null>(null)
 const newName = ref('')
 const formError = ref('')
 
-function mkNode(path: string, name: string, kind: 'dir' | 'symlink'): Node {
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还。此前本组件三者皆无：
+// 键盘用户从「浏览目录」进来后既退不出（无 Esc），焦点也不会还给触发按钮。
+// X 按钮 / 点遮罩 / 取消按钮统一走返回的 modalClose。
+const box = ref<HTMLElement | null>(null)
+const { close: modalClose } = useModal(() => props.open, box, () => emit('cancel'))
+
+function mkNode(path: string, name: string, kind: 'dir' | 'symlink' | 'file'): Node {
   return { path, name, kind, expanded: false, loaded: false, loading: false, error: '', children: [] }
 }
+
+/** 目录在前、符号链接次之、文件在后的稳定排序，避免每次刷新顺序乱跳。 */
+function rankOf(k: string) { return k === 'dir' ? 0 : k === 'symlink' ? 1 : 2 }
 
 async function loadChildren(path: string) {
   const n = nodes[path] ?? (nodes[path] = mkNode(path, basename(path), 'dir'))
@@ -57,12 +72,20 @@ async function loadChildren(path: string) {
   try {
     const r = await api.get<{ entries: { name: string; kind: string; modified: number }[] }>(
       API.files.list(), { params: { path, hidden: false } })
+    const wantFile = props.mode === 'file'
     const kids = (r.entries ?? [])
-      .filter((e) => e.kind === 'dir' || e.kind === 'symlink')
-      .sort((a, b) => a.name.localeCompare(b.name))
+      // 目录模式下只收目录与符号链接；文件模式额外收文件
+      .filter((e) => e.kind === 'dir' || e.kind === 'symlink' || (wantFile && e.kind === 'file'))
+      .sort((a, b) => {
+        const ra = rankOf(a.kind), rb = rankOf(b.kind)
+        if (ra !== rb) return ra - rb
+        return a.name.localeCompare(b.name)
+      })
       .map((e) => {
         const cp = joinDir(path, e.name)
-        if (!nodes[cp]) nodes[cp] = mkNode(cp, e.name, e.kind === 'symlink' ? 'symlink' : 'dir')
+        const k: 'dir' | 'symlink' | 'file' =
+          e.kind === 'file' ? 'file' : (e.kind === 'symlink' ? 'symlink' : 'dir')
+        if (!nodes[cp]) nodes[cp] = mkNode(cp, e.name, k)
         return cp
       })
     n.children = kids
@@ -102,6 +125,16 @@ async function expandTo(target: string) {
   }
 }
 
+/** 行点击：目录模式下点行即选中；文件模式下目录仅导航、文件才选中。 */
+function onRowClick(n: Node) {
+  if (n.kind === 'dir') {
+    if (props.mode === 'file') toggle(n.path)
+    else select(n.path)
+  } else {
+    select(n.path)
+  }
+}
+
 function toggle(path: string) {
   const n = nodes[path]
   if (!n || n.kind !== 'dir') return
@@ -121,7 +154,7 @@ function ensureRoot() {
   const ip = norm(props.initialPath || ROOT)
   expandTo(ip).then(async () => {
     const n = nodes[ip]
-    // 初始路径真实存在则预选中，方便直接确认
+    // 初始路径真实存在则预选中，方便直接确认（文件模式下 ip 为目录，目录可预选）
     if (n && n.loaded && !n.error) selected.value = ip
     // 把选中行滚进视野：树默认停在最顶层，不滚动的话"展开到 site_root"
     // 等于把人送到楼下就走了——看得见路径才算着陆。
@@ -164,24 +197,38 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="emit('cancel')">
-    <div class="modal" role="dialog" aria-modal="true">
-      <h3>选择目录 <span class="dim tiny">（可浏览服务器任意目录，仅显示目录）</span></h3>
+  <!-- 二级浮层（可从一级弹窗内部再弹出），故用 .level-2 抬层级；此前此处写死 z-index:60 -->
+  <div v-if="open" class="mask level-2" @click.self="modalClose">
+    <div ref="box" class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 class="modal-title">
+          选择{{ mode === 'file' ? '可执行文件' : '目录' }}
+          <span class="dim tiny">
+            {{ mode === 'file'
+              ? '（浏览服务器目录，点文件即选中；参数为命令后自行追加）'
+              : '（可浏览服务器任意目录，仅显示目录）' }}
+          </span>
+        </h3>
+        <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
+          <Icon name="close" :size="16" />
+        </button>
+      </div>
 
       <div class="tree" ref="treeEl">
         <div v-if="!visibleRows.length" class="dim empty">读取中…</div>
         <template v-for="row in visibleRows" :key="row.node.path">
           <div class="row" :class="{ sel: selected === row.node.path }"
             :style="{ paddingLeft: 8 + row.depth * 16 + 'px' }"
-            @click="select(row.node.path)">
+            @click="onRowClick(row.node)">
             <button v-if="row.node.kind === 'dir'" class="tw" :class="{ open: row.node.expanded }"
               @click.stop="toggle(row.node.path)" :aria-label="row.node.expanded ? '折叠' : '展开'">
               <Icon name="chevron" :size="13" />
             </button>
             <span v-else class="tw ph" />
-            <Icon name="folder" :size="15" />
+            <Icon :name="row.node.kind === 'file' ? 'file' : 'folder'" :size="15" />
             <span class="nm">{{ row.node.name }}</span>
             <span v-if="row.node.kind === 'symlink'" class="dim tiny link">链接</span>
+            <span v-else-if="row.node.kind === 'file'" class="dim tiny link">文件</span>
             <Icon v-if="selected === row.node.path" class="check" name="check" :size="14" />
           </div>
           <p v-if="row.node.error" class="err" :style="{ paddingLeft: 8 + (row.depth + 1) * 16 + 'px' }">
@@ -190,9 +237,9 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
         </template>
       </div>
 
-      <p v-if="formError" class="err form-err">{{ formError }}</p>
+      <p v-if="formError" class="err-bar" role="alert">{{ formError }}</p>
 
-      <div class="newdir">
+      <div v-if="mode !== 'file'" class="newdir">
         <input v-model="newName" placeholder="在所选目录内新建子目录" @keyup.enter="doMkdir" />
         <button class="btn-ghost btn-sm" :disabled="!newName.trim()" @click="doMkdir">
           <Icon name="plus" :size="13" /> 新建
@@ -203,21 +250,21 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
         已选：<code>{{ selected || '（未选择）' }}</code>
       </div>
 
-      <div class="modal-actions">
-        <button class="btn-ghost" @click="emit('cancel')">取消</button>
-        <button class="btn-primary" :disabled="!selected" @click="emit('select', selected!)">选择此目录</button>
+      <div class="modal-foot">
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="modalClose">取消</button>
+          <button class="btn-primary" :disabled="!selected" @click="emit('select', selected!)">
+            {{ mode === 'file' ? '选择此文件' : '选择此目录' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .55);
-  display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal { width: min(540px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
-  background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; }
-.modal h3 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 6px; }
-
+/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条 / 错误条统一取 main.css 公共类
+   （此前整套私有复制：遮罩 .55、宽 540、圆角 12、padding 18/20、z-index 60）。 */
 .tree { flex: 1; overflow-y: auto; min-height: 160px; max-height: 44vh;
   border: 1px solid var(--c-border); border-radius: 8px; padding: 4px; background: var(--c-surface); }
 .tree .empty { padding: 18px; text-align: center; }
@@ -240,7 +287,4 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 .newdir input { flex: 1; }
 .selpath { margin: 2px 0 6px; word-break: break-all; }
 .selpath code { color: var(--c-text); background: var(--c-surface); padding: 1px 5px; border-radius: 4px; }
-.form-err { margin: 0 0 8px; }
-
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 </style>

@@ -667,7 +667,7 @@ async function doConfirmed() {
                         <Icon name="download" :size="13" />
                       </button>
                       <!-- 卸载用图标按钮不占横向空间，语义与后果写进 title -->
-                      <button class="btn-danger btn-sm icon-btn" :disabled="!canPkg || pkgBusy(p.name)"
+                      <button class="btn-ghost btn-sm icon-btn danger" :disabled="!canPkg || pkgBusy(p.name)"
                               :title="`卸载 ${labelOf(p.name)}：从系统移除该软件包`" @click="askRemove(p.name)">
                         <Icon name="trash" :size="13" />
                       </button>

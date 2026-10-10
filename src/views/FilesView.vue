@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, fmtSize } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { useModal } from '@/composables/useModal'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
 import { toast } from '@/composables/useToast'
@@ -230,6 +231,11 @@ function askOk() {
   cb(a.value.trim())
 }
 
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗三者皆无）。
+// X / 点遮罩 / 取消按钮统一走 closeAsk。
+const askBox = ref<HTMLElement | null>(null)
+const { close: closeAsk } = useModal(() => !!ask.value, askBox, () => { ask.value = null })
+
 // ── 建目录 / 重命名 / 改权限（审计 F3：后端路由早已注册，此前前端零调用）──
 function askMkdir() {
   ask.value = {
@@ -363,7 +369,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('copy')">复制到…</button>
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('move')">移动到…</button>
-      <button class="btn-danger btn-sm" :disabled="batchBusy" @click="confirmBatchDel = true">移入回收站</button>
+      <button class="btn-ghost btn-sm danger" :disabled="batchBusy" @click="confirmBatchDel = true">移入回收站</button>
       <button class="btn-ghost btn-sm" @click="selected = new Set()">取消选择</button>
     </div>
 
@@ -396,7 +402,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
               <!-- 重命名 / 权限（审计 F3）：行内直接入口，目录与文件均可 -->
               <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askRename(e)">重命名</button>
               <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askChmod(e)">权限</button>
-              <button v-if="canWrite" class="btn-danger btn-sm" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
+              <button v-if="canWrite" class="btn-ghost btn-sm danger" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
             </td>
           </tr>
         </tbody>
@@ -433,15 +439,22 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
 
     <!-- 通用输入弹窗（新建文件夹 / 重命名 / 权限 / 批量目标） -->
-    <div v-if="ask" class="mask" @click.self="ask = null">
-      <div class="modal" role="dialog" aria-modal="true">
-        <h3>{{ ask.title }}</h3>
+    <div v-if="ask" class="mask" @click.self="closeAsk">
+      <div ref="askBox" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">{{ ask.title }}</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeAsk">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
         <label class="blk">{{ ask.label }}
           <input v-model="ask.value" :placeholder="ask.placeholder" @keyup.enter="askOk" />
         </label>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="ask = null">取消</button>
-          <button class="btn-primary" @click="askOk">{{ ask.okText ?? '确定' }}</button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closeAsk">取消</button>
+            <button class="btn-primary" @click="askOk">{{ ask.okText ?? '确定' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -462,5 +475,5 @@ tr.sens { background: var(--c-warn-bg); }
 .editor textarea { min-height: 320px; font-family: var(--mono); font-size: 13px; }
 /* 通用输入弹窗（与 DatabasesView 同形态） */
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+/* .modal-actions 已取 main.css 公共规则（此前本页另抄一份） */
 </style>

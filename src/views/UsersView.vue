@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, roleLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { useModal } from '@/composables/useModal'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 /** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
@@ -35,6 +36,10 @@ const canManage = computed(() => auth.enabled(CAP.USER_MANAGE, 'user.manage'))
 // 弹窗：新建 / 编辑共用
 const editing = ref<UserOut | null>(null)
 const showModal = ref(false)
+// Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗无 role="dialog"、
+// 无 Esc、无焦点管理）。X / 点遮罩 / 取消按钮统一走 closeUserModal。
+const userBox = ref<HTMLElement | null>(null)
+const { close: closeUserModal } = useModal(() => showModal.value, userBox, () => { showModal.value = false })
 const form = ref({ username: '', password: '', role: 'operator', rootsText: '', disabled: false })
 const saving = ref(false)
 const formErr = ref('')
@@ -140,7 +145,7 @@ onMounted(load)
                 <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(u)">
                   <Icon name="edit" :size="14" /> 编辑
                 </button>
-                <button v-if="u.role !== 'owner'" class="btn-danger btn-sm" :disabled="!canManage" @click="askDelete(u)">
+                <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm danger" :disabled="!canManage" @click="askDelete(u)">
                   <Icon name="trash" :size="14" /> 删除
                 </button>
               </td>
@@ -154,13 +159,17 @@ onMounted(load)
     </template>
 
     <!-- 新建 / 编辑弹窗 -->
-    <div v-if="showModal" class="mask" @click.self="showModal = false">
-      <div class="modal">
-        <div class="m-head">
+    <div v-if="showModal" class="mask" @click.self="closeUserModal">
+      <div ref="userBox" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
           <Icon :name="editing ? 'edit' : 'user-plus'" :size="16" />
-          <span>{{ editing ? '编辑用户' : '新建用户' }}</span>
+          <h3 class="modal-title">{{ editing ? '编辑用户' : '新建用户' }}</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeUserModal">
+            <Icon name="close" :size="16" />
+          </button>
         </div>
-        <p v-if="formErr" class="err">{{ formErr }}</p>
+        <!-- 整段错误统一 .err-bar（此前 .err 只是纯红字，与弹窗错误条两套长相） -->
+        <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
         <div class="field">
           <label>用户名</label>
           <input v-model="form.username" :disabled="!!editing" :placeholder="editing ? '' : '登录名，1-64 字符'" />
@@ -185,11 +194,13 @@ onMounted(load)
             <span class="switch" /><span>禁用该账号</span>
           </label>
         </div>
-        <div class="m-acts">
-          <button class="btn-ghost" :disabled="saving" @click="showModal = false">取消</button>
-          <button class="btn-primary" :disabled="saving" @click="save">
-            {{ saving ? '保存中…' : '保存' }}
-          </button>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" :disabled="saving" @click="closeUserModal">取消</button>
+            <button class="btn-primary" :disabled="saving" @click="save">
+              {{ saving ? '保存中…' : '保存' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -212,8 +223,8 @@ onMounted(load)
 .badge-danger { color: var(--c-danger); }
 .badge-soft { color: var(--c-text-dim); background: rgba(139,148,158,.15); border-color: transparent; }
 
-.m-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 14px; }
-.m-acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+/* 标题行（.modal-head）/ 关闭按钮（.modal-close）/ 操作条（.modal-actions）统一取 main.css，
+   本页不再保留 .m-head / .m-acts 私有副本（与全站弹窗漂移） */
 .field { margin-bottom: 14px; }
 .field > label { display: block; font-size: 12.5px; color: var(--c-text-dim); margin-bottom: 6px; }
 .field input, .field select, .field textarea {

@@ -12,7 +12,13 @@
  */
 import { reactive } from 'vue'
 
-export type ToastKind = 'ok' | 'err' | 'info'
+/**
+ * 四态。**取值到此为止，不要再自造 kind**——每加一种就要给一种新配色/图标，
+ * 结果是同一个语义在不同页面长得不一样：
+ *   ok 成功（绿 · check）｜err 失败（红 · alert-circle）
+ *   warn 警告（黄 · alert）｜info 中性提示（主色 · info）
+ */
+export type ToastKind = 'ok' | 'err' | 'warn' | 'info'
 
 export interface ToastItem {
   id: number
@@ -20,8 +26,11 @@ export interface ToastItem {
   text: string
 }
 
-/** 自动消失时长（ms）。足够读完一句提示，又不至于赖着不走。 */
-const TTL = 3600
+/**
+ * 自动消失时长（ms）。按**需要阅读的信息量**分级，而不是一刀切：
+ * 失败要说清原因、用户倾向停下来读；成功只是确认，短一点更利落。
+ */
+const TTL: Record<ToastKind, number> = { ok: 3200, info: 3600, warn: 4500, err: 5000 }
 /** 同时最多显示几条；超出丢最旧。 */
 const MAX = 3
 
@@ -32,14 +41,14 @@ let seq = 0
  * 弹一条提示。
  *
  * @param text 文案（面向用户的完整句子，不带标点收尾也可）
- * @param kind 语义：ok（成功，绿）/ err（失败，红）/ info（中性提示，主色）
+ * @param kind 语义：ok 成功 / err 失败 / warn 警告 / info 中性提示
  * @returns 该条的 id，可用于提前 dismiss
  */
 export function toast(text: string, kind: ToastKind = 'ok'): number {
   const id = ++seq
   items.push({ id, kind, text })
   while (items.length > MAX) items.shift()
-  window.setTimeout(() => dismiss(id), TTL)
+  window.setTimeout(() => dismiss(id), TTL[kind])
   return id
 }
 
