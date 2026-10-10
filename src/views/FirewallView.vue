@@ -151,16 +151,20 @@ async function doDelete() {
       </section>
 
       <div class="card flush" v-if="rules.length">
-        <table>
-          <thead><tr><th>端口</th><th>协议</th><th>动作</th><th>方向</th><th>来源</th><th>备注</th><th>归属</th><th /></tr></thead>
+        <table class="fixed">
+          <!-- 列宽（站点表范式）：来源为唯一弹性列；方向列窄屏隐藏（.col-opt，恒为入站/出站枚举）。 -->
+          <colgroup>
+            <col class="w-fwport" /><col class="w-fwproto" /><col class="w-fwact" /><col class="w-fwdir" /><col class="w-fwsrc" /><col class="w-fwcmt" /><col class="w-fwown" /><col class="w-fwacts" />
+          </colgroup>
+          <thead><tr><th>端口</th><th>协议</th><th>动作</th><th class="col-opt">方向</th><th>来源</th><th>备注</th><th>归属</th><th /></tr></thead>
           <tbody>
             <tr v-for="r in rules" :key="r.id">
               <td class="mono">{{ r.ports }}</td>
               <td>{{ fwProtocolLabel(r.protocol) }}</td>
               <td><span class="badge" :class="r.action === 'allow' ? 'badge-ok' : 'badge-danger'">{{ fwActionLabel(r.action) }}</span></td>
-              <td>{{ r.direction === 'in' ? '入站' : '出站' }}</td>
+              <td class="col-opt">{{ r.direction === 'in' ? '入站' : '出站' }}</td>
               <td class="mono">{{ r.source ?? '任意' }}</td>
-              <td class="dim">{{ r.comment ?? '—' }}</td>
+              <td class="dim ellipsis" :title="r.comment ?? ''">{{ r.comment ?? '—' }}</td>
               <td class="nowrap">
                 <span v-if="r.panel_managed" class="badge badge-primary">面板管理</span>
                 <span v-else class="badge" title="面板不会删除用户自建规则">用户自建</span>
@@ -194,4 +198,13 @@ async function doDelete() {
 </template>
 
 <style scoped>
+/* 规则表列宽（站点表范式）：来源为唯一弹性列；操作列 100px 容下「删除」。 */
+col.w-fwport { width: 10%; }
+col.w-fwproto { width: 8%; }
+col.w-fwact { width: 8%; }
+col.w-fwdir { width: 7%; }
+col.w-fwsrc { width: auto; }
+col.w-fwcmt { width: 16%; }
+col.w-fwown { width: 11%; }
+col.w-fwacts { width: 100px; }
 </style>

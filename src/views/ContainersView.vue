@@ -310,15 +310,20 @@ function canStop(c: Container) { return c.state === 'running' }
 
       <!-- ── 镜像 ── -->
       <div class="card flush" v-else-if="images.length">
-        <table>
+        <table class="fixed">
+          <!-- 列宽与上方容器表同范式；前缀独立（w-i*），不与容器表 w-* 混用。
+               镜像 ID 列次要，窄屏隐藏（.col-opt）。 -->
+          <colgroup>
+            <col class="w-irepo" /><col class="w-itag" /><col class="w-iid" /><col class="w-isize" /><col class="w-itime" />
+          </colgroup>
           <thead>
-            <tr><th>仓库</th><th>标签</th><th>镜像 ID</th><th>体积</th><th>创建时间</th></tr>
+            <tr><th>仓库</th><th>标签</th><th class="col-opt">镜像 ID</th><th>体积</th><th>创建时间</th></tr>
           </thead>
           <tbody>
             <tr v-for="i in images" :key="i.id + i.tag">
-              <td class="mono">{{ i.repository }}</td>
+              <td class="mono ellipsis" :title="i.repository">{{ i.repository }}</td>
               <td><span class="badge" :class="i.tag === '<none>' ? 'badge-warn' : 'badge-primary'">{{ i.tag }}</span></td>
-              <td class="mono dim" :title="i.id">{{ shortId(i.id) }}</td>
+              <td class="mono dim col-opt" :title="i.id">{{ shortId(i.id) }}</td>
               <td>{{ i.size }}</td>
               <td class="dim">{{ i.created }}</td>
             </tr>
@@ -382,4 +387,10 @@ col.w-acts { width: 12%; }
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }
 .box { height: 260px; }
 @keyframes ct-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* 镜像表列宽（与上方容器表同范式；前缀 w-i* 避免与容器表 w-* 混用）。 */
+col.w-irepo { width: auto; }
+col.w-itag { width: 110px; }
+col.w-iid { width: 120px; }
+col.w-isize { width: 90px; }
+col.w-itime { width: 185px; }
 </style>

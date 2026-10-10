@@ -136,6 +136,11 @@ input, textarea, select {
   width: 100%;
   transition: border-color .14s ease, box-shadow .14s ease;
 }
+/* 原生勾选框 / 单选钮例外：不随 input{width:100%} 拉伸——否则在宽列里被拉成
+   38px 扁条（WAF 表实测）、在窄列里被压成 10px（文件表实测）。此前只在弹窗与
+   个别视图（SitesView .row-inline / AppsView 内联）局部复位，这里统一兜底；
+   .switch 自带的 width:0 规则在后方定义，特异性相同仍按其后续生效。 */
+input[type="checkbox"], input[type="radio"] { width: auto; }
 /* 占位符颜色统一（暗/亮主题对比一致）：浏览器默认 placeholder 在暗色下偏灰且
    各视图此前未显式控制，统一用次级文字色并强制 opacity:1（部分浏览器默认 0.54）。 */
 input::placeholder, textarea::placeholder, select::placeholder { color: var(--c-text-dim); opacity: 1; }
@@ -163,6 +168,9 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
 .btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-sm { padding: 4px 10px; font-size: 13px; border-radius: var(--radius-xs); }
 .btn-icon { padding: 7px; width: 34px; height: 34px; }
+/* 表格操作列：带 icon 与纯文字按钮混排时，inline-block 默认 baseline 对齐会让
+   两者 top 相差 3px（实测数据库表「浏览/SQL」与「备份/恢复」），统一 middle 消除。 */
+td button { vertical-align: middle; }
 /* 危险修饰（与既有 `.danger` 文字色工具类配合）：站点/容器/备份/证书等表内
    删除按钮通用——之前散在 CertsView 私有样式里，提成全局避免各页漂移。
    `.btn-ghost.danger` 维持透明底 + 红色文字；`.btn-primary.danger` 实心红底。 */

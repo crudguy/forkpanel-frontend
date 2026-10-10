@@ -188,14 +188,19 @@ function closeBrowse() { browse.value = null }
       </section>
 
       <div class="card flush" v-if="conns.length">
-        <table>
+        <table class="fixed">
+          <!-- 列宽同站点表范式：库/文件为唯一弹性列（width:auto）吸收余量；
+               操作列 270px 容下浏览/SQL/备份/恢复 4 个带文字按钮。 -->
+          <colgroup>
+            <col class="w-dbname" /><col class="w-dbeng" /><col class="w-dbhost" /><col class="w-dbdb" /><col class="w-dbcli" /><col class="w-dbacts" />
+          </colgroup>
           <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库 / 文件</th><th>客户端</th><th /></tr></thead>
           <tbody>
             <tr v-for="c in conns" :key="c.id">
-              <td>{{ c.name }}</td>
+              <td class="ellipsis" :title="c.name">{{ c.name }}</td>
               <td>{{ c.engine }}</td>
               <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
-              <td class="dim mono">{{ c.default_db ?? '—' }}</td>
+              <td class="dim mono ellipsis" :title="c.default_db ?? ''">{{ c.default_db ?? '—' }}</td>
               <td>
                 <!-- 该字段只代表「外部客户端有无安装」，不代表连接可达。
                      旧文案「可用」会让用户在绿色徽标下点备份然后失败，且无从归因。 -->
@@ -323,4 +328,12 @@ function closeBrowse() { browse.value = null }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 字段 / 操作条 / 后果预警一律取 main.css 的公共式样。
    此前这里私有复刻了 .restore-warn（硬编码 #FF5A36）、.modal-actions、.danger-btn（#C73E1F）。 */
+/* 连接表列宽（站点表范式）：库/文件为唯一弹性列；操作列 270px 容下
+   浏览 / SQL / 备份 / 恢复 4 个带文字按钮。 */
+col.w-dbname { width: 10%; }
+col.w-dbeng { width: 8%; }
+col.w-dbhost { width: 14%; }
+col.w-dbdb { width: auto; }
+col.w-dbcli { width: 11%; }
+col.w-dbacts { width: 270px; }
 </style>

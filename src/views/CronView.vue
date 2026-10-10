@@ -172,15 +172,19 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
       </section>
 
       <div class="card flush" v-if="jobs.length">
-        <table>
-          <thead><tr><th>名称</th><th>表达式</th><th>命令</th><th>用户</th><th>上次执行</th><th>下次预览</th><th /></tr></thead>
+        <table class="fixed">
+          <!-- 列宽：命令为唯一弹性列；用户列窄屏隐藏（.col-opt，多为 root/面板用户）。 -->
+          <colgroup>
+            <col class="w-cjid" /><col class="w-cjexpr" /><col class="w-cjcmd" /><col class="w-cjuser" /><col class="w-cjlast" /><col class="w-cjnext" /><col class="w-cjacts" />
+          </colgroup>
+          <thead><tr><th>名称</th><th>表达式</th><th>命令</th><th class="col-opt">用户</th><th>上次执行</th><th>下次预览</th><th /></tr></thead>
           <tbody>
             <tr v-for="j in jobs" :key="j.id">
-              <td>{{ j.id }}</td>
+              <td class="ellipsis" :title="j.id">{{ j.id }}</td>
               <td class="mono">{{ j.expr }}</td>
-              <td class="mono dim">{{ j.command }}</td>
-              <td>{{ j.user }}</td>
-              <td>{{ fmt(j.last_run_at) }}</td>
+              <td class="mono dim ellipsis" :title="j.command">{{ j.command }}</td>
+              <td class="col-opt">{{ j.user }}</td>
+              <td class="nowrap">{{ fmt(j.last_run_at) }}</td>
               <td class="dim">
                 <span v-for="(t, i) in j.next.slice(0, 2)" :key="i">{{ fmt(t) }}<br /></span>
               </td>
@@ -260,4 +264,13 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
 /* 实心主色底 + 白滑块、42×24：旧版 --c-primary-soft 浅色底开销/关都偏浅橙、对比弱。
    与 ServiceDetailView（开机自启）、SitesView（自动续期）保持同一套开关外观。 */
+/* 任务表列宽（站点表范式）：命令为唯一弹性列；操作列 220px 容下
+   执行 / 编辑 / 删除 3 个按钮（「提交中…」文案更宽）。 */
+col.w-cjid { width: 10%; }
+col.w-cjexpr { width: 12%; }
+col.w-cjcmd { width: auto; }
+col.w-cjuser { width: 8%; }
+col.w-cjlast { width: 15%; }
+col.w-cjnext { width: 15%; }
+col.w-cjacts { width: 220px; }
 </style>

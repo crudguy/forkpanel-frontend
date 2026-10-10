@@ -234,14 +234,18 @@ onMounted(async () => {
          故挂在锚点 #caps 上，topbar 系统信息胶囊一键直达。 -->
     <section id="caps" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
-      <table>
+      <table class="fixed">
+        <!-- 列宽：原因为唯一弹性列（ellipsis + title 悬停）。 -->
+        <colgroup>
+          <col class="w-capk" /><col class="w-capst" /><col class="w-capbk" /><col class="w-caprs" />
+        </colgroup>
         <thead><tr><th>能力</th><th>状态</th><th>后端</th><th>原因</th></tr></thead>
         <tbody>
           <tr v-for="[k, c] in caps" :key="k">
-            <td class="mono">{{ k }}</td>
+            <td class="mono ellipsis" :title="k">{{ k }}</td>
             <td><span class="badge" :class="c.supported ? 'badge-ok' : 'badge-danger'">{{ c.supported ? '可用' : '不可用' }}</span></td>
             <td class="dim">{{ c.backend ?? '—' }}</td>
-            <td class="dim">{{ c.reason ?? '—' }}</td>
+            <td class="dim ellipsis" :title="c.reason ?? ''">{{ c.reason ?? '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -266,11 +270,15 @@ onMounted(async () => {
       <p v-if="roleErr" class="err" role="alert">{{ roleErr }}</p>
 
       <div v-if="roles.length" class="card flush">
-        <table>
+        <table class="fixed">
+          <!-- 列宽：角色名为唯一弹性列；删除按钮列定宽 90px。 -->
+          <colgroup>
+            <col class="w-rlname" /><col class="w-rlperm" /><col class="w-rlsrc" /><col class="w-rlacts" />
+          </colgroup>
           <thead><tr><th>角色</th><th class="num">权限</th><th>来源</th><th /></tr></thead>
           <tbody>
             <tr v-for="r in roles" :key="r.name">
-              <td class="mono">{{ r.name }}</td>
+              <td class="mono ellipsis" :title="r.name">{{ r.name }}</td>
               <td class="num">
                 {{ r.permissions.length }} 项
                 <span v-if="!r.permissions.length" class="danger">（无法解析）</span>
@@ -340,4 +348,13 @@ onMounted(async () => {
 .kv-row > .k { width: 220px; flex: none; color: var(--c-text-dim); }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }
 .perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono); }
+/* 能力矩阵表列宽：原因为唯一弹性列；角色表列宽：角色名为唯一弹性列。 */
+col.w-capk { width: 26%; }
+col.w-capst { width: 90px; }
+col.w-capbk { width: 110px; }
+col.w-caprs { width: auto; }
+col.w-rlname { width: 26%; }
+col.w-rlperm { width: 120px; }
+col.w-rlsrc { width: 100px; }
+col.w-rlacts { width: 90px; }
 </style>

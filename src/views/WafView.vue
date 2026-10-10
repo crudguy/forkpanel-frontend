@@ -188,7 +188,11 @@ onMounted(load)
       desc="先在「网站」建站，再回来统一配置 WAF" />
 
     <div v-else-if="sites.length" class="card flush">
-      <table aria-label="站点 WAF 配置">
+      <table class="fixed" aria-label="站点 WAF 配置">
+        <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发桶列按控件实测宽（输入框 92px + 内边距）。 -->
+        <colgroup>
+          <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfacts" />
+        </colgroup>
         <thead>
           <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
           <tr>
@@ -198,8 +202,8 @@ onMounted(load)
         </thead>
         <tbody>
           <tr v-for="s in sites" :key="s.id">
-            <td>{{ s.name }}</td>
-            <td class="mono dim">{{ s.domains.join(', ') }}</td>
+            <td class="ellipsis" :title="s.name">{{ s.name }}</td>
+            <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
             <td class="col-opt">{{ kindLabel(s.kind) }}</td>
             <td>
               <!-- aria-label 给出「哪个站点的什么开关」：读屏只念 checkbox 无法定位 -->
@@ -253,4 +257,14 @@ onMounted(load)
 /* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类，
    不再私有重定义（审计 V1：WAF 页自造按钮样式曾与全局漂移）。 */
 .num { width: 92px; }
+/* 配置表列宽（站点表范式）：域名为唯一弹性列；控件列按实测控件宽定宽
+   （CC/突发桶输入框自身 92px + 单元格内边距 26px）。 */
+col.w-wfname { width: 10%; }
+col.w-wfdom { width: auto; }
+col.w-wfkind { width: 7%; }
+col.w-wfon { width: 64px; }
+col.w-wfprof { width: 104px; }
+col.w-wfrate { width: 120px; }
+col.w-wfburst { width: 120px; }
+col.w-wfacts { width: 130px; }
 </style>

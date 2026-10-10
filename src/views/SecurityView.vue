@@ -211,7 +211,11 @@ async function doDisable() {
 
       <section class="card">
         <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
-        <table v-if="sessions.length">
+        <table v-if="sessions.length" class="fixed">
+          <!-- 列宽（站点表范式）：用户为唯一弹性列；吊销按钮列定宽 100px。 -->
+          <colgroup>
+            <col class="w-suser" /><col class="w-srole" /><col class="w-sctime" /><col class="w-sidle" /><col class="w-sacts" />
+          </colgroup>
           <thead><tr><th>用户</th><th>角色</th><th>创建于</th><th>空闲</th><th /></tr></thead>
           <tbody>
             <tr v-for="s in sessions" :key="s.id">
@@ -338,4 +342,10 @@ async function doDisable() {
 .break { word-break: break-all; }
 /* 关闭 MFA 输入弹窗（与其他视图同形态）：遮罩 / 弹窗框 / 标题行 / 关闭按钮 /
    字段 / 操作条一律取 main.css 的公共式样（.muted 也是公共工具类，不再私抄） */
+/* 会话表列宽（站点表范式）：用户为唯一弹性列；吊销按钮列 100px。 */
+col.w-suser { width: auto; }
+col.w-srole { width: 100px; }
+col.w-sctime { width: 110px; }
+col.w-sidle { width: 80px; }
+col.w-sacts { width: 100px; }
 </style>

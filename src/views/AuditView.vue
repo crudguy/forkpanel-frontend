@@ -146,17 +146,21 @@ onMounted(load)
 
       <template v-else>
         <div class="card flush">
-          <table>
+          <table class="fixed">
+            <!-- 列宽：目标为唯一弹性列；时间/结果/箭头列定宽，避免 19 字符时间戳换行。 -->
+            <colgroup>
+              <col class="w-atime" /><col class="w-aactor" /><col class="w-aaction" /><col class="w-atarget" /><col class="w-aresult" /><col class="w-achev" />
+            </colgroup>
             <thead>
               <tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>结果</th><th /></tr>
             </thead>
             <tbody>
               <template v-for="(a, i) in rows" :key="a.id ?? i">
-                <tr class="row" @click="toggle(i)">
+                <tr class="data-row" @click="toggle(i)">
                   <td class="muted nowrap">{{ fmt(a.ts) }}</td>
-                  <td>{{ a.actor }}</td>
+                  <td class="ellipsis" :title="a.actor">{{ a.actor }}</td>
                   <td class="mono">{{ a.action }}</td>
-                  <td class="muted">{{ a.target || '—' }}</td>
+                  <td class="muted ellipsis" :title="a.target || ''">{{ a.target || '—' }}</td>
                   <td><span class="badge" :class="resClass(a.result)">{{ auditResultLabel(a.result) }}</span></td>
                   <td class="nowrap chev-cell">
                     <Icon name="chevron" :size="14" :class="{ rot: expanded === i }" />
@@ -213,10 +217,13 @@ onMounted(load)
 .filters input { flex: 1 1 150px; min-width: 130px; }
 .filters input[type=datetime-local] { flex: 0 1 170px; }
 
-/* 表格 */
-.row { cursor: pointer; }
-.row:hover { background: var(--c-hover, rgba(255,255,255,.04)); }
-.chev-cell { color: var(--c-text-dim); width: 1%; }
+/* 表格。⚠️ 行类名不得用 .row：main.css 的 .row 是表单行布局（display:flex），
+   会把 tr 变成 flex 容器——整行内容叠挤、不按列对齐（实测 trDisp=flex）。 */
+.data-row { cursor: pointer; }
+.data-row:hover { background: var(--c-hover, rgba(255,255,255,.04)); }
+/* chev 列宽由 colgroup（w-achev 40px）决定；此前 scoped 的 width:1% 叠加在
+   fixed 布局上把该列压到 26px，icon 溢出（scrollWidth 40 > clientWidth 26）。 */
+.chev-cell { color: var(--c-text-dim); }
 /* chevron 默认朝右；展开时转 90° 朝下（ICONS 无 chevron-down，复用同一个） */
 .rot { transform: rotate(90deg); transition: transform .15s ease; }
 .detail-row td { background: var(--c-surface-2, transparent); }
@@ -238,4 +245,11 @@ onMounted(load)
 .pager select {
   background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
   border-radius: var(--radius-sm); padding: 6px 9px; font-size: 13px; font-family: inherit; }
+/* 审计表列宽（站点表范式）：目标为唯一弹性列；时间/结果/箭头列定宽不换行。 */
+col.w-atime { width: 170px; }
+col.w-aactor { width: 11%; }
+col.w-aaction { width: 13%; }
+col.w-atarget { width: auto; }
+col.w-aresult { width: 90px; }
+col.w-achev { width: 40px; }
 </style>

@@ -373,10 +373,16 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
     </div>
 
     <div v-if="entries.length" class="card flush">
-      <table>
+      <table class="fixed">
+        <!-- 勾选列仅在可写时渲染，colgroup 须同步 v-if —— 否则列宽与列数错位。
+             名称为唯一弹性列；属主列窄屏隐藏（.col-opt）。名称超长时裁切 + title 悬停。 -->
+        <colgroup>
+          <col v-if="canWrite" class="w-fchk" />
+          <col class="w-fname" /><col class="w-fsize" /><col class="w-fmode" /><col class="w-fowner" /><col class="w-fmtime" /><col class="w-facts" />
+        </colgroup>
         <thead><tr>
           <th v-if="canWrite" class="chk"><input type="checkbox" aria-label="全选" :checked="allChecked" @change="allChecked = !allChecked" /></th>
-          <th>名称</th><th>大小</th><th>权限</th><th>属主</th><th>修改时间</th><th />
+          <th>名称</th><th>大小</th><th>权限</th><th class="col-opt">属主</th><th>修改时间</th><th />
         </tr></thead>
         <tbody>
           <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
@@ -384,7 +390,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
               <input v-if="!e.sensitive" type="checkbox" :aria-label="`选择 ${e.name}`"
                 :checked="selected.has(e.name)" @change="toggle(e)" />
             </td>
-            <td>
+            <td class="ellipsis" :title="e.name">
               <a href="#" class="fname" @click.prevent="enter(e)">
                 <Icon :name="e.kind === 'dir' ? 'folder' : 'file'" :size="15" />
                 {{ e.name }}
@@ -393,7 +399,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
             </td>
             <td class="num">{{ e.kind === 'dir' ? '—' : fmtSize(e.size) }}</td>
             <td class="num mono">{{ e.mode ?? '—' }}</td>
-            <td>{{ e.owner ?? '—' }}</td>
+            <td class="col-opt">{{ e.owner ?? '—' }}</td>
             <td class="num">{{ fmtDateTime(e.modified) }}</td>
             <td class="nowrap">
               <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="download(e)">下载</button>
@@ -475,4 +481,13 @@ tr.sens { background: var(--c-warn-bg); }
 /* 通用输入弹窗（与 DatabasesView 同形态） */
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 /* .modal-actions 已取 main.css 公共规则（此前本页另抄一份） */
+/* 文件表列宽（站点表范式）：名称为唯一弹性列；操作列 320px 容下
+   下载 / 编辑 / 重命名 / 权限 / 删除 5 个带文字按钮。 */
+col.w-fchk { width: 48px; }   /* 勾选框 13px + 默认 margin 7px + 单元格内边距 26px = 46px，留 2px 余量 */
+col.w-fname { width: auto; }
+col.w-fsize { width: 90px; }
+col.w-fmode { width: 100px; }
+col.w-fowner { width: 96px; }
+col.w-fmtime { width: 160px; }
+col.w-facts { width: 320px; }
 </style>
