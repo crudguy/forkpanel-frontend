@@ -188,7 +188,19 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
 .card.flush { padding: 0; overflow: auto; }
 
 /* ── 页面头部 / 工具条 ── */
-.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* 页头做成与主机监控页卡片（.card / MetricCard）同款的玻璃面板：
+   --c-glass + 背景模糊 + 边框 + 圆角 + 阴影，标题与工具栏同处一条带，
+   视觉上呼应顶栏与监控卡片，避免纯文字标题在内容区「悬空」。 */
+.page-head {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+  background: var(--c-glass);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
+}
 .page-sub { color: var(--c-text-dim); font-size: 13px; margin: 2px 0 0; }
 /* 页面级标题（图标 + 名称）：所有管理页顶部标题栏统一字号/字重/颜色，
    与顶栏 h1(17px/650) 协调但低半级。Sites/Waf/Certs 此前用卡片级 .sec-head(14px)

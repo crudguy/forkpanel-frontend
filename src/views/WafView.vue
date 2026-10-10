@@ -167,7 +167,7 @@ onMounted(load)
     <p v-if="error" class="err" role="alert">{{ error }}</p>
 
     <div class="page-head">
-      <h2 class="page-title"><Icon name="firewall" :size="18" /> 站点 WAF</h2>
+      <h2 class="page-title"><Icon name="firewall" :size="18" /> WAF</h2>
       <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
       <span v-if="blockedPending" class="dim tiny"
         :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
