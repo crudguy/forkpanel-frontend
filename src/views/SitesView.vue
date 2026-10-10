@@ -332,6 +332,8 @@ function openEdit(s: Site) {
   void probeRuntime()
   // 站点配置区：清残留 + 拉取当前站点的落盘配置（异步，不阻塞弹窗打开）。
   resetConf()
+  // 表单规格基线：保存时据此判断「本次是否改了影响配置的字段」（手动维护站点要弹二选一）。
+  confSpecBase.value = confSpecNow()
   void loadConf(s.id)
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
@@ -486,7 +488,6 @@ async function save() {
   busy.value = true; error.value = ''; formError.value = ''; fieldErrs.value = {}
   const name = form.value.name.trim()
   const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
-  const root = form.value.root.trim() || undefined
   try {
     // ── 前置校验：**逐字段收集**，而非抛出第一个就中断 ──
     // 好处有二：① 一次把所有问题都标出来，用户改一轮即可；② 每条都挂在**对应输入框旁**
@@ -545,52 +546,105 @@ async function save() {
       revealField(firstBad)      // 把第一个出错的字段（含其红字）滚进视野
       return
     }
-    // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
-    if (editing.value) {
-      // name 一并提交：后端 patch 自本次起支持改名（nginx 配置按域名派生、
-      // root 已是绝对路径、证书按 domain，改名都不影响，也不会重新下发配置）
-      await api.patch(API.sites.patch(editing.value.id), { name, domains, root, enabled: form.value.enabled })
-    } else {
-      await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
+    // 手动维护站点：apply 不会自动更新磁盘配置（后端整段跳过渲染/下发）。若本次动了
+    // 影响配置的字段（或站点此前已未同步），先弹二选一——默默跳过就是制造
+    // 「面板显示 A、nginx 实际 B」的静默分叉（as11 真实踩过，017 迁移为它而立）。
+    // ⚠ 判定源必须「实时 + 快照」双取：confManual / confStale 是配置区本次会话的
+    //   实时状态（loadConf、保存配置后即刻更新），editing.* 是打开弹窗时的列表快照。
+    //   曾只用快照：同一会话内先「保存配置」转手动、再改 WAF 保存，快照里 manual
+    //   仍是 false → 不弹二选一、静默入库（实测复现）——正是 017 要消灭的分叉。
+    if (
+      (confManual.value || editing.value?.manual_conf) &&
+      form.value.enabled &&
+      (confStale.value || editing.value?.conf_stale || confSpecChanged())
+    ) {
+      saveAsk.value = true
+      return
     }
-    // ② 下发。**停用态也照样调 apply**——它只落库不下发（与后端「停用守恒」一致），
-    //    但类型 / 反代后端 / php-fpm / WAF 只有 apply 才会写进库。
-    let msg: string
-    if (webSupported.value) {
-      const r = await deploy(name, domains)
-      msg = r && r.manual
-        // 手动维护站点：表单照常入库，但磁盘上的配置文件**刻意不覆盖**。
-        // 不能只说"已下发"（那是撒谎）——要说清"改了哪、没改哪、怎么恢复"。
-        ? `已保存站点 ${name}：该站点为「手动维护」——表单改动已入库，但配置文件未被覆盖（要按表单重新下发请用配置区的「恢复面板托管」）`
+    await commitSave(false)
+  } catch (e) {
+    mapSaveError(e)
+  } finally { busy.value = false }
+}
+
+/** 保存失败的统一落点（本次保存 + 二选一续跑共用同一套字段映射与抖动反馈）。 */
+function mapSaveError(e: unknown) {
+  // **能定位到字段就挂在字段旁**；定位不到（网络/服务端异常）才用通用错误条。
+  const fd = errorFieldDetail(e)
+  if (fd) {
+    const m = BACKEND_FIELD[fd.field]
+    if (m) {
+      fieldErrs.value = { [m.key]: fieldMsg(m.msg, fd.reason) }
+      revealField(m.key)
+    } else {
+      formError.value = fieldMsg('提交内容有误，请检查后重试', fd.reason)
+    }
+  } else if ((e as { code?: number } | null)?.code === 50001) {
+    // 50001 = 路径越界。本表单里唯一的路径输入就是根目录，落到它旁边。
+    fieldErrs.value = { root: errorText(e) }
+    revealField('root')
+  } else {
+    formError.value = errorText(e)
+  }
+  // 递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
+  errSeq.value++
+}
+
+/**
+ * 校验通过后的实际保存：patch/create 落库 + apply 下发。
+ *
+ * `regenerate=true` 仅对「手动维护」站点有意义：按当前表单重新渲染并覆盖手写配置
+ * （后端 regen_conf；覆盖前自动备份），站点恢复为面板托管、「未同步」解除。
+ * 「仅保存」（false）时后端保持文件不动——若与表单分叉，后端会标记为「未同步」。
+ */
+async function commitSave(regenerate: boolean) {
+  const name = form.value.name.trim()
+  const domains = form.value.domains.split(/[,\s]+/).filter(Boolean)
+  const root = form.value.root.trim() || undefined
+  // regen 只对手动维护站点传递（其余站点后端会忽略，但不发明无用参数）。
+  // ⚠ 与 save() 的弹窗判定同源：必须「实时（confManual）+ 快照（editing）」双取——
+  //   同一会话内刚「保存配置」转手动时列表快照还是旧值，只查快照会漏传 regen_conf，
+  //   用户点了「按表单重新生成」却实际不生成（静默失效）。
+  const regen = regenerate && (confManual.value || editing.value?.manual_conf === true)
+  // ① 数据模型。新建走 create（它能确立初始 enabled），编辑走 patch（它负责启停真同步）。
+  if (editing.value) {
+    // name 一并提交：后端 patch 自本次起支持改名（nginx 配置按域名派生、
+    // root 已是绝对路径、证书按 domain，改名都不影响，也不会重新下发配置）
+    await api.patch(API.sites.patch(editing.value.id), { name, domains, root, enabled: form.value.enabled })
+  } else {
+    await api.post(API.sites.create(), { name, domains, root, enabled: form.value.enabled })
+  }
+  // ② 下发。**停用态也照样调 apply**——它只落库不下发（与后端「停用守恒」一致），
+  //    但类型 / 反代后端 / php-fpm / WAF 只有 apply 才会写进库。
+  let msg: string
+  if (webSupported.value) {
+    const r = await deploy(name, domains, regen)
+    msg = r && r.regenerated
+      // 本次按表单重新生成：覆盖了手写配置（覆盖前已备份；备份失败也如实说）
+      ? `已保存站点 ${name}：已按表单重新生成配置并覆盖磁盘文件${r.backup ? '（原配置已自动备份）' : '（注意：原配置备份失败，审计日志已记录）'}`
+      : r && r.manual
+        // 手动维护 + 选了「仅保存」：表单照常入库，磁盘配置**刻意不动**。
+        // 只说"已保存"等于撒谎——要讲清"配置没改、以及怎么同步"。
+        ? `已保存站点 ${name}：该站点为「手动维护」——表单改动已入库，配置文件未覆盖（如需同步到配置，请用配置区「按表单重新生成」）`
         : r && r.deployed === false
           ? `已保存站点 ${name}：当前为停用状态，配置已登记但未下发`
           : `已保存站点 ${name} 并下发配置`
-    } else {
-      msg = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
-    }
-    // 成功提示走浮层 toast（脱离文档流）：写成页面级 notice 会把下方内容整体下推，
-    //   每次保存页面都抖一下，观感不稳——这正是本次改 toast 的原因。
-    closeModal(); await load(); toast(msg)
+  } else {
+    msg = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
+  }
+  // 成功提示走浮层 toast（脱离文档流）：写成页面级 notice 会把下方内容整体下推，
+  //   每次保存页面都抖一下，观感不稳——这正是本次改 toast 的原因。
+  closeModal(); await load(); toast(msg)
+}
+
+/** 二选一后继续保存（「按表单重新生成」与「仅保存」两个动作按钮的落点）。 */
+async function resumeSave(regenerate: boolean) {
+  saveAsk.value = false
+  busy.value = true
+  try {
+    await commitSave(regenerate)
   } catch (e) {
-    // 失败：**能定位到字段就挂在字段旁**；定位不到（网络/服务端异常）才用通用错误条。
-    const fd = errorFieldDetail(e)
-    if (fd) {
-      const m = BACKEND_FIELD[fd.field]
-      if (m) {
-        fieldErrs.value = { [m.key]: fieldMsg(m.msg, fd.reason) }
-        revealField(m.key)
-      } else {
-        formError.value = fieldMsg('提交内容有误，请检查后重试', fd.reason)
-      }
-    } else if ((e as { code?: number } | null)?.code === 50001) {
-      // 50001 = 路径越界。本表单里唯一的路径输入就是根目录，落到它旁边。
-      fieldErrs.value = { root: errorText(e) }
-      revealField('root')
-    } else {
-      formError.value = errorText(e)
-    }
-    // 递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
-    errSeq.value++
+    mapSaveError(e)
   } finally { busy.value = false }
 }
 
@@ -611,9 +665,11 @@ function kindTargets() {
  * 与列表行「重载」的区别：重载只是让 nginx 重读**磁盘上已有的**配置，不会重新渲染；
  * 改了域名 / 类型 / WAF 后必须走这里才会生效。
  */
-async function deploy(name: string, domains: string[]) {
-  // 响应里的 manual（= 站点处于「手动维护」，本次**未**重渲染/下发）供 save() 如实提示。
-  return api.post<{ deployed?: boolean; manual?: boolean }>(API.sites.apply(), {
+async function deploy(name: string, domains: string[], regenerate = false) {
+  // 响应字段供 commitSave 如实提示：
+  // - manual（本站点处于「手动维护」，本次**未**重渲染/下发）
+  // - regenerated/backup（本次选了「按表单重新生成」：已覆盖手写配置 + 备份路径，可 null）
+  return api.post<{ deployed?: boolean; manual?: boolean; regenerated?: boolean; backup?: string | null }>(API.sites.apply(), {
     name,
     domains,
     root: form.value.root.trim() || name,
@@ -622,6 +678,8 @@ async function deploy(name: string, domains: string[]) {
     // SPA 回退仅对 static 类型有意义：其余类型强制 false，避免误带入反代/重定向。
     spa: form.value.kind === 'static' ? !!form.value.spa : false,
     ...kindTargets(),
+    // 仅「手动维护 + 用户选了重新生成」才带：后端据此按本次表单覆盖手写配置
+    ...(regenerate ? { regen_conf: true } : {}),
     waf: wafPayload(),
   })
 }
@@ -765,11 +823,11 @@ async function doDeleteCert() {
   finally { busy.value = false }
 }
 
-// ── 站点原始配置（编辑弹窗内「站点配置（Nginx）」区）：查看 / 编辑 / 恢复面板托管 ──
+// ── 站点原始配置（编辑弹窗内「站点配置（Nginx）」区）：查看 / 编辑 / 按表单重新生成 ──
 //
 // 这份文件是「表单 → render → 校验 → 下发」的**产物**。手动维护（后端 manual_conf）
 // 让用户直接改这份产物成为一等状态：保存成功后表单「保存并应用」不再覆盖它，
-// 直到「恢复面板托管」按表单重新渲染覆盖（或停用/重新启用清零标记）。
+// 直到「按表单重新生成」按表单重新渲染覆盖（或停用/重新启用清零标记）。
 // 路径唯一来源是后端按落库 conf_path 的返回——前端**不拼路径**，后端也拒绝前端传路径。
 const confLoading = ref(false)
 /** 配置文件落盘路径；null = 尚未下发（停用态或从未 apply） */
@@ -785,8 +843,14 @@ const confManual = ref(false)
  */
 const confErr = ref('')
 const confBusy = ref(false)
-/** 「恢复面板托管」二次确认（覆盖手工内容不可撤销） */
+/** 「按表单重新生成」二次确认（覆盖手工内容；覆盖前自动备份，但仍不可逆） */
 const confAsk = ref(false)
+/** 未同步（后端 stale，017 迁移）：表单规格与磁盘配置不一致——面板所见 ≠ nginx 实际生效 */
+const confStale = ref(false)
+/** 保存二选一弹窗：手动维护站点 + 表单改动了影响配置的字段（或已未同步） */
+const saveAsk = ref(false)
+/** 表单规格基线（openEdit 时快照）：判断「本次编辑是否改了影响配置的字段」 */
+const confSpecBase = ref('')
 /** 原始配置编辑仅 owner 可保存（后端 403 同口径）；管理员可看不可写。 */
 const isOwner = computed(() => auth.me?.role === 'owner')
 
@@ -798,21 +862,78 @@ const confHint = computed(() => {
   return '保存到磁盘并重载（保存前自动 nginx -t 校验；失败不会动旧文件）'
 })
 
+/** 「按表单重新生成」的提示：与「保存配置」后果完全不同，不能共用 confHint。 */
+const regenHint = computed(() => {
+  if (!canManage.value) return '无 site.manage 权限'
+  if (!isOwner.value) return '仅 owner 可重新生成配置'
+  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  return '按当前表单重新渲染并覆盖磁盘上的这份配置：丢弃手工修改（覆盖前自动备份到服务器），站点恢复为面板托管'
+})
+
+/** 「保存手动维护的站点」二选一的说明文案（conf_stale 时点明现状）。 */
+const saveAskLead = computed(() => {
+  const n = editing.value?.name ?? '该站点'
+  const why = confSpecChanged()
+    ? '检测到表单中影响配置的字段有变更。'
+    : '该站点此前已处于「未同步」状态（表单与磁盘配置不一致）。'
+  return `「${n}」处于手动维护：「保存并应用」不会自动更新磁盘上的 Nginx 配置。${why}`
+    + '「按表单重新生成」会用当前表单覆盖配置（原手动配置先自动备份）；'
+    + '「仅保存」只把表单值入库、配置文件保持不变（站点会标记「未同步」）。'
+})
+
+/**
+ * 表单规格的本地指纹：仅用于 save() 判断「本次编辑是否改了影响配置的字段」，
+ * 决定手动维护站点保存前是否弹二选一。
+ *
+ * ⚠ 字段清单与后端 `deploy_fingerprint`（panel-api/routes/sites.rs）保持一致——
+ *   两边新增「影响 render 输出」的字段时必须同步加，否则该字段改动不触发保存时
+ *   弹窗（兜底：后端 conf_stale 仍会把它标成「未同步」，属事后提醒而非漏报）。
+ */
+function confSpecNow(): string {
+  return JSON.stringify([
+    form.value.name.trim(),
+    form.value.domains.trim(),
+    form.value.root.trim(),
+    form.value.kind,
+    !!form.value.spa,
+    form.value.upstreams.split(/[,\s]+/).filter(Boolean),
+    form.value.fpm.trim(),
+    form.value.redirectTarget.trim(),
+    form.value.redirectCode,
+    form.value.wafOn,
+    form.value.wafProfile,
+    form.value.wafRate,
+    form.value.wafBurst,
+    form.value.routes.map(rowToRoute),
+  ])
+}
+/** 本次编辑是否改了影响配置的字段（基线在 openEdit 快照；新建站点恒 false）。 */
+function confSpecChanged(): boolean {
+  return confSpecBase.value !== '' && confSpecNow() !== confSpecBase.value
+}
+
+// 保存二选一弹窗的通用弹窗行为（Esc / 焦点陷阱 / 离场动画）——与全站弹窗同规。
+const saveAskBox = ref<HTMLElement | null>(null)
+const { close: closeSaveAsk } = useModal(() => saveAsk.value, saveAskBox, () => { saveAsk.value = false })
+
 /** 清空本区块状态（重新打开编辑弹窗时调用，避免上一站点的内容/报错残留）。 */
 function resetConf() {
   confPath.value = null; confText.value = ''; confManual.value = false
   confErr.value = ''; confBusy.value = false; confAsk.value = false
+  confStale.value = false; saveAsk.value = false
 }
 
 /** 拉取当前站点配置（打开编辑弹窗时调用；失败落本区块错误位，不阻塞弹窗其它功能）。 */
 async function loadConf(id: number) {
   confLoading.value = true; confErr.value = ''
   try {
-    const d = await api.get<{ path: string | null; content: string | null; manual: boolean }>(
+    const d = await api.get<{ path: string | null; content: string | null; manual: boolean; stale: boolean }>(
       API.sites.conf(id))
     confPath.value = d.path ?? null
     confText.value = d.content ?? ''
     confManual.value = d.manual
+    // stale：表单规格 vs 磁盘配置的指纹不一致（后端 017）——面板所见 ≠ nginx 实际生效
+    confStale.value = d.stale
   } catch (e) {
     confErr.value = errorText(e)
   } finally { confLoading.value = false }
@@ -842,10 +963,12 @@ async function saveConf() {
   if (!confText.value.trim()) { confErr.value = '配置内容不能为空'; return }
   confBusy.value = true; confErr.value = ''
   try {
-    const d = await api.put<{ path: string; manual: boolean; reloaded: boolean }>(
+    const d = await api.put<{ path: string; manual: boolean; stale?: boolean; reloaded: boolean }>(
       API.sites.conf(editing.value.id), { content: confText.value })
     confPath.value = d?.path ?? confPath.value
     confManual.value = !!d?.manual
+    // 保存原文 = 文件与表单在当前时刻对齐（后端快照即当前指纹）→ 未同步解除
+    confStale.value = !!d?.stale
     toast('站点配置已保存并重载；此后表单「保存并应用」不再覆盖该文件')
     await load(true)
   } catch (e) {
@@ -854,14 +977,17 @@ async function saveConf() {
   } finally { confBusy.value = false }
 }
 
-/** 恢复面板托管：按表单规格重新渲染覆盖（丢弃手工内容），成功后重新拉取本区内容。 */
+/** 按表单重新生成：按表单规格重新渲染覆盖（丢弃手工内容，覆盖前自动备份），成功后重新拉取本区内容。 */
 async function restoreConf() {
   if (!editing.value || !canManage.value || !isOwner.value || !webSupported.value) return
   confAsk.value = false
   confBusy.value = true; confErr.value = ''
   try {
-    await api.post(API.sites.confRestore(editing.value.id), {})
-    toast('已恢复面板托管：配置按当前表单重新渲染并下发')
+    const d = await api.post<{ backup?: string | null }>(API.sites.confRestore(editing.value.id), {})
+    // 备份是安全网：有/无都要如实说（无 = 文件缺失或备份失败，审计日志已记录）
+    toast(d?.backup
+      ? '已按表单重新生成配置并下发（原手动配置已自动备份）'
+      : '已按表单重新生成配置并下发（注意：原配置备份失败，手工修改未留存副本）')
     const id = editing.value.id
     await loadConf(id)
     await load(true)
@@ -925,8 +1051,13 @@ async function restoreConf() {
             </td>
             <td>
               <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
-              <span v-if="s.manual_conf" class="badge badge-warn conf-badge"
-                title="站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「恢复面板托管」）">手动</span>
+              <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
+                   「面板所见 ≠ nginx 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
+              <span v-if="s.manual_conf" class="badge conf-badge" :class="s.conf_stale ? 'badge-danger' : 'badge-warn'"
+                :title="s.conf_stale
+                  ? '未同步：表单规格已变更，但磁盘配置没有跟着更新——面板显示 ≠ nginx 实际生效；编辑该站点可「按表单重新生成」同步'
+                  : '站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「按表单重新生成」）'">
+                {{ s.conf_stale ? '未同步' : '手动' }}</span>
             </td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
@@ -1178,7 +1309,7 @@ async function restoreConf() {
           </button>
         </div>
 
-        <!-- 站点原始配置：查看 / 编辑原文 / 恢复面板托管。
+        <!-- 站点原始配置：查看 / 编辑原文 / 按表单重新生成。
              这份文件是「表单 → render → 校验 → 下发」的**产物**；「手动维护」让直接改
              产物成为一等状态——保存后表单「保存并应用」不再覆盖它（后端 manual_conf）。
              路径由后端按落库 conf_path 给出：前端不拼路径，后端也不接受前端传路径。
@@ -1187,13 +1318,21 @@ async function restoreConf() {
           <div class="conf-head">
             <span class="conf-title">
               <Icon name="file" :size="14" /> 站点配置（Nginx）
-              <span v-if="confManual" class="badge badge-warn"
-                title="已手动接管：表单「保存并应用」不会覆盖磁盘上的这份配置；点「恢复面板托管」交还控制权">手动维护</span>
+              <span v-if="confManual" class="badge" :class="confStale ? 'badge-danger' : 'badge-warn'"
+                :title="confStale
+                  ? '表单规格已变更，但磁盘上的这份配置没有跟着更新——面板显示的将不是 nginx 实际生效的内容；点「按表单重新生成」同步'
+                  : '已手动接管：表单「保存并应用」不会覆盖磁盘上的这份配置；点「按表单重新生成」交还控制权'">
+                {{ confStale ? '未同步' : '手动维护' }}</span>
             </span>
             <span v-if="confLoading" class="dim tiny">读取中…</span>
             <span v-else class="mono dim tiny ellipsis conf-path"
               :title="confPath || '尚未下发：保存「并应用」后生成'">{{ confPath || '尚未下发' }}</span>
           </div>
+          <!-- 未同步警示（后端 017 指纹判定）：表单规格与磁盘配置分叉时，先说清现状再给操作 -->
+          <p v-if="confStale" class="hint-note is-warn conf-stale">
+            <Icon name="info" :size="14" class="ic" />
+            <span>表单中影响配置的字段（如 WAF／域名／根目录）已变更，磁盘上的这份配置<b>没有跟着更新</b>——当前面板显示的将不是 nginx 实际生效的内容。点「按表单重新生成」同步，或继续在此手动编辑原文件。</span>
+          </p>
           <p v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg" role="alert">{{ confErr }}</p>
           <textarea v-model="confText" class="mono conf-text" rows="10" spellcheck="false"
             :readonly="!canManage || !isOwner || !webSupported"
@@ -1202,14 +1341,14 @@ async function restoreConf() {
           <div class="conf-ops">
             <p class="hint-note conf-hint">
               <Icon name="info" :size="14" class="ic" />
-              <span v-if="confManual">保存原文将直接生效（先跑 nginx -t，失败不动旧文件）。<b>恢复面板托管</b>会丢弃你对这份配置的手工修改，按表单重新渲染。</span>
-              <span v-else>保存原文将<b>接管</b>这份配置：此后表单「保存并应用」不再覆盖它，直到「恢复面板托管」交还。</span>
+              <span v-if="confManual">保存原文将直接生效（先跑 nginx -t，失败不动旧文件）。<b>按表单重新生成</b>会丢弃你对这份配置的手工修改，按表单重新渲染（覆盖前自动备份）。</span>
+              <span v-else>保存原文将<b>接管</b>这份配置：此后表单「保存并应用」不再覆盖它，直到「按表单重新生成」交还。</span>
             </p>
             <div class="conf-btns">
               <button v-if="confManual" class="btn-ghost btn-sm"
                 :disabled="confBusy || !isOwner || !webSupported"
-                :title="confHint" @click="confAsk = true">
-                <Icon name="refresh" :size="13" /> 恢复面板托管
+                :title="regenHint" @click="confAsk = true">
+                <Icon name="refresh" :size="13" /> 按表单重新生成
               </button>
               <button class="btn-ghost btn-sm"
                 :disabled="confBusy || !canManage || !isOwner || !webSupported || !editing?.enabled"
@@ -1256,9 +1395,31 @@ async function restoreConf() {
       :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
       confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
 
-    <ConfirmDialog :open="confAsk" danger title="恢复面板托管"
-      :detail="editing ? `将按当前表单重新渲染「${editing.name}」的配置并覆盖磁盘上的现有文件——你对它做的全部手工修改都会丢失（不可撤销）。` : ''"
-      confirm-word="恢复" @confirm="restoreConf" @cancel="confAsk = false" />
+    <ConfirmDialog :open="confAsk" danger title="按表单重新生成"
+      :detail="editing ? `将按当前表单重新渲染「${editing.name}」的配置并覆盖磁盘上的现有文件——你对它做的全部手工修改都会丢失（覆盖前会自动备份到服务器，但请勿依赖它找回）。` : ''"
+      confirm-word="重新生成" @confirm="restoreConf" @cancel="confAsk = false" />
+
+    <!-- 保存二选一：手动维护站点 + 表单改了影响配置的字段（或已未同步）。
+         不弹这步 = 表单值静默入库而磁盘配置不动 → 面板与 nginx 分叉（as11 真实踩过）。
+         level-2：叠加在编辑弹窗之上（与目录选择器同级抬层）。 -->
+    <div v-if="saveAsk" class="mask level-2" @click.self="closeSaveAsk">
+      <div ref="saveAskBox" class="modal stack" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">保存手动维护的站点</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeSaveAsk">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="modal-lead">{{ saveAskLead }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="closeSaveAsk">取消</button>
+          <button class="btn-ghost" title="只把表单值入库；磁盘配置保持不变（随后会标记「未同步」）"
+            @click="resumeSave(false)">仅保存（不覆盖配置）</button>
+          <button class="btn-primary" title="按当前表单覆盖磁盘配置：先自动备份原配置，再重新渲染并重载"
+            @click="resumeSave(true)">按表单重新生成</button>
+        </div>
+      </div>
+    </div>
 
     <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
       @select="onPickRoot" @cancel="pickerOpen = false" />
@@ -1541,6 +1702,8 @@ sudo update-ca-certificates</pre>
 .conf-hint { margin: 0; flex: 1; min-width: 0; }
 .conf-btns { display: flex; gap: 6px; flex: none; margin-top: 2px; }
 .conf-badge { margin-left: 4px; }
+/* 未同步警示条：.conf 是 grid（gap 管间距），归零外边距防止双重留白 */
+.conf-stale { margin: 0; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
