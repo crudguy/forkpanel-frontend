@@ -151,8 +151,8 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}</p>
 
-    <div class="sec-head">
-      <Icon name="lock" :size="16" /> 站点证书
+    <div class="page-head">
+      <h2 class="page-title"><Icon name="lock" :size="18" /> 站点证书</h2>
       <span class="spacer" />
       <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
       <button class="btn-ghost" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">

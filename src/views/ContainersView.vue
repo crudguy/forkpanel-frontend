@@ -209,8 +209,9 @@ function canStop(c: Container) { return c.state === 'running' }
 <template>
   <div>
     <div class="page-head">
+      <h2 class="page-title"><Icon name="docker" :size="18" /> 容器</h2>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy || !supported" @click="load()">
+      <button class="btn-ghost" :disabled="busy || !supported" @click="load()">
         <Icon name="refresh" :size="15" /> 刷新
       </button>
     </div>

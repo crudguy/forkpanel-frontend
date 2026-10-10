@@ -275,8 +275,9 @@ function fmtTime(t: number | null) {
 <template>
   <div>
     <div class="page-head">
+      <h2 class="page-title"><Icon name="disk" :size="18" /> 备份</h2>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.BACKUP_MANAGE)"

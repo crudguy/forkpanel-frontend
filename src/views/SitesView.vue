@@ -755,8 +755,8 @@ async function doDeleteCert() {
          （与 ProcessesView 把工具条收进卡片顶栏同范式）。此前二者悬在页面级 page-head，
          与真正作用的列表隔了一层，页面顶部还为它们白占一行。
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
-    <div class="sec-head block">
-      <Icon name="globe" :size="16" /> 网站
+    <div class="page-head">
+      <h2 class="page-title"><Icon name="globe" :size="18" /> 网站</h2>
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
       <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">

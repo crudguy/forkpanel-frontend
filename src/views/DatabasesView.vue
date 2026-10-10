@@ -149,8 +149,9 @@ function closeBrowse() { browse.value = null }
 <template>
   <div>
     <div class="page-head">
+      <h2 class="page-title"><Icon name="database" :size="18" /> 数据库</h2>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.DBMS_MANAGE)"

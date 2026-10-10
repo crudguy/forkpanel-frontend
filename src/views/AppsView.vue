@@ -333,14 +333,13 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 <template>
   <div class="wrap">
     <div class="page-head">
-      <h2>应用</h2>
-      <div class="head-acts">
-        <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
-          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
-          @click="openCreate">
-          <Icon name="plus" :size="14" /> 新建应用
-        </button>
-      </div>
+      <h2 class="page-title">应用</h2>
+      <span class="spacer" />
+      <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
+        :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
+        @click="openCreate">
+        <Icon name="plus" :size="14" /> 新建应用
+      </button>
     </div>
 
     <p class="hint-note">

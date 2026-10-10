@@ -335,9 +335,8 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 <template>
   <div>
     <div class="page-head">
-      <div>
-        <p class="page-sub"><code class="cwd">{{ path }}</code></p>
-      </div>
+      <h2 class="page-title"><Icon name="folder" :size="18" /> 文件</h2>
+      <span class="page-sub"><code class="cwd">{{ path }}</code></span>
       <span class="spacer" />
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
