@@ -32,6 +32,7 @@ export const API = {
   system: {
     capabilities: () => '/api/v1/system/capabilities',
     overview: () => '/api/v1/system/overview',
+    users: () => '/api/v1/system/users',
   },
 
   metrics: {

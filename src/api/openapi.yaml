@@ -1198,6 +1198,17 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope', properties: { data: { $ref: '#/components/schemas/Overview' } } }
 
+  /api/v1/system/users:
+    get:
+      tags: [system]
+      summary: 枚举本机系统账户（运行用户下拉数据源）
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope', properties: { data: { type: array, items: { type: object, properties: { name: { type: string }, uid: { type: integer }, gid: { type: integer }, shell: { type: string }, login_allowed: { type: boolean } } } } } } }
+
   /api/v1/metrics/realtime:
     get:
       tags: [system]

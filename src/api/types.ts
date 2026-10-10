@@ -81,6 +81,9 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
  *  （换算在后端 kind_to_api/kind_to_db）。 */
 export const siteKindLabel = enumLabel({ static: '静态站点', proxy: '反向代理', php: 'PHP 站点', redirect: '整站重定向' })
 
+/** 站点 WAF 档位（落库值 basic / strict，对应 migrations/008_site_waf.sql）。 */
+export const wafProfileLabel = enumLabel({ basic: '基础', strict: '严格' })
+
 export interface Site {
   id: number
   name: string
