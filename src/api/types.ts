@@ -126,6 +126,38 @@ export interface Site {
    * （表单改过、文件没跟上，后端 017 迁移按指纹判定）。
    */
   conf_stale: boolean
+  /**
+   * 自定义配置片段（owner 维护，019）：插在主 server 块尾部（所有 location 之后），
+   * 随表单「保存并应用」重新渲染。null / 空 = 无。
+   * 与「手动维护」互补——片段属托管态（随保存重渲染），整文件手动维护则不被覆盖。
+   */
+  custom_conf: string | null
+}
+
+/** 配置历史版本（后端 GET /sites/{id}/conf/versions 列表项，最新在前） */
+export interface ConfVersion {
+  id: number
+  /** content 的 SHA-256 十六进制（去重与「当前版本」标记用） */
+  hash: string
+  /** 写入口：apply（表单下发）/ regen（按表单重新生成）/ manual（手动保存）/ rollback（回滚） */
+  source: string
+  /** 触发用户名（与审计日志同源） */
+  operator: string
+  created_at: number
+  /** 内容长度（字节） */
+  size: number
+  /** 内容是否与磁盘当前文件一致（文件缺失 / 未下发时全部 false） */
+  current: boolean
+}
+
+/** 单个历史版本正文（GET /sites/{id}/conf/versions/{vid}，回滚前预览） */
+export interface ConfVersionDetail {
+  id: number
+  content: string
+  hash: string
+  source: string
+  operator: string
+  created_at: number
 }
 
 /**

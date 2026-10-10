@@ -28,7 +28,7 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type ConfVersion, type ConfVersionDetail, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -231,6 +231,9 @@ function emptyForm() {
     // 缺兜底的路由表会被后端拒（漏掉的路径会落到别的站点去，用户无从预期）。
     routes: [newRoute('/', 'static')] as RouteRow[],
     wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
+    // 自定义配置片段（019）：插在主 server 块尾部（所有 location 之后），随保存并应用
+    // 重新渲染下发；仅 owner 可改（后端 403 + 64KiB 双护栏）。空串 = 不使用。
+    customConf: '',
   }
 }
 
@@ -323,6 +326,8 @@ function openEdit(s: Site) {
     wafProfile: s.waf_profile ?? 'basic',
     wafRate: s.waf_rate_per_sec ?? 0,
     wafBurst: s.waf_burst ?? 0,
+    // 自定义片段回填（019）：null / 缺失一律落空串，textarea 里就是干净的空白。
+    customConf: s.custom_conf ?? '',
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
   error.value = ''
@@ -450,6 +455,7 @@ const BACKEND_FIELD: Record<string, { key: string; msg: string }> = {
   'waf.profile': { key: 'wafProfile', msg: 'WAF 档位不合法' },
   'waf.rate_per_sec': { key: 'wafRate', msg: '限速取值不合法' },
   'waf.burst': { key: 'wafBurst', msg: '突发桶取值不合法' },
+  custom_conf: { key: 'customConf', msg: '自定义片段不合法' },
 }
 /** 后端 reason 是否已是给人看的中文——是则原样透出（更具体），否则用前端中文兜底。 */
 function fieldMsg(fallback: string, reason: string) {
@@ -537,6 +543,12 @@ async function save() {
           }
           if (!errs.routes && !seen.has('/')) errs.routes = '必须有一条前缀为 / 的兜底路由（否则漏掉的路径会落到别的站点）'
         }
+      }
+      // 自定义片段（019）：前端只挡「明知超限还提交」的必然失败；owner 判定与
+      // 64 KiB 的权威校验仍在后端（前端判断不等于后端校验）。非 owner 不发送该字段。
+      if (isOwner.value && form.value.customConf.trim()
+        && new TextEncoder().encode(form.value.customConf).length > 64 * 1024) {
+        errs.customConf = '自定义片段超过 64 KiB 上限（原始 nginx 文本按字节计）'
       }
     }
     const firstBad = Object.keys(errs)[0]
@@ -680,6 +692,9 @@ async function deploy(name: string, domains: string[], regenerate = false) {
     ...kindTargets(),
     // 仅「手动维护 + 用户选了重新生成」才带：后端据此按本次表单覆盖手写配置
     ...(regenerate ? { regen_conf: true } : {}),
+    // 自定义片段（019，仅 owner）：空串 = 清空、非空 = 覆盖；非 owner **不传**——
+    // 后端语义是「缺省 = 保留库中现值」（与 waf 同款），不传绝不误清 owner 的片段。
+    ...(isOwner.value ? { custom_conf: form.value.customConf } : {}),
     waf: wafPayload(),
   })
 }
@@ -905,6 +920,9 @@ function confSpecNow(): string {
     form.value.wafRate,
     form.value.wafBurst,
     form.value.routes.map(rowToRoute),
+    // 019：片段也是渲染输出的一部分（插在 server 块尾）——不进指纹的话，手动站点
+    // 只改片段后保存不会弹二选一、磁盘文件静默不动（后端 018 起指纹同款含它）。
+    form.value.customConf,
   ])
 }
 /** 本次编辑是否改了影响配置的字段（基线在 openEdit 快照；新建站点恒 false）。 */
@@ -921,6 +939,10 @@ function resetConf() {
   confPath.value = null; confText.value = ''; confManual.value = false
   confErr.value = ''; confBusy.value = false; confAsk.value = false
   confStale.value = false; saveAsk.value = false
+  // 版本面板同样归零：上一站点展开的列表/报错/详情不能残留到下一个站点
+  versOpen.value = false; versList.value = []; versErr.value = ''
+  versOpenId.value = null; versDetail.value = null
+  versLoading.value = false; rollbackTarget.value = null
 }
 
 /** 拉取当前站点配置（打开编辑弹窗时调用；失败落本区块错误位，不阻塞弹窗其它功能）。 */
@@ -971,6 +993,7 @@ async function saveConf() {
     confStale.value = !!d?.stale
     toast('站点配置已保存并重载；此后表单「保存并应用」不再覆盖该文件')
     await load(true)
+    if (versOpen.value) await loadVersions()  // 本次保存已留档新版本——展开的列表同步刷新
   } catch (e) {
     confErr.value = confErrText(e)
     errSeq.value++  // 重建错误条，抖动动画可重播（与表单错误同一机制）
@@ -991,8 +1014,110 @@ async function restoreConf() {
     const id = editing.value.id
     await loadConf(id)
     await load(true)
+    if (versOpen.value) await loadVersions()  // 重新生成同样在版本链留档
   } catch (e) {
     confErr.value = confErrText(e)
+    errSeq.value++
+  } finally { confBusy.value = false }
+}
+
+// ── 配置历史版本与回滚（018 迁移）──
+//
+// 每次成功写盘——保存并应用（apply）、按表单重新生成（regen）、手动保存（manual）、
+// 回滚（rollback）——都会把「当时落盘的内容」留档（每站保留最近 20 版，同内容去重）。
+// 回滚 = nginx -t 校验 → 现场留档 → 原子替换 → reload → 按「版本指纹 vs 当前表单
+// 指纹」自动定态（一致 ⇒ 面板托管；否则转手动维护）。属 root 级写入面，仅 owner。
+
+/** 版本面板是否展开（懒加载：首次展开才拉列表——不进弹窗就不发请求） */
+const versOpen = ref(false)
+const versLoading = ref(false)
+/** 版本列表的独立错误位：加载/回滚失败只染红这一块，不该泼到整个配置区 */
+const versErr = ref('')
+const versList = ref<ConfVersion[]>([])
+/** 正在展开查看正文的版本 id（null = 全部收起） */
+const versOpenId = ref<number | null>(null)
+const versDetailLoading = ref(false)
+const versDetail = ref<ConfVersionDetail | null>(null)
+/** 回滚二次确认的目标版本（ConfirmDialog 的 open 判据） */
+const rollbackTarget = ref<ConfVersion | null>(null)
+
+/** 版本来源 → 中文名（键 = 后端落库值 source，勿写成展示口径）。 */
+function versSourceLabel(s: string) {
+  if (s === 'apply') return '保存并应用'
+  if (s === 'regen') return '重新生成'
+  if (s === 'manual') return '手动保存'
+  if (s === 'rollback') return '回滚'
+  return s
+}
+
+/** 字节数的紧凑展示（版本行空间小，不做 KB/MB 自适应堆叠）。 */
+function fmtBytes(n: number): string {
+  return n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`
+}
+
+async function toggleVersions() {
+  versOpen.value = !versOpen.value
+  if (versOpen.value && !versList.value.length && !versLoading.value) await loadVersions()
+}
+
+async function loadVersions() {
+  if (!editing.value) return
+  versLoading.value = true; versErr.value = ''
+  try {
+    const d = await api.get<{ items: ConfVersion[] }>(API.sites.confVersions(editing.value.id))
+    versList.value = d.items ?? []
+  } catch (e) {
+    versErr.value = confErrText(e)
+  } finally { versLoading.value = false }
+}
+
+/** 展开 / 收起某版本正文（按需单取——列表不一次拉 20 份全文）。 */
+async function toggleVersDetail(v: ConfVersion) {
+  if (!editing.value) return
+  if (versOpenId.value === v.id) { versOpenId.value = null; return }
+  versOpenId.value = v.id
+  versDetail.value = null
+  versDetailLoading.value = true; versErr.value = ''
+  try {
+    versDetail.value = await api.get<ConfVersionDetail>(API.sites.confVersion(editing.value.id, v.id))
+  } catch (e) {
+    versErr.value = confErrText(e)
+    versOpenId.value = null
+  } finally { versDetailLoading.value = false }
+}
+
+/** 回滚按钮的禁用原因（tooltip）；可执行时讲清动作与后果。 */
+function rollbackHint(v: ConfVersion): string {
+  if (!canManage.value) return '无 site.manage 权限'
+  if (!isOwner.value) return '仅 owner 可回滚配置（原始 nginx 文本属 root 级写入面）'
+  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  if (!editing.value?.enabled) return '站点已停用（配置已移除）；请先启用并保存后再回滚'
+  if (v.current) return '该版本与磁盘上的当前文件一致，无需回滚'
+  return `回滚到 ${fmtDateTime(v.created_at)} 的这版（${versSourceLabel(v.source)}）：先 nginx -t 校验，替换前把当前文件留档进版本链（可再次回滚找回），然后重载生效`
+}
+
+/** 回滚（二次确认后执行）：成功后整区重取——磁盘内容、手动/未同步态、版本列表。 */
+async function doRollback() {
+  if (!editing.value || !rollbackTarget.value) return
+  if (!canManage.value || !isOwner.value || !webSupported.value) return
+  const id = editing.value.id
+  const vid = rollbackTarget.value.id
+  rollbackTarget.value = null
+  confBusy.value = true; confErr.value = ''; versErr.value = ''
+  try {
+    const d = await api.post<{ path: string; manual: boolean; stale: boolean; reloaded: boolean }>(
+      API.sites.confRollback(id), { version_id: vid })
+    confPath.value = d?.path ?? confPath.value
+    confManual.value = !!d?.manual
+    confStale.value = !!d?.stale
+    toast(d?.manual
+      ? '已回滚到所选版本并重载；内容与当前表单不一致，站点转入「手动维护」（表单再变更会标「未同步」）'
+      : '已回滚到所选版本并重载；站点保持面板托管')
+    await loadConf(id)
+    await loadVersions()
+    await load(true)
+  } catch (e) {
+    versErr.value = confErrText(e)
     errSeq.value++
   } finally { confBusy.value = false }
 }
@@ -1275,6 +1400,26 @@ async function restoreConf() {
           </template>
         </div>
 
+        <!-- 自定义配置片段（019）：原始 nginx 文本，插在主 server 块尾部（所有
+             location 之后）。属**托管态**——随「保存并应用」重新渲染下发（与
+             「手动维护」互补：那个是整文件被接管、这个是被渲染进去的片段）。
+             仅 owner 可改（写坏≈root 级事故，后端 403 / 64KiB 双护栏），其他人只读。 -->
+        <div class="cc">
+          <div class="cc-head">
+            <span class="cc-title"><Icon name="edit" :size="14" /> 自定义配置片段</span>
+            <span v-if="!isOwner" class="dim tiny">仅 owner 可编辑</span>
+          </div>
+          <textarea v-model="form.customConf" class="mono cc-text" rows="5" spellcheck="false"
+            :readonly="!canManage || !isOwner" :disabled="!webSupported"
+            :aria-invalid="!!fieldErrs.customConf" data-f="customConf"
+            placeholder="例如：location /static/ { expires 7d; }"></textarea>
+          <span v-if="fieldErrs.customConf" :key="'cc' + errSeq" class="field-err">{{ fieldErrs.customConf }}</span>
+          <p class="hint-note cc-note">
+            <Icon name="info" :size="14" class="ic" />
+            <span>插入在 server 块<b>尾部</b>（所有 location 之后），随「保存并应用」重新渲染下发；下发前经 nginx -t 校验——写错不会上线。留空 = 不使用。</span>
+          </p>
+        </div>
+
         <!-- SSL 证书：站点配置的一部分，与站点同处一个编辑弹窗
              （此前是页面下方独立的「证书」区块——与应用站点配置同理，单独成块既多余、
               又让「该站点的证书」与「编辑该站点」割裂在两处；现在合并进来，
@@ -1357,6 +1502,39 @@ async function restoreConf() {
               </button>
             </div>
           </div>
+          <!-- 历史版本与回滚（018）：每次成功写盘（保存并应用 / 重新生成 / 手动保存 /
+               回滚）都会留档，每站保留最近 20 版。懒加载：展开才拉列表；正文按需单取。 -->
+          <div class="vers">
+            <button class="btn-ghost btn-sm vers-toggle" @click="toggleVersions">
+              <Icon name="clock" :size="13" />
+              {{ versOpen ? '收起历史版本' : '历史版本与回滚' }}
+            </button>
+            <div v-if="versOpen" class="vers-panel">
+              <p v-if="versLoading" class="dim tiny">加载中…</p>
+              <p v-else-if="versErr" :key="'ve' + errSeq" class="err-bar conf-msg" role="alert">{{ versErr }}</p>
+              <p v-else-if="!versList.length" class="dim tiny">暂无历史版本：每次「保存并应用」、重新生成、手动保存与回滚都会在此留档（每站保留最近 20 版）。</p>
+              <template v-else>
+                <div v-for="v in versList" :key="v.id" class="vers-row">
+                  <div class="vers-meta">
+                    <span class="vers-src">{{ versSourceLabel(v.source) }}</span>
+                    <span class="dim tiny vers-when">{{ fmtDateTime(v.created_at) }} · {{ v.operator }} · {{ fmtBytes(v.size) }}</span>
+                    <span v-if="v.current" class="badge badge-ok vers-cur" title="该版本与磁盘上的当前文件一致">当前</span>
+                  </div>
+                  <div class="vers-ops">
+                    <button class="btn-ghost btn-sm" @click="toggleVersDetail(v)">
+                      {{ versOpenId === v.id ? '收起' : '查看' }}
+                    </button>
+                    <button class="btn-ghost btn-sm"
+                      :disabled="confBusy || !isOwner || !webSupported || !editing?.enabled || v.current"
+                      :title="rollbackHint(v)" @click="rollbackTarget = v">
+                      <Icon name="restart" :size="13" /> 回滚
+                    </button>
+                  </div>
+                  <pre v-if="versOpenId === v.id" class="vers-content mono">{{ versDetailLoading ? '加载中…' : (versDetail?.content ?? '') }}</pre>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
 
         <label class="blk row-inline">
@@ -1398,6 +1576,12 @@ async function restoreConf() {
     <ConfirmDialog :open="confAsk" danger title="按表单重新生成"
       :detail="editing ? `将按当前表单重新渲染「${editing.name}」的配置并覆盖磁盘上的现有文件——你对它做的全部手工修改都会丢失（覆盖前会自动备份到服务器，但请勿依赖它找回）。` : ''"
       confirm-word="重新生成" @confirm="restoreConf" @cancel="confAsk = false" />
+
+    <!-- 回滚二次确认（018）：替换前会把当前文件留档进版本链（可再回滚找回），
+         但为避免误点仍要求输入确认词。 -->
+    <ConfirmDialog :open="!!rollbackTarget" danger title="回滚配置版本"
+      :detail="rollbackTarget ? `将把「${editing?.name ?? ''}」的磁盘配置替换为 ${fmtDateTime(rollbackTarget.created_at)} 留档的版本（${versSourceLabel(rollbackTarget.source)}）。替换前先把当前文件留档进版本链（可再次回滚找回），随后执行 nginx -t 校验并重载。` : ''"
+      confirm-word="回滚" @confirm="doRollback" @cancel="rollbackTarget = null" />
 
     <!-- 保存二选一：手动维护站点 + 表单改了影响配置的字段（或已未同步）。
          不弹这步 = 表单值静默入库而磁盘配置不动 → 面板与 nginx 分叉（as11 真实踩过）。
@@ -1637,6 +1821,7 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .modal-head { grid-column: 1 / -1; }
 .modal.wide.site-modal > .blk.full,
 .modal.wide.site-modal > .waf,
+.modal.wide.site-modal > .cc,
 .modal.wide.site-modal > .ssl,
 .modal.wide.site-modal > .conf,
 .modal.wide.site-modal > .hint-note,
@@ -1704,6 +1889,32 @@ sudo update-ca-certificates</pre>
 .conf-badge { margin-left: 4px; }
 /* 未同步警示条：.conf 是 grid（gap 管间距），归零外边距防止双重留白 */
 .conf-stale { margin: 0; }
+
+/* 自定义配置片段（019）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
+   原文用等宽字体；只读态（非 owner）仍可选中复制。 */
+.cc { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
+.cc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cc-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
+.cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: 12px; line-height: 1.55; }
+.cc-note { margin: 6px 0 0; }
+
+/* 历史版本与回滚（018）：列表行 = 元信息 + 操作两列；正文展开为 pre-wrap 等宽块，
+   展开行整幅跨列（不挤在 auto 列里）。 */
+.vers { display: flex; flex-direction: column; gap: 8px; }
+.vers-toggle { align-self: flex-start; }
+.vers-panel { display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--c-border); border-radius: 8px; padding: 4px 10px 8px; background: var(--c-hover); }
+.vers-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+  padding: 5px 0; border-bottom: 1px dashed var(--c-border); }
+.vers-row:last-child { border-bottom: 0; }
+.vers-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vers-src { flex: none; font-size: 12.5px; color: var(--c-text); }
+.vers-when { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vers-cur { flex: none; }
+.vers-ops { display: flex; gap: 4px; flex: none; }
+.vers-content { grid-column: 1 / -1; margin: 4px 0 2px; padding: 8px 10px; max-height: 240px; overflow: auto;
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 6px;
+  font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。

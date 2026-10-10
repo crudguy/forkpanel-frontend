@@ -104,6 +104,12 @@ export const API = {
     conf: (id: number) => `/api/v1/sites/${id}/conf`,
     /** 恢复面板托管（丢弃手工修改，按表单重新渲染下发；仅 owner） */
     confRestore: (id: number) => `/api/v1/sites/${id}/conf/restore`,
+    /** 配置历史版本列表（最新在前，每站保留 20 版） */
+    confVersions: (id: number) => `/api/v1/sites/${id}/conf/versions`,
+    /** 单个历史版本正文（回滚前预览） */
+    confVersion: (id: number, vid: number) => `/api/v1/sites/${id}/conf/versions/${vid}`,
+    /** 回滚到指定历史版本（nginx -t 校验 → 留档 → 落盘 + reload；仅 owner） */
+    confRollback: (id: number) => `/api/v1/sites/${id}/conf/rollback`,
     logs: (id: number) => `/api/v1/sites/${id}/logs`,
     sslApply: (id: number) => `/api/v1/sites/${id}/ssl/apply`,
   },
