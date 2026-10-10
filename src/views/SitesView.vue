@@ -852,12 +852,14 @@ async function doDeleteCert() {
           <span>未接入 Web 服务器（nginx）：<b>只能保存站点登记信息，无法下发配置</b>；
             下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
         </div>
-        <label class="blk" :class="{ 'has-err': fieldErrs.name }" data-f="name">名称
+        <label class="blk" :class="{ 'has-err': fieldErrs.name }" data-f="name"
+          title="站点标识，用作配置文件名与默认目录；仅小写字母、数字、连字符（如 my-site）">名称
           <input v-model="form.name" placeholder="my-site" :aria-invalid="!!fieldErrs.name"
             @input="clearFieldErr('name')" />
           <span v-if="fieldErrs.name" :key="'name' + errSeq" class="field-err">{{ fieldErrs.name }}</span>
         </label>
-        <label class="blk">类型
+        <label class="blk"
+          title="单路由=整站一种处理方式；多路由=按 URL 前缀分派到不同后端或目录">类型
           <select v-model="form.kind" :disabled="!webSupported">
             <option value="static">静态</option>
             <option value="proxy">反向代理 / 负载均衡</option>
@@ -866,12 +868,14 @@ async function doDeleteCert() {
             <option value="routed">多路由（按前缀分派）</option>
           </select>
         </label>
-        <label class="blk full" :class="{ 'has-err': fieldErrs.domains }" data-f="domains">域名（逗号分隔）
+        <label class="blk full" :class="{ 'has-err': fieldErrs.domains }" data-f="domains"
+          title="可填多个，逗号分隔；须解析到本机 IP，否则 HTTPS 证书申请可能失败">域名（逗号分隔）
           <input v-model="form.domains" placeholder="example.com, www.example.com"
             :aria-invalid="!!fieldErrs.domains" @input="clearFieldErr('domains')" />
           <span v-if="fieldErrs.domains" :key="'domains' + errSeq" class="field-err">{{ fieldErrs.domains }}</span>
         </label>
-        <label class="blk full" :class="{ 'has-err': fieldErrs.root }" data-f="root">根目录（留空用站点名，须落在站点根目录内）
+        <label class="blk full" :class="{ 'has-err': fieldErrs.root }" data-f="root"
+          title="站点文件的物理目录；留空则用站点名，且必须位于站点根目录内（防路径穿越）">根目录（留空用站点名，须落在站点根目录内）
           <div class="dir-row">
             <input v-model="form.root" placeholder="留空则用站点名" :aria-invalid="!!fieldErrs.root"
               @input="clearFieldErr('root')" />
@@ -899,12 +903,14 @@ async function doDeleteCert() {
             curTpl.runtimePkg }}{{ tplRuntimeMissing ? ' 未装，可到「软件」页装' : ' 已装' }}</b></template>。
             模板只预填反代目标，<b>不会创建应用进程</b>——进程请到「服务」页托管（systemd），或用「容器」页跑 Docker。</span>
         </p>
-        <label v-if="form.kind === 'proxy'" class="blk full" :class="{ 'has-err': fieldErrs.upstreams }" data-f="upstreams">后端（逗号分隔）
+        <label v-if="form.kind === 'proxy'" class="blk full" :class="{ 'has-err': fieldErrs.upstreams }" data-f="upstreams"
+          title="上游服务地址，逗号分隔可负载均衡；格式 http://127.0.0.1:3000">后端（逗号分隔）
           <input v-model="form.upstreams" :disabled="!webSupported" :aria-invalid="!!fieldErrs.upstreams"
             placeholder="http://127.0.0.1:3000, http://127.0.0.1:3001" @input="clearFieldErr('upstreams')" />
           <span v-if="fieldErrs.upstreams" :key="'upstreams' + errSeq" class="field-err">{{ fieldErrs.upstreams }}</span>
         </label>
-        <label v-if="form.kind === 'php'" class="blk full" :class="{ 'has-err': fieldErrs.fpm }" data-f="fpm">php-fpm
+        <label v-if="form.kind === 'php'" class="blk full" :class="{ 'has-err': fieldErrs.fpm }" data-f="fpm"
+          title="PHP-FPM 监听地址；unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000">php-fpm
           <input v-model="form.fpm" :disabled="!webSupported" :aria-invalid="!!fieldErrs.fpm"
             placeholder="unix:/run/php/php8.2-fpm.sock 或 127.0.0.1:9000" @input="clearFieldErr('fpm')" />
           <span v-if="fieldErrs.fpm" :key="'fpm' + errSeq" class="field-err">{{ fieldErrs.fpm }}</span>
@@ -912,19 +918,22 @@ async function doDeleteCert() {
         <!-- SPA history 路由回退：仅 static 类型有意义。开启后 nginx 用
              `try_files $uri $uri/ /index.html` 兜底，配合前端 history 模式单页应用。
              对反代 / PHP / 重定向类型无意义，故仅 static 时显示。 -->
-        <label v-if="form.kind === 'static'" class="blk row-inline">
+        <label v-if="form.kind === 'static'" class="blk row-inline"
+          title="开启后未命中文件回退到 /index.html，适用于 Vue/React 等 history 模式单页应用">
           <input type="checkbox" v-model="form.spa" :disabled="!webSupported" />
           <span>SPA 回退（history 路由兜底到 index.html）</span>
         </label>
         <!-- 整站重定向：仅 redirect 类型有意义。目标须 http(s):// 开头（后端校验），
              状态码限 301/302/307/308；$request_uri 自动追加，无需手填路径。 -->
         <template v-if="form.kind === 'redirect'">
-          <label class="blk full" :class="{ 'has-err': fieldErrs.redirectTarget }" data-f="redirectTarget">重定向目标 URL
+          <label class="blk full" :class="{ 'has-err': fieldErrs.redirectTarget }" data-f="redirectTarget"
+            title="访问该站点时跳转到的目标 URL，须以 http(s):// 开头">重定向目标 URL
             <input v-model="form.redirectTarget" :disabled="!webSupported" :aria-invalid="!!fieldErrs.redirectTarget"
               placeholder="https://example.com" @input="clearFieldErr('redirectTarget')" />
             <span v-if="fieldErrs.redirectTarget" :key="'rt' + errSeq" class="field-err">{{ fieldErrs.redirectTarget }}</span>
           </label>
-          <label class="blk" :class="{ 'has-err': fieldErrs.redirectCode }" data-f="redirectCode">状态码
+          <label class="blk" :class="{ 'has-err': fieldErrs.redirectCode }" data-f="redirectCode"
+            title="301/308 永久（可被缓存）；302/307 临时（保留请求方法）">状态码
             <select v-model.number="form.redirectCode" :disabled="!webSupported" @change="clearFieldErr('redirectCode')">
               <option :value="301">301 永久</option>
               <option :value="302">302 临时</option>
@@ -992,14 +1001,16 @@ async function doDeleteCert() {
             <input type="checkbox" v-model="form.wafOn" :disabled="!webSupported" /> 启用 WAF
           </label>
           <template v-if="form.wafOn">
-            <label :class="{ 'has-err': fieldErrs.wafProfile }" data-f="wafProfile">档位
+            <label :class="{ 'has-err': fieldErrs.wafProfile }" data-f="wafProfile"
+              title="内置规则集档位：基础覆盖常见注入/穿越；严格额外拦截空 UA 与非常见方法（误杀率更高）">档位
               <select v-model="form.wafProfile" :disabled="!webSupported" @change="clearFieldErr('wafProfile')">
                 <option value="basic">基础（SQLi / XSS / 穿越 / 敏感文件 / 恶意 UA）</option>
                 <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
               </select>
               <span v-if="fieldErrs.wafProfile" :key="'wp' + errSeq" class="field-err">{{ fieldErrs.wafProfile }}</span>
             </label>
-            <label :class="{ 'has-err': fieldErrs.wafRate }" data-f="wafRate">CC 限速（次/秒，0 = 不限）
+            <label :class="{ 'has-err': fieldErrs.wafRate }" data-f="wafRate"
+              title="单客户端每秒最大请求数；0 = 不限速">CC 限速（次/秒，0 = 不限）
               <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported"
                 :aria-invalid="!!fieldErrs.wafRate" @input="clearFieldErr('wafRate')" />
               <span v-if="fieldErrs.wafRate" :key="'wr' + errSeq" class="field-err">{{ fieldErrs.wafRate }}</span>
