@@ -100,6 +100,10 @@ export const API = {
     patch: (id: number) => `/api/v1/sites/${id}`,
     remove: (id: number) => `/api/v1/sites/${id}`,
     reload: (id: number) => `/api/v1/sites/${id}/reload`,
+    /** 站点原始配置：GET 读 / PUT 存（写入即转「手动维护」，仅 owner 可写） */
+    conf: (id: number) => `/api/v1/sites/${id}/conf`,
+    /** 恢复面板托管（丢弃手工修改，按表单重新渲染下发；仅 owner） */
+    confRestore: (id: number) => `/api/v1/sites/${id}/conf/restore`,
     logs: (id: number) => `/api/v1/sites/${id}/logs`,
     sslApply: (id: number) => `/api/v1/sites/${id}/ssl/apply`,
   },

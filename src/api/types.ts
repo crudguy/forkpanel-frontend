@@ -114,6 +114,12 @@ export interface Site {
   redirect_code: number | null
   /** 多路由表（kind=routed 时非空）。⚠ 后端保证非 routed 时为 `[]` 而非 null */
   routes: SiteRoute[]
+  /**
+   * 手动维护：true = 磁盘上的配置文件由用户**原始编辑**接管，表单「保存并应用」
+   * 不再覆盖它（后端 apply 跳过渲染/下发，仅照常更新库内其它字段）。
+   * 可经编辑弹窗的「恢复面板托管」清零；停用 / 重新启用也会清零。
+   */
+  manual_conf: boolean
 }
 
 /**

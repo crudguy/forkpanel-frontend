@@ -330,6 +330,9 @@ function openEdit(s: Site) {
   resetTemplate()
   detectTemplateFromUpstreams()
   void probeRuntime()
+  // 站点配置区：清残留 + 拉取当前站点的落盘配置（异步，不阻塞弹窗打开）。
+  resetConf()
+  void loadConf(s.id)
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
 }
@@ -555,9 +558,13 @@ async function save() {
     let msg: string
     if (webSupported.value) {
       const r = await deploy(name, domains)
-      msg = r && r.deployed === false
-        ? `已保存站点 ${name}：当前为停用状态，配置已登记但未下发`
-        : `已保存站点 ${name} 并下发配置`
+      msg = r && r.manual
+        // 手动维护站点：表单照常入库，但磁盘上的配置文件**刻意不覆盖**。
+        // 不能只说"已下发"（那是撒谎）——要说清"改了哪、没改哪、怎么恢复"。
+        ? `已保存站点 ${name}：该站点为「手动维护」——表单改动已入库，但配置文件未被覆盖（要按表单重新下发请用配置区的「恢复面板托管」）`
+        : r && r.deployed === false
+          ? `已保存站点 ${name}：当前为停用状态，配置已登记但未下发`
+          : `已保存站点 ${name} 并下发配置`
     } else {
       msg = `已保存站点 ${name}（未接入 Web 服务器：仅登记，未下发）`
     }
@@ -605,7 +612,8 @@ function kindTargets() {
  * 改了域名 / 类型 / WAF 后必须走这里才会生效。
  */
 async function deploy(name: string, domains: string[]) {
-  return api.post<{ deployed?: boolean }>(API.sites.apply(), {
+  // 响应里的 manual（= 站点处于「手动维护」，本次**未**重渲染/下发）供 save() 如实提示。
+  return api.post<{ deployed?: boolean; manual?: boolean }>(API.sites.apply(), {
     name,
     domains,
     root: form.value.root.trim() || name,
@@ -756,6 +764,112 @@ async function doDeleteCert() {
   catch (e) { sslErrTo(errorText(e)) }
   finally { busy.value = false }
 }
+
+// ── 站点原始配置（编辑弹窗内「站点配置（Nginx）」区）：查看 / 编辑 / 恢复面板托管 ──
+//
+// 这份文件是「表单 → render → 校验 → 下发」的**产物**。手动维护（后端 manual_conf）
+// 让用户直接改这份产物成为一等状态：保存成功后表单「保存并应用」不再覆盖它，
+// 直到「恢复面板托管」按表单重新渲染覆盖（或停用/重新启用清零标记）。
+// 路径唯一来源是后端按落库 conf_path 的返回——前端**不拼路径**，后端也拒绝前端传路径。
+const confLoading = ref(false)
+/** 配置文件落盘路径；null = 尚未下发（停用态或从未 apply） */
+const confPath = ref<string | null>(null)
+/** 编辑区内容（与原文件同构；保存时原样提交） */
+const confText = ref('')
+/** 站点是否处于「手动维护」（后端 manual_conf） */
+const confManual = ref(false)
+/**
+ * 本区块**独立**的错误位（与弹窗顶部 formError 分开）：
+ * 配置区校验失败时，错误必须落在**配置区自己身上**——用户正在看的就是这段文本，
+ * 甩到弹窗顶部等于让人自己去找是哪儿写坏了。
+ */
+const confErr = ref('')
+const confBusy = ref(false)
+/** 「恢复面板托管」二次确认（覆盖手工内容不可撤销） */
+const confAsk = ref(false)
+/** 原始配置编辑仅 owner 可保存（后端 403 同口径）；管理员可看不可写。 */
+const isOwner = computed(() => auth.me?.role === 'owner')
+
+const confHint = computed(() => {
+  if (!canManage.value) return '无 site.manage 权限'
+  if (!isOwner.value) return '仅 owner 可保存原始配置'
+  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  if (!editing.value?.enabled) return '站点已停用（配置已移除）；先在下方勾选「启用」并保存，再回来编辑'
+  return '保存到磁盘并重载（保存前自动 nginx -t 校验；失败不会动旧文件）'
+})
+
+/** 清空本区块状态（重新打开编辑弹窗时调用，避免上一站点的内容/报错残留）。 */
+function resetConf() {
+  confPath.value = null; confText.value = ''; confManual.value = false
+  confErr.value = ''; confBusy.value = false; confAsk.value = false
+}
+
+/** 拉取当前站点配置（打开编辑弹窗时调用；失败落本区块错误位，不阻塞弹窗其它功能）。 */
+async function loadConf(id: number) {
+  confLoading.value = true; confErr.value = ''
+  try {
+    const d = await api.get<{ path: string | null; content: string | null; manual: boolean }>(
+      API.sites.conf(id))
+    confPath.value = d.path ?? null
+    confText.value = d.content ?? ''
+    confManual.value = d.manual
+  } catch (e) {
+    confErr.value = errorText(e)
+  } finally { confLoading.value = false }
+}
+
+/**
+ * 配置区错误文案：40002（nginx -t 校验失败）**必须透出原始输出**。
+ *
+ * errorText 的 40002 分支只给一句「配置校验未通过」——对表单保存够用，但对
+ * 正在直接编辑原文的用户等于没有信息：人要知道的是「哪一行、什么错」。nginx 的
+ * 原始输出正是那个可执行的答案（如 `nginx: [emerg] unexpected "}" ...:42`），
+ * 属**命令诊断输出**而非内部英文标识，透出是刻意为之（后有 CJK 兜底纪律约束其它分支）。
+ */
+function confErrText(e: unknown) {
+  if ((e as { code?: number } | null)?.code === 40002) {
+    const out = (e as { detail?: { output?: unknown } }).detail?.output
+    const s = typeof out === 'string' ? out.trim() : ''
+    if (s) return `配置校验未通过（nginx -t）：\n${s}`
+  }
+  return errorText(e)
+}
+
+/** 保存原始配置 → 转「手动维护」。门控前置（能力位 + 权限 + owner），否则只等来 501/403。 */
+async function saveConf() {
+  if (!editing.value || !canManage.value || !isOwner.value || !webSupported.value) return
+  if (!editing.value.enabled) { confErr.value = '站点已停用（配置已移除），请先启用并保存后再编辑'; return }
+  if (!confText.value.trim()) { confErr.value = '配置内容不能为空'; return }
+  confBusy.value = true; confErr.value = ''
+  try {
+    const d = await api.put<{ path: string; manual: boolean; reloaded: boolean }>(
+      API.sites.conf(editing.value.id), { content: confText.value })
+    confPath.value = d?.path ?? confPath.value
+    confManual.value = !!d?.manual
+    toast('站点配置已保存并重载；此后表单「保存并应用」不再覆盖该文件')
+    await load(true)
+  } catch (e) {
+    confErr.value = confErrText(e)
+    errSeq.value++  // 重建错误条，抖动动画可重播（与表单错误同一机制）
+  } finally { confBusy.value = false }
+}
+
+/** 恢复面板托管：按表单规格重新渲染覆盖（丢弃手工内容），成功后重新拉取本区内容。 */
+async function restoreConf() {
+  if (!editing.value || !canManage.value || !isOwner.value || !webSupported.value) return
+  confAsk.value = false
+  confBusy.value = true; confErr.value = ''
+  try {
+    await api.post(API.sites.confRestore(editing.value.id), {})
+    toast('已恢复面板托管：配置按当前表单重新渲染并下发')
+    const id = editing.value.id
+    await loadConf(id)
+    await load(true)
+  } catch (e) {
+    confErr.value = confErrText(e)
+    errSeq.value++
+  } finally { confBusy.value = false }
+}
 </script>
 
 <template>
@@ -809,7 +923,11 @@ async function doDeleteCert() {
               </template>
               <span v-else class="dim">—</span>
             </td>
-            <td><span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span></td>
+            <td>
+              <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
+              <span v-if="s.manual_conf" class="badge badge-warn conf-badge"
+                title="站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「恢复面板托管」）">手动</span>
+            </td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
                  新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
@@ -1060,6 +1178,48 @@ async function doDeleteCert() {
           </button>
         </div>
 
+        <!-- 站点原始配置：查看 / 编辑原文 / 恢复面板托管。
+             这份文件是「表单 → render → 校验 → 下发」的**产物**；「手动维护」让直接改
+             产物成为一等状态——保存后表单「保存并应用」不再覆盖它（后端 manual_conf）。
+             路径由后端按落库 conf_path 给出：前端不拼路径，后端也不接受前端传路径。
+             仅编辑既有站点时出现：新建站点尚未落库、没有配置文件可读。 -->
+        <div v-if="editing" class="conf">
+          <div class="conf-head">
+            <span class="conf-title">
+              <Icon name="file" :size="14" /> 站点配置（Nginx）
+              <span v-if="confManual" class="badge badge-warn"
+                title="已手动接管：表单「保存并应用」不会覆盖磁盘上的这份配置；点「恢复面板托管」交还控制权">手动维护</span>
+            </span>
+            <span v-if="confLoading" class="dim tiny">读取中…</span>
+            <span v-else class="mono dim tiny ellipsis conf-path"
+              :title="confPath || '尚未下发：保存「并应用」后生成'">{{ confPath || '尚未下发' }}</span>
+          </div>
+          <p v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg" role="alert">{{ confErr }}</p>
+          <textarea v-model="confText" class="mono conf-text" rows="10" spellcheck="false"
+            :readonly="!canManage || !isOwner || !webSupported"
+            :placeholder="confLoading ? '读取中…' : '（配置文件为空或尚未下发——先保存「并应用」生成）'"
+            aria-label="站点 Nginx 配置原文"></textarea>
+          <div class="conf-ops">
+            <p class="hint-note conf-hint">
+              <Icon name="info" :size="14" class="ic" />
+              <span v-if="confManual">保存原文将直接生效（先跑 nginx -t，失败不动旧文件）。<b>恢复面板托管</b>会丢弃你对这份配置的手工修改，按表单重新渲染。</span>
+              <span v-else>保存原文将<b>接管</b>这份配置：此后表单「保存并应用」不再覆盖它，直到「恢复面板托管」交还。</span>
+            </p>
+            <div class="conf-btns">
+              <button v-if="confManual" class="btn-ghost btn-sm"
+                :disabled="confBusy || !isOwner || !webSupported"
+                :title="confHint" @click="confAsk = true">
+                <Icon name="refresh" :size="13" /> 恢复面板托管
+              </button>
+              <button class="btn-ghost btn-sm"
+                :disabled="confBusy || !canManage || !isOwner || !webSupported || !editing?.enabled"
+                :title="confHint" @click="saveConf">
+                <Icon name="check" :size="13" /> {{ confBusy ? '保存中…' : '保存配置' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <label class="blk row-inline">
           <input type="checkbox" v-model="form.enabled" />
           <span>启用（纳入 Web 服务器配置）</span>
@@ -1095,6 +1255,10 @@ async function doDeleteCert() {
     <ConfirmDialog :open="!!delCert" danger title="删除证书"
       :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
       confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
+
+    <ConfirmDialog :open="confAsk" danger title="恢复面板托管"
+      :detail="editing ? `将按当前表单重新渲染「${editing.name}」的配置并覆盖磁盘上的现有文件——你对它做的全部手工修改都会丢失（不可撤销）。` : ''"
+      confirm-word="恢复" @confirm="restoreConf" @cancel="confAsk = false" />
 
     <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
       @select="onPickRoot" @cancel="pickerOpen = false" />
@@ -1313,6 +1477,7 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .blk.full,
 .modal.wide.site-modal > .waf,
 .modal.wide.site-modal > .ssl,
+.modal.wide.site-modal > .conf,
 .modal.wide.site-modal > .hint-note,
 .modal.wide.site-modal > .tip,
 .modal.wide.site-modal > .row-inline,
@@ -1363,6 +1528,19 @@ sudo update-ca-certificates</pre>
 .ssl-meta .mono { font-family: var(--mono); font-size: 13px; }
 .ssl-ops { display: flex; align-items: center; gap: 6px; flex: none; }
 .ca-link { margin-top: 10px; }
+
+/* 站点原始配置区块：与 SSL 区块同范式（虚线分隔，同为「既有站点专属」区块）。
+   原文用等宽字体承载；nginx -t 的原始输出按**原样换行**展示（pre-wrap）。 */
+.conf { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; display: grid; gap: 8px; }
+.conf-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.conf-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); flex: none; }
+.conf-path { margin-left: auto; max-width: 56%; text-align: right; }
+.conf-msg { margin: 0; white-space: pre-wrap; }
+.conf-text { width: 100%; min-height: 190px; resize: vertical; font-size: 12px; line-height: 1.55; }
+.conf-ops { display: flex; align-items: flex-start; gap: 10px; }
+.conf-hint { margin: 0; flex: 1; min-width: 0; }
+.conf-btns { display: flex; gap: 6px; flex: none; margin-top: 2px; }
+.conf-badge { margin-left: 4px; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
