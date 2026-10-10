@@ -1183,7 +1183,6 @@ sudo update-ca-certificates</pre>
   padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6;
   margin: 0 0 14px; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.badge-danger { background: rgba(248,81,73,.18); color: #ff7b72; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
 /* 多路由表：一个站点内多条 `location ^~ <前缀>`。逐行一条，窄屏自然换行。 */
@@ -1282,7 +1281,6 @@ sudo update-ca-certificates</pre>
 .ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: 13px; line-height: 1.5; }
 .ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
 .ssl-opt input { width: auto; margin-top: 2px; }
-.btn-sm.danger { color: #ff7b72; }
 /* 自动续期开关：与 ServiceDetailView 的开机自启开关同款——实心主色底 + 白滑块、42×24。
    旧版是 --c-primary-soft 浅色底 + 主色滑块，开销/关都偏「浅橙」，用户反馈看不出选中。
    CronView 同步升级，三处一套。 */

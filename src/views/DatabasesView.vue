@@ -176,7 +176,7 @@ function closeBrowse() { browse.value = null }
           <label>主机<input v-model="form.host" :disabled="form.engine === 'sqlite'" /></label>
           <template v-if="form.engine !== 'sqlite'">
             <label>端口<input v-model="form.port" inputmode="numeric" :placeholder="form.engine === 'mysql' ? '3306' : '5432'" /></label>
-            <label>用户名<span style="color:#e5484d;margin-left:2px" title="MySQL/PostgreSQL 连接必须指定账号">*</span><input v-model="form.user" autocomplete="off" :placeholder="form.engine === 'mysql' ? 'root' : 'postgres'" /></label>
+            <label>用户名<span style="color:var(--c-danger);margin-left:2px" title="MySQL/PostgreSQL 连接必须指定账号">*</span><input v-model="form.user" autocomplete="off" :placeholder="form.engine === 'mysql' ? 'root' : 'postgres'" /></label>
             <label>口令<input v-model="form.password" type="password" autocomplete="new-password" /></label>
           </template>
           <label>{{ form.engine === 'sqlite' ? '数据库文件' : '库名' }}

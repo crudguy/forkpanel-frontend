@@ -177,5 +177,5 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
 }
 .term.dim { opacity: .55; }
 .hint { color: var(--c-text-mute); font-size: 12px; margin: 8px 0 0; }
-.err { color: #f85149; font-size: 13px; }
+.err { color: var(--c-danger); font-size: 13px; }
 </style>
