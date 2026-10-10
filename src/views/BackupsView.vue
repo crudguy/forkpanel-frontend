@@ -322,16 +322,19 @@ function fmtTime(t: number | null) {
       </section>
 
       <div class="card flush" v-if="plans.length">
-        <table>
-          <thead><tr><th>#</th><th>类型</th><th>目标</th><th>产物目录</th><th>保留</th><th>加密</th><th>远端</th><th>上次执行</th><th /></tr></thead>
+        <table class="fixed">
+          <colgroup>
+            <col class="w-bid" /><col class="w-bkind" /><col class="w-btarget" /><col class="w-bdest" /><col class="w-bkeep" /><col class="w-benc" /><col class="w-bremote" /><col class="w-brun" /><col class="w-bacts" />
+          </colgroup>
+          <thead><tr><th>#</th><th>类型</th><th>目标</th><th>产物目录</th><th class="col-opt">保留</th><th class="col-opt">加密</th><th>远端</th><th>上次执行</th><th /></tr></thead>
           <tbody>
             <tr v-for="p in plans" :key="p.id">
               <td>{{ p.id }}</td>
               <td>{{ backupKindLabel(p.kind) }}</td>
-              <td class="mono">{{ p.target }}</td>
-              <td class="dim mono">{{ p.dest_dir }}</td>
-              <td>{{ p.keep_count }}</td>
-              <td :class="p.encrypt ? '' : 'dim'">{{ p.encrypt ? '已加密' : '未加密' }}</td>
+              <td class="mono ellipsis" :title="p.target">{{ p.target }}</td>
+              <td class="dim mono ellipsis" :title="p.dest_dir">{{ p.dest_dir }}</td>
+              <td class="col-opt">{{ p.keep_count }}</td>
+              <td :class="p.encrypt ? 'col-opt' : 'dim col-opt'">{{ p.encrypt ? '已加密' : '未加密' }}</td>
               <td class="dim">
                 <template v-if="p.remote_kind">
                   {{ remoteKindLabel(p.remote_kind) }}
@@ -429,11 +432,14 @@ function fmtTime(t: number | null) {
           </button>
           <button class="btn-ghost btn-sm" @click="curArtifacts = null">关闭</button>
         </div>
-        <table v-if="curArtifacts.items.length">
+        <table v-if="curArtifacts.items.length" class="fixed">
+          <colgroup>
+            <col class="w-afile" /><col class="w-asize" /><col class="w-atime" />
+          </colgroup>
           <thead><tr><th>文件</th><th>大小</th><th>时间</th></tr></thead>
           <tbody>
             <tr v-for="a in curArtifacts.items" :key="a.name">
-              <td class="mono">{{ a.name }}</td>
+              <td class="mono ellipsis" :title="a.name">{{ a.name }}</td>
               <td>{{ fmtSize(a.size) }}</td>
               <td class="dim">{{ fmtTime(a.mtime) }}</td>
             </tr>
@@ -466,4 +472,22 @@ function fmtTime(t: number | null) {
 /* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行 */
 .chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; }
 .chk input { width: auto; }
+/* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
+   操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
+   产物目录为唯一弹性列（可能很长），ellipsis 截断、完整值走 title。
+   保留/加密在窄屏（<=720px）由 main.css 公共规则隐藏（.col-opt）。 */
+.w-bid { width: 5%; }
+.w-bkind { width: 9%; }
+.w-btarget { width: 13%; }
+.w-bdest { width: auto; }     /* 弹性列 */
+.w-bkeep { width: 6%; }
+.w-benc { width: 8%; }
+.w-bremote { width: 12%; }
+.w-brun { width: 13%; }
+.w-bacts { width: 340px; }    /* 执行 / 产物 / 编辑 / 远端 / 删除 5 个带文字按钮 */
+/* 产物明细表（弹窗内） */
+.w-afile { width: auto; }     /* 文件名弹性列 */
+.w-asize { width: 90px; }
+.w-atime { width: 150px; }
+
 </style>

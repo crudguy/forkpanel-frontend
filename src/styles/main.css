@@ -252,6 +252,13 @@ tbody tr { transition: background .12s ease; }
 tbody tr:hover { background: var(--c-hover); }
 tbody tr:last-child td { border-bottom: none; }
 .num { font-variant-numeric: tabular-nums; }
+
+/* 数据表显式列宽（与站点/证书/进程页统一范式：table-layout:fixed + colgroup，
+   长文本列 .ellipsis 截断、完整值走 title 悬停）。各视图在 <colgroup> 用 .w-* 指定列宽，
+   弹性列用 width:auto 吸收剩余宽度。窄屏（<=720px）由下方 .card.flush table.fixed 转回 auto。 */
+table.fixed { table-layout: fixed; width: 100%; }
+table.fixed th, table.fixed td { overflow: hidden; }
+.ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 
 /* ── 表单字段 ── */

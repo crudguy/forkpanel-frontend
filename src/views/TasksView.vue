@@ -91,7 +91,10 @@ onUnmounted(stopPoll)
     <div v-if="loading" class="skeleton box" />
     <template v-else>
       <div class="card flush">
-        <table>
+        <table class="fixed">
+          <colgroup>
+            <col class="w-tid" /><col class="w-tname" /><col class="w-tstate" /><col class="w-tprog" /><col class="w-tstart" /><col class="w-tacts" />
+          </colgroup>
           <thead><tr><th>#</th><th>任务</th><th>状态</th><th class="num">进度</th><th>开始时间</th><th /></tr></thead>
           <tbody>
             <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 打开详情 -->
@@ -99,7 +102,7 @@ onUnmounted(stopPoll)
                 tabindex="0" role="button" :aria-label="`查看任务 #${t.id} 详情`"
                 @keydown.enter="open(t)" @keydown.space.prevent="open(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
-              <td class="mono dim">{{ t.key || t.kind }}</td>
+              <td class="mono dim ellipsis" :title="t.key || t.kind">{{ t.key || t.kind }}</td>
               <td>
                 <span class="badge" :class="stateClass(t.state)">{{ stateText(t.state) }}</span>
                 <span v-if="t.needs_human" class="badge badge-danger" title="任务被中断，需人工确认后续影响">需人工</span>
@@ -152,4 +155,13 @@ tr.active { background: var(--c-active) !important; }
 .out { margin: 0; padding: 14px; background: var(--c-bg); border: 1px solid var(--c-border);
        border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
        white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
+/* 任务表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
+   任务标识（kind/key）为唯一弹性列，可能较长，ellipsis 截断、完整值走 title。 */
+.w-tid { width: 6%; }
+.w-tname { width: auto; }     /* 弹性列 */
+.w-tstate { width: 12%; }
+.w-tprog { width: 13%; }      /* 含迷你进度条（min-width 120px） */
+.w-tstart { width: 16%; }
+.w-tacts { width: 160px; }    /* 输出 + 取消两个带文字按钮 */
+
 </style>

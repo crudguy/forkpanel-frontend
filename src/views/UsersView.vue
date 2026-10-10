@@ -127,17 +127,20 @@ onMounted(load)
       <p v-else-if="error" class="err">{{ error }}</p>
       <div v-else-if="loading" class="skeleton box" />
       <div v-else class="card flush">
-        <table>
+        <table class="fixed">
+          <colgroup>
+            <col class="w-uname" /><col class="w-urole" /><col class="w-uroots" /><col class="w-ustate" /><col class="w-umfa" /><col class="w-ulogin" /><col class="w-uacts" />
+          </colgroup>
           <thead><tr><th>用户名</th><th>角色</th><th>权限范围</th><th>状态</th><th>MFA</th><th>最后登录</th><th /></tr></thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
-              <td>{{ u.username }}</td>
+              <td class="ellipsis" :title="u.username">{{ u.username }}</td>
               <td>
                 <span class="badge badge-primary">{{ roleLabel(u.role) }}</span>
                 <span v-if="u.role === 'owner'" class="badge badge-soft"
                       title="首启向导创建的初始管理员账号，受保护：不可删除、不可禁用">引导账号</span>
               </td>
-              <td class="muted">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
+              <td class="muted ellipsis" :title="(u.allowed_roots || []).join(', ') || '全部'">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
               <td><span class="badge" :class="u.disabled ? 'badge-danger' : 'badge-ok'">{{ u.disabled ? '已禁用' : '正常' }}</span></td>
               <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : ''">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
               <td class="muted">{{ u.last_login_at ? fmtDateTime(u.last_login_at) : '从未登录' }}</td>
@@ -242,4 +245,14 @@ onMounted(load)
 .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
                  border-radius: 50%; background: #fff; transition: .15s; }
 .switch-row input:checked + .switch::after { left: 20px; }
+/* 用户表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
+   权限范围为唯一弹性列（目录白名单可能很长），ellipsis 截断、完整值走 title。 */
+.w-uname { width: 12%; }
+.w-urole { width: 9%; }
+.w-uroots { width: auto; }    /* 弹性列 */
+.w-ustate { width: 8%; }
+.w-umfa { width: 8%; }
+.w-ulogin { width: 14%; }
+.w-uacts { width: 150px; }    /* 编辑 + 删除两个带文字按钮 */
+
 </style>
