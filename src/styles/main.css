@@ -168,6 +168,8 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
    `.btn-ghost.danger` 维持透明底 + 红色文字；`.btn-primary.danger` 实心红底。 */
 .btn-ghost.danger { color: var(--c-danger); }
 .btn-ghost.danger:hover:not(:disabled) { color: var(--c-danger); border-color: color-mix(in srgb, var(--c-danger) 40%, transparent); background: transparent; }
+/* 行内操作组：列表项/卡片底部的一组小按钮横排 */
+.row-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .btn-primary.danger { background: var(--c-danger); box-shadow: none; }
 .btn-primary.danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 

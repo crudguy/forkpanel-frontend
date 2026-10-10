@@ -87,16 +87,15 @@ onMounted(load)
 
 <template>
   <section class="page">
-    <header class="head">
-      <h1>通知</h1>
-      <div class="ops">
-        <span v-if="unread > 0" class="badge">未读 {{ unread }}</span>
-        <button class="btn" :disabled="!unread" @click="readAll">全部已读</button>
-        <button class="btn" @click="load">刷新</button>
-      </div>
-    </header>
+    <div class="page-head">
+      <h2 class="page-title">通知</h2>
+      <span class="spacer" />
+      <span v-if="unread > 0" class="badge badge-danger">未读 {{ unread }}</span>
+      <button class="btn-ghost btn-sm" :disabled="!unread" @click="readAll">全部已读</button>
+      <button class="btn-ghost btn-sm" @click="load">刷新</button>
+    </div>
 
-    <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="error" class="err-bar">{{ error }}</p>
     <p v-if="loading" class="muted">加载中…</p>
     <EmptyState v-if="!loading && !items.length"
       title="暂无通知"
@@ -113,9 +112,9 @@ onMounted(load)
           <span class="time">{{ fmt(n.ts) }}</span>
         </div>
         <p v-if="n.body" class="body">{{ n.body }}</p>
-        <div class="ops">
-          <button v-if="!n.read" class="btn small" @click="markRead(n)">标记已读</button>
-          <button class="btn small danger" @click="delTarget = n">删除</button>
+        <div class="row-actions">
+          <button v-if="!n.read" class="btn-ghost btn-sm" @click="markRead(n)">标记已读</button>
+          <button class="btn-ghost btn-sm danger" @click="delTarget = n">删除</button>
         </div>
       </li>
     </ul>
@@ -132,16 +131,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.page { padding: 16px; }
-.head { display: flex; align-items: center; justify-content: space-between; }
-h1 { font-size: 18px; margin: 0; }
-.ops { display: flex; gap: 8px; align-items: center; }
-/* 主题变量（审计 U10）：此前硬编码 #c73e1f/#555 等，亮色主题割裂 */
-.badge { background: var(--c-danger); color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 12px; }
-.btn { border: 1px solid var(--c-border-strong); background: transparent; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.small { padding: 2px 8px; font-size: 12px; }
-.btn.danger { border-color: var(--c-danger); color: var(--c-danger); }
 .list { list-style: none; padding: 0; margin-top: 12px; }
 .item { border-left: 3px solid var(--c-border-strong); padding: 10px 12px; margin-bottom: 8px; background: var(--c-glass); border-radius: 6px; }
 .item.crit { border-left-color: var(--c-danger); }
@@ -158,6 +147,4 @@ h1 { font-size: 18px; margin: 0; }
 .tag { font-size: 12px; opacity: .7; }
 .time { font-size: 12px; opacity: .6; margin-left: auto; }
 .body { margin: 6px 0; white-space: pre-wrap; font-size: 13px; opacity: .85; }
-.muted { opacity: .6; }
-.err { color: var(--c-danger); }
 </style>
