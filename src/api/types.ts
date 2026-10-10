@@ -139,6 +139,13 @@ export interface SiteRoute {
    * 没它就没有任何入口（Laravel/ThinkPHP 的标准部署姿势是 /public/index.php）。
    */
   front_controller?: string
+  /**
+   * kind=static：**该路由自己的根目录（可选，覆盖站点级 root）**。
+   * 留空继承站点根目录（最常见的「整站一个根、各静态子路径共用」）；填了则这条
+   * 静态路由从它自己的目录读文件（如 `/` 前端产物 + `/blog` 另一套静态站）。
+   * 后端会约束其落在 site_root 之内，防路径穿越。
+   */
+  root?: string
 }
 
 // ── 专业监控页：完整系统快照（对应后端 panel_os::SystemSnapshot）──

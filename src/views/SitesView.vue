@@ -203,6 +203,19 @@ function onPickRoot(p: string) {
   form.value.root = p
   pickerOpen.value = false
 }
+// 路由级根目录选择器：记录当前编辑的路由下标（站点级用 pickerOpen/onPickRoot）。
+// 同一时刻只能开一个 DirectoryPickerDialog，站点级与路由级互斥（不会同时开）。
+const routePickerIdx = ref(-1)
+const routePickerOpen = ref(false)
+function openRouteRootPicker(i: number) {
+  routePickerIdx.value = i
+  routePickerOpen.value = true
+}
+function onPickRouteRoot(p: string) {
+  if (routePickerIdx.value >= 0) form.value.routes[routePickerIdx.value].root = p
+  routePickerOpen.value = false
+  routePickerIdx.value = -1
+}
 // 站点编辑弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const modalBox = ref<HTMLElement | null>(null)
 // 统一关闭出口（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮 / Esc 都走它
@@ -229,10 +242,12 @@ interface RouteRow {
   spa: boolean
   fpm: string
   frontController: string
+  /** kind=static：该路由自己的根目录（可选，覆盖站点级 root）；留空继承站点根 */
+  root: string
 }
 
 function newRoute(prefix: string, kind: RouteRow['kind']): RouteRow {
-  return { prefix, kind, upstreams: '', spa: false, fpm: '', frontController: '' }
+  return { prefix, kind, upstreams: '', spa: false, fpm: '', frontController: '', root: '' }
 }
 
 /**
@@ -260,7 +275,7 @@ function rowToRoute(r: RouteRow): SiteRoute {
   if (r.kind === 'php') {
     return { prefix: r.prefix.trim(), kind: 'php', fpm: r.fpm.trim(), front_controller: r.frontController.trim() }
   }
-  return { prefix: r.prefix.trim(), kind: 'static', spa: !!r.spa }
+  return { prefix: r.prefix.trim(), kind: 'static', spa: !!r.spa, root: r.root.trim() || undefined }
 }
 const form = ref(emptyForm())
 
@@ -292,6 +307,7 @@ function openEdit(s: Site) {
           spa: !!r.spa,
           fpm: r.fpm ?? '',
           frontController: r.front_controller ?? '',
+          root: r.root ?? '',
         }))
       : [newRoute('/', 'static')],
     // 后端已把 upstreams/fpm 落库（migration 009），编辑时回填真实值：
@@ -940,9 +956,19 @@ async function doDeleteCert() {
               placeholder="http://127.0.0.1:3000" :aria-label="`第 ${i + 1} 条路由的后端`" />
             <input v-else-if="r.kind === 'php'" v-model="r.fpm" class="rt-target"
               placeholder="unix:/run/php/php8.2-fpm.sock" :aria-label="`第 ${i + 1} 条路由的 php-fpm`" />
-            <label v-else class="rt-spa" :title="'未命中文件时回退到 /index.html（history 路由单页应用）'">
-              <input type="checkbox" v-model="r.spa" /> SPA
-            </label>
+            <template v-else-if="r.kind === 'static'">
+              <label class="rt-root" :title="'留空则用站点根目录；填了则这条静态路由从它自己的目录读文件'">
+                <input v-model="r.root" class="rt-target" placeholder="留空=站点根目录"
+                  :aria-label="`第 ${i + 1} 条路由的根目录`" />
+                <button type="button" class="btn-ghost btn-sm rt-dir" :disabled="!canManage"
+                  @click="openRouteRootPicker(i)" :aria-label="`浏览第 ${i + 1} 条路由的根目录`">
+                  <Icon name="folder" :size="13" /> 目录
+                </button>
+              </label>
+              <label class="rt-spa" :title="'未命中文件时回退到 /index.html（history 路由单页应用）'">
+                <input type="checkbox" v-model="r.spa" /> SPA
+              </label>
+            </template>
             <input v-if="r.kind === 'php'" v-model="r.frontController" class="rt-target"
               placeholder="/public/index.php" :aria-label="`第 ${i + 1} 条路由的入口脚本`" />
             <button type="button" class="btn-ghost btn-sm rt-del" title="删除该路由"
@@ -953,8 +979,9 @@ async function doDeleteCert() {
           <p class="field-err" v-if="fieldErrs.routes">{{ fieldErrs.routes }}</p>
           <p class="hint-note routes-note">
             <Icon name="info" :size="14" class="ic" />
-            <span>典型用法：<b>/</b> 静态（SPA）+ <b>/api</b> 反代到后端。PHP 路由需填
-              <b>入口脚本</b>（如 <code>/public/index.php</code>）——多路由下不用
+            <span>典型用法：<b>/</b> 静态（SPA）+ <b>/api</b> 反代到后端；静态路由可**单独指定根目录**
+              （如 <code>/</code> 前端产物 + <code>/blog</code> 另一套静态站，各自独立目录）。
+              PHP 路由需填 <b>入口脚本</b>（如 <code>/public/index.php</code>）——多路由下不用
               <code>.php</code> 后缀匹配，而是把整个前缀交给该入口，由框架自己路由。</span>
           </p>
         </div>
@@ -1060,6 +1087,10 @@ async function doDeleteCert() {
 
     <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
       @select="onPickRoot" @cancel="pickerOpen = false" />
+
+    <DirectoryPickerDialog :open="routePickerOpen"
+      :initial-path="(form.routes[routePickerIdx]?.root) || siteRoot"
+      @select="onPickRouteRoot" @cancel="routePickerOpen = false" />
 
     <!-- 根证书安装指引：自签 leaf 由面板本地根 CA 签发，不把根装进信任库浏览器必然报不可信。
          这是「自签证书没法在本地用」的正解——不是换证书，而是装根。 -->
@@ -1201,15 +1232,21 @@ sudo update-ca-certificates</pre>
 .routes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .routes-title { font-size: 12.5px; color: var(--c-text); }
 .routes-title em { font-style: normal; margin-left: 8px; color: var(--c-text-dim); font-size: 12px; }
-.route-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* 一条路由 = 一行：root 是唯一可伸缩项（grow/shrink），其余固定列永不错行；
+   窄到放不下时由 root 收缩兜底，避免 SPA/删除被挤到第二行 */
+.route-row { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
 /* 前缀列固定宽：它是这张表的主键，太宽会让后面的目标字段被挤出视野 */
-.route-row .rt-prefix { flex: 0 0 130px; min-width: 0; }
-.route-row .rt-kind   { flex: 0 0 92px; }
+.route-row .rt-prefix { flex: 0 0 116px; min-width: 0; }
+.route-row .rt-kind   { flex: 0 0 80px; }
 .route-row .rt-target { flex: 1 1 220px; min-width: 0; }
 .route-row .rt-spa { flex: none; display: flex; align-items: center; gap: 5px;
   font-size: 12.5px; color: var(--c-text-dim); white-space: nowrap; }
 /* 原生勾选框必须复位 width——全局 `input { width: 100% }` 会让它撑满整行 */
 .route-row .rt-spa input { width: auto; }
+/* 路由级根目录：label 包 input + 目录按钮，整体占弹性宽 */
+.route-row .rt-root { flex: 1 1 160px; min-width: 0; display: flex; gap: 8px; align-items: center; }
+.route-row .rt-root input { flex: 1 1 auto; min-width: 0; }
+.route-row .rt-dir { flex: none; }
 .route-row .rt-del { flex: none; }
 .routes.has-err .rt-prefix, .routes.has-err .rt-kind { border-color: var(--c-danger); }
 .routes-note { margin: 2px 0 0; }
