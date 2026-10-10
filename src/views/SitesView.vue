@@ -234,6 +234,10 @@ function emptyForm() {
     // 自定义配置片段（019）：插在主 server 块尾部（所有 location 之后），随保存并应用
     // 重新渲染下发；仅 owner 可改（后端 403 + 64KiB 双护栏）。空串 = 不使用。
     customConf: '',
+    // 高级配置（020）：www 跳转 / TLS 强化 / 伪静态。默认值与后端 020 迁移一致
+    wwwRedirect: 'off', tlsProfile: 'modern', tlsMin: 'TLSv1.2',
+    hsts: false, hstsMaxAge: 300, hstsSub: false, hstsPreload: false,
+    rewritePreset: 'none', rewriteCustom: '',
   }
 }
 
@@ -328,6 +332,16 @@ function openEdit(s: Site) {
     wafBurst: s.waf_burst ?? 0,
     // 自定义片段回填（019）：null / 缺失一律落空串，textarea 里就是干净的空白。
     customConf: s.custom_conf ?? '',
+    // 高级配置回填（020）：库里都有 DEFAULT，缺失时回落到与后端相同的默认值
+    wwwRedirect: s.www_redirect || 'off',
+    tlsProfile: s.tls_profile || 'modern',
+    tlsMin: s.tls_min || 'TLSv1.2',
+    hsts: !!s.hsts,
+    hstsMaxAge: s.hsts_max_age ?? 300,
+    hstsSub: !!s.hsts_include_sub,
+    hstsPreload: !!s.hsts_preload,
+    rewritePreset: s.rewrite_preset || 'none',
+    rewriteCustom: s.rewrite_custom ?? '',
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
   error.value = ''
@@ -695,6 +709,16 @@ async function deploy(name: string, domains: string[], regenerate = false) {
     // 自定义片段（019，仅 owner）：空串 = 清空、非空 = 覆盖；非 owner **不传**——
     // 后端语义是「缺省 = 保留库中现值」（与 waf 同款），不传绝不误清 owner 的片段。
     ...(isOwner.value ? { custom_conf: form.value.customConf } : {}),
+    // 高级配置（020）：显式传即覆盖（校验在后端走白名单/区间）
+    www_redirect: form.value.wwwRedirect,
+    tls_profile: form.value.tlsProfile,
+    tls_min: form.value.tlsMin,
+    hsts: form.value.hsts,
+    hsts_max_age: form.value.hstsMaxAge,
+    hsts_sub: form.value.hstsSub,
+    hsts_preload: form.value.hstsPreload,
+    rewrite_preset: form.value.rewritePreset,
+    rewrite_custom: form.value.rewriteCustom,
     waf: wafPayload(),
   })
 }
@@ -862,6 +886,8 @@ const confBusy = ref(false)
 const confAsk = ref(false)
 /** 未同步（后端 stale，017 迁移）：表单规格与磁盘配置不一致——面板所见 ≠ nginx 实际生效 */
 const confStale = ref(false)
+/** 外部修改（020）：磁盘内容与最后一次留档不一致——文件在面板之外被改过 */
+const confExternal = ref(false)
 /** 保存二选一弹窗：手动维护站点 + 表单改动了影响配置的字段（或已未同步） */
 const saveAsk = ref(false)
 /** 表单规格基线（openEdit 时快照）：判断「本次编辑是否改了影响配置的字段」 */
@@ -923,6 +949,16 @@ function confSpecNow(): string {
     // 019：片段也是渲染输出的一部分（插在 server 块尾）——不进指纹的话，手动站点
     // 只改片段后保存不会弹二选一、磁盘文件静默不动（后端 018 起指纹同款含它）。
     form.value.customConf,
+    // 高级配置（020）：同样改变渲染输出，漏了就不会弹「未同步」二选一
+    form.value.wwwRedirect,
+    form.value.tlsProfile,
+    form.value.tlsMin,
+    form.value.hsts,
+    form.value.hstsMaxAge,
+    form.value.hstsSub,
+    form.value.hstsPreload,
+    form.value.rewritePreset,
+    form.value.rewriteCustom,
   ])
 }
 /** 本次编辑是否改了影响配置的字段（基线在 openEdit 快照；新建站点恒 false）。 */
@@ -938,7 +974,7 @@ const { close: closeSaveAsk } = useModal(() => saveAsk.value, saveAskBox, () => 
 function resetConf() {
   confPath.value = null; confText.value = ''; confManual.value = false
   confErr.value = ''; confBusy.value = false; confAsk.value = false
-  confStale.value = false; saveAsk.value = false
+  confStale.value = false; saveAsk.value = false; confExternal.value = false
   // 版本面板同样归零：上一站点展开的列表/报错/详情不能残留到下一个站点
   versOpen.value = false; versList.value = []; versErr.value = ''
   versOpenId.value = null; versDetail.value = null
@@ -949,13 +985,14 @@ function resetConf() {
 async function loadConf(id: number) {
   confLoading.value = true; confErr.value = ''
   try {
-    const d = await api.get<{ path: string | null; content: string | null; manual: boolean; stale: boolean }>(
+    const d = await api.get<{ path: string | null; content: string | null; manual: boolean; stale: boolean; external?: boolean }>(
       API.sites.conf(id))
     confPath.value = d.path ?? null
     confText.value = d.content ?? ''
     confManual.value = d.manual
     // stale：表单规格 vs 磁盘配置的指纹不一致（后端 017）——面板所见 ≠ nginx 实际生效
     confStale.value = d.stale
+    confExternal.value = !!d?.external
   } catch (e) {
     confErr.value = errorText(e)
   } finally { confLoading.value = false }
@@ -1183,6 +1220,8 @@ async function doRollback() {
                   ? '未同步：表单规格已变更，但磁盘配置没有跟着更新——面板显示 ≠ nginx 实际生效；编辑该站点可「按表单重新生成」同步'
                   : '站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「按表单重新生成」）'">
                 {{ s.conf_stale ? '未同步' : '手动' }}</span>
+              <span v-if="s.conf_external" class="badge conf-badge badge-warn"
+                title="外部修改：磁盘上的配置文件与最后一次落盘的内容不一致——文件在面板之外被改动过（脚本误写 / 人工手改）。面板不会静默覆盖它，可在编辑弹窗内「按表单重新生成」或改写为自定义片段">外部改动</span>
             </td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
@@ -1420,6 +1459,85 @@ async function doRollback() {
           </p>
         </div>
 
+        <!-- 高级配置（020）：www 跳转 / TLS 强化 / 伪静态。
+             三类都是「字段固定、极易写错、出错后果严重」——手写 `if ($host …)` 有陷阱、
+             ssl_ciphers 抄错会让老客户端连不上、rewrite 是新手最大的坑，故做成表单
+             由渲染器产出。TLS 项仅在站点已有证书时才会写进配置（前端如实说明）。 -->
+        <div class="adv">
+          <div class="adv-head">
+            <span class="adv-title"><Icon name="shield" :size="14" /> 高级配置</span>
+          </div>
+          <label class="blk adv-row" title="只对主域名生效：子域不会被一起改写">
+            www 跳转
+            <select v-model="form.wwwRedirect">
+              <option value="off">不处理</option>
+              <option value="to_www">裸域 → www（example.com → www.example.com）</option>
+              <option value="to_bare">www → 裸域（www.example.com → example.com）</option>
+            </select>
+          </label>
+          <label class="blk adv-row" title="影响 ssl_protocols：只有下限及以上会被启用">
+            TLS 版本下限
+            <select v-model="form.tlsMin">
+              <option value="TLSv1">TLSv1（最老客户端，不安全）</option>
+              <option value="TLSv1.1">TLSv1.1</option>
+              <option value="TLSv1.2">TLSv1.2（推荐）</option>
+              <option value="TLSv1.3">TLSv1.3（仅新客户端）</option>
+            </select>
+          </label>
+          <label class="blk adv-row" title="影响 ssl_ciphers：档位越高越安全、老客户端越可能连不上">
+            加密套件档位
+            <select v-model="form.tlsProfile">
+              <option value="compat">兼容（老客户端，含弱套件）</option>
+              <option value="modern">现代（默认）</option>
+              <option value="strict">严格（仅 TLSv1.3 + 前向保密）</option>
+            </select>
+          </label>
+          <label class="blk row-inline" title="开启后浏览器在 max-age 内强制 HTTPS，服务端无法撤回">
+            <input type="checkbox" v-model="form.hsts" />
+            <span>启用 HSTS（浏览器强制 HTTPS，不可撤回）</span>
+          </label>
+          <template v-if="form.hsts">
+            <label class="blk adv-row" title="默认 300 秒：先小步验证，确认无误再调大">
+              有效期 max-age（秒）
+              <input v-model.number="form.hstsMaxAge" type="number" min="0" max="63072000" />
+            </label>
+            <label class="blk row-inline" title="一并约束所有子域：确认全部子域都支持 HTTPS 再开">
+              <input type="checkbox" v-model="form.hstsSub" /> <span>含子域（includeSubDomains）</span>
+            </label>
+            <label class="blk row-inline" title="申请进浏览器内置列表，几乎不可逆">
+              <input type="checkbox" v-model="form.hstsPreload" /> <span>加入 preload 列表</span>
+            </label>
+            <p class="hint-note is-warn adv-warn">
+              <Icon name="alert" :size="14" class="ic" />
+              <span>HSTS 在 max-age 期间<b>无法从服务端撤回</b>：先用 300 秒验证，确认全站可用 HTTPS 后再调大；preload 更要三思。</span>
+            </p>
+          </template>
+          <template v-if="form.kind === 'php'">
+            <label class="blk adv-row" title="预置模板替换默认的 try_files 兜底；不确定就选「无」">
+              伪静态模板
+              <select v-model="form.rewritePreset">
+                <option value="none">无</option>
+                <option value="wordpress">WordPress</option>
+                <option value="laravel">Laravel</option>
+                <option value="thinkphp">ThinkPHP（PATH_INFO）</option>
+                <option value="typecho">Typecho</option>
+                <option value="discuz">Discuz</option>
+                <option value="custom">自定义…</option>
+              </select>
+            </label>
+            <label v-if="form.rewritePreset === 'custom'" class="blk full adv-row"
+              title="原样进 location / 内；上限 64 KiB">
+              自定义 rewrite（location / 内）
+              <textarea v-model="form.rewriteCustom" class="mono adv-text" rows="4" spellcheck="false"
+                placeholder="try_files $uri $uri/ /index.php?$args;"></textarea>
+            </label>
+          </template>
+          <p class="hint-note adv-note">
+            <Icon name="info" :size="14" class="ic" />
+            <span>TLS 与 HSTS 仅在站点<b>已有证书</b>时才会写进配置；www 跳转与伪静态随「保存并应用」重新渲染。</span>
+          </p>
+        </div>
+
         <!-- SSL 证书：站点配置的一部分，与站点同处一个编辑弹窗
              （此前是页面下方独立的「证书」区块——与应用站点配置同理，单独成块既多余、
               又让「该站点的证书」与「编辑该站点」割裂在两处；现在合并进来，
@@ -1477,6 +1595,11 @@ async function doRollback() {
           <p v-if="confStale" class="hint-note is-warn conf-stale">
             <Icon name="info" :size="14" class="ic" />
             <span>表单中影响配置的字段（如 WAF／域名／根目录）已变更，磁盘上的这份配置<b>没有跟着更新</b>——当前面板显示的将不是 nginx 实际生效的内容。点「按表单重新生成」同步，或继续在此手动编辑原文件。</span>
+          </p>
+          <!-- 外部修改（020）：面板不静默覆盖——是人工有意、脚本误写还是攻击无从判断 -->
+          <p v-if="confExternal" class="hint-note is-warn conf-external">
+            <Icon name="alert" :size="14" class="ic" />
+            <span>检测到<b>外部修改</b>：磁盘上的这份配置与面板最后一次下发的内容不一致（文件在面板之外被改过）。面板不会擅自覆盖它——可点「按表单重新生成」覆盖，或把需要的改动改写成上方的「自定义配置片段」。</span>
           </p>
           <p v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg" role="alert">{{ confErr }}</p>
           <textarea v-model="confText" class="mono conf-text" rows="10" spellcheck="false"
@@ -1822,6 +1945,7 @@ sudo update-ca-certificates</pre>
 .modal.wide.site-modal > .blk.full,
 .modal.wide.site-modal > .waf,
 .modal.wide.site-modal > .cc,
+.modal.wide.site-modal > .adv,
 .modal.wide.site-modal > .ssl,
 .modal.wide.site-modal > .conf,
 .modal.wide.site-modal > .hint-note,
@@ -1897,6 +2021,20 @@ sudo update-ca-certificates</pre>
 .cc-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
 .cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: 12px; line-height: 1.55; }
 .cc-note { margin: 6px 0 0; }
+
+/* 高级配置（020）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
+   内部是纵向堆叠的几个字段：选项多、且 HSTS 勾开后还会长出附加项，
+   做成两列网格反而会让跟随出现的输入框跳位。 */
+.adv { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
+.adv-head { margin-bottom: 6px; }
+.adv-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
+.adv-row { margin-bottom: 8px; }
+.adv-row select { width: 100%; margin-top: 4px; }
+.adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: 12px; line-height: 1.55; margin-top: 4px; }
+.adv-warn { margin: 6px 0 8px; }
+.adv-note { margin: 8px 0 0; }
+/* 外部修改警示条：与 .conf-stale 同款（.conf 是 grid，归零外边距防双重留白） */
+.conf-external { margin: 0; }
 
 /* 历史版本与回滚（018）：列表行 = 元信息 + 操作两列；正文展开为 pre-wrap 等宽块，
    展开行整幅跨列（不挤在 auto 列里）。 */

@@ -132,6 +132,30 @@ export interface Site {
    * 与「手动维护」互补——片段属托管态（随保存重渲染），整文件手动维护则不被覆盖。
    */
   custom_conf: string | null
+  /**
+   * www ↔ 非 www 跳转（020）：off | to_www | to_bare。
+   * **只对主域名**（domains[0]）生效——子域不会被一起改写。
+   */
+  www_redirect: string
+  /** 加密套件档位（020）：compat（老客户端）/ modern（默认）/ strict（仅 TLSv1.3） */
+  tls_profile: string
+  /** TLS 版本下限（020）：TLSv1 | TLSv1.1 | TLSv1.2 | TLSv1.3 */
+  tls_min: string
+  /** HSTS 开关（020）。⚠ 浏览器在 max-age 期间强制 HTTPS、服务端无法撤回 */
+  hsts: boolean
+  /** HSTS max-age（秒） */
+  hsts_max_age: number
+  hsts_include_sub: boolean
+  hsts_preload: boolean
+  /** 伪静态预置模板（020，仅 php）：none | wordpress | laravel | thinkphp | typecho | discuz | custom */
+  rewrite_preset: string
+  /** rewrite_preset=custom 时的原始 rewrite 文本；其余为 null */
+  rewrite_custom: string | null
+  /**
+   * 外部修改（020）：磁盘上的配置文件与「最后一次落盘的内容」不一致——文件在面板
+   * 之外被改动过。面板**不会**静默覆盖它，由用户决定重新生成 / 改片段 / 手动接管。
+   */
+  conf_external: boolean
 }
 
 /** 配置历史版本（后端 GET /sites/{id}/conf/versions 列表项，最新在前） */
