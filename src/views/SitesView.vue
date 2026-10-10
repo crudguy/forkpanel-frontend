@@ -1163,12 +1163,23 @@ sudo update-ca-certificates</pre>
    26px 正常分界。SSL 证书管理已并入编辑弹窗，页面下方不再有独立「证书」区块。 */
 .sec-head.block:first-of-type { margin-top: 0; }
 
-/* WAF 区块：位于站点编辑弹窗内，用虚线分隔以表明它是站点配置的一部分而非并列项 */
-.waf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px;
+/* WAF 区块：位于站点编辑弹窗内，用虚线分隔以表明它是站点配置的一部分而非并列项。
+   ⚠️ 曾用 flex-wrap 排这 4 个控件：570px 内容宽装不下「勾选 + 档位 + CC + 突发桶」，
+   且折点取决于「档位」下拉最长 option 的宽度（基础 ≈300px / 严格 ≈360px 折法不同）——
+   实测要么折成 3+1、要么 2+2：勾选框浮在 select 行、突发桶标签与输入分家，视觉错乱。
+   改为确定性网格：勾选行独占一行（与上方 SPA 回退的勾选行同构），字段行三段式——
+   档位弹性吸收余量，CC / 突发桶两列按标签宽度自适应（max-content 保证标签不折行）。 */
+.waf { display: grid; grid-template-columns: minmax(96px, 1fr) max-content max-content;
+  align-items: start; gap: 10px 14px; margin-top: 10px;
   border-top: 1px dashed var(--c-border); padding-top: 10px; }
+.waf > label.inline { grid-column: 1 / -1; }
 .waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
 .waf label.inline { flex-direction: row; align-items: center; cursor: help; }
 .waf label.inline input { width: auto; }
+/* 窄窗（弹窗退到 94vw 后内容区不足 ~470px）：字段行退回单列堆叠，防止数值列挤没「档位」 */
+@media (max-width: 500px) {
+  .waf { grid-template-columns: minmax(0, 1fr); }
+}
 .tiny { font-size: 11.5px; }
 .cert-sweep { margin: 0 0 10px; padding-left: 2px; }
 /* 「横幅」语言（与 WafView / LoginView 的 .notice / .warn 同一套）：
@@ -1240,9 +1251,14 @@ sudo update-ca-certificates</pre>
    sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
 .modal.wide { padding-bottom: 0; }
 /* 新建/编辑站点弹窗：字段两列网格（仅作用于站点弹窗，不影响 CA 指引弹窗）。
-   h3 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
+   标题行 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
 .modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
-.modal.wide.site-modal > h3 { grid-column: 1 / -1; margin-bottom: 2px; }
+/* ⚠️ 标题行必须显式跨两列。标题原先是**直接子级** <h3>（配 `> h3` 跨列规则），
+   弹窗统一改造把它包进了 .modal-head 公共组件——跨列规则没同步指向 .modal-head
+   时它是死选择器：head 只占第 1 列，「名称」被挤到第 1 行第 2 列、被吸顶标题
+   压住，其后所有字段整体错半格（2026-10-10 实机复现：head x=331/w=325 只占
+   半幅、名称 x=648 与 head 重叠 8px）。 */
+.modal.wide.site-modal > .modal-head { grid-column: 1 / -1; }
 .modal.wide.site-modal > .blk.full,
 .modal.wide.site-modal > .waf,
 .modal.wide.site-modal > .ssl,
