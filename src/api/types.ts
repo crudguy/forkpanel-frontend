@@ -156,6 +156,29 @@ export interface Site {
    * 之外被改动过。面板**不会**静默覆盖它，由用户决定重新生成 / 改片段 / 手动接管。
    */
   conf_external: boolean
+  // ── 021：访问控制 / 反代增强 / 站点日志 ──
+  /** IP 白名单（单 IP 或 CIDR，IPv4）；非空即白名单模式（只放行名单内，其余 deny all），此时 ip_deny 被忽略 */
+  ip_allow: string[] | null
+  /** IP 黑名单（单 IP 或 CIDR，IPv4）；ip_allow 非空时被忽略 */
+  ip_deny: string[] | null
+  /** HTTP Basic Auth 开关（口令不落库，仅设置时经 openssl 生成 apr1 摘要写入 htpasswd 文件） */
+  auth_basic: boolean
+  /** Basic Auth 用户名（auth_basic=true 时必填） */
+  auth_user: string | null
+  /** 多后端负载均衡策略（021）：least_conn | ip_hash。单后端时 upstream 块不存在、策略不生效 */
+  lb_policy: string
+  /** 反代建连超时（秒，1~3600） */
+  proxy_connect_timeout: number
+  /** 反代发送超时（秒，1~3600） */
+  proxy_send_timeout: number
+  /** 反代读取超时（秒，1~3600） */
+  proxy_read_timeout: number
+  /** 站点独立访问日志开关（021）：开启后由面板指定路径，可下载/清空 */
+  log_access: boolean
+  /** 站点独立错误日志开关（021） */
+  log_error: boolean
+  /** 错误日志级别（021）：debug | info | notice | warn | error | crit | alert | emerg */
+  log_error_level: string
 }
 
 /** 配置历史版本（后端 GET /sites/{id}/conf/versions 列表项，最新在前） */

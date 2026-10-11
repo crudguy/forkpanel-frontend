@@ -238,6 +238,10 @@ function emptyForm() {
     wwwRedirect: 'off', tlsProfile: 'modern', tlsMin: 'TLSv1.2',
     hsts: false, hstsMaxAge: 300, hstsSub: false, hstsPreload: false,
     rewritePreset: 'none', rewriteCustom: '',
+    // 访问控制 / 反代增强 / 站点日志（021）：默认值与后端 021 迁移一致
+    ipAllow: '', ipDeny: '', authBasic: false, authUser: '', authPass: '',
+    lbPolicy: 'least_conn', proxyConnectTimeout: 60, proxySendTimeout: 60, proxyReadTimeout: 60,
+    logAccess: false, logError: false, logErrorLevel: 'error',
   }
 }
 
@@ -342,6 +346,19 @@ function openEdit(s: Site) {
     hstsPreload: !!s.hsts_preload,
     rewritePreset: s.rewrite_preset || 'none',
     rewriteCustom: s.rewrite_custom ?? '',
+    // 访问控制 / 反代增强 / 站点日志（021）回填：库里都有 DEFAULT，缺失时回落到与后端相同的默认值
+    ipAllow: (s.ip_allow ?? []).join(', '),
+    ipDeny: (s.ip_deny ?? []).join(', '),
+    authBasic: !!s.auth_basic,
+    authUser: s.auth_user ?? '',
+    authPass: '', // 口令只写不读，永不回填
+    lbPolicy: s.lb_policy || 'least_conn',
+    proxyConnectTimeout: s.proxy_connect_timeout ?? 60,
+    proxySendTimeout: s.proxy_send_timeout ?? 60,
+    proxyReadTimeout: s.proxy_read_timeout ?? 60,
+    logAccess: !!s.log_access,
+    logError: !!s.log_error,
+    logErrorLevel: s.log_error_level || 'error',
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
   error.value = ''
@@ -564,6 +581,13 @@ async function save() {
         && new TextEncoder().encode(form.value.customConf).length > 64 * 1024) {
         errs.customConf = '自定义片段超过 64 KiB 上限（原始 nginx 文本按字节计）'
       }
+      // 访问控制（021）：Basic Auth 开启时必须填用户名；新站点首次开启还需口令
+      if (form.value.authBasic) {
+        const u = form.value.authUser.trim()
+        if (!u) errs.authUser = '开启 Basic Auth 必须填写用户名'
+        else if (u.includes(':') || /\s/.test(u)) errs.authUser = '用户名不能含冒号或空白'
+        else if (!editing.value && !form.value.authPass) errs.authPass = '新站点首次开启 Basic Auth 需设置口令'
+      }
     }
     const firstBad = Object.keys(errs)[0]
     if (firstBad) {
@@ -719,8 +743,46 @@ async function deploy(name: string, domains: string[], regenerate = false) {
     hsts_preload: form.value.hstsPreload,
     rewrite_preset: form.value.rewritePreset,
     rewrite_custom: form.value.rewriteCustom,
+    // 访问控制 / 反代增强 / 站点日志（021）：IP 名单以逗号分隔字符串提交（后端解析/校验）
+    ip_allow: form.value.ipAllow.split(/[,\s]+/).filter(Boolean).join(','),
+    ip_deny: form.value.ipDeny.split(/[,\s]+/).filter(Boolean).join(','),
+    auth_basic: form.value.authBasic,
+    auth_user: form.value.authUser.trim() || null,
+    // 口令只写不读：仅在本次填写了才提交（否则保留现有 htpasswd 文件，不误清）
+    ...(form.value.authPass ? { auth_pass: form.value.authPass } : {}),
+    lb_policy: form.value.lbPolicy,
+    proxy_connect_timeout: form.value.proxyConnectTimeout,
+    proxy_send_timeout: form.value.proxySendTimeout,
+    proxy_read_timeout: form.value.proxyReadTimeout,
+    log_access: form.value.logAccess,
+    log_error: form.value.logError,
+    log_error_level: form.value.logErrorLevel,
     waf: wafPayload(),
   })
+}
+
+// ── 站点日志（021）：查看 / 清空 ──
+/** 查看日志：浏览器新标签打开下载端点（text/plain 直接渲染/下载）。 */
+function viewLog(kind: 'access' | 'error') {
+  if (!editing.value) return
+  window.open(API.sites.logDownload(editing.value.id, kind), '_blank', 'noopener')
+}
+/** 清空日志（截断而非删除）：先弹内联二次确认（避免误清空），确认后 POST。 */
+const clearAsk = ref<'access' | 'error' | null>(null)
+async function clearLog(kind: 'access' | 'error') {
+  if (!editing.value) return
+  clearAsk.value = kind
+}
+async function confirmClear() {
+  const kind = clearAsk.value
+  clearAsk.value = null
+  if (!kind || !editing.value) return
+  busy.value = true; error.value = ''
+  try {
+    await api.post(API.sites.logClear(editing.value.id), { kind })
+    toast(kind === 'access' ? '访问日志已清空' : '错误日志已清空')
+  } catch (e) { error.value = errorText(e) }
+  finally { busy.value = false }
 }
 
 // ── 删除站点 ──
@@ -1538,6 +1600,117 @@ async function doRollback() {
           </p>
         </div>
 
+        <!-- 访问控制 / 反代增强（021）：三类「字段固定、极易写错、后果严重」——
+             IP 黑白名单顺序匹配、Basic Auth 口令落盘、多后端负载策略，皆由渲染器产出。 -->
+        <div class="adv">
+          <div class="adv-head">
+            <span class="adv-title"><Icon name="key" :size="14" /> 访问控制与反代</span>
+          </div>
+          <!-- IP 黑白名单（互斥：白名单非空时黑名单被忽略，对应 input 禁用） -->
+          <label class="blk full adv-row" title="单 IP 或 CIDR（IPv4），逗号/空格分隔。白名单非空即只放行名单内、其余拒绝">
+            IP 白名单（allow）
+            <textarea v-model="form.ipAllow" class="mono adv-text" rows="2" spellcheck="false"
+              :disabled="!!form.ipDeny.trim()" placeholder="192.168.1.10, 10.0.0.0/24"></textarea>
+          </label>
+          <label class="blk full adv-row" :class="{ 'is-dim': !!form.ipAllow.trim() }"
+            title="单 IP 或 CIDR（IPv4）。白名单非空时被忽略">
+            IP 黑名单（deny）
+            <textarea v-model="form.ipDeny" class="mono adv-text" rows="2" spellcheck="false"
+              :disabled="!!form.ipAllow.trim()" placeholder="1.2.3.4, 5.6.7.0/24"></textarea>
+          </label>
+          <p class="hint-note adv-note" v-if="form.ipAllow.trim()">
+            <Icon name="info" :size="14" class="ic" />
+            <span>已启用白名单：黑名单被忽略（白名单优先，名单外全部拒绝）。</span>
+          </p>
+          <!-- HTTP Basic Auth：口令不落库，仅设置时经 openssl 生成 apr1 摘要写入 htpasswd -->
+          <label class="blk row-inline" title="开启后访问站点需输入用户名口令（口令不落库）">
+            <input type="checkbox" v-model="form.authBasic" /> <span>启用 Basic Auth（HTTP 基础认证）</span>
+          </label>
+          <template v-if="form.authBasic">
+            <label class="blk full adv-row" data-f="authUser" :class="{ 'has-err': fieldErrs.authUser }"
+              title="Basic Auth 用户名（不能含冒号或空白）">
+              用户名
+              <input v-model="form.authUser" @input="clearFieldErr('authUser')"
+                :aria-invalid="!!fieldErrs.authUser" placeholder="admin" />
+              <span v-if="fieldErrs.authUser" :key="'authUser' + errSeq" class="field-err">{{ fieldErrs.authUser }}</span>
+            </label>
+            <label class="blk full adv-row" data-f="authPass" :class="{ 'has-err': fieldErrs.authPass }"
+              title="留空 = 保留现有口令（仅设置时经 openssl 生成摘要写入 htpasswd，不落库、不回显）">
+              口令{{ editing ? '（留空保留）' : '' }}
+              <input type="password" v-model="form.authPass" @input="clearFieldErr('authPass')"
+                :aria-invalid="!!fieldErrs.authPass" placeholder="********" />
+              <span v-if="fieldErrs.authPass" :key="'authPass' + errSeq" class="field-err">{{ fieldErrs.authPass }}</span>
+            </label>
+          </template>
+          <!-- 反代增强：仅 proxy 类型有意义（单后端无 upstream 块、策略不生效） -->
+          <template v-if="form.kind === 'proxy'">
+            <label class="blk adv-row" title="多后端时的负载均衡策略">
+              负载均衡策略
+              <select v-model="form.lbPolicy">
+                <option value="least_conn">最小连接（默认）</option>
+                <option value="ip_hash">按客户端 IP 哈希</option>
+              </select>
+            </label>
+            <label class="blk adv-row" title="与上游建连超时（秒，1~3600）">
+              建连超时（秒）
+              <input v-model.number="form.proxyConnectTimeout" type="number" min="1" max="3600" />
+            </label>
+            <label class="blk adv-row" title="向上游发送超时（秒，1~3600）">
+              发送超时（秒）
+              <input v-model.number="form.proxySendTimeout" type="number" min="1" max="3600" />
+            </label>
+            <label class="blk adv-row" title="从上游读取超时（秒，1~3600）">
+              读取超时（秒）
+              <input v-model.number="form.proxyReadTimeout" type="number" min="1" max="3600" />
+            </label>
+          </template>
+        </div>
+
+        <!-- 站点日志（021）：独立 access/error 开关 + 级别 + 查看/下载/清空 -->
+        <div class="adv">
+          <div class="adv-head">
+            <span class="adv-title"><Icon name="file" :size="14" /> 站点日志</span>
+          </div>
+          <label class="blk row-inline" title="开启后由面板指定路径记录本站访问日志，可查看/下载/清空">
+            <input type="checkbox" v-model="form.logAccess" /> <span>记录访问日志（access.log）</span>
+          </label>
+          <label class="blk row-inline" title="开启后由面板指定路径记录本站错误日志">
+            <input type="checkbox" v-model="form.logError" /> <span>记录错误日志（error.log）</span>
+          </label>
+          <label class="blk adv-row" v-if="form.logError" title="错误日志级别">
+            错误级别
+            <select v-model="form.logErrorLevel">
+              <option value="debug">debug</option>
+              <option value="info">info</option>
+              <option value="notice">notice</option>
+              <option value="warn">warn</option>
+              <option value="error">error（默认）</option>
+              <option value="crit">crit</option>
+              <option value="alert">alert</option>
+              <option value="emerg">emerg</option>
+            </select>
+          </label>
+          <div class="log-actions" v-if="editing">
+            <button v-if="form.logAccess" class="btn-ghost btn-sm" :disabled="busy" type="button"
+              @click="viewLog('access')"><Icon name="file" :size="13" /> 查看访问日志</button>
+            <button v-if="form.logAccess" class="btn-ghost btn-sm" :disabled="busy" type="button"
+              @click="clearLog('access')"><Icon name="trash" :size="13" /> 清空访问日志</button>
+            <button v-if="form.logError" class="btn-ghost btn-sm" :disabled="busy" type="button"
+              @click="viewLog('error')"><Icon name="file" :size="13" /> 查看错误日志</button>
+            <button v-if="form.logError" class="btn-ghost btn-sm" :disabled="busy" type="button"
+              @click="clearLog('error')"><Icon name="trash" :size="13" /> 清空错误日志</button>
+          </div>
+          <div class="log-confirm" v-if="clearAsk">
+            <span>确定清空{{ clearAsk === 'access' ? '访问' : '错误' }}日志？将截断文件（保留并继续写入），不可恢复。</span>
+            <button class="btn-ghost btn-sm" type="button" @click="clearAsk = null">取消</button>
+            <button class="btn-danger btn-sm" type="button" :disabled="busy" @click="confirmClear">确认清空</button>
+          </div>
+          <p class="hint-note adv-note" v-if="!form.logAccess && !form.logError">
+            <Icon name="info" :size="14" class="ic" />
+            <span>未开启独立日志：站点沿用 nginx 全局日志（无法按站点查看/下载/清空）。</span>
+          </p>
+        </div>
+
         <!-- SSL 证书：站点配置的一部分，与站点同处一个编辑弹窗
              （此前是页面下方独立的「证书」区块——与应用站点配置同理，单独成块既多余、
               又让「该站点的证书」与「编辑该站点」割裂在两处；现在合并进来，
@@ -2033,6 +2206,19 @@ sudo update-ca-certificates</pre>
 .adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: 12px; line-height: 1.55; margin-top: 4px; }
 .adv-warn { margin: 6px 0 8px; }
 .adv-note { margin: 8px 0 0; }
+/* 021：IP 黑名单在白名单非空时禁用 + 视觉降权 */
+.is-dim { opacity: .5; }
+.is-dim textarea { pointer-events: none; }
+/* 021：站点日志操作区 + 内联清空确认条 */
+.log-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+.log-confirm {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
+  background: color-mix(in srgb, var(--c-danger, #e5484d) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-danger, #e5484d) 35%, transparent);
+  font-size: 12px; color: var(--c-text);
+}
+.log-confirm > span { flex: 1 1 auto; min-width: 180px; }
 /* 外部修改警示条：与 .conf-stale 同款（.conf 是 grid，归零外边距防双重留白） */
 .conf-external { margin: 0; }
 

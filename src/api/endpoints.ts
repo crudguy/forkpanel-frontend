@@ -111,6 +111,10 @@ export const API = {
     /** 回滚到指定历史版本（nginx -t 校验 → 留档 → 落盘 + reload；仅 owner） */
     confRollback: (id: number) => `/api/v1/sites/${id}/conf/rollback`,
     logs: (id: number) => `/api/v1/sites/${id}/logs`,
+    /** 站点独立日志：下载（021，kind=access|error 走 query） */
+    logDownload: (id: number, kind: string) => `/api/v1/sites/${id}/log/download?kind=${encodeURIComponent(kind)}`,
+    /** 站点独立日志：清空（021，截断而非删除；body 可选 kind） */
+    logClear: (id: number) => `/api/v1/sites/${id}/log/clear`,
     sslApply: (id: number) => `/api/v1/sites/${id}/ssl/apply`,
   },
 
