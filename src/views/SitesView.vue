@@ -33,6 +33,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
+import NginxEditor from '@/components/NginxEditor.vue'
 
 // Site / Cert 已移入 src/api/types.ts（跨视图共享类型，避免各存删减副本而漂移）
 
@@ -1775,10 +1776,10 @@ async function doRollback() {
             <span>检测到<b>外部修改</b>：磁盘上的这份配置与面板最后一次下发的内容不一致（文件在面板之外被改过）。面板不会擅自覆盖它——可点「按表单重新生成」覆盖，或把需要的改动改写成上方的「自定义配置片段」。</span>
           </p>
           <p v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg" role="alert">{{ confErr }}</p>
-          <textarea v-model="confText" class="mono conf-text" rows="10" spellcheck="false"
+          <NginxEditor v-model="confText" class="conf-text" :rows="10" :spellcheck="false"
             :readonly="!canManage || !isOwner || !webSupported"
             :placeholder="confLoading ? '读取中…' : '（配置文件为空或尚未下发——先保存「并应用」生成）'"
-            aria-label="站点 Nginx 配置原文"></textarea>
+            aria-label="站点 Nginx 配置原文" />
           <div class="conf-ops">
             <p class="hint-note conf-hint">
               <Icon name="info" :size="14" class="ic" />
