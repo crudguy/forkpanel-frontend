@@ -2201,8 +2201,23 @@ sudo update-ca-certificates</pre>
 
 /* 内容滚动区与分区卡片 */
 .modal-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; position: relative; padding: 18px 22px 8px; }
-.modal-body .sector { max-width: 780px; margin: 0 auto 22px; }
-.modal-body .sector-h { font-size: 14px; font-weight: 700; margin: 0 0 10px; color: var(--c-text); }
+/* 全屏后横向空间充足：分区内简单输入框双列排布，宽块（路由表 / 代码编辑器 /
+   证书列表 / 提示）整宽跨两列。整列块用 1fr 1fr，列间距 18、行距 14。 */
+.modal-body .sector { max-width: 980px; margin: 0 auto 22px;
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 14px; align-items: start; }
+/* .blk 默认 margin-bottom:12px（与 row-gap 叠加会双倍留白），分区内归零 */
+.modal-body .sector > .blk { margin-bottom: 0; }
+/* 整宽元素：跨两列 */
+.modal-body .sector > .blk.full,
+.modal-body .sector > .routes,
+.modal-body .sector > .tpl-row,
+.modal-body .sector > .waf,
+.modal-body .sector > .cc,
+.modal-body .sector > .adv,
+.modal-body .sector > .ssl,
+.modal-body .sector > .conf,
+.modal-body .sector > .hint-note { grid-column: 1 / -1; }
+.modal-body .sector-h { grid-column: 1 / -1; font-size: 14px; font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
 
 /* 通用宽版弹窗（CA 指引等）操作条吸底：站点弹窗已在上方用 grid 行固定，不受影响 */
 .modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
@@ -2266,7 +2281,18 @@ sudo update-ca-certificates</pre>
 /* 高级配置（020）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
    内部是纵向堆叠的几个字段：选项多、且 HSTS 勾开后还会长出附加项，
    做成两列网格反而会让跟随出现的输入框跳位。 */
-.adv { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
+.adv { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 11px; align-items: start; }
+/* 卡片内简单输入框双列；标题 / 整宽文本域 / 提示 / 日志操作条跨两列 */
+.modal-body .adv > .blk { margin-bottom: 0; }
+.modal-body .adv > .adv-head,
+.modal-body .adv > .blk.full,
+.modal-body .adv > .adv-row.full,
+.modal-body .adv > .hint-note,
+.modal-body .adv > .adv-note,
+.modal-body .adv > .adv-warn,
+.modal-body .adv > .log-actions,
+.modal-body .adv > .log-confirm { grid-column: 1 / -1; }
 .adv-head { margin-bottom: 6px; }
 .adv-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
 .adv-row { margin-bottom: 8px; }
@@ -2289,6 +2315,14 @@ sudo update-ca-certificates</pre>
 .log-confirm > span { flex: 1 1 auto; min-width: 180px; }
 /* 外部修改警示条：与 .conf-stale 同款（.conf 是 grid，归零外边距防双重留白） */
 .conf-external { margin: 0; }
+/* 窄视口（弹窗 ≈ 96vw 已不足 ~760px）回退单列：双列会被输入框宽度挤爆，
+   且全宽项保持跨两列也无害（单列下本就整宽）。 */
+@media (max-width: 760px) {
+  .modal.wide.site-modal .modal-body .sector,
+  .modal.wide.site-modal .modal-body .adv { grid-template-columns: 1fr; }
+  .modal.wide.site-modal .modal-body .sector > .blk,
+  .modal.wide.site-modal .modal-body .adv > .blk { grid-column: auto; }
+}
 
 /* 历史版本与回滚（018）：列表行 = 元信息 + 操作两列；正文展开为 pre-wrap 等宽块，
    展开行整幅跨列（不挤在 auto 列里）。 */
