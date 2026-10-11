@@ -22,7 +22,7 @@
  * 所以「编辑」一个反代 / PHP 站时那两个输入框是空的，**必须重填**才能再应用
  * （后端会以 400 拒绝空值，不会静默把站点改成静态）。
  */
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
@@ -219,6 +219,42 @@ function onPickRouteRoot(p: string) {
 }
 // 站点编辑弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const modalBox = ref<HTMLElement | null>(null)
+// 编辑弹窗全屏 + 左侧分段导航（2026-10-11，B 方案）：导航 rail 平滑滚动到对应分区，
+// 滚动时高亮当前分区；打开弹窗时复位到顶部与首个分区。
+const modalBody = ref<HTMLElement | null>(null)
+const navSections = [
+  { id: 'sec-basic', label: '基础' },
+  { id: 'sec-routing', label: '路由与后端' },
+  { id: 'sec-secure', label: '安全与性能' },
+  { id: 'sec-ops', label: '日志与证书' },
+] as const
+const activeSec = ref<string>('sec-basic')
+function scrollToSec(id: string) {
+  const body = modalBody.value
+  if (!body) return
+  const el = body.querySelector<HTMLElement>('#' + id)
+  if (!el) return
+  body.scrollTo({ top: Math.max(0, el.offsetTop - 14), behavior: 'smooth' })
+  activeSec.value = id
+}
+function onBodyScroll() {
+  const body = modalBody.value
+  if (!body) return
+  const top = body.scrollTop + 28
+  let cur: string = navSections[0].id
+  for (const s of navSections) {
+    const el = body.querySelector<HTMLElement>('#' + s.id)
+    if (el && el.offsetTop <= top) cur = s.id
+  }
+  activeSec.value = cur
+}
+watch(modalOpen, (v) => {
+  if (!v) return
+  nextTick(() => {
+    modalBody.value?.scrollTo({ top: 0 })
+    activeSec.value = 'sec-basic'
+  })
+})
 // 统一关闭出口（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮 / Esc 都走它
 const { close: modalClose } = useModal(() => modalOpen.value, modalBox, closeModal)
 const editing = ref<Site | null>(null)
@@ -1322,12 +1358,20 @@ async function doRollback() {
             <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
           </p>
         </div>
+      <div class="modal-mid">
+        <nav class="nav-rail" aria-label="编辑分区">
+          <button v-for="s in navSections" :key="s.id" type="button" class="nav-item"
+            :class="{ active: activeSec === s.id }" @click="scrollToSec(s.id)">{{ s.label }}</button>
+        </nav>
+        <div ref="modalBody" class="modal-body" @scroll="onBodyScroll">
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
           <Icon name="alert" :size="15" class="ic" />
           <span>未接入 Web 服务器（nginx）：<b>只能保存站点登记信息，无法下发配置</b>；
             下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
         </div>
+        <section class="sector" id="sec-basic">
+          <h4 class="sector-h">基础信息</h4>
         <label class="blk" :class="{ 'has-err': fieldErrs.name }" data-f="name"
           title="站点标识，用作配置文件名与默认目录；仅小写字母、数字、连字符（如 my-site）">名称
           <input v-model="form.name" placeholder="my-site" :aria-invalid="!!fieldErrs.name"
@@ -1365,6 +1409,9 @@ async function doRollback() {
              （都是 proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填
              模板，而不是给 SiteKind 加 4 个产出同一份配置的变体。
              再点同一个 chip 可取消选择；手改过「后端」后切模板不会覆盖你填的内容。 -->
+        </section>
+        <section class="sector" id="sec-routing">
+          <h4 class="sector-h">路由与后端</h4>
         <div v-if="form.kind === 'proxy'" class="tpl-row">
           <span class="tpl-label">应用模板</span>
           <button v-for="t in APP_TEMPLATES" :key="t.key" type="button" class="tpl-chip"
@@ -1472,6 +1519,9 @@ async function doRollback() {
         </div>
 
         <!-- WAF：站点配置的一部分，与其它字段**同一次下发**，故同处一个表单 -->
+        </section>
+        <section class="sector" id="sec-secure">
+          <h4 class="sector-h">安全与性能</h4>
         <div class="waf">
           <label class="inline" title="在被管理站点前生成拦截规则；规则集由系统内置，此处只能选档位与数值">
             <input type="checkbox" v-model="form.wafOn" :disabled="!webSupported" /> 启用 WAF
@@ -1667,6 +1717,9 @@ async function doRollback() {
           </template>
         </div>
 
+        </section>
+        <section class="sector" id="sec-ops">
+          <h4 class="sector-h">日志与证书</h4>
         <!-- 站点日志（021）：独立 access/error 开关 + 级别 + 查看/下载/清空 -->
         <div class="adv">
           <div class="adv-head">
@@ -1834,6 +1887,7 @@ async function doRollback() {
           </div>
         </div>
 
+        </section>
         <label class="blk row-inline">
           <input type="checkbox" v-model="form.enabled" />
           <span>启用（纳入 Web 服务器配置）</span>
@@ -1852,6 +1906,8 @@ async function doRollback() {
         <!-- 操作条吸底：弹窗比视口高时，按钮不会随内容滚走，矮窗口下也点得到。
              错误条**不再**挤在这里——它已上移到弹窗顶部吸顶（见上方 .form-msg），
              字段级错误则各自挂在出问题的输入框旁。 -->
+        </div>
+      </div>
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" @click="modalClose">取消</button>
@@ -2104,42 +2160,53 @@ sudo update-ca-certificates</pre>
 /* 根证书引导与站点编辑都用宽版（宽度与滚动见公共 .modal.wide）；此处只补
    sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
 .modal.wide { padding-bottom: 0; }
-/* 新建/编辑站点弹窗宽度：覆盖公共 .modal.wide 的 620px → 650px（仅作用于站点弹窗，
-   CA 指引等其它宽版弹窗仍保持 620px）。特异性 (0,3,1) 压过公共 (0,2,0)。 */
-.modal.wide.site-modal { width: min(650px, 94vw); }
-/* 新建/编辑站点弹窗：字段两列网格（仅作用于站点弹窗，不影响 CA 指引弹窗）。
-   标题行 / waf / ssl / 提示块 / 操作条等需整行，短字段（名称、类型）自然并排成一对。 */
-.modal.wide.site-modal { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 10px; align-items: start; }
-/* ⚠️ 标题行必须显式跨两列。标题原先是**直接子级** <h3>（配 `> h3` 跨列规则），
-   弹窗统一改造把它包进了 .modal-head 公共组件——跨列规则没同步指向 .modal-head
-   时它是死选择器：head 只占第 1 列，「名称」被挤到第 1 行第 2 列、被吸顶标题
-   压住，其后所有字段整体错半格（2026-10-10 实机复现：head x=331/w=325 只占
-   半幅、名称 x=648 与 head 重叠 8px）。 */
-.modal.wide.site-modal > .modal-head { grid-column: 1 / -1; }
-.modal.wide.site-modal > .blk.full,
-.modal.wide.site-modal > .waf,
-.modal.wide.site-modal > .cc,
-.modal.wide.site-modal > .adv,
-.modal.wide.site-modal > .ssl,
-.modal.wide.site-modal > .conf,
-.modal.wide.site-modal > .hint-note,
-.modal.wide.site-modal > .tip,
-.modal.wide.site-modal > .row-inline,
-.modal.wide.site-modal > .modal-foot { grid-column: 1 / -1; }
-/* 吸底操作条：弹窗比视口高时按钮会随内容一起滚走，矮窗口下看不见也点不到。
-   .modal.wide 自身即滚动容器，sticky 相对它的 padding box 生效；弹窗下内边距改由
-   操作条自己承担（故 .modal.wide 的 padding-bottom 归零），负左右外边距让操作条通栏。 */
-.modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
-  padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
-
-/* 站点弹窗的操作条吸底：弹窗内容（字段 + WAF + SSL）比视口高时按钮不随内容滚走，
-   矮窗口下也点得到。错误条**不再**挤在这里，改到弹窗顶部吸顶（见下方 .form-msg）。 */
-.modal.wide.site-modal > .modal-foot { position: sticky; bottom: 0; z-index: 2;
-  margin: 14px -20px 0; padding: 12px 20px; background: var(--c-surface-2);
-  border-top: 1px solid var(--c-border); }
-/* 内部操作条不再自行吸底（避免两层 sticky 叠加），吸底与背景统一由父容器承担。 */
+/* 站点编辑弹窗：全屏面板 + 左侧分段导航（2026-10-11，B 方案）。
+   结构：.modal(网格 标题 / 中部 / 操作条) > .modal-mid(导航 rail + .modal-body 滚动区)。
+   覆盖公共 .modal.wide 的 620px → 全屏面板；特异性 (0,3,1) 压过公共 (0,2,0)。 */
+.modal.wide.site-modal {
+  width: min(1180px, 96vw);
+  height: min(94vh, 960px);
+  max-height: 96vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+  padding: 0;
+  overflow: hidden;
+}
+.modal.wide.site-modal > .modal-head { grid-row: 1; border-bottom: 1px solid var(--c-border); }
+.modal.wide.site-modal > .modal-mid { grid-row: 2; display: flex; min-height: 0; }
+.modal.wide.site-modal > .modal-foot {
+  grid-row: 3; position: static; margin: 0; padding: 12px 22px;
+  background: var(--c-surface-2); border-top: 1px solid var(--c-border);
+}
+/* 内部操作条不再自行吸底（弹窗为 grid 行，天然固定底部），吸底与背景由 grid 行承担。 */
 .modal.wide.site-modal > .modal-foot .modal-actions { position: static; margin: 0;
   padding: 0; border-top: 0; background: none; }
+
+/* 左侧分段导航 rail：点按平滑滚动到对应 .sector；当前分区由 onBodyScroll 高亮 */
+.nav-rail {
+  width: 176px; flex: none; overflow-y: auto;
+  border-right: 1px solid var(--c-border);
+  padding: 14px 10px; background: var(--c-surface-2);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer;
+  padding: 8px 10px; border-radius: 8px;
+  font: inherit; font-size: 13px; color: var(--c-text);
+}
+.nav-item:hover { background: var(--c-hover); }
+.nav-item.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+
+/* 内容滚动区与分区卡片 */
+.modal-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; position: relative; padding: 18px 22px 8px; }
+.modal-body .sector { max-width: 780px; margin: 0 auto 22px; }
+.modal-body .sector-h { font-size: 14px; font-weight: 700; margin: 0 0 10px; color: var(--c-text); }
+
+/* 通用宽版弹窗（CA 指引等）操作条吸底：站点弹窗已在上方用 grid 行固定，不受影响 */
+.modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
+  padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
 
 /* ── 弹窗内的报错：标题行内的通用条（吸顶）+ 字段级红字，两者分工明确 ── */
 /* 通用消息条跟着公共 .modal-head **整体吸顶**（不再自己做第二个 sticky）：
