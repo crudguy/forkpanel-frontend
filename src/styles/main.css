@@ -146,6 +146,10 @@ input[type="checkbox"], input[type="radio"] { width: auto; }
 input::placeholder, textarea::placeholder, select::placeholder { color: var(--c-text-dim); opacity: 1; }
 input:focus-visible, textarea:focus-visible, select:focus-visible,
 button:focus-visible { outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft); }
+/* 禁用态：此前只有 button:disabled —— 输入控件被 :disabled 后外观与可用态**完全一致**
+   （未接入 nginx 时站点编辑弹窗内整片输入框都是禁用态），用户只能靠 hover title 猜原因。
+   统一降透明度 + 禁用光标，与按钮禁用同一语义（各视图的私有 .is-dim 之类补丁可并入）。 */
+input:disabled, textarea:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
 
 /* 键盘焦点环统一（审计 P13）：a 与其他可聚焦元素共用一套指示，
    此前链接完全没有焦点样式，键盘用户无法定位 */

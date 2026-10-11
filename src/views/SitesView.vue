@@ -162,8 +162,15 @@ function tlsState(s: Site): { label: string; cls: string; title: string } {
   return { label: '已启用', cls: 'badge-ok', title: '证书已随站点配置在 Web 服务器生效' }
 }
 
+/**
+ * 列表**非静默加载失败**（区别于「真的一个站点都没有」）。
+ * 不加这个标志时 `sites` 保持空数组 → 走 EmptyState「暂无站点 · 点新建站点」，
+ * 与顶部的错误红字自相矛盾（一边说加载失败、一边说没有数据）。
+ */
+const loadFailed = ref(false)
+
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = '' }
+  if (!silent) { loading.value = true; error.value = ''; loadFailed.value = false }
   try {
     sites.value = await api.get<Site[]>(API.sites.list())
     certs.value = await api.get<Cert[]>(API.certs.list())
@@ -173,12 +180,24 @@ async function load(silent = false) {
     catch { /* 旧后端无此端点：选择器降级为默认起始目录，不阻断站点功能 */ }
     if (silent) error.value = '' // 自愈：轮询成功清旧错（站点页不轮询，保留一致语义）
   } catch (e) {
-    if (!silent) error.value = errorText(e)
+    if (!silent) { error.value = errorText(e); loadFailed.value = true }
   } finally {
     if (!silent) loading.value = false
   }
 }
 onMounted(load)
+
+/**
+ * 列表本地检索：按站点名 / 域名做包含匹配（不区分大小写）。
+ * 纯前端过滤、不发请求——站点量级用不到服务端分页，且过滤要即时反馈。
+ */
+const q = ref('')
+const visibleSites = computed(() => {
+  const k = q.value.trim().toLowerCase()
+  if (!k) return sites.value
+  return sites.value.filter(s =>
+    s.name.toLowerCase().includes(k) || s.domains.some(d => d.toLowerCase().includes(k)))
+})
 
 function certLevel(d: number | null) {
   if (d === null) return 'dim'
@@ -222,12 +241,32 @@ const modalBox = ref<HTMLElement | null>(null)
 // 编辑弹窗全屏 + 左侧分段导航（2026-10-11，B 方案）：导航 rail 平滑滚动到对应分区，
 // 滚动时高亮当前分区；打开弹窗时复位到顶部与首个分区。
 const modalBody = ref<HTMLElement | null>(null)
+// 段名必须**如实**对应段内实际内容：此前「安全与性能」里塞着自定义片段、www 跳转、
+// 伪静态这类「站点行为」项，「日志与证书」里塞着整块 Nginx 原文与历史版本——
+// 名字与内容不符，找东西只能靠猜。
 const navSections = [
   { id: 'sec-basic', label: '基础' },
   { id: 'sec-routing', label: '路由与后端' },
-  { id: 'sec-secure', label: '安全与性能' },
-  { id: 'sec-ops', label: '日志与证书' },
+  { id: 'sec-secure', label: '安全与高级' },
+  { id: 'sec-ops', label: '日志 · 证书 · 原文' },
 ] as const
+/** 表单字段 → 所属分区。仅用于把字段级错误映射回导航 rail（见 secErrs）。 */
+const FIELD_SEC: Record<string, string> = {
+  name: 'sec-basic', domains: 'sec-basic', root: 'sec-basic',
+  upstreams: 'sec-routing', fpm: 'sec-routing',
+  redirectTarget: 'sec-routing', redirectCode: 'sec-routing', routes: 'sec-routing',
+  wafProfile: 'sec-secure', wafRate: 'sec-secure', wafBurst: 'sec-secure',
+  customConf: 'sec-secure', authUser: 'sec-secure', authPass: 'sec-secure',
+}
+/** 分区是否有字段级错误：rail 上对应项亮红点，用户切到别的分区后仍知道哪儿没改对。 */
+const secErrs = computed<Record<string, boolean>>(() => {
+  const m: Record<string, boolean> = {}
+  for (const k of Object.keys(fieldErrs.value)) {
+    const s = FIELD_SEC[k]
+    if (s) m[s] = true
+  }
+  return m
+})
 const activeSec = ref<string>('sec-basic')
 function scrollToSec(id: string) {
   const body = modalBody.value
@@ -814,11 +853,13 @@ async function confirmClear() {
   const kind = clearAsk.value
   clearAsk.value = null
   if (!kind || !editing.value) return
-  busy.value = true; error.value = ''
+  // ⚠️ 清空日志发生在**编辑弹窗内**，错误绝不能写页面级 error——那行提示在 .mask 之后，
+  //    用户只会看到"点了确认没反应"。走 formError（弹窗顶部吸顶条）。
+  busy.value = true; formError.value = ''
   try {
     await api.post(API.sites.logClear(editing.value.id), { kind })
     toast(kind === 'access' ? '访问日志已清空' : '错误日志已清空')
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { formError.value = errorText(e); errSeq.value++ }
   finally { busy.value = false }
 }
 
@@ -826,22 +867,37 @@ async function confirmClear() {
 const delTarget = ref<Site | null>(null)
 async function doDelete() {
   if (!delTarget.value) return
+  const name = delTarget.value.name
   busy.value = true; error.value = ''
-  try { await api.del(API.sites.remove(delTarget.value.id)); delTarget.value = null; await load() }
-  catch (e) { error.value = errorText(e) }
-  finally { busy.value = false }
+  try {
+    await api.del(API.sites.remove(delTarget.value.id))
+    delTarget.value = null
+    await load()
+    toast(`已删除站点 ${name}`)
+  } catch (e) {
+    // ⚠️ 失败也要关掉确认框：留着它不关、而错误写在页面级（被 .mask 挡住），
+    //    用户看到的是"点了删除、对话框卡在那儿没反应"。关掉后错误条才可见。
+    delTarget.value = null
+    error.value = errorText(e)
+  } finally { busy.value = false }
 }
 
 // ── 重载（受 webserver 能力门禁）──
+/**
+ * 正在重载的站点 id。
+ * 行内按钮此前只按能力/权限禁用、**完全不反映进行中状态**——点「重载」后界面毫无变化，
+ * 连点还会并发触发多次 reload。这里给出 per-row 忙碌态（按钮文案 + 全局 busy 兜底）。
+ */
+const rowBusyId = ref<number | null>(null)
 async function reloadSite(s: Site) {
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; rowBusyId.value = s.id
   try {
     await api.post(API.sites.reload(s.id), {})
     toast(`已重载 ${s.name}`)
   } catch (e) {
     if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法重载配置', 'warn')
     else error.value = errorText(e)
-  } finally { busy.value = false; await load() }
+  } finally { rowBusyId.value = null; busy.value = false; await load() }
 }
 
 // ── SSL：证书管理已并入「编辑站点」弹窗 ──
@@ -956,9 +1012,17 @@ async function setAutoRenew(c: Cert, val: boolean) {
 async function doDeleteCert() {
   if (!delCert.value) return
   busy.value = true; error.value = ''
-  try { await api.del(API.certs.remove(delCert.value.id)); delCert.value = null; await load() }
-  catch (e) { sslErrTo(errorText(e)) }
-  finally { busy.value = false }
+  const dom = delCert.value.domain
+  try {
+    await api.del(API.certs.remove(delCert.value.id))
+    delCert.value = null
+    await load()
+    toast(`已删除证书 ${dom}`)
+  } catch (e) {
+    // 同 doDelete：失败必须关确认框，否则错误落在遮罩之后、表现为"点了没反应"
+    delCert.value = null
+    sslErrTo(errorText(e))
+  } finally { busy.value = false }
 }
 
 // ── 站点原始配置（编辑弹窗内「站点配置（Nginx）」区）：查看 / 编辑 / 按表单重新生成 ──
@@ -1001,6 +1065,11 @@ const confHint = computed(() => {
   if (!editing.value?.enabled) return '站点已停用（配置已移除）；先在下方勾选「启用」并保存，再回来编辑'
   return '保存到磁盘并重载（保存前自动 nginx -t 校验；失败不会动旧文件）'
 })
+
+/** 当前编辑中的配置字节数（UTF-8）：给超长配置一个可感知的量级（后端上限 64 KiB）。 */
+const confSize = computed(() => new TextEncoder().encode(confText.value).length)
+/** 接近 64 KiB 上限时警示（后端对该值做权威校验，这里只是提前提醒）。 */
+const confTooBig = computed(() => confSize.value > 64 * 1024)
 
 /** 「按表单重新生成」的提示：与「保存配置」后果完全不同，不能共用 confHint。 */
 const regenHint = computed(() => {
@@ -1261,12 +1330,19 @@ async function doRollback() {
 
 <template>
   <div>
-    <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <!-- 页面级错误也用公共 .err-bar（红底 + 图标），不再是无图标的裸红字——
+         与弹窗内的错误条保持同一长相。 -->
+    <p v-if="error" class="err-bar page-err" role="alert">
+      <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
+    </p>
 
-    <div v-if="!webSupported" class="tip warn">
-      未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
-      请先在主机上安装并启动 nginx，再回到此页刷新。
-    </div>
+    <!-- 与弹窗内同类警示统一走公共 .hint-note.is-warn：此前本页私有的 .tip.warn
+         是另一套长相（无圆角内边距由各处自造），同一语义两种外观。 -->
+    <p v-if="!webSupported" class="hint-note is-warn">
+      <Icon name="alert" :size="15" class="ic" />
+      <span>未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
+        请先在主机上安装并启动 nginx，再回到此页刷新。</span>
+    </p>
 
     <!-- 站点列表。刷新与新建收进本区块头：它们是「对这张表」的动作，紧贴其操作对象
          （与 ProcessesView 把工具条收进卡片顶栏同范式）。此前二者悬在页面级 page-head，
@@ -1274,6 +1350,8 @@ async function doRollback() {
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
     <div class="page-head">
       <h2 class="page-title"><Icon name="globe" :size="18" /> 网站</h2>
+      <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
+      <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
       <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
@@ -1288,21 +1366,39 @@ async function doRollback() {
              故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
              证书表 w-dom/w-iss/…/w-cst/w-acts（含同为「状态」列的 w-cst），互不影响。 -->
         <colgroup>
-          <col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
+          <col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
         </colgroup>
         <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
-             窄屏（<=720px）由 main.css 公共规则隐藏，8 列降到 6 列才放得下。 -->
+             窄屏（<=720px）由 main.css 公共规则隐藏，9 列降到 6 列才放得下。 -->
         <thead><tr>
           <th scope="col">名称</th><th scope="col">域名</th><th scope="col" class="col-opt">根目录</th>
-          <th scope="col" class="col-opt">类型</th><th scope="col">WAF</th><th scope="col">状态</th>
+          <th scope="col" class="col-opt">类型</th><th scope="col" class="col-opt">特性</th>
+          <th scope="col">WAF</th><th scope="col">状态</th>
           <th scope="col">TLS</th><th scope="col">操作</th>
         </tr></thead>
         <tbody>
-          <tr v-for="s in sites" :key="s.id">
+          <!-- 过滤无结果 ≠ 没有站点：单列一行说明，避免落到「暂无站点」空态造成误判 -->
+          <tr v-if="!visibleSites.length">
+            <td colspan="9" class="dim">没有匹配「{{ q }}」的站点</td>
+          </tr>
+          <tr v-for="s in visibleSites" :key="s.id">
             <td class="ellipsis" :title="s.name">{{ s.name }}</td>
-            <td class="ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
+            <!-- 多域名：只列第一个 + 「+N」，完整列表走 title——否则 15% 列宽下
+                 后半段被截掉，用户不知道到底配了几个域名。 -->
+            <td class="ellipsis" :title="s.domains.join(', ')">{{ s.domains[0] ?? '—' }}<span
+              v-if="s.domains.length > 1" class="dim tiny"> +{{ s.domains.length - 1 }}</span></td>
             <td class="mono dim ellipsis col-opt" :title="s.root">{{ s.root }}</td>
             <td class="col-opt">{{ kindLabel(s.kind) }}</td>
+            <!-- 特性（021）：访问控制 / 独立日志此前只能逐个点开编辑才知道，列表里一眼看不到 -->
+            <td class="col-opt feat-cell">
+              <span v-if="s.auth_basic" class="feat" title="已启用 Basic Auth（HTTP 基础认证）"><Icon name="key" :size="13" /></span>
+              <span v-if="s.log_access || s.log_error" class="feat"
+                :title="`已开启独立站点日志（${[s.log_access ? 'access' : '', s.log_error ? 'error' : ''].filter(Boolean).join(' / ')}）`"><Icon name="file" :size="13" /></span>
+              <span v-if="(s.ip_allow ?? []).length || (s.ip_deny ?? []).length" class="feat"
+                :title="(s.ip_allow ?? []).length ? '已启用 IP 白名单' : '已启用 IP 黑名单'"><Icon name="shield" :size="13" /></span>
+              <span v-if="!s.auth_basic && !s.log_access && !s.log_error
+                && !(s.ip_allow ?? []).length && !(s.ip_deny ?? []).length" class="dim">—</span>
+            </td>
             <td>
               <template v-if="s.waf_enabled">
                 <span class="badge badge-ok">{{ wafProfileLabel(s.waf_profile ?? 'basic') }}</span>
@@ -1310,7 +1406,9 @@ async function doRollback() {
               </template>
               <span v-else class="dim">—</span>
             </td>
-            <td>
+            <!-- .st-cell：单格最多 3 个徽章（状态 + 未同步 + 外部改动），6% 列宽放不下会
+                 参差不齐地换行；改 flex 换行并给列加下限，行高才稳定。 -->
+            <td class="st-cell">
               <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
               <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
                    「面板所见 ≠ nginx 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
@@ -1328,16 +1426,22 @@ async function doRollback() {
                  文字装在 .btn-label 里：窄屏（<=720px）由 main.css 收起只留图标，
                  否则 4 个按钮在窄列里会竖着堆成 4 行（实测行高 247px）。 -->
             <td class="actions">
-              <button class="btn-ghost btn-sm" :disabled="!canManage" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
-              <button class="btn-ghost btn-sm" :disabled="!canReload" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">重载</span></button>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canManage" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /><span class="btn-label">删除</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!canManage || busy" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!canReload || busy" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">{{ rowBusyId === s.id ? '重载中…' : '重载' }}</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
+              <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /><span class="btn-label">删除</span></button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <EmptyState v-else title="暂无站点" hint="点击上方「网站」右侧的「新建站点」添加虚拟主机" />
+    <!-- 加载失败 ≠ 没有数据：sites 保持空数组时若一律走「暂无站点」，会与顶部错误红字
+         自相矛盾（一边说失败、一边说没有）。空态文案也要跟着 canCreate 走——未接入
+         底座时「新建站点」是禁用态，还让人去点它就是误导。 -->
+    <EmptyState v-else-if="loadFailed" title="站点列表加载失败" hint="请确认后端服务正常后点上方「刷新」重试"
+      :reason="error || undefined" />
+    <EmptyState v-else title="暂无站点"
+      :hint="canCreate ? '点击上方「新建站点」添加虚拟主机' : '当前未接入 Web 服务器（nginx）：需先安装并启动，才能新建站点'" />
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="modalClose">
@@ -1361,7 +1465,9 @@ async function doRollback() {
       <div class="modal-mid">
         <nav class="nav-rail" aria-label="编辑分区">
           <button v-for="s in navSections" :key="s.id" type="button" class="nav-item"
-            :class="{ active: activeSec === s.id }" @click="scrollToSec(s.id)">{{ s.label }}</button>
+            :class="{ active: activeSec === s.id, 'has-err': secErrs[s.id] }"
+            :title="secErrs[s.id] ? '该分区内有字段未填对' : s.label"
+            @click="scrollToSec(s.id)">{{ s.label }}<i v-if="secErrs[s.id]" class="nav-dot" aria-hidden="true" /></button>
         </nav>
         <div ref="modalBody" class="modal-body" @scroll="onBodyScroll">
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
@@ -1403,12 +1509,27 @@ async function doRollback() {
               <Icon name="folder" :size="13" /> 浏览…
             </button>
           </div>
+          <!-- 硬约束「必须落在站点根目录内」此前只写在 title 里——用户填错只能等后端 50001。
+               后端下发了 siteRoot 就常驻展示边界（旧后端无此端点时不显示）。 -->
+          <span v-if="siteRoot" class="root-hint dim tiny">站点根目录：<code class="mono">{{ siteRoot }}</code>（须落在其中）</span>
           <span v-if="fieldErrs.root" :key="'root' + errSeq" class="field-err">{{ fieldErrs.root }}</span>
         </label>
         <!-- 应用模板：Node / Java / Python / .NET 在 nginx 这一层接入方式完全相同
              （都是 proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填
              模板，而不是给 SiteKind 加 4 个产出同一份配置的变体。
              再点同一个 chip 可取消选择；手改过「后端」后切模板不会覆盖你填的内容。 -->
+        <!-- 「启用」是站点级全局属性，此前排在弹窗最底部（Nginx 原文编辑器之后）、
+             不属于任何导航分区——要滚过整份配置才找得到，rail 上也没有入口。 -->
+        <label class="blk full row-inline">
+          <input type="checkbox" v-model="form.enabled" />
+          <span>启用（纳入 Web 服务器配置）</span>
+        </label>
+        <div class="hint-note" :class="{ 'is-warn': !!editing }">
+          <Icon name="info" :size="15" class="ic" />
+          <span>{{ editing
+            ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
+            : '保存即下发：站点会立即对外服务。取消勾选则只登记站点、不下发配置。' }}</span>
+        </div>
         </section>
         <section class="sector" id="sec-routing">
           <h4 class="sector-h">路由与后端</h4>
@@ -1817,6 +1938,11 @@ async function doRollback() {
             <span v-if="confLoading" class="dim tiny">读取中…</span>
             <span v-else class="mono dim tiny ellipsis conf-path"
               :title="confPath || '尚未下发：保存「并应用」后生成'">{{ confPath || '尚未下发' }}</span>
+            <!-- 字节数：超长配置此前完全没有量级感知（后端 64 KiB 上限只在提交后才报错） -->
+            <span v-if="!confLoading && confText" class="dim tiny conf-size"
+              :class="{ 'is-warn-text': confTooBig }"
+              :title="confTooBig ? '已超过 64 KiB 上限，保存会被后端拒绝' : '当前配置大小（后端上限 64 KiB）'">
+              {{ fmtBytes(confSize) }}</span>
           </div>
           <!-- 未同步警示（后端 017 指纹判定）：表单规格与磁盘配置分叉时，先说清现状再给操作 -->
           <p v-if="confStale" class="hint-note is-warn conf-stale">
@@ -1828,10 +1954,24 @@ async function doRollback() {
             <Icon name="alert" :size="14" class="ic" />
             <span>检测到<b>外部修改</b>：磁盘上的这份配置与面板最后一次下发的内容不一致（文件在面板之外被改过）。面板不会擅自覆盖它——可点「按表单重新生成」覆盖，或把需要的改动改写成上方的「自定义配置片段」。</span>
           </p>
-          <p v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg" role="alert">{{ confErr }}</p>
-          <NginxEditor v-model="confText" class="conf-text" :rows="10" :spellcheck="false"
+          <!-- 读取失败要给重试出口：此前失败只留一条红字，编辑区仍是空白 + 「尚未下发」
+               占位符，用户会误判成"这个站点确实没有配置文件"。 -->
+          <div v-if="confErr" :key="'cf' + errSeq" class="err-bar conf-msg conf-fail" role="alert">
+            <Icon name="alert" :size="14" class="ic" />
+            <span>{{ confErr }}</span>
+            <button class="btn-ghost btn-sm" type="button" :disabled="confLoading"
+              @click="editing && loadConf(editing.id)">重试</button>
+          </div>
+          <!-- 只读态要说清**为什么**不能改：NginxEditor 只读时外观虽已变化（底纹变灰），
+               但原因此前只藏在按钮 title 里。 -->
+          <p v-if="!canManage || !isOwner || !webSupported" class="hint-note is-warn conf-ro">
+            <Icon name="lock" :size="14" class="ic" />
+            <span>{{ !webSupported ? '未接入 Web 服务器（nginx）：配置只读'
+              : (!isOwner ? '仅 owner 可编辑原始配置（当前为只读）' : '无 site.manage 权限：配置只读') }}</span>
+          </p>
+          <NginxEditor v-model="confText" class="conf-editor" :rows="10" :spellcheck="false"
             :readonly="!canManage || !isOwner || !webSupported"
-            :placeholder="confLoading ? '读取中…' : '（配置文件为空或尚未下发——先保存「并应用」生成）'"
+            :placeholder="confLoading ? '读取中…' : (confErr ? '（读取失败：请点上方「重试」）' : '（配置文件为空或尚未下发——先保存「并应用」生成）')"
             aria-label="站点 Nginx 配置原文" />
           <div class="conf-ops">
             <p class="hint-note conf-hint">
@@ -1888,20 +2028,11 @@ async function doRollback() {
         </div>
 
         </section>
-        <label class="blk row-inline">
-          <input type="checkbox" v-model="form.enabled" />
-          <span>启用（纳入 Web 服务器配置）</span>
-        </label>
-        <div class="hint-note" :class="{ 'is-warn': !!editing }">
-          <Icon name="info" :size="15" class="ic" />
-          <span>{{ editing
-            ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
-            : '保存即下发：站点会立即对外服务。取消勾选则只登记站点、不下发配置。' }}</span>
-        </div>
+        <!-- 「启用」开关已上移到「基础」分区（见 sec-basic）：它是站点级全局属性，
+             摆在弹窗最底部、Nginx 原文编辑器之后，既不属于任何导航分区也找不到。 -->
         <p class="tip">
-          流程：渲染 → 语法校验 → 原子替换 → reload → 入库；校验失败时旧配置不受影响。
-          反代后端由 nginx <code>upstream</code>（least_conn）轮询，只接受
-          <code>http(s)://host:port</code>；WAF 与站点配置同一次下发。
+          保存前会先跑一次 nginx 语法校验，失败不会影响正在运行的配置；反代后端只接受
+          <code>http(s)://host:port</code>，WAF 与站点配置同一次下发。
         </p>
         <!-- 操作条吸底：弹窗比视口高时，按钮不会随内容滚走，矮窗口下也点得到。
              错误条**不再**挤在这里——它已上移到弹窗顶部吸顶（见上方 .form-msg），
@@ -2093,10 +2224,8 @@ sudo update-ca-certificates</pre>
    padding/border-width/border-radius 全为 0，于是「警示条」实测渲染成
    padding:0 / border:0 / radius:0、高仅 19px 的一条裸色带，且 margin:0 导致它
    与下方卡片严丝合缝贴合（实测 0px），文字还顶到内容区左边缘。 */
-.tip.warn { color: var(--c-warn); background: var(--c-warn-bg);
-  border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
-  padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6;
-  margin: 0 0 14px; }
+/* （.tip.warn 已删除：本页那处「未检测到 nginx」警示已改用公共 .hint-note.is-warn，
+   留着这套私有警告样式只会让同一语义出现两种长相。） */
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
@@ -2164,16 +2293,25 @@ sudo update-ca-certificates</pre>
    结构：.modal(网格 标题 / 中部 / 操作条) > .modal-mid(导航 rail + .modal-body 滚动区)。
    覆盖公共 .modal.wide 的 620px → 全屏面板；特异性 (0,3,1) 压过公共 (0,2,0)。 */
 .modal.wide.site-modal {
-  width: min(1180px, 96vw);
+  /* 96vw 再叠加 .mask 的 clamp 内边距会溢出视口，改 100% 由 mask 统一控边 */
+  width: min(1180px, 100%);
   height: min(94vh, 960px);
   max-height: 96vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr;
   padding: 0;
+  /* ⚠️ 必须同步覆写这两个变量：公共 .modal-head 用它们的**负值**外扩
+     （margin: -py -px 12px / padding: py px 12px），本是为抵消弹窗自身内边距而设计。
+     padding 归零后不覆写，标题行会被推出容器、再被 overflow:hidden 裁掉——
+     表现为标题与关闭按钮贴死上边与左边。与 TrashPanel / SqlConsole 同款全幅面板同口径。 */
+  --modal-py: 0;
+  --modal-px: 0;
   overflow: hidden;
 }
-.modal.wide.site-modal > .modal-head { grid-row: 1; border-bottom: 1px solid var(--c-border); }
+/* 变量归零后 head 失去内边距，此处显式补（与 .modal-body 的 18/22 左对齐） */
+.modal.wide.site-modal > .modal-head { grid-row: 1; margin: 0; padding: 14px 22px 12px;
+  border-bottom: 1px solid var(--c-border); }
 .modal.wide.site-modal > .modal-mid { grid-row: 2; display: flex; min-height: 0; }
 .modal.wide.site-modal > .modal-foot {
   grid-row: 3; position: static; margin: 0; padding: 12px 22px;
@@ -2198,6 +2336,11 @@ sudo update-ca-certificates</pre>
 }
 .nav-item:hover { background: var(--c-hover); }
 .nav-item.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+/* 分区内有字段级错误：rail 上亮红点（用户切到别的分区后仍找得到问题在哪） */
+.nav-item { position: relative; }
+.nav-item.has-err { color: var(--c-danger); }
+.nav-dot { position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--c-danger); }
 
 /* 内容滚动区与分区卡片 */
 .modal-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; position: relative; padding: 18px 22px 8px; }
@@ -2205,8 +2348,12 @@ sudo update-ca-certificates</pre>
    证书列表 / 提示）整宽跨两列。整列块用 1fr 1fr，列间距 18、行距 14。 */
 .modal-body .sector { max-width: 980px; margin: 0 auto 22px;
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 14px; align-items: start; }
-/* .blk 默认 margin-bottom:12px（与 row-gap 叠加会双倍留白），分区内归零 */
-.modal-body .sector > .blk { margin-bottom: 0; }
+/* 分区之间补一条分隔线：滚动长表单时边界只靠标题文字可辨，与左侧 rail 的「分段」感对不上 */
+.modal-body .sector + .sector { border-top: 1px solid var(--c-border); padding-top: 20px; }
+/* ⚠️ 必须写 margin:0 而不是只写 margin-bottom：main.css 的 `.modal .blk { margin: 12px 0 }`
+   是**简写**，本页 .blk 只覆盖了 margin-bottom，margin-top:12px 仍在生效——与 row-gap
+   叠加成 26px（设计为 14），首行字段与分区标题之间也凭空多 12px。 */
+.modal-body .sector > .blk { margin: 0; }
 /* 整宽元素：跨两列 */
 .modal-body .sector > .blk.full,
 .modal-body .sector > .routes,
@@ -2262,7 +2409,9 @@ sudo update-ca-certificates</pre>
 .conf-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); flex: none; }
 .conf-path { margin-left: auto; max-width: 56%; text-align: right; }
 .conf-msg { margin: 0; white-space: pre-wrap; }
-.conf-text { width: 100%; min-height: 190px; resize: vertical; font-size: 12px; line-height: 1.55; }
+/* （.conf-text 已删除：该 class 落在 NginxEditor 的**根容器**上，resize 无效、
+   min-height 作用在 wrapper 而非 textarea，字号行高也与组件内部重复定义。
+   高度、等宽字体、滚动条槽位统一由 NginxEditor 自己负责。） */
 .conf-ops { display: flex; align-items: flex-start; gap: 10px; }
 .conf-hint { margin: 0; flex: 1; min-width: 0; }
 .conf-btns { display: flex; gap: 6px; flex: none; margin-top: 2px; }
@@ -2284,7 +2433,8 @@ sudo update-ca-certificates</pre>
 .adv { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px;
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 11px; align-items: start; }
 /* 卡片内简单输入框双列；标题 / 整宽文本域 / 提示 / 日志操作条跨两列 */
-.modal-body .adv > .blk { margin-bottom: 0; }
+/* 同 .sector：必须整条 margin 归零，否则 .modal .blk 的 margin-top:12px 与 row-gap 叠加 */
+.modal-body .adv > .blk { margin: 0; }
 .modal-body .adv > .adv-head,
 .modal-body .adv > .blk.full,
 .modal-body .adv > .adv-row.full,
@@ -2322,6 +2472,18 @@ sudo update-ca-certificates</pre>
   .modal.wide.site-modal .modal-body .adv { grid-template-columns: 1fr; }
   .modal.wide.site-modal .modal-body .sector > .blk,
   .modal.wide.site-modal .modal-body .adv > .blk { grid-column: auto; }
+  /* 窄屏 rail 转顶部横向 tab：176px 固定宽在 96vw 弹窗里会吃掉约 1/4 内容宽度 */
+  .modal.wide.site-modal > .modal-mid { flex-direction: column; }
+  .modal.wide.site-modal .nav-rail { width: auto; flex: none; flex-direction: row;
+    overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--c-border); padding: 8px 10px; }
+  .modal.wide.site-modal .nav-item { width: auto; white-space: nowrap; padding: 6px 12px; }
+}
+/* 矮窗（≤600px 高）：纵向 rail + 内容区双层滚动操作路径太长，同样转横向 tab 把高度让给内容 */
+@media (max-height: 600px) {
+  .modal.wide.site-modal > .modal-mid { flex-direction: column; }
+  .modal.wide.site-modal .nav-rail { width: auto; flex: none; flex-direction: row;
+    overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--c-border); padding: 8px 10px; }
+  .modal.wide.site-modal .nav-item { width: auto; white-space: nowrap; padding: 6px 12px; }
 }
 
 /* 历史版本与回滚（018）：列表行 = 元信息 + 操作两列；正文展开为 pre-wrap 等宽块，
@@ -2359,8 +2521,10 @@ col.w-name { width: 7%; }
 col.w-sdom { width: 15%; }
 col.w-sroot { width: auto; }   /* 唯一弹性列：table-layout:fixed 把剩余宽度全部给它 */
 col.w-kind { width: 6%; }
+col.w-feat { width: 7%; }   /* 特性（021）：Basic Auth / 独立日志 / IP 名单图标 */
 col.w-waf { width: 8%; }
-col.w-st { width: 6%; }
+/* 状态列可能同时挂 3 个徽章（状态 + 未同步 + 外部改动），6% 放不下会参差换行 → 9% */
+col.w-st { width: 9%; }
 col.w-tls { width: 8%; }
 col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 间距 = 286，加单元格左右内边距 26
                                   = 312；取 320 留 8px 余量。⚠️ 内边距要从里面扣——写 310 时内容区只有
@@ -2380,4 +2544,34 @@ col.w-cst { width: 8%; }
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: site-sk 1.4s ease infinite; border-radius: var(--radius); }
 .box { height: 300px; }
 @keyframes site-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+/* ══ UX 审计整改（2026-10-11）新增样式 ══ */
+/* 页头检索框：与工具按钮同高，窄屏下不跟标题抢空间 */
+.site-search { width: min(220px, 40vw); padding: 5px 10px; font-size: 13px; }
+/* 根目录字段下的「站点根目录」边界说明 */
+.root-hint { display: block; margin-top: 5px; }
+.root-hint code { font-size: 11.5px; }
+/* 状态列：单格最多 3 个徽章，改可换行的 flex 行——行高稳定，不再参差 */
+.st-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+/* 特性列（021）：图标徽章，含义走 title 悬停 */
+.feat-cell { display: flex; align-items: center; gap: 6px; }
+.feat { display: inline-flex; color: var(--c-primary); }
+/* 路由表条数无上限会让分区无限增长，给可视上限、滚动收在表内 */
+.routes { max-height: 45vh; overflow-y: auto; }
+/* 标题层级统一：区块标题一律 13px/600（.routes-title 原 12.5px 比同级低半级） */
+.routes-title { font-size: 13px; }
+/* 配置区读取失败条：要塞一个「重试」按钮（.err-bar 是 flex，单独排布） */
+.conf-fail { align-items: center; flex-wrap: wrap; gap: 8px; }
+.conf-fail > span { flex: 1 1 auto; min-width: 0; }
+/* 只读原因条：紧贴编辑器上方，收掉 .hint-note 默认下边距避免与编辑器拉开距离 */
+.conf-ro { margin: 0 0 8px; }
+/* 页面级错误条也走公共 .err-bar：此前是裸红字无图标，与弹窗内的 .err-bar 两种长相 */
+.page-err { margin: 0 0 12px; }
+/* 模板 chip 选中态加强：此前选中只改边框 + 浅底，与 hover（仅改边框）几乎分不出来 */
+.tpl-chip.is-on { color: var(--c-primary); font-weight: 600; box-shadow: inset 0 0 0 1px var(--c-primary); }
+/* 卡片列表行补 hover：表行有 tbody tr:hover，证书行 / 版本行此前完全没反馈 */
+.ssl-row:hover, .vers-row:hover { background: var(--c-active); }
+/* 配置字节数：紧跟路径右侧，超限转警示色 */
+.conf-size { flex: none; margin-left: 8px; }
+.is-warn-text { color: var(--c-warn); }
 </style>

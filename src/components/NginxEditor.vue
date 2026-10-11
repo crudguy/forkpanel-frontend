@@ -136,6 +136,11 @@ function syncScroll() {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-soft);
 }
+/* 只读态（非 owner / 未接入底座时整框禁写）：必须与可编辑态有可见差异，
+   否则用户以为能改、敲半天没反应。:has() 让着色层跟着 textarea 的 readonly 一起变
+   （pre 在前、textarea 在后，兄弟选择器够不着，故从根容器反查）。 */
+.nginx-editor:has(.ne-ta:read-only) .ne-pre { background: var(--c-hover); border-color: var(--c-border); }
+.nginx-editor:has(.ne-ta:read-only) .ne-ta { cursor: default; }
 </style>
 
 <!-- token 配色：用 .nginx-editor 前缀（非 scoped），以命中 v-for 渲染的 span -->
