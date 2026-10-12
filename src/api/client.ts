@@ -197,7 +197,17 @@ export function errorText(e: unknown): string {
       if (seg === 5) return '文件操作失败'
       if (seg === 6) return '数据库操作失败'
       if (seg === 7) return '防火墙操作失败'
-      if (e.code === 10001) return '提交内容有误，请检查后重试'
+      // 10001 = 参数校验失败。后端在 `detail.reason` 里写的是**给人看的中文原因**
+      // （"尚未配置 API Endpoint，无法测试"、"未知步骤 id `nope`"…），此前一律丢掉
+      // 换成一句通用「提交内容有误」——用户知道错了，却不知道错在哪，只能反复试。
+      // 有中文 reason 就透出；仍是英文内部串才回落到通用文案（与下面 message 的
+      // 纪律一致：不把内部英文甩给用户）。
+      if (e.code === 10001) {
+        const r = (e.detail as { reason?: unknown } | undefined)?.reason
+        return typeof r === 'string' && /[\u4e00-\u9fff]/.test(r)
+          ? r
+          : '提交内容有误，请检查后重试'
+      }
       // 后端 message 多为内部英文（如 "invalid input" / "not found"）——不甩给用户；
       // 已是中文的后端文案（部分校验原因）则原样透出，保住"具体"这一价值。
       return /[\u4e00-\u9fff]/.test(e.message) ? e.message : '请求失败，请稍后重试'
