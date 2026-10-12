@@ -11,7 +11,7 @@ import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { SystemSnapshot } from '@/api/types'
-import MetricCard from '@/components/MetricCard.vue'
+import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -26,16 +26,11 @@ const C = {
   netIn: '#4ea1ff', netOut: '#ffb454', load: '#b48cff', danger: '#ff4d4d', hot: '#ff9a3d',
 }
 
-const cpuPct = computed(() => snap.value?.cpu.total_pct ?? 0)
 const perCore = computed<number[]>(() => snap.value?.cpu.per_core_pct ?? [])
 const cores = computed(() => perCore.value.length)
 const loads = computed<number[]>(() => {
   const c = snap.value?.cpu
   return [c?.load1 ?? 0, c?.load5 ?? 0, c?.load15 ?? 0]
-})
-const memPct = computed(() => {
-  const m = snap.value?.mem
-  return m && m.total_kib ? (m.used_kib / m.total_kib) * 100 : 0
 })
 const swapTotalKib = computed(() => snap.value?.mem.swap_total_kib ?? 0)
 const swapUsedKib = computed(() => snap.value?.mem.swap_used_kib ?? 0)
@@ -87,6 +82,36 @@ function loadRatio(l: number): number {
 /** 确定性失败（501 未实现 / 403 无权限）的显式提示；网络抖动保持静默重试 */
 const snapError = ref('')
 
+/** A2：顶端指标头改读面板**统一的采样序列**（与「实时趋势」页同一环形缓冲）——
+    两页同一时刻读数一致；下方明细（每核 / 磁盘 / 网络 / 温度）仍为即时快照。 */
+interface RingSample {
+  ts: number; cpu: number
+  mem_used_kib: number; mem_total_kib: number
+  load1: number
+  disk_used_bytes: number; disk_total_bytes: number
+}
+const hdr = ref<RingSample | null>(null)
+async function loadHeader() {
+  try {
+    const r = await api.get<{ interval_ms: number; samples: RingSample[] }>(
+      API.metrics.realtime(), { params: { since: 60 } })
+    const last = r?.samples?.at(-1)
+    if (last) hdr.value = last
+  } catch { /* 头卡失败保留上一帧；明细不受影响 */ }
+}
+
+const hdrItems = computed<MetricItem[]>(() => {
+  const h = hdr.value
+  const memH = h && h.mem_total_kib ? (h.mem_used_kib / h.mem_total_kib * 100) : 0
+  const diskH = h && h.disk_total_bytes ? (h.disk_used_bytes / h.disk_total_bytes * 100) : 0
+  return [
+    { label: 'CPU', value: (h?.cpu ?? 0).toFixed(1), unit: '%', icon: 'cpu', tone: 'primary', progress: h?.cpu },
+    { label: '内存', value: memH.toFixed(1), unit: '%', icon: 'disk', tone: 'cyan', progress: memH },
+    { label: '负载', value: (h?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'gauge', tone: 'warn' },
+    { label: '磁盘', value: diskH.toFixed(1), unit: '%', icon: 'database', tone: 'ok', progress: diskH },
+  ]
+})
+
 async function loadSnapshot() {
   try {
     snap.value = await api.get<SystemSnapshot>(API.metrics.snapshot())
@@ -100,22 +125,25 @@ async function loadSnapshot() {
 }
 let rtTimer: number | undefined
 
+/** 每次轮询：快照明细 + 统一采样序列（头卡），两请求并行发出、互不阻塞 */
+function tick() { void loadSnapshot(); void loadHeader() }
+
 /** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9） */
 function onVisibility() {
   if (document.hidden) {
     if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
   } else {
-    loadSnapshot()
+    tick()
     // 恢复前必须先清旧句柄（同 SystemView）：后台标签打开时 onMounted 已建过定时器，
     // 直接覆盖会让旧句柄丢失、两个定时器同时跑。
     if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-    rtTimer = window.setInterval(loadSnapshot, 2000)
+    rtTimer = window.setInterval(tick, 2000)
   }
 }
 
 onMounted(() => {
-  loadSnapshot()
-  rtTimer = window.setInterval(loadSnapshot, 2000)
+  tick()
+  rtTimer = window.setInterval(tick, 2000)
   document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
@@ -134,13 +162,12 @@ onUnmounted(() => {
 
     <div v-if="loading && !snap" class="card skeleton" style="height:280px" />
     <template v-else-if="snap">
-      <!-- 顶部读数 -->
-      <div class="grid cols-4">
-        <MetricCard label="CPU 总体" :value="fmtPct(cpuPct)" unit="%" icon="cpu" tone="primary" :progress="cpuPct" />
-        <MetricCard label="内存" :value="fmtPct(memPct)" unit="%" icon="disk" tone="cyan" :progress="memPct" />
-        <MetricCard label="负载 1m" :value="loads[0].toFixed(2)" unit="" icon="gauge" tone="warn" />
-        <MetricCard label="进程数" :value="String(procCount)" unit="" icon="process" tone="primary" />
-      </div>
+      <!-- 顶部读数（A2）：与「实时趋势」页共用 MetricHeader + 同一采样序列；
+           进程数移入采样注脚（来源仍为下方快照明细） -->
+      <MetricHeader :items="hdrItems" :sampled-at="hdr?.ts ?? null"
+        source-hint="顶端读数取自面板统一的采样序列（每 2 秒一次），与「实时趋势」页同源，同一时刻两页一致；下方每核 / 磁盘 / 网络 / 温度明细为打开瞬间的即时快照。">
+        <template #extra>· 进程 {{ procCount }} 个</template>
+      </MetricHeader>
 
       <!-- CPU 详情：每核 + 负载 -->
       <div class="sec-head"><Icon name="cpu" :size="16" /> CPU 使用率（每核）</div>

@@ -11,6 +11,7 @@ import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { CAP, type ServerNote } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
+import { type MetricItem } from '@/components/MetricHeader.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -108,10 +109,28 @@ async function poll() {
   }
 }
 
-function fmtGB(b?: number) {
-  const g = (b ?? 0) / 1073741824
-  return g >= 1024 ? (g / 1024).toFixed(2) + ' TB' : g.toFixed(1) + ' GB'
-}
+/** 顶端指标卡（B7）：数值与单位分行呈现，长复合值走「副行」——
+    此前整串塞进 value，在 5 列窄卡里折行、基线参差（实测「45.7 GB / 102.1 GB」折行）。
+    注：computed 内引用下方声明的 cpu/memPct 等——惰性求值，运行时均已就绪。 */
+const ovCards = computed<MetricItem[]>(() => {
+  const totalG = (ov.value?.disk_total_bytes ?? 0) / 1073741824
+  const usedG = (ov.value?.disk_used_bytes ?? 0) / 1073741824
+  const tb = totalG >= 1024
+  const du = tb ? 1024 : 1
+  const dUnit = tb ? 'TB' : 'GB'
+  return [
+    { label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: 'primary', progress: Number(cpu.value) },
+    { label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GB',
+      sub: `总量 ${((ov.value?.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB`,
+      icon: 'server', tone: 'cyan', progress: memPct.value },
+    { label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
+      sub: `总量 ${(totalG / du).toFixed(1)} ${dUnit}`,
+      icon: 'disk', tone: 'primary', progress: diskPct.value },
+    { label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'bolt', tone: loadTone.value },
+    { label: '网络', value: `↓ ${fmtNet(ov.value?.net_in_bps)}`,
+      sub: `↑ ${fmtNet(ov.value?.net_out_bps)}`, icon: 'network', tone: 'cyan' },
+  ]
+})
 function fmtNet(bps?: number) {
   const m = (bps ?? 0) / 1e6
   return m >= 1 ? m.toFixed(1) + ' Mbps' : ((bps ?? 0) / 1e3).toFixed(0) + ' Kbps'
@@ -297,16 +316,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
       </div>
       <!-- 指标卡 -->
       <div v-else class="grid cols-5">
-        <MetricCard label="CPU" :value="cpu" unit="%" icon="cpu" :progress="Number(cpu)" tone="primary" />
-        <MetricCard label="内存" :value="((ov?.mem_used_kib || 0) / 1024).toFixed(0)"
-          :unit="'/ ' + ((ov?.mem_total_kib || 0) / 1024).toFixed(0) + ' MB'" icon="server"
-          :progress="memPct" tone="cyan" />
-        <MetricCard label="磁盘" :value="ov ? fmtGB(ov.disk_used_bytes) : '0'"
-          :unit="'/ ' + (ov ? fmtGB(ov.disk_total_bytes) : '0')" icon="disk"
-          :progress="diskPct" tone="primary" />
-        <MetricCard label="负载" :value="(ov?.load1 ?? 0).toFixed(2)" unit="1m" icon="bolt" :tone="loadTone" />
-        <MetricCard label="网络" :value="ov ? fmtNet(ov.net_in_bps) : '0'"
-          :unit="'↓ · ' + (ov ? fmtNet(ov.net_out_bps) : '0') + ' ↑'" icon="network" tone="cyan" />
+        <MetricCard v-for="c in ovCards" :key="c.label" v-bind="c" />
       </div>
 
       <!-- 高负载时的救火捷径：只在异常时出现，避免常态占视觉位 -->

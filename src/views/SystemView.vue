@@ -12,7 +12,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import MetricCard from '@/components/MetricCard.vue'
+import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -118,6 +118,18 @@ const memPct = computed(() =>
   last.value && last.value.mem_total_kib ? (last.value.mem_used_kib / last.value.mem_total_kib * 100) : 0)
 const diskPct = computed(() =>
   last.value && last.value.disk_total_bytes ? (last.value.disk_used_bytes / last.value.disk_total_bytes * 100) : 0)
+
+/** 指标头数据项（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列 */
+const hdrItems = computed<MetricItem[]>(() => [
+  { label: 'CPU', value: (last.value?.cpu ?? 0).toFixed(1), unit: '%',
+    icon: 'cpu', tone: 'primary', progress: last.value?.cpu },
+  { label: '内存', value: memPct.value.toFixed(1), unit: '%',
+    icon: 'disk', tone: 'cyan', progress: memPct.value },
+  { label: '负载', value: (last.value?.load1 ?? 0).toFixed(2), unit: '1m',
+    icon: 'gauge', tone: 'warn' },
+  { label: '磁盘', value: diskPct.value.toFixed(1), unit: '%',
+    icon: 'database', tone: 'ok', progress: diskPct.value },
+])
 const loadMax = computed(() =>
   Math.max(2, ...buf.value.map(s => s.load1)))
 // 网络坐标轴上限取缓冲内入/出最大值，保证曲线不贴底
@@ -182,17 +194,10 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 
     <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
-    <!-- 当前快照读数（本页实时读数头，差异化在下方趋势） -->
-    <div class="grid cols-4">
-      <MetricCard label="CPU" :value="(last?.cpu ?? 0).toFixed(1)" unit="%"
-                  icon="cpu" tone="primary" :progress="last?.cpu" />
-      <MetricCard label="内存" :value="memPct.toFixed(1)" unit="%"
-                  icon="disk" tone="cyan" :progress="memPct" />
-      <MetricCard label="负载" :value="(last?.load1 ?? 0).toFixed(2)" unit="1m"
-                  icon="gauge" tone="warn" />
-      <MetricCard label="磁盘" :value="diskPct.toFixed(1)" unit="%"
-                  icon="database" tone="ok" :progress="diskPct" />
-    </div>
+    <!-- 顶部读数（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列（环形缓冲），
+         同一时刻两页读数一致；下方曲线为趋势呈现 -->
+    <MetricHeader :items="hdrItems" :sampled-at="last?.ts ?? null"
+      source-hint="取自面板统一的 60 秒滚动采样序列（每 2 秒采样一次）；与「专业快照」页顶端读数同源，同一时刻两页一致。" />
 
     <!-- 实时曲线：CPU / 内存 / 负载 / 磁盘 四系列 -->
     <div class="sec-head">
