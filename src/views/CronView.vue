@@ -15,6 +15,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
+import { toast } from '@/composables/useToast'
 
 interface Job {
   id: string; expr: string; command: string; user: string
@@ -133,6 +134,31 @@ async function saveEdit() {
 }
 
 function fmt(ts: number | null) { return fmtDateTime(ts) }
+
+// ── Webhook 测试 / 触发（cron.webhook/test + cron/jobs/{id}/webhook）──
+const webhookUrl = ref('')
+const webhookBusy = ref(false)
+async function testWebhook() {
+  if (!webhookUrl.value) return
+  webhookBusy.value = true; error.value = ''; note.value = ''
+  try {
+    await api.post(API.cron.webhookTest(), { url: webhookUrl.value })
+    note.value = `Webhook「${webhookUrl.value}」探测成功`
+    toast('Webhook 探测成功')
+  } catch (e) { error.value = errorText(e) }
+  finally { webhookBusy.value = false }
+}
+
+const trigBusy = ref<string | null>(null)
+async function triggerWebhook(j: Job) {
+  trigBusy.value = j.id; error.value = ''; note.value = ''
+  try {
+    await api.post(API.cron.webhookTrigger(j.id), {})
+    note.value = `已向任务「${j.id}」配置的 Webhook 发送测试事件`
+    toast('已触发 Webhook')
+  } catch (e) { error.value = errorText(e) }
+  finally { trigBusy.value = null }
+}
 </script>
 
 <template>
@@ -163,6 +189,14 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
             {{ createBusy ? '创建中…' : '创建' }}</button>
           <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
             {{ previewBusy ? '计算中…' : '预览执行时刻' }}
+          </button>
+        </div>
+        <div class="field webhook-test">
+          <label>测试 Webhook URL
+            <input v-model="webhookUrl" placeholder="https://example.com/hook" :disabled="webhookBusy" />
+          </label>
+          <button class="btn-ghost" :disabled="!canManage || !webhookUrl || webhookBusy" @click="testWebhook">
+            <Icon name="bell" :size="14" /> {{ webhookBusy ? '测试中…' : '测试连通性' }}
           </button>
         </div>
         <p v-if="previewExpr === form.expr" class="tip">
@@ -245,6 +279,9 @@ function fmt(ts: number | null) { return fmtDateTime(ts) }
             <button class="btn-ghost" :disabled="!editForm.expr || previewBusy" @click="doPreview(editForm.expr)">
               {{ previewBusy ? '计算中…' : '预览执行时刻' }}
             </button>
+            <button class="btn-ghost" :disabled="!canManage || trigBusy === edit?.id" @click="triggerWebhook(edit)">
+              <Icon name="bell" :size="14" /> {{ trigBusy === edit?.id ? '触发中…' : '触发 Webhook' }}
+            </button>
             <span class="spacer" />
             <button class="btn-primary" :disabled="editBusy || !editForm.expr || !editForm.command"
                     @click="saveEdit">
@@ -273,4 +310,8 @@ col.w-cjuser { width: 8%; }
 col.w-cjlast { width: 15%; }
 col.w-cjnext { width: 15%; }
 col.w-cjacts { width: 220px; }
+/* Webhook 测试行：输入与按钮底部对齐 */
+.webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.webhook-test label { flex: 1 1 280px; }
+.webhook-test input { width: 100%; }
 </style>

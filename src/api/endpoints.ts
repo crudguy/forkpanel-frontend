@@ -212,6 +212,9 @@ export const API = {
     run: (id: string) => `/api/v1/cron/jobs/${enc(id)}/run`,
     runs: (id: string) => `/api/v1/cron/jobs/${enc(id)}/runs`,
     preview: () => '/api/v1/cron/preview',
+    // Webhook：测试任意 URL 可达性 / 触发某任务已配置的 webhook（发一条 test 事件）
+    webhookTest: () => '/api/v1/cron/webhook/test',
+    webhookTrigger: (id: string) => `/api/v1/cron/jobs/${enc(id)}/webhook`,
   },
 
   logs: {
