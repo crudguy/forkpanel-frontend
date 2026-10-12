@@ -296,7 +296,8 @@ onUnmounted(closeFollow)
           <div class="title-row">
             <h2 class="mono">{{ svc.name }}</h2>
             <span class="badge" :class="stateBadge(svc.state)">{{ serviceStateLabel(svc.state) }}</span>
-            <span v-if="!svc.managed" class="badge badge-warn">未托管</span>
+            <span v-if="!svc.managed" class="badge"
+              title="该服务非面板创建（不代表故障）：启停操作仍可用，停止前需二次确认">未托管</span>
           </div>
           <p class="desc">{{ svc.description ?? '无描述' }}</p>
 

@@ -622,7 +622,8 @@ async function doConfirmed() {
               <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
                 <td class="svc-name" :title="s.name">
                   {{ s.name }}
-                  <span v-if="!s.managed" class="badge badge-warn">未托管</span>
+                  <span v-if="!s.managed" class="badge"
+                    title="该服务非面板创建（不代表故障）：启停操作仍可用，停止前需二次确认">未托管</span>
                 </td>
                 <td><span class="badge" :class="serviceStateBadge(s.state)">{{ serviceStateLabel(s.state) }}</span></td>
                 <td class="num">{{ s.enabled ? '是' : '否' }}</td>
