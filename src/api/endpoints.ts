@@ -267,6 +267,10 @@ export const API = {
     get: () => '/api/v1/settings',
     patch: () => '/api/v1/settings',
     dashboard: () => '/api/v1/settings/dashboard',
+    // C2 首启上手清单（GET 只需登录 / PUT 需 settings.manage）
+    onboarding: () => '/api/v1/settings/onboarding',
+    // C10 测试连接：真实探测 /v1/models（仅探测，不改配置）
+    llmTest: () => '/api/v1/settings/llm/test',
   },
 
   users: {

@@ -13,7 +13,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import type { SettingsReport } from '@/api/types'
+import type { SettingsReport, LlmTestResult } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 
@@ -45,6 +45,30 @@ const llmEndpoint = ref('')
 const llmModel = ref('')
 const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
 const showKey = ref(false)
+
+// ── C10 测试连接：真实探测 OpenAI 兼容 /v1/models ──
+// 带上当前输入（未填的字段后端回落到库里已存值），所以**不必先保存**就能验证
+// ——报告点名的问题正是"保存后才知道配置是否可用"。
+const testing = ref(false)
+const testResult = ref<LlmTestResult | null>(null)
+async function testConn() {
+  if (testing.value) return
+  testing.value = true
+  formError.value = ''
+  testResult.value = null
+  try {
+    testResult.value = await api.post<LlmTestResult>(API.settings.llmTest(), {
+      endpoint: llmEndpoint.value.trim() || undefined,
+      model: llmModel.value.trim() || undefined,
+      api_key: llmKey.value.trim() || undefined,
+    })
+  } catch (e) {
+    // 400（未配置 / URL 非法）走这里；探测失败是 ok:false 而非异常
+    formError.value = errorText(e)
+  } finally {
+    testing.value = false
+  }
+}
 
 // ── 角色管理（RBAC 自定义角色）──
 // 安全判断全在后端：防提权（权限必须是自身权限的子集）、内置角色名保留、
@@ -158,7 +182,13 @@ onMounted(async () => {
     <template v-if="canManage">
       <section class="card">
         <div class="sec-head"><Icon name="sparkles" :size="16" /> AI 助手 · LLM 接入</div>
-        <p class="sec-sub">为「AI 助手」的自然语言层预留。当前诊断内核为内置规则引擎，配置 LLM 后叙事层自动启用。</p>
+        <!-- 诚实文案：诊断内核是内置规则引擎（开箱即用）；LLM 叙事层**尚未接线**——
+             此前写的是"配置 LLM 后叙事层自动启用"，但后端无任何消费点（已 grep 确认），
+             照那句写就是"改了却不生效"的谎言，与设置页自身的三段诚实模型相矛盾。 -->
+        <p class="sec-sub">
+          AI 助手的诊断内核是内置规则引擎，开箱即用，不依赖此处配置。这里配置的是<strong>可选的 LLM 接入</strong>；
+          <strong>注意：叙事层目前尚未接线</strong>，配置会保存、可用「测试连接」验证，但暂不会被诊断调用。
+        </p>
         <div v-if="loading" class="dim">加载中…</div>
         <template v-else-if="report">
           <div class="form">
@@ -188,11 +218,28 @@ onMounted(async () => {
           </div>
           <p class="sec-note">密钥经主密钥 AES-GCM 加密落库，界面与接口均不回显明文。</p>
           <p v-if="formError" class="err" role="alert">{{ formError }}</p>
+
+          <!-- C10 测试连接：结果必须**落在按钮下方**（出错处），而不是飘一条 toast 就没了。 -->
+          <div v-if="testResult" class="test-out" :class="testResult.ok ? 'is-ok' : 'is-bad'" role="status">
+            <Icon :name="testResult.ok ? 'check' : 'alert-circle'" :size="15" />
+            <div class="to-body">
+              <span class="to-detail">{{ testResult.detail }}</span>
+              <span class="to-meta">
+                耗时 {{ testResult.latency_ms }} ms<template v-if="testResult.status"> · HTTP {{ testResult.status }}</template><template v-if="testResult.model_count !== null"> · 可用模型 {{ testResult.model_count }} 个</template>
+              </span>
+            </div>
+          </div>
+
           <div class="actions">
             <button class="btn-primary" :disabled="saving" @click="save">
               <Icon name="check" :size="15" /> {{ saving ? '保存中…' : '保存' }}
             </button>
+            <button class="btn-ghost" :disabled="testing || saving" title="用当前输入（未填字段取已存配置）真实请求 /v1/models，不改动任何配置" @click="testConn">
+              <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
+            </button>
           </div>
+          <p class="sec-note">「测试连接」用当前输入真实请求 <code class="mono">/v1/models</code>（未填的字段取已保存配置），
+            所以<strong>不必先保存</strong>就能知道配得对不对。</p>
         </template>
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>
@@ -337,7 +384,18 @@ onMounted(async () => {
 .key-row .inp { flex: 1; }
 .set-ok { color: var(--c-ok); }
 .danger { color: var(--c-danger); }
-.actions { margin-top: 10px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+/* C10 测试连接结果：紧贴按钮下方（出错处），成功/失败两态，不占用 toast */
+.test-out { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0 0;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface-2); }
+.test-out.is-ok { border-color: color-mix(in srgb, var(--c-ok) 42%, transparent); background: var(--c-ok-soft); }
+.test-out.is-bad { border-color: color-mix(in srgb, var(--c-danger) 42%, transparent); background: var(--c-danger-soft); }
+.test-out :deep(.icon) { flex: none; margin-top: 2px; }
+.test-out.is-ok :deep(.icon) { color: var(--c-ok); }
+.test-out.is-bad :deep(.icon) { color: var(--c-danger); }
+.to-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.to-detail { font-size: 13.5px; color: var(--c-text); word-break: break-word; }
+.to-meta { font-size: 12px; color: var(--c-text-dim); font-family: var(--mono); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
 .perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
