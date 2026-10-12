@@ -57,7 +57,6 @@ const installError = ref('')
 // 诊断分支下的"修复"交互状态（daemon_unreachable：把复制命令换成按钮）
 const fixBusy = ref(false)
 const fixError = ref('')
-const fixNote = ref('')
 const startOpen = ref(false)
 const joinOpen = ref(false)
 const restartOpen = ref(false)
@@ -98,10 +97,10 @@ async function doInstall() {
 /** 可视化修复①：启动 Docker 服务（复用 services/docker/start）。 */
 async function startDocker() {
   startOpen.value = false
-  fixBusy.value = true; fixError.value = ''; fixNote.value = ''
+  fixBusy.value = true; fixError.value = ''
   try {
     await api.post(API.services.start('docker'), {})
-    fixNote.value = 'Docker 服务已启动。若容器页仍提示不可达，请继续：把面板用户加入 docker 组 → 重启面板。'
+    toast('Docker 服务已启动。若容器页仍提示不可达，请继续：把面板用户加入 docker 组 → 重启面板。')
   } catch (e) { fixError.value = errorText(e) }
   finally { fixBusy.value = false }
 }
@@ -109,10 +108,10 @@ async function startDocker() {
 /** 可视化修复②：把面板运行用户加入 docker 组（后端按面板进程身份执行，非登录用户）。 */
 async function joinGroup() {
   joinOpen.value = false
-  fixBusy.value = true; fixError.value = ''; fixNote.value = ''
+  fixBusy.value = true; fixError.value = ''
   try {
     const r = await api.post<{ user: string }>(API.containers.joinDockerGroup(), {})
-    fixNote.value = `已将面板用户「${r.user}」加入 docker 组，请点击「重启面板」使新组生效。`
+    toast(`已将面板用户「${r.user}」加入 docker 组，请点击「重启面板」使新组生效。`)
   } catch (e) { fixError.value = errorText(e) }
   finally { fixBusy.value = false }
 }
@@ -120,7 +119,8 @@ async function joinGroup() {
 /** 可视化修复③：重启面板使新组生效（重启期间面板短暂不可用，稍后重新登录）。 */
 async function restartPanel() {
   restartOpen.value = false
-  fixBusy.value = true; fixError.value = ''; fixNote.value = '面板正在重启，稍后请重新登录。'
+  fixBusy.value = true; fixError.value = ''
+  toast('面板正在重启，稍后请重新登录。')
   try {
     await api.post(API.services.restart('panel'), {})
   } catch (e) {
@@ -249,7 +249,6 @@ function canStop(c: Container) { return c.state === 'running' }
         <span v-if="!canService && !canJoin" class="dim">
           需要 system.manage 与 container.manage 权限才能执行修复操作。
         </span>
-        <span v-if="fixNote" class="ok-note">{{ fixNote }}</span>
         <p v-if="fixError" class="err">{{ fixError }}</p>
       </div>
 
