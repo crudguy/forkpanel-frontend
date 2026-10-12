@@ -95,6 +95,70 @@ onMounted(() => {
 })
 onUnmounted(() => { if (unreadTimer) clearInterval(unreadTimer) })
 
+// ── 系统健康徽标（A12）：CPU/内存/磁盘迷你条 + 运行中任务数 ──
+// 数据源 /system/overview（与概览同口径）+ /tasks（运行中计数）；15s 轮询，
+// 失败静默、页签不可见暂停（沿用全站 P9 纪律）。
+const health = ref<{ cpu: number; mem: number; disk: number; uptime: number } | null>(null)
+const runningTasks = ref(0)
+const healthOk = computed(() => auth.supported(CAP.METRICS_READ))
+const tasksOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'task.view') === null)
+
+async function loadHealth() {
+  try {
+    const ov = await api.get<{
+      cpu_pct?: number; mem_used_kib?: number; mem_total_kib?: number
+      disk_used_bytes?: number; disk_total_bytes?: number; uptime_sec?: number
+    }>(API.system.overview())
+    health.value = {
+      cpu: ov?.cpu_pct ?? 0,
+      mem: ov && ov.mem_total_kib ? (ov.mem_used_kib ?? 0) / ov.mem_total_kib * 100 : 0,
+      disk: ov && ov.disk_total_bytes ? (ov.disk_used_bytes ?? 0) / ov.disk_total_bytes * 100 : 0,
+      uptime: ov?.uptime_sec ?? 0,
+    }
+  } catch { /* 静默重试：徽标取不到不影响任何操作 */ }
+}
+async function loadRunningTasks() {
+  if (!tasksOk.value) return
+  try {
+    const list = await api.get<{ state: string }[]>(API.tasks.list())
+    runningTasks.value = (list ?? []).filter(t => t.state === 'queued' || t.state === 'running').length
+  } catch { /* 静默重试 */ }
+}
+function onHealthTick() { void loadHealth(); void loadRunningTasks() }
+let healthTimer: number | undefined
+function onHealthVisibility() {
+  if (document.hidden) {
+    if (healthTimer) { clearInterval(healthTimer); healthTimer = undefined }
+  } else {
+    onHealthTick()
+    // 恢复前先清旧句柄（同各监控页）：后台标签打开时 onMounted 已建过定时器，
+    // 直接覆盖会让旧句柄丢失、两个定时器同时跑。
+    if (healthTimer) { clearInterval(healthTimer); healthTimer = undefined }
+    healthTimer = window.setInterval(onHealthTick, 15_000)
+  }
+}
+onMounted(() => {
+  onHealthTick()
+  healthTimer = window.setInterval(onHealthTick, 15_000)
+  document.addEventListener('visibilitychange', onHealthVisibility)
+})
+onUnmounted(() => {
+  if (healthTimer) clearInterval(healthTimer)
+  document.removeEventListener('visibilitychange', onHealthVisibility)
+})
+
+const hpct = (x: number) => Math.min(100, Math.max(2, x)) + '%'
+const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')
+const healthTip = computed(() => {
+  const h = health.value
+  if (!h) return '系统健康（点击查看概览）'
+  const p = auth.platform
+  const host = p ? `${p.distro || p.os} · ${p.arch}` : ''
+  const d = Math.floor(h.uptime / 86400), hr = Math.floor((h.uptime % 86400) / 3600)
+  const up = h.uptime >= 86400 ? `${d} 天 ${hr} 小时` : `${hr} 小时`
+  return `CPU ${h.cpu.toFixed(1)}% · 内存 ${h.mem.toFixed(1)}% · 磁盘 ${h.disk.toFixed(1)}%\n${host} · 已运行 ${up}｜点击查看概览`
+})
+
 // 命令面板：全局 ⌘K / Ctrl+K 唤起（评估报告 A11）。即便焦点在终端输入框也照常触发，
 // 因为这是面板级快捷键，不应被页面内输入框吞掉。
 function onPaletteKey(e: KeyboardEvent) {
@@ -131,6 +195,20 @@ function logout() {
         </div>
 
         <span class="spacer" />
+
+        <!-- 系统健康徽标（A12）：CPU/内存/磁盘迷你条，点击直达概览；悬浮出完整读数与主机信息。
+             无 metrics 能力时整钮隐藏。 -->
+        <RouterLink v-if="healthOk && health" to="/" class="health" :title="healthTip">
+          <span class="hb" :class="htone(health.cpu)"><i :style="{ width: hpct(health.cpu) }" /></span>
+          <span class="hb" :class="htone(health.mem)"><i :style="{ width: hpct(health.mem) }" /></span>
+          <span class="hb" :class="htone(health.disk)"><i :style="{ width: hpct(health.disk) }" /></span>
+        </RouterLink>
+
+        <!-- 运行中任务计数（与任务中心同源）：仅在有任务时出现 -->
+        <RouterLink v-if="tasksOk && runningTasks > 0" to="/cron/tasks" class="task-chip"
+          :title="`${runningTasks} 个任务运行中，点击查看`">
+          <Icon name="clock" :size="13" /> {{ runningTasks }}
+        </RouterLink>
 
         <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
              平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。
@@ -298,7 +376,30 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    面板以表格/卡片为主，填满比"限制行长"更实用，故直接铺满可用宽度。 */
 .wrap { width: 100%; }
 
+/* ── 系统健康徽标（A12）：三条迷你指标条 + 运行中任务计数 ── */
+.health {
+  display: inline-flex; flex-direction: column; justify-content: center; gap: 3px;
+  height: 34px; padding: 0 10px; flex: none;
+  border: 1px solid var(--c-border); border-radius: 10px;
+  text-decoration: none; transition: border-color .15s ease, background .15s ease;
+}
+.health:hover { border-color: var(--c-border-strong); background: var(--c-hover); }
+.hb { width: 30px; height: 4px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
+.hb > i { display: block; height: 100%; border-radius: 999px; transition: width .4s ease; }
+.hb.ok > i { background: var(--c-ok); }
+.hb.warn > i { background: var(--c-warn); }
+.hb.danger > i { background: var(--c-danger); }
+.task-chip {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  height: 24px; padding: 0 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  color: var(--c-primary); background: var(--c-primary-soft);
+  transition: box-shadow .15s ease;
+}
+.task-chip:hover { box-shadow: 0 0 0 1px var(--c-primary); }
+
 @media (max-width: 720px) {
   .sysinfo { display: none; }
+  .health { display: none; }
 }
 </style>
