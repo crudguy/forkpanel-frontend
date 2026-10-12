@@ -1326,6 +1326,55 @@ async function doRollback() {
     errSeq.value++
   } finally { confBusy.value = false }
 }
+
+// ── 列表批量操作（评估 G3：批量启用 / 停用 / 删除）──
+const selected = ref<number[]>([])
+// 表头全选与当前过滤结果（visibleSites）联动；改搜索词只影响可见项
+const allSelected = computed<boolean>({
+  get: () => visibleSites.value.length > 0 && visibleSites.value.every(s => selected.value.includes(s.id)),
+  set: (v) => { selected.value = v ? visibleSites.value.map(s => s.id) : [] },
+})
+function toggleSelect(id: number) {
+  const i = selected.value.indexOf(id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(id)
+}
+const batchBusy = ref(false)
+const batchDelOpen = ref(false)
+
+// 逐站 PATCH {enabled}；用 allSettled 不因单个失败中断其余，最后给汇总 toast
+async function batchSetEnabled(on: boolean) {
+  if (!selected.value.length) return
+  batchBusy.value = true
+  try {
+    const ids = [...selected.value]
+    const res = await Promise.allSettled(ids.map(id => api.patch(API.sites.patch(id), { enabled: on })))
+    const ok = res.filter(r => r.status === 'fulfilled').length
+    const fail = res.length - ok
+    toast(fail ? `已${on ? '启用' : '停用'} ${ok} 个站点，${fail} 个失败` : `已${on ? '启用' : '停用'} ${ok} 个站点`)
+    selected.value = []
+    await load()
+  } catch { /* Promise.allSettled 不抛，仅作兜底层 */ }
+  finally { batchBusy.value = false }
+}
+
+function askBatchDelete() { if (selected.value.length) batchDelOpen.value = true }
+
+async function batchDelete() {
+  if (!selected.value.length) return
+  batchBusy.value = true
+  try {
+    const ids = [...selected.value]
+    const res = await Promise.allSettled(ids.map(id => api.del(API.sites.remove(id))))
+    const ok = res.filter(r => r.status === 'fulfilled').length
+    const fail = res.length - ok
+    toast(fail ? `已删除 ${ok} 个站点，${fail} 个失败` : `已删除 ${ok} 个站点`)
+    batchDelOpen.value = false
+    selected.value = []
+    await load()
+  } catch { /* 同上 */ }
+  finally { batchBusy.value = false }
+}
 </script>
 
 <template>
@@ -1366,11 +1415,14 @@ async function doRollback() {
              故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
              证书表 w-dom/w-iss/…/w-cst/w-acts（含同为「状态」列的 w-cst），互不影响。 -->
         <colgroup>
-          <col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
+          <col class="w-sel" /><col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
         </colgroup>
         <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
              窄屏（<=720px）由 main.css 公共规则隐藏，9 列降到 6 列才放得下。 -->
         <thead><tr>
+          <th scope="col" class="col-sel"><input type="checkbox" :checked="allSelected"
+            @change="allSelected = ($event.target as HTMLInputElement).checked"
+            :disabled="!visibleSites.length" aria-label="全选站点" /></th>
           <th scope="col">名称</th><th scope="col">域名</th><th scope="col" class="col-opt">根目录</th>
           <th scope="col" class="col-opt">类型</th><th scope="col" class="col-opt">特性</th>
           <th scope="col">WAF</th><th scope="col">状态</th>
@@ -1379,9 +1431,12 @@ async function doRollback() {
         <tbody>
           <!-- 过滤无结果 ≠ 没有站点：单列一行说明，避免落到「暂无站点」空态造成误判 -->
           <tr v-if="!visibleSites.length">
-            <td colspan="9" class="dim">没有匹配「{{ q }}」的站点</td>
+            <td colspan="10" class="dim">没有匹配「{{ q }}」的站点</td>
           </tr>
           <tr v-for="s in visibleSites" :key="s.id">
+            <td class="col-sel"><input type="checkbox" :checked="selected.includes(s.id)"
+              @change="toggleSelect(s.id)" :disabled="!canManage"
+              :title="canManage ? '选择此站点' : '无管理权限'" aria-label="选择站点" /></td>
             <td class="ellipsis" :title="s.name">{{ s.name }}</td>
             <!-- 多域名：只列第一个 + 「+N」，完整列表走 title——否则 15% 列宽下
                  后半段被截掉，用户不知道到底配了几个域名。 -->
@@ -1434,6 +1489,14 @@ async function doRollback() {
           </tr>
         </tbody>
       </table>
+      <div class="batch-bar" v-if="selected.length">
+        <span class="batch-count">已选 {{ selected.length }} 项</span>
+        <span class="spacer" />
+        <button class="btn-ghost btn-sm" :disabled="!canManage || batchBusy" @click="batchSetEnabled(true)">启用</button>
+        <button class="btn-ghost btn-sm" :disabled="!canManage || batchBusy" @click="batchSetEnabled(false)">停用</button>
+        <button class="btn-ghost btn-sm danger" :disabled="!canManage || batchBusy" @click="askBatchDelete">删除</button>
+        <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="selected = []">取消选择</button>
+      </div>
     </div>
     <!-- 加载失败 ≠ 没有数据：sites 保持空数组时若一律走「暂无站点」，会与顶部错误红字
          自相矛盾（一边说失败、一边说没有）。空态文案也要跟着 canCreate 走——未接入
@@ -2053,6 +2116,10 @@ async function doRollback() {
       :detail="delTarget ? `将删除站点「${delTarget.name}」及其关联证书，且无法恢复。` : ''"
       confirm-word="删除" @confirm="doDelete" @cancel="delTarget = null" />
 
+    <ConfirmDialog :open="batchDelOpen" danger title="批量删除站点"
+      :detail="`将删除已选的 ${selected.length} 个站点及其关联证书，且无法恢复。此操作不可撤销。`"
+      confirm-word="删除" @confirm="batchDelete" @cancel="batchDelOpen = false" />
+
     <ConfirmDialog :open="!!delCert" danger title="删除证书"
       :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
       confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
@@ -2574,4 +2641,11 @@ col.w-cst { width: 8%; }
 /* 配置字节数：紧跟路径右侧，超限转警示色 */
 .conf-size { flex: none; margin-left: 8px; }
 .is-warn-text { color: var(--c-warn); }
+/* ── 列表批量操作（G3）── */
+col.w-sel { width: 40px; }
+.col-sel { text-align: center; width: 40px; padding-left: 0; padding-right: 0; }
+.col-sel input { width: auto; vertical-align: middle; cursor: pointer; }
+.batch-bar { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-top: 1px solid var(--c-border); margin-top: 4px; flex-wrap: wrap; }
+.batch-count { font-size: 13px; color: var(--c-text-dim); }
+.batch-bar .spacer { flex: 1; }
 </style>
