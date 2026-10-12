@@ -266,6 +266,7 @@ export const API = {
   settings: {
     get: () => '/api/v1/settings',
     patch: () => '/api/v1/settings',
+    dashboard: () => '/api/v1/settings/dashboard',
   },
 
   users: {

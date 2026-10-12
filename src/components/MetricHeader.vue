@@ -1,6 +1,8 @@
 <script lang="ts">
 /** 指标头数据项。导出给两个监控页做类型标注，避免各自复制一份接口后漂移。 */
 export interface MetricItem {
+  /** 卡片标识（概览页布局个性化用：cpu/mem/disk/load/net；其余场景可省略） */
+  id?: string
   label: string
   /** 已格式化的数值（脚本侧完成 toFixed 等） */
   value: string

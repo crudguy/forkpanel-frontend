@@ -15,6 +15,7 @@ import { type MetricItem } from '@/components/MetricHeader.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 
 const auth = useAuthStore()
@@ -119,17 +120,33 @@ const ovCards = computed<MetricItem[]>(() => {
   const du = tb ? 1024 : 1
   const dUnit = tb ? 'TB' : 'GB'
   return [
-    { label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: 'primary', progress: Number(cpu.value) },
-    { label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GB',
+    { id: 'cpu', label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: 'primary', progress: Number(cpu.value) },
+    { id: 'mem', label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GB',
       sub: `总量 ${((ov.value?.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB`,
       icon: 'server', tone: 'cyan', progress: memPct.value },
-    { label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
+    { id: 'disk', label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
       sub: `总量 ${(totalG / du).toFixed(1)} ${dUnit}`,
       icon: 'disk', tone: 'primary', progress: diskPct.value },
-    { label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'bolt', tone: loadTone.value },
-    { label: '网络', value: `↓ ${fmtNet(ov.value?.net_in_bps)}`,
+    { id: 'load', label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'bolt', tone: loadTone.value },
+    { id: 'net', label: '网络', value: `↓ ${fmtNet(ov.value?.net_in_bps)}`,
       sub: `↑ ${fmtNet(ov.value?.net_out_bps)}`, icon: 'network', tone: 'cyan' },
   ]
+})
+
+/** 按已保存布局渲染（顺序 + 显隐）；布局中未出现的卡片（未来新增）追加在末尾可见 */
+const shownCards = computed<MetricItem[]>(() => {
+  const prefs = layout.value
+  if (!prefs?.length) return ovCards.value
+  const byId = new Map(ovCards.value.map(c => [c.id as string, c]))
+  const out: MetricItem[] = []
+  for (const p of prefs) {
+    const c = byId.get(p.id)
+    if (c && p.visible) out.push(c)
+  }
+  for (const c of ovCards.value) {
+    if (!prefs.some(p => p.id === c.id)) out.push(c)
+  }
+  return out
 })
 function fmtNet(bps?: number) {
   const m = (bps ?? 0) / 1e6
@@ -243,9 +260,66 @@ const alerts = computed<Alert[]>(() => {
   return out
 })
 
+// ── 卡片布局（A1 个性化）：顺序 + 显隐，存后端 /api/v1/settings/dashboard ──
+// 编辑需 settings.manage（布局是面板级共享配置）；读取对全员开放。
+// 读取/写入失败都不阻塞概览：读失败用默认顺序，写失败出警告提示。
+interface CardPref { id: string; visible: boolean }
+const layout = ref<CardPref[] | null>(null)
+const layoutOpen = ref(false)
+const dragId = ref<string | null>(null)
+const canLayout = computed(() => auth.can('settings.manage'))
+const CARD_LABEL: Record<string, string> = { cpu: 'CPU', mem: '内存', disk: '磁盘', load: '负载', net: '网络' }
+
+const layoutBox = ref<HTMLElement | null>(null)
+const { close: closeLayout } = useModal(() => layoutOpen.value, layoutBox, () => (layoutOpen.value = false))
+
+async function loadLayout() {
+  try {
+    const r = await api.get<{ cards: CardPref[] }>(API.settings.dashboard())
+    if (r?.cards?.length) layout.value = r.cards
+  } catch { /* 布局读取失败用默认顺序，不影响概览渲染 */ }
+}
+async function saveLayout(next: CardPref[]) {
+  try {
+    const r = await api.put<{ cards: CardPref[] }>(API.settings.dashboard(), { cards: next })
+    if (r?.cards?.length) layout.value = r.cards
+    toast('卡片布局已保存')
+  } catch (e) { toast(errorText(e), 'warn') }
+}
+/** 拖拽/勾选的底稿：尚无已存布局时以当前默认顺序为准 */
+function ensureLayout(): CardPref[] {
+  return layout.value ?? ovCards.value.map(c => ({ id: c.id as string, visible: true }))
+}
+function toggleCard(id: string) {
+  const arr = ensureLayout().map(c => ({ ...c, visible: c.id === id ? !c.visible : c.visible }))
+  // 后端也会 400；前端先拦一道给出人话
+  if (!arr.some(c => c.visible)) { toast('至少保留一张可见卡片', 'warn'); return }
+  layout.value = arr
+  void saveLayout(arr)
+}
+function onDragStart(id: string, e: DragEvent) {
+  if (!canLayout.value) return
+  dragId.value = id
+  if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id) }
+}
+function onDropOn(id: string) {
+  const from = dragId.value
+  dragId.value = null
+  if (!canLayout.value || !from || from === id) return
+  const arr = ensureLayout().slice()
+  const fi = arr.findIndex(c => c.id === from)
+  const ti = arr.findIndex(c => c.id === id)
+  if (fi < 0 || ti < 0) return
+  const [moved] = arr.splice(fi, 1)
+  arr.splice(ti, 0, moved)
+  layout.value = arr
+  void saveLayout(arr)
+}
+
 onMounted(async () => {
   await auth.loadMe()
   void loadNotes()
+  void loadLayout()
   if (!auth.supported(CAP.METRICS_READ)) return
   await poll()
   await loadStatus()
@@ -265,44 +339,13 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
   <div class="dash">
     <div class="page-head">
       <h2 class="page-title">概览</h2>
+      <span class="spacer" />
+      <!-- 卡片设置（A1 个性化）：显隐开关；顺序在下方直接拖拽卡片调整 -->
+      <button v-if="canLayout && auth.supported(CAP.METRICS_READ)" class="btn-ghost btn-sm"
+        title="卡片显示与排序（在页面上直接拖拽卡片调整顺序）" @click="layoutOpen = true">
+        <Icon name="gear" :size="14" /> 卡片设置
+      </button>
     </div>
-
-    <!-- 本机便签（025，多条）：单机面板的「我在哪台机器」防误操作位。放在指标卡之前、
-         且不依赖 metrics 能力——容量档位再低也得知道这台机器是干嘛的。
-         ⚠️ 必须留在 v-if/v-else 链**之外**：塞进两者中间会打断相邻关系，模板直接编译失败。 -->
-    <section class="card server-note">
-      <div class="sec-head">
-        <Icon name="note" :size="16" /><span>本机便签</span>
-        <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
-          @click="adding = true">
-          <Icon name="plus" :size="13" />添加
-        </button>
-      </div>
-      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}</p>
-      <div v-if="notes.length || adding" class="note-list">
-        <div v-for="n in notes" :key="n.id" class="note-row">
-          <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
-            :saver="(v: string) => saveNote(n.id, v)"
-            placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
-          <template v-if="canSystemManage">
-            <span class="note-time" :title="new Date(n.updated_at * 1000).toLocaleString()">
-              {{ noteTime(n.updated_at) }}
-            </span>
-            <button class="note-del" title="删除这条便签" @click="delNote = n">
-              <Icon name="trash" :size="13" />
-            </button>
-          </template>
-        </div>
-        <InlineRemark v-if="adding" model-value="" :editable="true"
-          :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
-      </div>
-      <p v-else-if="noteLoaded" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
-      <p v-else class="muted">加载中…</p>
-    </section>
-
-    <ConfirmDialog :open="!!delNote" danger title="删除便签"
-      :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
-      @confirm="doDeleteNote" @cancel="delNote = null" />
 
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
@@ -314,9 +357,15 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
       <div v-if="!ov" class="grid cols-5">
         <div v-for="i in 5" :key="i" class="card skeleton" style="height:96px" />
       </div>
-      <!-- 指标卡 -->
-      <div v-else class="grid cols-5">
-        <MetricCard v-for="c in ovCards" :key="c.label" v-bind="c" />
+      <!-- 指标卡（A1 个性化）：顺序/显隐按后端布局渲染；管理员可拖拽排序 -->
+      <div v-else class="grid" :class="`cols-${Math.max(1, shownCards.length)}`">
+        <MetricCard v-for="c in shownCards" :key="c.id" v-bind="c"
+          :draggable="canLayout"
+          :class="[{ 'card-drag': canLayout }, { dragging: dragId === c.id }]"
+          @dragstart="onDragStart(c.id as string, $event)"
+          @dragover.prevent
+          @drop.prevent="onDropOn(c.id as string)"
+          @dragend="dragId = null" />
       </div>
 
       <!-- 高负载时的救火捷径：只在异常时出现，避免常态占视觉位 -->
@@ -384,6 +433,65 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
         </section>
       </div>
     </template>
+
+    <!-- 本机便签（025，多条）：A1 降级——从首屏顶部移到页尾（首屏优先呈"这台机器是否健康"），
+         仍不依赖 metrics 能力（能力缺失时它是页面上唯一的卡片）；且必须留在 v-if/v-else 链
+         **之外**（塞进链中会打断相邻关系，模板直接编译失败）。 -->
+    <section class="card server-note">
+      <div class="sec-head">
+        <Icon name="note" :size="16" /><span>本机便签</span>
+        <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
+          @click="adding = true">
+          <Icon name="plus" :size="13" />添加
+        </button>
+      </div>
+      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}</p>
+      <div v-if="notes.length || adding" class="note-list">
+        <div v-for="n in notes" :key="n.id" class="note-row">
+          <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
+            :saver="(v: string) => saveNote(n.id, v)"
+            placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+          <template v-if="canSystemManage">
+            <span class="note-time" :title="new Date(n.updated_at * 1000).toLocaleString()">
+              {{ noteTime(n.updated_at) }}
+            </span>
+            <button class="note-del" title="删除这条便签" @click="delNote = n">
+              <Icon name="trash" :size="13" />
+            </button>
+          </template>
+        </div>
+        <InlineRemark v-if="adding" model-value="" :editable="true"
+          :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
+      </div>
+      <p v-else-if="noteLoaded" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+      <p v-else class="muted">加载中…</p>
+    </section>
+
+    <ConfirmDialog :open="!!delNote" danger title="删除便签"
+      :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
+      @confirm="doDeleteNote" @cancel="delNote = null" />
+
+    <!-- 卡片设置弹窗（A1）：显隐开关；顺序在概览页直接拖拽卡片调整 -->
+    <div v-if="layoutOpen" class="mask" @click.self="closeLayout">
+      <div ref="layoutBox" class="modal" role="dialog" aria-modal="true" aria-label="卡片设置">
+        <div class="modal-head">
+          <h3 class="modal-title">概览卡片</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeLayout">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="hint-note">勾选控制显示；在概览页直接<b>拖拽卡片</b>可调整顺序。至少保留一张。</p>
+        <div class="lay-list">
+          <label v-for="c in ensureLayout()" :key="c.id" class="lay-row">
+            <input type="checkbox" :checked="c.visible" @change="toggleCard(c.id)" />
+            <span>{{ CARD_LABEL[c.id] ?? c.id }}</span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="closeLayout">完成</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -407,6 +515,17 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
            border: 1px solid var(--c-danger); border-radius: 10px;
            background: var(--c-danger-soft); color: var(--c-danger); font-size: 13.5px; }
 .hot-tip span { flex: 1; }
+
+/* ── A1 个性化：卡片拖拽与设置弹窗 ── */
+.card-drag { cursor: grab; }
+.card-drag:active { cursor: grabbing; }
+.dragging { opacity: .45; }
+.lay-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px; }
+.lay-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 9px; cursor: pointer; font-size: 13.5px; }
+.lay-row:hover { background: var(--c-hover); }
+/* 原生勾选框复位 width（全局 input{width:100%}） */
+.lay-row input { width: auto; }
 
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
