@@ -5,6 +5,7 @@
  * 一处组件四处用（站点 / 容器 / 数据库连接 / 本机说明）：点击文字进入编辑，
  * Esc 取消、Shift+Enter 或失焦保存；保存失败**保持编辑态**并把错误落在组件内
  * （不静默丢弃用户输入）。保存成功走全局浮层 toast。
+ * 编辑框高度随内容自适应（auto-grow）：长备注不再出现内部滚动条、无需手动拖拽。
  *
  * 与「大表单保存」刻意分开：备注是轻量、高频、可独立失败的字段，不应拖累
  * 整张表单的保存链路（站点编辑表单尤其如此——那里保存一次要走 nginx 校验）。
@@ -46,12 +47,22 @@ async function start() {
   editing.value = true
   await nextTick()
   inputEl.value?.focus()
+  grow()
 }
 
 function cancel() {
   escaped.value = true
   editing.value = false
   err.value = ''
+}
+
+/** 高度自适应：先归零让 scrollHeight 反映真实内容高度，再撑开（下限 46px≈两行）。
+ *  固定 rows=2 的方案在长备注下会出现内部滚动条，只能手动拖拽。 */
+function grow() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 46)}px`
 }
 
 async function save() {
@@ -87,7 +98,7 @@ async function save() {
     <template v-else>
       <textarea ref="inputEl" v-model="draft" class="iremark-input" rows="2"
         :placeholder="placeholder" :disabled="busy"
-        @keydown.esc.prevent="cancel" @keydown.enter.shift.exact.prevent="save" @blur="save" />
+        @keydown.esc.prevent="cancel" @keydown.enter.shift.exact.prevent="save" @blur="save" @input="grow" />
       <div class="iremark-meta">
         <span v-if="err" class="iremark-err">{{ err }}</span>
         <span v-else class="iremark-hint">Shift + Enter 或点击空白处保存</span>
@@ -109,7 +120,9 @@ async function save() {
 .iremark-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .iremark-pen { color: var(--c-text-dim); flex: none; opacity: 0; transition: opacity .12s ease; }
 .iremark-show:hover .iremark-pen { opacity: 1; }
-.iremark-input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 46px; padding: 6px 9px;
+/* 高度由 auto-grow（script grow()）接管，故去掉 resize: vertical——手动拖出的高度
+   会在下一次 input 时被重算冲掉，保留只会造成「拖了又弹回」的割裂感 */
+.iremark-input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 6px 9px;
   border: 1px solid var(--c-border-strong); border-radius: 8px; background: var(--c-surface);
   color: var(--c-text); font: inherit; font-size: 13px; line-height: 1.5; }
 .iremark-input:focus { outline: none; border-color: var(--c-primary); }
