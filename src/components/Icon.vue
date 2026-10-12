@@ -71,6 +71,8 @@ const ICONS: Record<string, string> = {
   'alert-circle': '<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>',
   // 备注/说明（022）：便签形文档——本机说明卡与内联备注的标识
   note: '<path d="M5 4h14v13.5L14.5 21H5z"/><path d="M14.5 21v-3.5H19"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/>',
+  // 帮助（A6）：问号圆，用于页面头部「?」按钮，点开右侧说明抽屉
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.4 2.4 0 0 1 4.5 1.2c0 1.6-2.1 2-2.1 3.6M12 17h.01"/>',
 }
 </script>
 

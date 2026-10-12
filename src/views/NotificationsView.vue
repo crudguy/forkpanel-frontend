@@ -99,7 +99,11 @@ onMounted(load)
     <p v-if="loading" class="muted">加载中…</p>
     <EmptyState v-if="!loading && !items.length"
       title="暂无通知"
-      hint="备份失败、恢复失败等需要人工处置的事件会出现在这里" />
+      hint="备份失败、恢复失败等需要人工处置的事件会出现在这里">
+      <template #cta>
+        <button class="btn-primary btn-sm" :disabled="loading" @click="load">刷新</button>
+      </template>
+    </EmptyState>
 
     <ul class="list">
       <li v-for="n in items" :key="n.id" class="item" :class="[n.level, { read: n.read }]">

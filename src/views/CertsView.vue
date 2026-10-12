@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 
@@ -29,6 +30,8 @@ const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 const error = ref('')
 const busy = ref(false)
 const loading = ref(false)
+/** 帮助抽屉（A6）：页面头部「?」打开，承载证书与根 CA 的完整说明 */
+const helpOpen = ref(false)
 
 const canSsl = computed(() => auth.can('ssl.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
@@ -153,6 +156,9 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
     <div class="page-head">
       <h2 class="page-title"><Icon name="lock" :size="18" /> 证书</h2>
+      <button class="btn-icon ghost" type="button" title="证书说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <span class="spacer" />
       <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
       <button class="btn-ghost" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
@@ -176,7 +182,12 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
     <div v-if="loading && !certs.length" class="skeleton box" />
     <EmptyState v-else-if="!certs.length && !error" title="暂无证书"
-      desc="先在「网站」建站并申请证书，或点上方「申请证书」" />
+      hint="先在「网站」建站并申请证书，或点上方「申请证书」">
+      <template #cta>
+        <RouterLink v-if="!sites.length" class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
+        <button v-else class="btn-primary btn-sm" :disabled="!sslReady" :title="sslHint" @click="openApply">申请证书</button>
+      </template>
+    </EmptyState>
 
     <div v-else-if="certs.length" class="card flush">
       <table class="fixed" aria-label="证书列表">
@@ -218,12 +229,14 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
       </table>
     </div>
 
-    <p class="tip">
-      证书是<b>站点维度</b>的资源：单站申请 / 查看在「网站 → 编辑站点」弹窗里；
-      本页把<b>全部站点</b>的证书汇总到一屏，便于统一巡检到期与续期。「信任根证书」是
-      一次性全局动作——导入面板本地根 CA 后，所有自签 HTTPS 站点不再报「非私密连接」，
-      首次部署、尚未建站时也应先完成这步。
-    </p>
+    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
+    <HelpDrawer :open="helpOpen" title="证书说明" @close="helpOpen = false">
+      <p>证书是<b>站点维度</b>的资源：单站申请 / 查看在「网站 → 编辑站点」弹窗里；本页把<b>全部站点</b>的证书汇总到一屏，便于统一巡检到期与续期。</p>
+      <h4>信任根证书</h4>
+      <p>一次性全局动作——导入面板本地根 CA 后，所有自签 HTTPS 站点不再报「非私密连接」。<b>首次部署、尚未建站时也应先完成这步</b>。</p>
+      <h4>自动续期</h4>
+      <p>到期前 30 天内由后台扫描自动续期（仅 ACME 渠道）；自签证书可手动「续期」重新签发。</p>
+    </HelpDrawer>
 
     <!-- 申请证书弹窗 -->
     <div v-if="sslModal" class="mask" @click.self="closeSslModal">

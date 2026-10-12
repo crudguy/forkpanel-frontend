@@ -22,6 +22,7 @@ import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const auth = useAuthStore()
 
@@ -66,6 +67,8 @@ const pkgDetectable = ref(false)
 
 const error = ref('')
 const formError = ref('')
+/** 帮助抽屉（A6）：页面头部「?」打开，承载「应用 = systemd + 反代站点」的完整说明 */
+const helpOpen = ref(false)
 
 // 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
 const systemUsers = ref<{ name: string; uid: number; login_allowed: boolean }[]>([])
@@ -334,6 +337,9 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
   <div class="wrap">
     <div class="page-head">
       <h2 class="page-title">应用</h2>
+      <button class="btn-icon ghost" type="button" title="应用说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <span class="spacer" />
       <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
         :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
@@ -344,16 +350,21 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 
     <p class="hint-note">
       <Icon name="info" :size="14" class="ic" />
-      <span>每个应用 = 一个由面板用 systemd 托管的进程 + 一个自动维护的反向代理站点（上游
-        <b>http://127.0.0.1:&lt;端口&gt;</b>）。<b>构建与依赖安装需你自己在项目目录完成</b>——
-        面板只负责把进程拉起来。</span>
+      <span>每个应用 = 面板托管的 systemd 进程 + 自动维护的反代站点。<b>构建与依赖安装需你自己完成</b>，
+        面板只负责把进程拉起来（完整说明见标题旁「?」）。</span>
     </p>
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
 
     <div v-if="loading && !apps.length" class="skeleton box" />
     <EmptyState v-else-if="!apps.length && !error" title="暂无托管应用"
-      desc="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点" />
+      hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点">
+      <template #cta>
+        <button class="btn-primary btn-sm" :disabled="!canManage || !webSupported" @click="openCreate">
+          <Icon name="plus" :size="14" /> 新建第一个应用
+        </button>
+      </template>
+    </EmptyState>
 
     <div v-else-if="apps.length" class="card flush">
       <table class="fixed">
@@ -554,6 +565,18 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         :confirm-word="pendingRemove ? pendingRemove.name : ''"
         @confirm="doRemove" @cancel="pendingRemove = null" />
     </div>
+
+    <!-- 完整说明收进帮助抽屉（A6）：头部「?」打开。
+         浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
+    <HelpDrawer :open="helpOpen" title="应用说明" @close="helpOpen = false">
+      <p>每个应用 = 一个由面板用 systemd 托管的进程 + 一个自动维护的反向代理站点（上游 <code>http://127.0.0.1:&lt;端口&gt;</code>）。<b>构建与依赖安装需你自己在项目目录完成</b>——面板只负责把进程拉起来。</p>
+      <h4>与「网站」页的关系</h4>
+      <p>应用是<b>投影</b>：每个启用态应用会自动持有一个同名反向代理站点，站点本身仍可在「网站」页改域名 / WAF。应用页只管<b>进程怎么起</b>。</p>
+      <h4>托管开关</h4>
+      <p>打开托管 = 装 systemd 单元 + 建站；关闭 = 撤站点 + 删单元。<b>不会删除你的项目代码与构建产物。</b></p>
+      <h4>运行用户</h4>
+      <p>留空 = 由面板创建 <code>site-&lt;应用名&gt;</code> 系统用户并降权运行，<b>并非 root</b>。</p>
+    </HelpDrawer>
   </div>
 </template>
 

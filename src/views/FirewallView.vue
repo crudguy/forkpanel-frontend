@@ -8,12 +8,13 @@
  * 2. 提交前展示"本次将放行哪些端口"，让用户看清再点。
  * 3. 后端在 apply 前会无条件做快照并在失败时回滚，UI 明确告知这一点。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, fwActionLabel, fwBackendLabel, fwProtocolLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { toast } from '@/composables/useToast'
@@ -31,6 +32,11 @@ const error = ref('')
 /** 警告通道：后端 warnings（部分生效/部分忽略）不是失败，不当错误渲染 */
 const warn = ref('')
 const busy = ref(false)
+/** 空态「放行端口」CTA：滚动到放行表单 */
+const allowCard = ref<HTMLElement | null>(null)
+function focusAllow() {
+  nextTick(() => allowCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
 const ports = ref('80,443')
 const source = ref('')
 const comment = ref('')
@@ -185,7 +191,7 @@ onMounted(() => { load(); loadFail2ban() })
       <p v-if="error" class="err" role="alert">{{ error }}</p>
       <p v-if="warn" class="warn" role="status">⚠ {{ warn }}</p>
 
-      <section class="card">
+      <section class="card" ref="allowCard">
         <div class="sec-head"><Icon name="firewall" :size="16" /> 放行端口</div>
         <div class="row">
           <label>端口
@@ -199,10 +205,8 @@ onMounted(() => { load(); loadFail2ban() })
           </label>
           <button class="btn-primary" :disabled="busy || !canManage || !ports" @click="apply">应用</button>
         </div>
-        <p class="tip">
-          仅支持放行（allow）。封禁端口可能导致 SSH 失联，需通过命令行操作。
-          后端会在变更前自动快照，失败时回滚。
-        </p>
+        <RiskBanner level="warn" title="仅支持放行（allow）"
+          text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
       </section>
 
       <div class="card flush" v-if="rules.length">
@@ -235,7 +239,11 @@ onMounted(() => { load(); loadFail2ban() })
           </tbody>
         </table>
       </div>
-      <EmptyState v-else title="暂无规则" />
+      <EmptyState v-else title="暂无规则">
+        <template #cta>
+          <button class="btn-primary btn-sm" @click="focusAllow">放行第一个端口</button>
+        </template>
+      </EmptyState>
 
       <!-- fail2ban 入侵防御：与防火墙同一能力门控；未装时 f2b.available=false 走空态 -->
       <section class="card f2b" v-if="auth.supported(CAP.FIREWALL_MANAGE)">

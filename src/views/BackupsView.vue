@@ -14,12 +14,14 @@
  * 状态语义：`last_result` 的 `partial` 表示**本地成功、远端上传失败**——
  * 本地那份是真的，所以不判为失败；但异地副本没成，必须让人一眼看见。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -47,6 +49,13 @@ const auth = useAuthStore()
 const plans = ref<Plan[]>([])
 const error = ref('')
 const busy = ref(false)
+/** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
+const createSec = ref<HTMLElement | null>(null)
+function scrollToCreate() {
+  nextTick(() => createSec.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+/** 帮助抽屉（A6）：页面头部的「?」打开，承载完整的备份约束说明 */
+const helpOpen = ref(false)
 const form = ref({
   kind: 'panel', target: 'panel', dest_dir: 'plans',
   cron_expr: '', keep_count: 7, encrypt: false,
@@ -276,6 +285,9 @@ function fmtTime(t: number | null) {
   <div>
     <div class="page-head">
       <h2 class="page-title"><Icon name="disk" :size="18" /> 备份</h2>
+      <button class="btn-icon ghost" type="button" title="备份说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
@@ -287,7 +299,7 @@ function fmtTime(t: number | null) {
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
 
-      <section class="card">
+      <section class="card" ref="createSec">
         <div class="sec-head"><Icon name="disk" :size="16" /> 新建备份计划</div>
         <div class="row">
           <label>类型
@@ -315,9 +327,10 @@ function fmtTime(t: number | null) {
 
         <RemoteTargetForm v-model="form.remote" :disabled="!canManage" />
 
+        <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
+          text="静态加密采用 AES-256-GCM，主密钥不落库——丢失后备份将永远无法解密，请先单独备份主密钥。" />
         <p class="tip">
-          产物落在面板备份根目录之下（相对路径，防越界）。可选<b>静态加密</b>（AES-256-GCM，主密钥不落库——丢了就解不开，请先单独备份主密钥）。
-          可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。
+          产物落在面板备份根目录之下（相对路径，防越界）。可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。
         </p>
       </section>
 
@@ -360,7 +373,11 @@ function fmtTime(t: number | null) {
           </tbody>
         </table>
       </div>
-      <EmptyState v-else title="暂无备份计划" />
+      <EmptyState v-else title="暂无备份计划">
+        <template #cta>
+          <button class="btn-primary btn-sm" @click="scrollToCreate">新建计划</button>
+        </template>
+      </EmptyState>
 
       <section class="card" v-if="editRemote">
         <div class="sec-head">
@@ -462,6 +479,18 @@ function fmtTime(t: number | null) {
       :detail="restoreConfirm ? `即将用「${restoreConfirm.name}」覆盖 ${restoreConfirm.plan.target} 的当前数据。任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。` : ''"
       confirm-word="覆盖恢复" @confirm="restoreFrom" @cancel="restoreConfirm = null"
     />
+
+    <!-- 完整说明收进帮助抽屉（A6）：不占用页面流，头部「?」随时可查。
+         浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
+    <HelpDrawer :open="helpOpen" title="备份说明" @close="helpOpen = false">
+      <p>备份计划把面板数据或站点文件定期落盘，可选远端副本（WebDAV / S3 兼容）做异地容灾。</p>
+      <h4>加密与主密钥</h4>
+      <p>开启<code>静态加密</code>后产物用 AES-256-GCM 加密。<b>主密钥不落库</b>——一旦丢失，备份将永远无法解密，请先单独把主密钥备份到安全的地方。</p>
+      <h4>远端副本</h4>
+      <p>凭据加密存储且<b>永不回显</b>。远端上传失败<b>不会</b>让本地备份判为失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。</p>
+      <h4>恢复</h4>
+      <p>从产物恢复是<b>高危</b>后续操作，需要手输确认词，确认前请看清将覆盖的目标。</p>
+    </HelpDrawer>
   </div>
 </template>
 

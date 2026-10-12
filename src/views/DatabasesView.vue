@@ -25,6 +25,7 @@ import Icon from '@/components/Icon.vue'
 import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
@@ -41,6 +42,8 @@ const auth = useAuthStore()
 const conns = ref<Conn[]>([])
 const error = ref('')
 const busy = ref(false)
+/** 帮助抽屉（A6）：页面头部「?」打开，承载引擎差异与能力边界的完整说明 */
+const helpOpen = ref(false)
 /** 打开 SQL 控制台的连接（null = 关闭） */
 const sqlConn = ref<Conn | null>(null)
 /** 空表单。port/user/password 仅 mysql/postgres 需要（口令后端 AES 加密、永不回显）。 */
@@ -160,6 +163,9 @@ function closeBrowse() { browse.value = null }
   <div>
     <div class="page-head">
       <h2 class="page-title"><Icon name="database" :size="18" /> 数据库</h2>
+      <button class="btn-icon ghost" type="button" title="数据库说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
@@ -194,8 +200,14 @@ function closeBrowse() { browse.value = null }
           </label>
           <button class="btn-primary" :disabled="!canManage || busy || !form.name || (form.engine !== 'sqlite' && !form.user.trim())" @click="create">添加</button>
         </div>
-        <p class="tip">SQLite 为内建引擎，可<b>只读浏览与查询</b>（SQL 控制台仅接受只读语句）；MySQL / PostgreSQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
       </section>
+
+      <!-- 完整说明收进帮助抽屉（A6）：能力边界不再铺在页面上；「?」在页面头部 -->
+      <HelpDrawer :open="helpOpen" title="数据库说明" @close="helpOpen = false">
+        <p>SQLite 为内建引擎，可<b>只读浏览与查询</b>（SQL 控制台仅接受只读语句）；MySQL / PostgreSQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
+        <h4>客户端就绪 ≠ 连接可达</h4>
+        <p>「客户端」列只表示本机有没有 psql / mysqldump 这类工具，<b>不代表目标库连得上</b>；连接可用性以实际执行结果为准。</p>
+      </HelpDrawer>
 
       <div class="card flush" v-if="conns.length">
         <table class="fixed">

@@ -20,10 +20,12 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, containerStateLabel, containerStateBadge } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -49,6 +51,8 @@ const images = ref<Image[]>([])
 const error = ref('')
 const busy = ref(false)
 const loading = ref(false)
+/** 帮助抽屉（A6）：页面头部「?」打开，承载「刻意不提供哪些操作」的完整说明 */
+const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
 
 // 安装 Docker：诊断分支下的交互状态
@@ -221,6 +225,9 @@ async function saveRemark(c: Container, v: string) {
   <div>
     <div class="page-head">
       <h2 class="page-title"><Icon name="docker" :size="18" /> 容器</h2>
+      <button class="btn-icon ghost" type="button" title="容器说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy || !supported" @click="load()">
         <Icon name="refresh" :size="15" /> 刷新
@@ -268,6 +275,9 @@ async function saveRemark(c: Container, v: string) {
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}</p>
+
+      <RiskBanner level="info" title="只读 + 生命周期操作"
+        text="容器为只读列举，支持启停 / 重启 / 删除；不提供创建容器（docker run 等价宿主级任意代码执行，需独立的镜像白名单与特权 / 挂载禁用设计）。" />
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
@@ -349,13 +359,16 @@ async function saveRemark(c: Container, v: string) {
       </div>
       <EmptyState v-else-if="!loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
 
-      <p class="tip">
-        <b>不提供</b>「创建容器 / 删除镜像 / 拉取镜像」：创建容器等价于在宿主机执行任意代码
-        （镜像内容 + 挂载宿主目录 + 特权模式 + 端口暴露），必须配套镜像白名单、禁止特权与宿主挂载、
-        资源配额等设计后才能开放。<br />
-        删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。
-      </p>
     </template>
+
+    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
+    <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
+      <p>容器为<b>只读列举 + 生命周期操作</b>（启停 / 重启 / 删除）。</p>
+      <h4>刻意不提供的操作</h4>
+      <p><b>创建容器 / 删除镜像 / 拉取镜像</b>：创建容器等价于在宿主机执行任意代码（镜像内容 + 挂载宿主目录 + 特权模式 + 端口暴露），必须配套镜像白名单、禁止特权与宿主挂载、资源配额等设计后才能开放。</p>
+      <h4>删除语义</h4>
+      <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
+    </HelpDrawer>
 
     <ConfirmDialog :open="!!delTarget" danger title="删除容器"
       :detail="delTarget ? `将删除容器「${delTarget.name}」（镜像 ${delTarget.image}）。\n\n容器内未持久化到卷或宿主目录的数据会一并丢失，且无法恢复。运行中的容器需先停止。` : ''"

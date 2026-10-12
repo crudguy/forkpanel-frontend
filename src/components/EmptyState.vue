@@ -18,6 +18,7 @@ defineProps<{
     <p class="title">{{ title }}</p>
     <p v-if="hint" class="hint">{{ hint }}</p>
     <p v-if="reason" class="reason">原因：{{ reason }}</p>
+    <div v-if="$slots.cta" class="cta"><slot name="cta" /></div>
   </div>
 </template>
 
@@ -26,4 +27,5 @@ defineProps<{
 .title { margin: 0 0 6px; font-size: 14px; }
 .hint { margin: 0; font-size: 13px; color: var(--c-text-dim); }
 .reason { margin: 6px 0 0; font-size: 12px; color: var(--c-warn); font-family: var(--mono); }
+.cta { margin-top: 14px; display: flex; justify-content: center; }
 </style>

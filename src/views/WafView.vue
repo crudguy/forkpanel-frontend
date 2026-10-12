@@ -21,6 +21,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, wafProfileLabel, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 
@@ -32,6 +33,8 @@ const sites = ref<Site[]>([])
 const drafts = ref<Record<number, Draft>>({})
 const error = ref('')
 const busyId = ref<number | null>(null)
+/** 帮助抽屉（A6）：页面头部「?」打开，承载 WAF 完整约束说明 */
+const helpOpen = ref(false)
 
 const canManage = computed(() => auth.can('site.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
@@ -168,6 +171,9 @@ onMounted(load)
 
     <div class="page-head">
       <h2 class="page-title"><Icon name="firewall" :size="18" /> WAF</h2>
+      <button class="btn-icon ghost" type="button" title="WAF 说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
       <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
       <span v-if="blockedPending" class="dim tiny"
         :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
@@ -185,7 +191,11 @@ onMounted(load)
     </div>
 
     <EmptyState v-if="!sites.length && !error" title="暂无站点"
-      desc="先在「网站」建站，再回来统一配置 WAF" />
+      hint="先在「网站」建站，再回来统一配置 WAF">
+      <template #cta>
+        <RouterLink class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
+      </template>
+    </EmptyState>
 
     <div v-else-if="sites.length" class="card flush">
       <table class="fixed" aria-label="站点 WAF 配置">
@@ -242,13 +252,20 @@ onMounted(load)
       </table>
     </div>
 
-    <p class="tip">
-      WAF 与站点配置<b>同一次下发</b>（它本来就是 nginx 配置的一部分）：规则集由系统内置，
-      此处只能选档位与数值。基础档拦 SQLi / XSS / 路径穿越 / 敏感文件探测 / 恶意 UA；
-      严格档追加空 UA 与非白名单方法，<b>误杀率更高</b>故不作默认。限速超限返回
-      <code>429</code>，<code>/.well-known</code> 始终放行——否则会把 ACME 证书续期打死。
-      <b>已停用的站点不可在此应用</b>：后端应用配置会一并启用站点。
-    </p>
+    <!-- 完整说明收进帮助抽屉（A6）：底部不再重复长文；「?」在页面头部。
+         浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
+    <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
+      <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 状态收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。</p>
+      <h4>档位</h4>
+      <ul>
+        <li><b>基础档</b>：拦 SQL 注入 / XSS / 路径穿越 / 敏感文件探测 / 恶意 UA。</li>
+        <li><b>严格档</b>：基础档之上追加空 UA 与非白名单方法拦截，<b>误杀率更高</b>，不建议作默认。</li>
+      </ul>
+      <h4>CC 限速</h4>
+      <p><code>rate_per_sec</code> 为 0 表示不限速；设置限速时 <code>burst</code> 才有意义（不限速却带 burst 会被后端拒绝）。超限请求返回 <code>429</code>；<code>/.well-known</code> 路径始终放行——否则会把 ACME 证书续期打死。</p>
+      <h4>已知副作用</h4>
+      <p>后端 apply 的 upsert 会把站点 <code>enabled</code> 置 1，因此<b>已停用的站点</b>在本页禁用「应用」，避免用户只想改 WAF 却被静默启用站点。</p>
+    </HelpDrawer>
   </div>
 </template>
 

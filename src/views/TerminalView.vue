@@ -19,6 +19,7 @@ import '@xterm/xterm/css/xterm.css'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 
 const auth = useAuthStore()
@@ -159,7 +160,8 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
     <template v-else>
       <p v-if="errorMsg" class="err" role="alert">{{ errorMsg }}</p>
       <div ref="termEl" class="term" :class="{ dim: !connected }" />
-      <p class="hint">提示：终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面即断开会话。</p>
+      <RiskBanner level="danger" title="宿主级权限"
+        text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面即断开会话。" />
     </template>
   </div>
 </template>
