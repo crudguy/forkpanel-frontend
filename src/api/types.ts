@@ -350,6 +350,10 @@ export interface PackageInfo {
   label?: string
   version: string | null
   manager: string
+  /** 是否被 apt-mark hold 钉住（后端按**真实包名**比对后回填）。true = 挡住 apt-get
+   *  upgrade 的自动升级；不影响显式指定版本安装——是防误升，不是安全边界。
+   *  仅已安装包有意义；非 apt 管理器恒 false。 */
+  held?: boolean
   /** 该软件包对应的主服务单元（后端由 dpkg -L 推导，enabled 但当前未运行的服务也能关联）。
    *  为 null 表示该软件没有可管理的服务（如 certbot/ufw），UI 据此不渲染「服务管理」入口。 */
   unit?: ServiceRef | null

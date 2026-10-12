@@ -15,6 +15,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported, ApiError } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { toast } from '@/composables/useToast'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
 import { CAP, PackageInfo, UpgradablePkg, ServiceInfo as Svc, ServiceRef, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -43,6 +44,9 @@ const pkgNote = ref('')
 // 于是 :disabled="!!busy" 恒为 false，刷新按钮的禁用保护从来没生效过（假保护）。
 // 已删除；按钮改用真实的加载态（服务 Tab 看 loading，软件 Tab 看 pkgs === null）。
 const loadingPkg = ref('')      // 正在提交安装的包名
+// 正在切换 hold 的包名。与 loadingPkg 分开：装卸走任务队列（异步、有进度），
+// hold 是秒级同步操作，两种忙态来源不同，混用一个 ref 会互相掩盖。
+const holdingPkg = ref('')
 // 安装对话框状态：点「+ 安装」先弹窗选版本，再提交。
 // 演进：行内版本输入框（25 行重复占位）→ 区块头总开关（易看漏）→ 现在的安装弹窗
 // （选择入口就在操作路径上，且版本是下拉选项而非手输，避免输错）。
@@ -332,6 +336,30 @@ function findTask(id: number) { return tasks.value.find(t => t.id === id) }
 /** 该逻辑包是否有进行中的任务（排队中/进行中）——只禁**同一个包**的重复提交。 */
 function pkgBusy(name: string) {
   return tasks.value.some(t => t.pkg === name && !FINISHED.has(t.state))
+}
+
+/** 切换升级钉住（apt-mark hold/unhold）。
+ *
+ *  同步操作（秒级），刻意不走任务队列——装卸/升级是耗时的外部命令，
+ *  hold 只是改一个 apt 标记，套任务流反而让用户等一个不需要的进度条。
+ *
+ *  成功后**只改本地该项的 held**，不重拉列表：loadPackages 有 5s 软新鲜度，
+ *  重拉会直接吃缓存、看不到刚发生的变化（软缓存吞掉即时反馈的坑）；
+ *  下次自然刷新（或切 Tab 超过 5s）会与后端重新对齐。
+ *
+ *  成功提示走全局浮层 toast；失败落页面级 error（与 doUpgrade 同口径）。 */
+async function doHold(n: string, held: boolean) {
+  error.value = ''
+  holdingPkg.value = n
+  try {
+    const r = await api.post<{ name: string; held: boolean }>(API.packages.hold(n), { held })
+    const p = pkgs.value?.find(x => x.name === n)
+    if (p) p.held = r.held
+    toast(`${labelOf(n)} 已${r.held ? '钉住：不会被自动升级（手动指定版本仍可安装）' : '取消钉住：恢复自动升级'}`)
+  } catch (e) {
+    if (isUnsupported(e)) error.value = '当前包管理器不支持钉住（仅 apt 系提供该能力）'
+    else error.value = errorText(e)
+  } finally { holdingPkg.value = '' }
 }
 
 function watchTask(id: number, pkg: string, label: string) {
@@ -659,6 +687,20 @@ async function doConfirmed() {
                               @click="doUpgrade(p.name, undefined)">
                         <Icon name="refresh" :size="13" />
                       </button>
+                      <!-- 升级钉住切换（apt-mark hold/unhold）。放在「更新」旁边：
+                           两者作用于同一条升级通道——钉住后自动升级不再选中该包。
+                           title 必须说清边界：只挡自动升级，**不挡**「更新」按钮与
+                           切换版本（它们走显式版本安装，apt 不拦）——否则用户会
+                           以为钉住了就连手动升级也做不了。 -->
+                      <button class="btn-ghost btn-sm icon-btn"
+                              :class="{ 'is-held': p.held }"
+                              :disabled="!canPkg || pkgBusy(p.name) || holdingPkg === p.name"
+                              :title="p.held
+                                ? `取消钉住 ${labelOf(p.name)}：恢复被自动升级选中`
+                                : `钉住 ${labelOf(p.name)}：阻止自动升级（手动指定版本仍可安装）`"
+                              @click="doHold(p.name, !p.held)">
+                        <Icon :name="p.held ? 'lock' : 'unlock'" :size="13" />
+                      </button>
                       <!-- 切换版本：已安装的软件也可能需要换版本（升级/回退），
                            此前只有「未安装」的包才有安装入口，已装的无法操作。
                            复用同一个安装弹窗，其中会标出「（已安装）」的当前版本。 -->
@@ -682,6 +724,15 @@ async function doConfirmed() {
                           :class="upgradableMap.get(p.name)!.major ? 'badge-danger' : 'badge-warn'"
                           :title="`可更新：v${upgradableMap.get(p.name)!.current} → v${upgradableMap.get(p.name)!.candidate}${upgradableMap.get(p.name)!.major ? '（跨主版本，升级需数据迁移）' : ''}`">
                       {{ upgradableMap.get(p.name)!.major ? '跨主版本 ' : '有新版 ' }}v{{ upgradableMap.get(p.name)!.candidate }}
+                    </span>
+                    <!-- 钉住徽标：与「有新版」并列是有意为之——两者直接相关，
+                         钉住的包即使探测到新版也不会被自动升级，用户看到两个徽标
+                         同时出现就明白「为什么有新版却不升」。
+                         用中性徽标（非 warn/danger）：钉住是用户的有意选择，
+                         是个状态不是问题；title 说清语义边界。 -->
+                    <span v-if="p.held" class="badge nowrap"
+                          title="该软件已钉住：不会被自动升级（含「更新」按钮的批量升级）；需要升级时先取消钉住，或手动指定版本安装">
+                      <Icon name="lock" :size="11" />已钉住
                     </span>
                     <!-- 原这里有「包管理器」徽标（apt / dnf / apk…）：那是实现细节，
                          普通用户看不懂且换发行版还变字，纯噪音，已移除。 -->
@@ -814,6 +865,10 @@ col.w-acts { width: 96px; }
 .pkg-actions { display: flex; gap: 6px; flex-shrink: 0; }
 /* 图标按钮：卡片里横向空间紧张，操作按钮一律用图标 + title 说明 */
 .icon-btn { padding: 4px 7px; }
+/* 钉住态：图标着品牌色 + 软底，与未钉住的灰图标形成一眼可辨的对比——
+   被钉住的包是用户的有意选择，值得在操作栏里被"看见"，
+   不必逐个悬停读 title 才知道谁被钉了。 */
+.icon-btn.is-held { color: var(--c-primary); background: var(--c-primary-soft); }
 /* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行，
    而不是显示省略号。 */
 .pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

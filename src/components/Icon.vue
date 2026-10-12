@@ -57,6 +57,9 @@ const ICONS: Record<string, string> = {
   gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-4"/>',
   file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  // 开锁（apt-mark hold 的「取消钉住」态）：锁体同 lock，锁梁抬起表示未锁住。
+  // 与 lock 成对使用——hold 切换按钮的二态图标，写错名只会渲染空 <svg>。
+  unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-1.8"/>',
   monitor: '<rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M12 16.5V20M8 20h8M7 8.5h10"/>',
   tasks: '<rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/><path d="M9 14l2.2 2.2L15.5 12"/>',
   archive: '<rect x="3.5" y="4" width="17" height="5" rx="1.2"/><path d="M5.5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/>',
