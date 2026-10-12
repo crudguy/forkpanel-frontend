@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import CommandPalette from '@/components/CommandPalette.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
@@ -15,6 +16,9 @@ import { navDrawerOpen, closeNav } from '@/composables/nav'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+// 命令面板（A11）开关：由全局 ⌘K / Ctrl+K 与顶栏搜索按钮唤起
+const paletteOpen = ref(false)
 
 // 移动端抽屉：路由切换即收起（审计 R1），避免停留在非当前页时抽屉仍开着
 watch(() => route.path, () => { if (navDrawerOpen.value) closeNav() })
@@ -87,6 +91,17 @@ onMounted(() => {
 })
 onUnmounted(() => { if (unreadTimer) clearInterval(unreadTimer) })
 
+// 命令面板：全局 ⌘K / Ctrl+K 唤起（评估报告 A11）。即便焦点在终端输入框也照常触发，
+// 因为这是面板级快捷键，不应被页面内输入框吞掉。
+function onPaletteKey(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
+  }
+}
+onMounted(() => window.addEventListener('keydown', onPaletteKey))
+onUnmounted(() => window.removeEventListener('keydown', onPaletteKey))
+
 function logout() {
   userMenu.value = false
   auth.logout()
@@ -123,6 +138,10 @@ function logout() {
           <Icon name="monitor" :size="15" />
           <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
         </RouterLink>
+
+        <button class="btn-icon ghost" type="button" title="命令面板（Ctrl / ⌘ + K）" @click="paletteOpen = true">
+          <Icon name="search" :size="18" />
+        </button>
 
         <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
           :title="unread ? `未读通知 ${unread} 条` : '通知'">
@@ -176,6 +195,8 @@ function logout() {
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
     <!-- 全站唯一的浮层提示宿主（脱离文档流，不影响任何页面布局） -->
     <ToastHost />
+    <!-- 命令面板：全局 ⌘K / Ctrl+K 唤起，顶栏搜索按钮亦可触发 -->
+    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
   </div>
 </template>
 

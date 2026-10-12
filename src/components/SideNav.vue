@@ -24,14 +24,14 @@
  * 底部的 distro·arch 原来塞在折叠开关上方，既挤占开关空间又和 topbar 重复。
  * 现统一放到 MainLayout 的 topbar 右侧状态簇，侧边栏底部只留折叠开关。
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { NAV_ITEMS } from '@/composables/navItems'
 import { navCollapsed, toggleNav, navDrawerOpen } from '@/composables/nav'
 import Icon from '@/components/Icon.vue'
 
-interface Item { to: string; label: string; icon: string; cap: string; perm: string }
+interface Item { to: string; label: string; icon: string; cap: string; perm: string; group: string }
 /**
  * 渲染用菜单项 = 定义 + 预计算的禁用原因。
  *
@@ -43,46 +43,13 @@ interface NavItem extends Item { off: string | null }
 
 const auth = useAuthStore()
 
-// 菜单项：扁平列表，不再分组。可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，
-// **禁止** isLinux / navigator.platform 之类平台判断。新模块 cap 复用既有常量兜底
-// （明细类用 METRICS_READ），仅 perm 区分可见性。
-const items = computed<NavItem[]>(() => [
-  { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view' },
-  // 「通知」不再占菜单位：topbar 常驻铃铛 + 未读徽标即入口
-  { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
-  // 「专业监控 / 进程」已并入主机监控页页内 Tab（/system/pro、/system/procs）
-  { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
-  // 门禁用 METRICS_READ 兜底而非 WEBSERVER_MANAGE：站点 CRUD（静态站）不依赖
-  // nginx——以 webserver 能力门禁会让无 nginx 的环境整项不可达；页内具体动作
-  // （配置下发/重载）各自按 WEBSERVER_MANAGE 置灰
-  { to: '/sites', label: '网站', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view' },
-  // 门禁用 service.view：应用本质是 systemd 单元托管，后端复用该权限点（不新造 app.*）
-  { to: '/apps', label: '应用', icon: 'bolt', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
-  // WAF 是站点配置的一部分（同一次 apply 下发），单列一项只为统一查看/批量调整
-  { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view' },
-  // 证书与 WAF 同族：单站 SSL 在「编辑站点」弹窗配，本页统一总览/申请/续期/信任根证书。
-  // 权限点复用 site.view（后端只有 ssl.manage、无 ssl.view；证书归属站点、菜单恒可达），
-  // 页内动作再按 ssl.manage 置灰——与 WAF 用 site.view 同理。
-  { to: '/certs', label: '证书', icon: 'lock', cap: CAP.METRICS_READ, perm: 'site.view' },
-  { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
-  { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_VIEW, perm: 'container.view' },
-  { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view' },
-  { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read' },
-  // 门禁用 METRICS_READ 兜底而非 FIREWALL_MANAGE：本页第二个 Tab /firewall/baseline
-  // （基线检查 + 会话 + MFA）后端 security 路由只校验 SECURITY_MANAGE、**不查** firewall
-  // cap——用 firewall 门禁会让没装 ufw 的机器连 MFA 都进不去（同 F20「站点门禁」教训）。
-  // 防火墙规则 Tab 在页内自行按 FIREWALL_MANAGE 置灰/提示 501，能力位依旧诚实。
-  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.METRICS_READ, perm: 'firewall.view' },
-  { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
-  { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view' },
-  // 「任务中心」已并入任务页第二个 Tab（/cron/tasks）
-  { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage' },
-  { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view' },
-  { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage' },
-  // 「审计日志」已并入日志页第二个 Tab（/logs/audit）
-  { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage' },
-  // 定义与判定分离：定义在上方一目了然，禁用原因在这里统一算一次（模板只读 it.off）
-].map((it) => ({ ...it, off: auth.whyDisabled(it.cap, it.perm) })))
+// 菜单项定义抽到 navItems.ts（与命令面板 A11 共用单一事实源），此处只算禁用原因。
+// 可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，**禁止** isLinux / navigator.platform
+// 之类平台判断。新模块 cap 复用既有常量兜底（明细类用 METRICS_READ），仅 perm 区分可见性。
+// 仍是扁平列表（A10 分组是独立一期工作），group 字段供命令面板归类展示。
+const items = computed<NavItem[]>(() =>
+  NAV_ITEMS.map((it) => ({ ...it, off: auth.whyDisabled(it.cap, it.perm) })),
+)
 
 const route = useRoute()
 // 含页内子 Tab 的菜单（主机监控 /system/*、软件与服务 /services/*、日志 /logs/audit、
@@ -91,6 +58,74 @@ const route = useRoute()
 function isOn(it: Item): boolean {
   return route.path === it.to || route.path.startsWith(it.to + '/')
 }
+
+// ── 能力域分组（A10）──────────────────────────────────────────────
+// 18 项菜单扁平铺开需要滚动才能看全；按 navItems.ts 的 group 字段分 8 组，
+// 组头可折叠、展开状态记忆到 localStorage；默认只展开「当前路由所在组」。
+// 约束：分组只影响**渲染**，不影响可见性口径（仍是 cap AND perm，见 items）。
+const GROUP_STORE = 'forkpanel.nav.groups'
+
+/** 当前路由落在哪个分组（前缀匹配，与 isOn 同口径） */
+function groupOfPath(p: string): string {
+  const hit = NAV_ITEMS.find((n) => p === n.to || p.startsWith(n.to + '/'))
+  return hit?.group ?? NAV_ITEMS[0].group
+}
+
+function readOpenGroups(): Set<string> {
+  // 当前路由所在组**必须**在展开集里（深链直入 /logs 时若只信任存储，
+  // 日志组仍是收起态，用户看不到自己所在页——实测踩到）。
+  const must = groupOfPath(route.path)
+  try {
+    const raw = localStorage.getItem(GROUP_STORE)
+    if (raw) {
+      const arr = JSON.parse(raw)
+      // 存储损坏/非数组时退回默认，不让脏数据渲染出空侧栏
+      if (Array.isArray(arr) && arr.every((x) => typeof x === 'string')) {
+        const set = new Set<string>(arr)
+        set.add(must)
+        return set
+      }
+    }
+  } catch { /* 隐私模式等存储不可用：退回默认 */ }
+  return new Set([must])
+}
+
+const openGroups = ref<Set<string>>(readOpenGroups())
+
+function persistOpen() {
+  try { localStorage.setItem(GROUP_STORE, JSON.stringify([...openGroups.value])) } catch { /* 忽略 */ }
+}
+
+function toggleGroup(name: string) {
+  const next = new Set(openGroups.value)
+  if (next.has(name)) next.delete(name)
+  else next.add(name)
+  openGroups.value = next
+  persistOpen()
+}
+
+// 跳转到的页面必须可见：所在组若在收起态则自动展开（并记忆）。
+// 只自动展开、绝不自动收起——用户手动展开的组不应因跳转被悄悄关掉。
+watch(() => route.path, (p) => {
+  const g = groupOfPath(p)
+  if (!openGroups.value.has(g)) {
+    const next = new Set(openGroups.value)
+    next.add(g)
+    openGroups.value = next
+    persistOpen()
+  }
+})
+
+/** 渲染分组：保持 navItems.ts 的定义顺序；空组不会出现（从 items 派生） */
+const groups = computed(() => {
+  const out: { name: string; list: NavItem[] }[] = []
+  for (const it of items.value) {
+    const hit = out.find((x) => x.name === it.group)
+    if (hit) hit.list.push(it)
+    else out.push({ name: it.group, list: [it] })
+  }
+  return out
+})
 </script>
 
 <template>
@@ -101,21 +136,33 @@ function isOn(it: Item): boolean {
     </div>
 
     <nav class="nav">
-      <RouterLink
-        v-for="it in items"
-        :key="it.to"
-        :to="it.to"
-        class="item"
-        :class="{ disabled: !!it.off, on: isOn(it) }"
-        :title="it.off ?? it.label"
-        :aria-label="it.label"
-        :aria-current="isOn(it) ? 'page' : undefined"
-        :aria-disabled="it.off ? 'true' : undefined"
-        :tabindex="it.off ? -1 : undefined"
-      >
-        <Icon :name="it.icon" :size="19" class="ico" />
-        <span class="label">{{ it.label }}</span>
-      </RouterLink>
+      <!-- 分组菜单（A10）：组头可折叠；收起用 v-if 直接移除 DOM（Tab / 读屏均不可达），
+           展开的组由 openGroups 驱动并记忆到 localStorage。 -->
+      <template v-for="g in groups" :key="g.name">
+        <button class="grp" type="button" :aria-expanded="openGroups.has(g.name)"
+          :title="openGroups.has(g.name) ? `收起「${g.name}」` : `展开「${g.name}」`"
+          @click="toggleGroup(g.name)">
+          <span class="grp-t">{{ g.name }}</span>
+          <Icon name="chevron" :size="12" class="grp-chev" :class="{ open: openGroups.has(g.name) }" />
+        </button>
+        <template v-if="openGroups.has(g.name)">
+          <RouterLink
+            v-for="it in g.list"
+            :key="it.to"
+            :to="it.to"
+            class="item"
+            :class="{ disabled: !!it.off, on: isOn(it) }"
+            :title="it.off ?? it.label"
+            :aria-label="it.label"
+            :aria-current="isOn(it) ? 'page' : undefined"
+            :aria-disabled="it.off ? 'true' : undefined"
+            :tabindex="it.off ? -1 : undefined"
+          >
+            <Icon :name="it.icon" :size="19" class="ico" />
+            <span class="label">{{ it.label }}</span>
+          </RouterLink>
+        </template>
+      </template>
     </nav>
 
     <!-- 底部固定区：只放折叠开关。两种状态都不换位置，用户学一次就够。
@@ -134,7 +181,8 @@ function isOn(it: Item): boolean {
 .side {
   width: 234px; flex: none;
   display: flex; flex-direction: column;
-  background: var(--c-surface);
+  /* 侧栏背板（B1）：比内容区暗一档，与卡片形成「暗背板 → 内容 → 亮卡片」的层级 */
+  background: var(--bg-nav);
   border-right: 1px solid var(--c-border);
   transition: width .2s ease;
   position: sticky; top: 0; height: 100vh;
@@ -158,10 +206,28 @@ function isOn(it: Item): boolean {
 
 .nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
 
+/* ── 分组头（A10）── 可点击折叠。行高：组头 ~26px、菜单项压到 ~38px（原 42-45px）；
+   「当前组展开 + 其余折叠」形态下 18 项一屏看全，不再需要滚动找菜单。 */
+.grp {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 6px 11px 4px; margin-top: 4px;
+  border: none; background: transparent; cursor: pointer; text-align: left;
+  color: var(--c-text-mute); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .5px; font-family: inherit;
+}
+.grp:hover { color: var(--c-text-dim); }
+.grp-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* chevron 原生朝右：收起 = 朝右(0)；展开 = 旋转 90° 朝下 */
+.grp-chev { flex: none; transition: transform .16s ease; }
+.grp-chev.open { transform: rotate(90deg); }
+/* 折叠态（76px）：分组头退化为分隔线——文字放不下、也不要点 */
+.collapsed .grp { height: 1px; margin: 7px 10px 4px; padding: 0; background: var(--c-border); pointer-events: none; }
+.collapsed .grp-t, .collapsed .grp-chev { display: none; }
+
 .item {
   position: relative;
   display: flex; align-items: center; gap: 11px;
-  padding: 9px 11px; border-radius: 10px;
+  padding: 7px 11px; border-radius: 10px;
   color: var(--c-text-dim); text-decoration: none; font-size: 14px;
   transition: background .14s ease, color .14s ease;
 }
