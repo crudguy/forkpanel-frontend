@@ -23,11 +23,14 @@ import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import TabBar from '@/components/TabBar.vue'
+import InlineRemark from '@/components/InlineRemark.vue'
 import { toast } from '@/composables/useToast'
 
 interface Container {
   id: string; name: string; image: string; state: string
   status: string; ports: string; created: string
+  /** 对象说明（备注，022）：容器不入库，备注存 container_remarks 引用表，列表端点联查挂载；无则为空串 */
+  remark: string
 }
 interface Image {
   id: string; repository: string; tag: string; size: string; created: string
@@ -204,6 +207,14 @@ function shortId(id: string) {
 }
 function canStart(c: Container) { return c.state !== 'running' }
 function canStop(c: Container) { return c.state === 'running' }
+
+/** 对象说明（备注，022）：内联保存。**按容器名称**存——完整 ID 随重建变化，
+ *  名称在重建时通常保留，按 ID 存会让重建后备注变孤儿。失败由 InlineRemark
+ *  就地展示，不拖累列表其它行。 */
+async function saveRemark(c: Container, v: string) {
+  await api.patch(API.containers.remark(c.name), { remark: v })
+  c.remark = v
+}
 </script>
 
 <template>
@@ -269,14 +280,21 @@ function canStop(c: Container) { return c.state === 'running' }
       <div class="card flush" v-if="tab === 'containers' && containers.length">
         <table class="fixed">
           <colgroup>
-            <col class="w-name" /><col class="w-img" /><col class="w-state" /><col class="w-ports" /><col class="w-id" /><col class="w-acts" />
+            <!-- 列宽（站点表范式）：镜像为唯一弹性列（width:auto）吸收余量；操作列 320px
+                 按「4 个带文字按钮」实测（各 67px + 3×6 间距 + 单元格内边距 26px）；
+                 备注列（022）固定 170px，ellipsis + title 兜长文。ID 列次要，窄屏隐藏。 -->
+            <col class="w-name" /><col class="w-cremark" /><col class="w-img" /><col class="w-state" /><col class="w-ports" /><col class="w-id" /><col class="w-acts" />
           </colgroup>
           <thead>
-            <tr><th>名称</th><th>镜像</th><th>状态</th><th>端口</th><th>ID</th><th /></tr>
+            <tr><th scope="col">名称</th><th scope="col">备注</th><th scope="col">镜像</th><th scope="col">状态</th><th scope="col">端口</th><th scope="col" class="col-opt">ID</th><th /></tr>
           </thead>
           <tbody>
             <tr v-for="c in containers" :key="c.id">
               <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
+              <td class="remark-cell">
+                <InlineRemark :model-value="c.remark" :editable="canManage"
+                  :saver="(v) => saveRemark(c, v)" />
+              </td>
               <td class="mono dim ellipsis" :title="c.image">{{ c.image }}</td>
               <td>
                 <span class="badge" :class="containerStateBadge(c.state)">{{ containerStateLabel(c.state) }}</span>
@@ -375,12 +393,18 @@ function canStop(c: Container) { return c.state === 'running' }
 table.fixed { table-layout: fixed; width: 100%; }
 table.fixed th, table.fixed td { overflow: hidden; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-col.w-name { width: 22%; }
-col.w-img { width: 24%; }
-col.w-state { width: 16%; }
-col.w-ports { width: 14%; }
-col.w-id { width: 12%; }
-col.w-acts { width: 12%; }
+/* 备注列（022）170px 固定：ellipsis + title 兜长文；镜像改为唯一弹性列吸收余量。
+   操作列改固定 320px：原 12% 百分比随表宽缩放（1440 下仅约 141px），4 个带文字
+   按钮必然折行——按「各 67px + 3×6 间距 + 单元格内边距 26px = 312」实测取值。 */
+col.w-name { width: 14%; }
+col.w-cremark { width: 170px; }
+col.w-img { width: auto; }
+col.w-state { width: 13%; }
+col.w-ports { width: 11%; }
+col.w-id { width: 9%; }
+col.w-acts { width: 320px; }
+/* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
+td.remark-cell { padding: 4px 10px; }
 
 /* 首次加载骨架（scoped，观感与服务/进程页统一；keyframes 独立命名避免全局冲突） */
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }

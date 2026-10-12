@@ -179,6 +179,8 @@ export interface Site {
   log_error: boolean
   /** 错误日志级别（021）：debug | info | notice | warn | error | crit | alert | emerg */
   log_error_level: string
+  /** 对象说明（备注，022）：站长维护的自由文本（≤500 字），随站点列表/详情返回，空串 = 无 */
+  remark: string
 }
 
 /** 配置历史版本（后端 GET /sites/{id}/conf/versions 列表项，最新在前） */

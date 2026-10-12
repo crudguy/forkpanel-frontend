@@ -12,8 +12,28 @@ import { API } from '@/api/endpoints'
 import { CAP } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import Icon from '@/components/Icon.vue'
+import InlineRemark from '@/components/InlineRemark.vue'
 
 const auth = useAuthStore()
+
+// ── 本机说明（022）：单例便签——「这台机器是干嘛的」防误操作位 ──
+// 读对全员开放，写需 system.manage。独立于指标卡、且不依赖 metrics 能力：
+// 容量档位再低，也得第一眼知道这台机器是干嘛的。
+const serverNote = ref('')
+const noteLoaded = ref(false)
+const canSystemManage = computed(() => auth.can('system.manage'))
+
+async function loadNote() {
+  try {
+    const r = await api.get<{ content: string }>(API.server.note())
+    serverNote.value = r.content ?? ''
+  } catch { /* 静默：加载失败不拖累概览，卡片退化为空备注 */ }
+  noteLoaded.value = true
+}
+async function saveNote(v: string) {
+  await api.patch(API.server.note(), { content: v })
+  serverNote.value = v
+}
 
 /** 对应后端 `OverviewResp`（routes/system.rs::overview）。此前用 `any`，
  *  SSE 合并时字段拼错会静默显示 0。 */
@@ -172,6 +192,7 @@ const alerts = computed<Alert[]>(() => {
 
 onMounted(async () => {
   await auth.loadMe()
+  void loadNote()
   if (!auth.supported(CAP.METRICS_READ)) return
   await poll()
   await loadStatus()
@@ -192,6 +213,16 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
     <div class="page-head">
       <h2 class="page-title">概览</h2>
     </div>
+
+    <!-- 本机说明（022）：单机面板的「我在哪台机器」防误操作位。放在指标卡之前、
+         且不依赖 metrics 能力——容量档位再低也得知道这台机器是干嘛的。
+         ⚠️ 必须留在 v-if/v-else 链**之外**：塞进两者中间会打断相邻关系，模板直接编译失败。 -->
+    <section class="card server-note">
+      <div class="sec-head"><Icon name="note" :size="16" /><span>本机说明</span></div>
+      <InlineRemark :model-value="serverNote" :editable="canSystemManage && noteLoaded"
+        :saver="saveNote"
+        placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+    </section>
 
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
@@ -287,6 +318,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
+
+/* 本机说明（022）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
+   但不改填充色——避免和告警/热区提示抢视觉权重。 */
+.server-note { border-left: 3px solid var(--c-primary); }
 
 .hot-tip { display: flex; align-items: center; gap: 9px; padding: 9px 14px;
            border: 1px solid var(--c-danger); border-radius: 10px;

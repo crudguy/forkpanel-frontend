@@ -31,6 +31,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type ConfVersion, type ConfVersionDetail, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import NginxEditor from '@/components/NginxEditor.vue'
@@ -318,6 +319,8 @@ function emptyForm() {
     ipAllow: '', ipDeny: '', authBasic: false, authUser: '', authPass: '',
     lbPolicy: 'least_conn', proxyConnectTimeout: 60, proxySendTimeout: 60, proxyReadTimeout: 60,
     logAccess: false, logError: false, logErrorLevel: 'error',
+    // 对象说明（备注，022）：便签式内联编辑，独立于大表单保存
+    remark: '',
   }
 }
 
@@ -435,6 +438,8 @@ function openEdit(s: Site) {
     logAccess: !!s.log_access,
     logError: !!s.log_error,
     logErrorLevel: s.log_error_level || 'error',
+    // 对象说明回填（022）
+    remark: s.remark ?? '',
   }
   // 与 openCreate 同理：清掉上次遗留的报错，避免「一打开就是红条」的误导。
   error.value = ''
@@ -449,6 +454,15 @@ function openEdit(s: Site) {
   void loadConf(s.id)
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
+}
+
+/** 对象说明（备注，022）：便签式内联保存，独立于大表单——保存站点要走 nginx
+ *  校验与下发，一句备注不该拖住整张表单。仅编辑已有站点时可用（新建尚无 id）。 */
+async function saveRemark(v: string) {
+  if (!editing.value) return
+  await api.patch(API.sites.remark(editing.value.id), { remark: v })
+  form.value.remark = v
+  editing.value.remark = v
 }
 
 /**
@@ -1577,6 +1591,13 @@ async function batchDelete() {
           <span v-if="siteRoot" class="root-hint dim tiny">站点根目录：<code class="mono">{{ siteRoot }}</code>（须落在其中）</span>
           <span v-if="fieldErrs.root" :key="'root' + errSeq" class="field-err">{{ fieldErrs.root }}</span>
         </label>
+        <!-- 对象说明（备注，022）：便签式内联编辑，独立于大表单保存——保存站点要走
+             nginx 校验与下发，一句备注不该拖住整张表单。新建时暂无 id，不渲染。 -->
+        <div v-if="editing" class="blk full">
+          <span class="remark-lb">备注（这台站点干嘛的）</span>
+          <InlineRemark :model-value="form.remark" :editable="canManage"
+            :saver="saveRemark" placeholder="如：客户的官网，PHP 版本锁 7.4 不能动" />
+        </div>
         <!-- 应用模板：Node / Java / Python / .NET 在 nginx 这一层接入方式完全相同
              （都是 proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填
              模板，而不是给 SiteKind 加 4 个产出同一份配置的变体。
@@ -2296,6 +2317,9 @@ sudo update-ca-certificates</pre>
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
+/* 备注块（022）：标签与其它 blk 字段同规格；组件与标签间距同 input 的 margin-top */
+.remark-lb { display: block; }
+.remark-blk .iremark { margin-top: 4px; }
 /* 多路由表：一个站点内多条 `location ^~ <前缀>`。逐行一条，窄屏自然换行。 */
 .routes { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
 .routes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

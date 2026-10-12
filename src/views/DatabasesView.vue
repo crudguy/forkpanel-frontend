@@ -24,10 +24,13 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
+import InlineRemark from '@/components/InlineRemark.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
   port: number | null; default_db: string | null; client_ready: boolean; has_password: boolean
+  /** 对象说明（备注，022）：≤500 字，随连接列表返回，空串 = 无 */
+  remark: string
 }
 interface DbTableInfo { name: string; rows: number; engine: string | null }
 interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
@@ -85,6 +88,13 @@ async function backup(c: Conn) {
     toast(`已提交备份任务 #${r.task_id}（请在任务面板查看）`)
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
+}
+
+/** 对象说明（备注，022）：内联保存。conn 传 id（后端 id / name 双解析）；
+ *  失败由 InlineRemark 就地展示，不弹窗、不翻页。 */
+async function saveRemark(c: Conn, v: string) {
+  await api.patch(API.db.remark(c.id), { remark: v })
+  c.remark = v
 }
 
 // ── 恢复（高危，覆盖当前库）──
@@ -190,14 +200,19 @@ function closeBrowse() { browse.value = null }
       <div class="card flush" v-if="conns.length">
         <table class="fixed">
           <!-- 列宽同站点表范式：库/文件为唯一弹性列（width:auto）吸收余量；
-               操作列 270px 容下浏览/SQL/备份/恢复 4 个带文字按钮。 -->
+               操作列 270px 容下浏览/SQL/备份/恢复 4 个带文字按钮；
+               备注列（022）固定 170px，ellipsis + title 兜长文。客户端列次要，窄屏隐藏。 -->
           <colgroup>
-            <col class="w-dbname" /><col class="w-dbeng" /><col class="w-dbhost" /><col class="w-dbdb" /><col class="w-dbcli" /><col class="w-dbacts" />
+            <col class="w-dbname" /><col class="w-dbremark" /><col class="w-dbeng" /><col class="w-dbhost" /><col class="w-dbdb" /><col class="w-dbcli" /><col class="w-dbacts" />
           </colgroup>
-          <thead><tr><th>名称</th><th>引擎</th><th>主机</th><th>库 / 文件</th><th>客户端</th><th /></tr></thead>
+          <thead><tr><th scope="col">名称</th><th scope="col">备注</th><th scope="col">引擎</th><th scope="col">主机</th><th scope="col">库 / 文件</th><th scope="col" class="col-opt">客户端</th><th /></tr></thead>
           <tbody>
             <tr v-for="c in conns" :key="c.id">
               <td class="ellipsis" :title="c.name">{{ c.name }}</td>
+              <td class="remark-cell">
+                <InlineRemark :model-value="c.remark" :editable="canManage"
+                  :saver="(v) => saveRemark(c, v)" />
+              </td>
               <td>{{ c.engine }}</td>
               <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
               <td class="dim mono ellipsis" :title="c.default_db ?? ''">{{ c.default_db ?? '—' }}</td>
@@ -331,9 +346,12 @@ function closeBrowse() { browse.value = null }
 /* 连接表列宽（站点表范式）：库/文件为唯一弹性列；操作列 270px 容下
    浏览 / SQL / 备份 / 恢复 4 个带文字按钮。 */
 col.w-dbname { width: 10%; }
+col.w-dbremark { width: 170px; }  /* 备注（022）：ellipsis + title 兜长文 */
 col.w-dbeng { width: 8%; }
 col.w-dbhost { width: 14%; }
 col.w-dbdb { width: auto; }
 col.w-dbcli { width: 11%; }
 col.w-dbacts { width: 270px; }
+/* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
+td.remark-cell { padding: 4px 10px; }
 </style>

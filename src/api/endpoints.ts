@@ -100,6 +100,8 @@ export const API = {
     patch: (id: number) => `/api/v1/sites/${id}`,
     remove: (id: number) => `/api/v1/sites/${id}`,
     reload: (id: number) => `/api/v1/sites/${id}/reload`,
+    /** 对象说明（备注，022）：这台站点干嘛的、为什么这么配。PATCH 内联保存（site.manage） */
+    remark: (id: number) => `/api/v1/sites/${id}/remark`,
     /** 站点原始配置：GET 读 / PUT 存（写入即转「手动维护」，仅 owner 可写） */
     conf: (id: number) => `/api/v1/sites/${id}/conf`,
     /** 恢复面板托管（丢弃手工修改，按表单重新渲染下发；仅 owner） */
@@ -162,6 +164,8 @@ export const API = {
     backup: (conn: number) => `/api/v1/db/${conn}/backup`,
     restore: (conn: number) => `/api/v1/db/${conn}/restore`,
     query: (conn: number) => `/api/v1/db/${conn}/query`,
+    /** 数据库连接说明（备注，022）。PATCH 内联保存（db.manage）；conn 为 id 或 name */
+    remark: (conn: string | number) => `/api/v1/db/${enc(conn)}/remark`,
   },
 
   backups: {
@@ -186,6 +190,13 @@ export const API = {
     stop: (id: string) => `/api/v1/containers/${id}/stop`,
     restart: (id: string) => `/api/v1/containers/${id}/restart`,
     remove: (id: string) => `/api/v1/containers/${id}`,
+    /** 容器备注（022）：GET 读 / PATCH 写（container.manage）。容器不入库，存引用表 */
+    remark: (id: string) => `/api/v1/containers/${enc(id)}/remark`,
+  },
+
+  server: {
+    /** 本机说明（022）：单例。GET 读（全员）/ PATCH 写（system.manage） */
+    note: () => '/api/v1/server/note',
   },
 
   firewall: {
