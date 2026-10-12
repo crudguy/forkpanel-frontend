@@ -89,7 +89,7 @@ pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 | `/settings` | 设置 | SettingsView |
 | `/users` | 用户 | UsersView |
 
-> 各路由截图见仓库外 `.workbuddy/tmp/screenshots/`（本地开发资产，不入库）。
+> 各路由截图见仓库外 `.workbuddy/screenshots/`（本地开发资产，不入库）。
 
 ## 契约同步规则
 
