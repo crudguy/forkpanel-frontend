@@ -193,6 +193,10 @@ export const API = {
     setEnabled: () => '/api/v1/firewall/enabled',
     rules: () => '/api/v1/firewall/rules',
     removeRule: (id: string) => `/api/v1/firewall/rules/${enc(id)}`,
+    // fail2ban 入侵防御（未装 fail2ban-client 时 GET 返 501，由视图友好提示）
+    fail2ban: () => '/api/v1/firewall/fail2ban',
+    fail2banJail: () => '/api/v1/firewall/fail2ban/jail',
+    fail2banUnban: () => '/api/v1/firewall/fail2ban/unban',
   },
 
   security: {
