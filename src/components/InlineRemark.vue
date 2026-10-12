@@ -80,7 +80,7 @@ async function save() {
   try {
     await props.saver(v)
     editing.value = false
-    toast('备注已保存')
+    toast('已保存')
   } catch (e) {
     // 失败保编辑态：用户输入不丢，错误就地显示
     err.value = errorText(e)

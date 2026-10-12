@@ -45,7 +45,6 @@ async function saveNote(id: number, v: string) {
 /** 新增便签（写需 system.manage） */
 async function saveNew(v: string) {
   await api.post(API.server.notes(), { content: v })
-  toast('便签已添加')
   await loadNotes()
   adding.value = false
 }
