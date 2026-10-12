@@ -181,6 +181,11 @@ export interface Site {
   log_error_level: string
   /** 对象说明（备注，022）：站长维护的自由文本（≤500 字），随站点列表/详情返回，空串 = 无 */
   remark: string
+  /**
+   * 上次下发时间（023）：最近一次「配置写入磁盘且 nginx reload 成功」的 Unix 秒。
+   * null = 从未成功下发过（区别于 0 = 1970）。停用站点不会刷新（撤下不是下发）。
+   */
+  last_applied_at: number | null
 }
 
 /** 配置历史版本（后端 GET /sites/{id}/conf/versions 列表项，最新在前） */

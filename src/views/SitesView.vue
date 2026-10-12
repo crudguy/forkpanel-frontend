@@ -164,6 +164,19 @@ function tlsState(s: Site): { label: string; cls: string; title: string } {
 }
 
 /**
+ * 上次下发时间（023）列用紧凑格式：`MM-DD HH:mm`（无年份——同面板内「去年的
+ * 下发」极少，完整时间走 title）。null/非法一律 `—`：0 是合法时间戳（1970），
+ * 与「从未下发」语义相反，绝不能把 NULL 显示成 1970。
+ */
+function fmtApplied(ts: number | null): string {
+  if (!ts) return '—'
+  const d = new Date(ts * 1000)
+  if (Number.isNaN(d.getTime())) return '—'
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/**
  * 列表**非静默加载失败**（区别于「真的一个站点都没有」）。
  * 不加这个标志时 `sites` 保持空数组 → 走 EmptyState「暂无站点 · 点新建站点」，
  * 与顶部的错误红字自相矛盾（一边说加载失败、一边说没有数据）。
@@ -1429,7 +1442,7 @@ async function batchDelete() {
              故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
              证书表 w-dom/w-iss/…/w-cst/w-acts（含同为「状态」列的 w-cst），互不影响。 -->
         <colgroup>
-          <col class="w-sel" /><col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-tls" /><col class="w-sacts" />
+          <col class="w-sel" /><col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-sapp" /><col class="w-tls" /><col class="w-sacts" />
         </colgroup>
         <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
              窄屏（<=720px）由 main.css 公共规则隐藏，9 列降到 6 列才放得下。 -->
@@ -1440,12 +1453,13 @@ async function batchDelete() {
           <th scope="col">名称</th><th scope="col">域名</th><th scope="col" class="col-opt">根目录</th>
           <th scope="col" class="col-opt">类型</th><th scope="col" class="col-opt">特性</th>
           <th scope="col">WAF</th><th scope="col">状态</th>
+          <th scope="col" class="col-opt">上次下发</th>
           <th scope="col">TLS</th><th scope="col">操作</th>
         </tr></thead>
         <tbody>
           <!-- 过滤无结果 ≠ 没有站点：单列一行说明，避免落到「暂无站点」空态造成误判 -->
           <tr v-if="!visibleSites.length">
-            <td colspan="10" class="dim">没有匹配「{{ q }}」的站点</td>
+            <td colspan="11" class="dim">没有匹配「{{ q }}」的站点</td>
           </tr>
           <tr v-for="s in visibleSites" :key="s.id">
             <td class="col-sel"><input type="checkbox" :checked="selected.includes(s.id)"
@@ -1489,6 +1503,11 @@ async function batchDelete() {
               <span v-if="s.conf_external" class="badge conf-badge badge-warn"
                 title="外部修改：磁盘上的配置文件与最后一次落盘的内容不一致——文件在面板之外被改动过（脚本误写 / 人工手改）。面板不会静默覆盖它，可在编辑弹窗内「按表单重新生成」或改写为自定义片段">外部改动</span>
             </td>
+            <!-- 上次下发（023）：「这个站多久没管了」此前只能翻日志。null = 从未成功
+                 下发过——与 0（1970）语义相反，不能把 NULL 格式化成 1970 谎报下发。
+                 单元格只到分（无年份），完整时间走 title；窄屏随 col-opt 隐藏。 -->
+            <td class="mono dim col-opt"
+              :title="s.last_applied_at ? `上次下发：${fmtDateTime(s.last_applied_at)}` : '从未下发过：尚无「配置写入磁盘且重载成功」的记录'">{{ fmtApplied(s.last_applied_at) }}</td>
             <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
                  新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
@@ -2616,11 +2635,27 @@ col.w-feat { width: 7%; }   /* 特性（021）：Basic Auth / 独立日志 / IP 
 col.w-waf { width: 8%; }
 /* 状态列可能同时挂 3 个徽章（状态 + 未同步 + 外部改动），6% 放不下会参差换行 → 9% */
 col.w-st { width: 9%; }
+/* 上次下发（023）：单元格形如 `10-12 14:05`（等宽 11 字符 ≈ 79px）+ 内边距 26 ≈ 105，
+   取 108 留余量；固定 px 同操作列的理由（百分比随表宽缩放，1440 下 8% 只剩 94px 会裁掉分钟）。
+   该宽度从域名列借：sdom 15%→14%（实测域名最长值 226px，14%@1640=230 仍够）。 */
+col.w-sapp { width: 108px; }
 col.w-tls { width: 8%; }
 col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 间距 = 286，加单元格左右内边距 26
                                   = 312；取 320 留 8px 余量。⚠️ 内边距要从里面扣——写 310 时内容区只有
                                   284px，仍差 2px，第 4 个按钮照样掉到第二行（实测行高 91px）。
-                                  用固定 px 而非百分比：百分比随表宽缩放，1440 窗口下 19% 只剩 220px。 */
+                                  用固定 px 而非百分比：百分比随表宽缩放，1440 窗口下 19% 只剩 220px。
+                                  ⚠️ 320px 按 1920 表宽实测；<1800px 收纯图标见下方 @media（023）。 */
+/* 中宽屏动作列收纯图标（023 引入「上次下发」列后追加）：
+   固定列 sel 40 + sapp 108 + sacts 320 = 468px，再加 60% 百分比列，<1800px 时
+   超过表宽——实测 1440（表宽 1160）下唯一弹性列「根目录」被压成 0px，连表头
+   都看不见。故此宽度以下动作列收成纯图标：4×29 + 3×6 间距 + 单元格内边距 34
+   = 168px（与 <=720 全局规则同规格，main.css 实测值），省出的 152px 还给根目录。
+   按钮可辨识性由 title / aria-label 保留（<=720 本就只显图标）。 */
+@media (max-width: 1799px) {
+  col.w-sacts { width: 168px; }
+  .actions .btn-label { display: none; }
+  .actions .btn-sm { padding: 4px 7px; }
+}
 /* 证书表（编辑弹窗内「SSL 证书」区块复用同款列宽思路，此处保留历史列宽定义，
    若后续在弹窗内恢复完整证书表格可直接复用；当前弹窗内改用紧凑卡片列表。 */
 col.w-dom { width: 24%; }
