@@ -198,8 +198,10 @@ export const API = {
   },
 
   server: {
-    /** 本机说明（022）：单例。GET 读（全员）/ PATCH 写（system.manage） */
-    note: () => '/api/v1/server/note',
+    /** 本机便签（025，多条）。GET 列表（全员）/ POST 新建（system.manage） */
+    notes: () => '/api/v1/server/notes',
+    /** 单条便签：PATCH 更新 / DELETE 删除（均需 system.manage） */
+    note: (id: number | string) => `/api/v1/server/notes/${enc(id)}`,
   },
 
   firewall: {

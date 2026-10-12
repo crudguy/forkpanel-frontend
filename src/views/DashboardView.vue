@@ -9,30 +9,65 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP } from '@/api/types'
+import { CAP, type ServerNote } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { toast } from '@/composables/useToast'
 
 const auth = useAuthStore()
 
-// ── 本机说明（022）：单例便签——「这台机器是干嘛的」防误操作位 ──
-// 读对全员开放，写需 system.manage。独立于指标卡、且不依赖 metrics 能力：
-// 容量档位再低，也得第一眼知道这台机器是干嘛的。
-const serverNote = ref('')
+// ── 本机便签（025）：多条独立便签，替代 022 单例说明 ──
+// 读对全员开放，写需 system.manage。每条 InlineRemark 自管编辑态；删除走
+// ConfirmDialog；新增是列表末尾一条空 InlineRemark（保存成功即 reload 收编——
+// create 不返回 id，临时编辑行的 id 只能从收编后的列表拿）。
+const notes = ref<ServerNote[]>([])
 const noteLoaded = ref(false)
+const adding = ref(false)
+const delNote = ref<ServerNote | null>(null)
+const noteErr = ref('')
 const canSystemManage = computed(() => auth.can('system.manage'))
 
-async function loadNote() {
+async function loadNotes() {
   try {
-    const r = await api.get<{ content: string }>(API.server.note())
-    serverNote.value = r.content ?? ''
-  } catch { /* 静默：加载失败不拖累概览，卡片退化为空备注 */ }
+    const r = await api.get<ServerNote[]>(API.server.notes())
+    notes.value = r ?? []
+  } catch { /* 静默：加载失败不拖累概览，卡片退化为空态 */ }
   noteLoaded.value = true
 }
-async function saveNote(v: string) {
-  await api.patch(API.server.note(), { content: v })
-  serverNote.value = v
+/** 保存既有便签：成功后本地更新，不整表 reload（updated_at 取本地秒，展示足够） */
+async function saveNote(id: number, v: string) {
+  await api.patch(API.server.note(id), { content: v })
+  const n = notes.value.find(x => x.id === id)
+  if (n) { n.content = v; n.updated_at = Math.floor(Date.now() / 1000) }
+}
+/** 新增便签（写需 system.manage） */
+async function saveNew(v: string) {
+  await api.post(API.server.notes(), { content: v })
+  toast('便签已添加')
+  await loadNotes()
+  adding.value = false
+}
+function doDeleteNote() {
+  const n = delNote.value
+  if (!n) return
+  delNote.value = null
+  api.del(API.server.note(n.id)).then(() => {
+    notes.value = notes.value.filter(x => x.id !== n.id)
+    toast('便签已删除')
+  }).catch((e) => { noteErr.value = errorText(e) })
+}
+/** 相对时间（便签时间戳是展示信息；超 30 天退化为 MM-DD） */
+function noteTime(ts: number): string {
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - ts)
+  if (s < 60) return '刚刚'
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`
+  if (s < 30 * 86400) return `${Math.floor(s / 86400)} 天前`
+  const d = new Date(ts * 1000)
+  const p = (k: number) => String(k).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 /** 对应后端 `OverviewResp`（routes/system.rs::overview）。此前用 `any`，
@@ -192,7 +227,7 @@ const alerts = computed<Alert[]>(() => {
 
 onMounted(async () => {
   await auth.loadMe()
-  void loadNote()
+  void loadNotes()
   if (!auth.supported(CAP.METRICS_READ)) return
   await poll()
   await loadStatus()
@@ -214,15 +249,42 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
       <h2 class="page-title">概览</h2>
     </div>
 
-    <!-- 本机说明（022）：单机面板的「我在哪台机器」防误操作位。放在指标卡之前、
+    <!-- 本机便签（025，多条）：单机面板的「我在哪台机器」防误操作位。放在指标卡之前、
          且不依赖 metrics 能力——容量档位再低也得知道这台机器是干嘛的。
          ⚠️ 必须留在 v-if/v-else 链**之外**：塞进两者中间会打断相邻关系，模板直接编译失败。 -->
     <section class="card server-note">
-      <div class="sec-head"><Icon name="note" :size="16" /><span>本机说明</span></div>
-      <InlineRemark :model-value="serverNote" :editable="canSystemManage && noteLoaded"
-        :saver="saveNote"
-        placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+      <div class="sec-head">
+        <Icon name="note" :size="16" /><span>本机便签</span>
+        <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
+          @click="adding = true">
+          <Icon name="plus" :size="13" />添加
+        </button>
+      </div>
+      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}</p>
+      <div v-if="notes.length || adding" class="note-list">
+        <div v-for="n in notes" :key="n.id" class="note-row">
+          <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
+            :saver="(v: string) => saveNote(n.id, v)"
+            placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+          <template v-if="canSystemManage">
+            <span class="note-time" :title="new Date(n.updated_at * 1000).toLocaleString()">
+              {{ noteTime(n.updated_at) }}
+            </span>
+            <button class="note-del" title="删除这条便签" @click="delNote = n">
+              <Icon name="trash" :size="13" />
+            </button>
+          </template>
+        </div>
+        <InlineRemark v-if="adding" model-value="" :editable="true"
+          :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
+      </div>
+      <p v-else-if="noteLoaded" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+      <p v-else class="muted">加载中…</p>
     </section>
+
+    <ConfirmDialog :open="!!delNote" danger title="删除便签"
+      :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
+      @confirm="doDeleteNote" @cancel="delNote = null" />
 
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
@@ -319,9 +381,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
 
-/* 本机说明（022）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
+/* 本机便签（025）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
    但不改填充色——避免和告警/热区提示抢视觉权重。 */
 .server-note { border-left: 3px solid var(--c-primary); }
+.note-add { margin-left: auto; }
+.note-list { display: flex; flex-direction: column; gap: 10px; }
+.note-row { display: flex; align-items: flex-start; gap: 6px; }
+.note-row .note-body { flex: 1; min-width: 0; }
+.note-time { flex: none; padding-top: 4px; font-size: 11.5px; color: var(--c-text-dim); white-space: nowrap; }
+.note-del { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; margin-top: 1px; border: none; border-radius: 7px;
+  background: none; color: var(--c-text-dim); cursor: pointer; opacity: .45; transition: opacity .12s ease; }
+.note-del:hover { opacity: 1; color: var(--c-danger); background: var(--c-danger-soft); }
 
 .hot-tip { display: flex; align-items: center; gap: 9px; padding: 9px 14px;
            border: 1px solid var(--c-danger); border-radius: 10px;

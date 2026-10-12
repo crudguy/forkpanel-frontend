@@ -67,6 +67,10 @@ function grow() {
 
 async function save() {
   if (escaped.value) { escaped.value = false; return }
+  // 防重入：saver 内部若卸载本组件（如「新增便签」保存后收起临时编辑行），
+  // Chrome 会在移除持有焦点的 textarea 时补派一次 blur → @blur 二次入场 →
+  // saver 双发（025 便签新增实测 POST 出两条相同内容）。busy 期内直接吞掉。
+  if (busy.value) return
   const v = draft.value.trim()
   // 无实质变化直接收起，不发请求
   if (v === props.modelValue.trim()) { editing.value = false; return }

@@ -345,6 +345,14 @@ export interface AppRuntimeInfo {
   build_hint: string
 }
 
+/** 本机便签（025，多条）。id=1 恒为迁移 025 从旧单例「本机说明」迁入的那条。 */
+export interface ServerNote {
+  id: number
+  content: string
+  /** 最近更新时间（unix 秒） */
+  updated_at: number
+}
+
 export interface PackageInfo {
   name: string
   label?: string
