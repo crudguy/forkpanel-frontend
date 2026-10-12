@@ -40,7 +40,7 @@ src/
   stores/            auth / system / ui / task（仅 3~4 个）
   components/        自研 ~15 个基础组件（Button/Table/Modal/Tabs/...）
   layouts/           MainLayout（侧边栏按能力矩阵渲染）
-  views/             10 个页面（仪表盘/系统/服务/站点/文件/数据库/防火墙/计划任务/日志/设置）
+  views/             ~27 个页面（路由总览见下方「页面 / 路由」）
   styles/            原生 CSS + 设计 token（CSS 变量）
 scripts/size-report.mjs   构建体积预算报告
 ci/check-contract.sh      前端调用路径 ⊆ openapi.yaml 校验
@@ -55,6 +55,42 @@ pnpm build      # vue-tsc 类型检查 + vite build → dist/
 pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 ```
 
+## 页面 / 路由
+
+登录后左侧菜单按 `capabilities` 渲染；下列为全部前端路由（≈27 个），标题来自 `route.meta.title`：
+
+| 路由 | 标题 | 视图组件 |
+|---|---|---|
+| `/login` | 登录 | LoginView |
+| `/` | 概览 | DashboardView |
+| `/system` | 实时趋势 | SystemView（宿主 MonitorView） |
+| `/system/pro` | 专业快照 | ProfessionalView |
+| `/system/procs` | 进程管理 | ProcessesView |
+| `/services/software` | 软件 | ServicesView |
+| `/services/units` | 服务 | ServicesView |
+| `/services/:unit` | 服务详情 | ServiceDetailView |
+| `/sites` | 网站 | SitesView |
+| `/apps` | 应用 | AppsView |
+| `/waf` | WAF | WafView |
+| `/certs` | 证书 | CertsView |
+| `/files` | 文件 | FilesView |
+| `/databases` | 数据库 | DatabasesView |
+| `/containers` | 容器 | ContainersView |
+| `/backups` | 备份 | BackupsView |
+| `/firewall` | 防火墙规则 | FirewallView（宿主 SecurityCenterView） |
+| `/firewall/baseline` | 安全基线 | SecurityView |
+| `/cron` | 计划任务 | CronView（宿主 TaskCenterView） |
+| `/cron/tasks` | 任务中心 | TasksView |
+| `/logs` | 系统日志 | LogsView（宿主 LogCenterView） |
+| `/logs/audit` | 审计日志 | AuditView |
+| `/notifications` | 通知 | NotificationsView |
+| `/terminal` | 终端 | TerminalView |
+| `/assistant` | AI 助手 | AssistantView |
+| `/settings` | 设置 | SettingsView |
+| `/users` | 用户 | UsersView |
+
+> 各路由截图见仓库外 `.workbuddy/tmp/screenshots/`（本地开发资产，不入库）。
+
 ## 契约同步规则
 
 - 后端是契约**事实源**（`forkpanel-backend/docs/api/openapi.yaml`）。
@@ -63,5 +99,5 @@ pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 
 ## 已知约束
 
-本仓库在该生成/评审环境下**未做前端构建验证**（环境无 Node 工具链）。
-代码按文档架构与既有骨架模式编写，需在具备 Node ≥ 22 的环境中 `pnpm i && pnpm build` 验证。
+- 构建验证：本环境已具备 Node ≥ 22 + pnpm，`pnpm i && pnpm build`（vue-tsc 类型检查 + vite build）可正常通过；提交前务必跑通。
+- `pnpm dev` 依赖后端 `panel serve --bind 127.0.0.1:2083`（或 mock 实例 2085）提供 `/api/v1`；纯前端改动走 Vite HMR，无需重启后端。
