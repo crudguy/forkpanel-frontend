@@ -40,6 +40,31 @@ const loading = ref(true)
 // ── 筛选条件（空值不下传，等价于"不过滤"）──
 const f = ref({ actor: '', action: '', result: '', q: '', since: '', until: '' })
 
+/** 动作候选（datalist 建议）：从已加载的真实记录里累积去重——比手写词表诚实，
+ *  也不会随后端新增动作而过时（评估 C5：自由文本无法枚举） */
+const knownActions = ref<string[]>([])
+
+// ── 快捷时间区间（评估 C5）──：datetime-local 空值无法用 placeholder 说明，
+// 看上去像坏掉的控件；一键填常用的三个区间，比手选两次日历快。
+function pad2(n: number) { return String(n).padStart(2, '0') }
+/** Date → datetime-local 输入值（本地时区）。**绝不用 toISOString**——它按 UTC 输出，会平移时区。 */
+function toLocalInput(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+function quickRange(kind: 'today' | '7d' | '30d') {
+  const now = new Date()
+  const start = new Date(now)
+  if (kind === 'today') start.setHours(0, 0, 0, 0)
+  else start.setDate(start.getDate() - (kind === '7d' ? 7 : 30))
+  f.value.since = toLocalInput(start)
+  f.value.until = toLocalInput(now)
+  applyFilters()
+}
+function clearTime() {
+  f.value.since = ''; f.value.until = ''
+  applyFilters()
+}
+
 // ── 分页 ──
 const page = ref(1)
 const pageSize = ref(20)
@@ -80,6 +105,10 @@ async function load() {
     const r = await api.get<{ items: AuditEntry[]; page: number; page_size: number; total: number }>(API.audit(), { params })
     rows.value = r?.items ?? []
     total.value = r?.total ?? 0
+    // 动作候选：从真实记录累积（datalist 建议）
+    if (rows.value.length) {
+      knownActions.value = [...new Set([...knownActions.value, ...rows.value.map((x) => x.action)])].sort()
+    }
     // 筛选后总页数可能变小：越界则回退到最后一页
     if (page.value > totalPages.value) { page.value = totalPages.value; await load(); return }
   } catch (e) { error.value = errorText(e) }
@@ -124,10 +153,14 @@ onMounted(load)
     <EmptyState v-if="!canView" title="无审计查看权限" reason="需要 audit.view" />
 
     <template v-else>
-      <!-- 筛选栏：条件全部下推服务端 -->
+      <!-- 筛选栏：条件全部下推服务端。时间列给显式「起始 / 截止」标签与快捷区间（评估 C5：
+           datetime-local 空值呈现为「年/月/日 -:-」，看起来像坏掉的控件） -->
       <div class="card filters">
         <input v-model="f.actor" placeholder="操作人" @keyup.enter="applyFilters" />
-        <input v-model="f.action" placeholder="动作，如 auth.login" @keyup.enter="applyFilters" />
+        <input v-model="f.action" placeholder="动作（可下拉选）" list="audit-actions" @keyup.enter="applyFilters" />
+        <datalist id="audit-actions">
+          <option v-for="a in knownActions" :key="a" :value="a" />
+        </datalist>
         <select v-model="f.result">
           <option value="">全部结果</option>
           <option value="ok">ok</option>
@@ -136,8 +169,14 @@ onMounted(load)
           <option value="error">error</option>
         </select>
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
-        <input v-model="f.since" type="datetime-local" title="起始时间" />
-        <input v-model="f.until" type="datetime-local" title="截止时间" />
+        <label class="dt">起始<input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限）" /></label>
+        <label class="dt">截止<input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限）" /></label>
+        <span class="quick">
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('today')">今天</button>
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('7d')">近 7 天</button>
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('30d')">近 30 天</button>
+          <button v-if="f.since || f.until" class="btn-ghost btn-sm" :disabled="loading" @click="clearTime">清除时间</button>
+        </span>
         <button class="btn-primary btn-sm" :disabled="loading" @click="applyFilters">筛选</button>
       </div>
 
@@ -215,7 +254,12 @@ onMounted(load)
   background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
   border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-family: inherit; }
 .filters input { flex: 1 1 150px; min-width: 130px; }
-.filters input[type=datetime-local] { flex: 0 1 170px; }
+/* 时间列：显式「起始 / 截止」标签——datetime-local 空值无法用 placeholder 说明（评估 C5）。
+   nowrap 必要：flex 收缩会把两个字断成两行（实测「起/始」竖排）。 */
+.filters .dt { display: flex; align-items: center; gap: 6px; flex: 0 1 auto;
+  font-size: 12px; color: var(--c-text-dim); white-space: nowrap; }
+.filters .dt input[type=datetime-local] { flex: 0 1 170px; }
+.filters .quick { display: flex; align-items: center; gap: 6px; }
 
 /* 表格。⚠️ 行类名不得用 .row：main.css 的 .row 是表单行布局（display:flex），
    会把 tr 变成 flex 容器——整行内容叠挤、不按列对齐（实测 trDisp=flex）。 */
