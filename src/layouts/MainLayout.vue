@@ -10,12 +10,16 @@ import { useAuthStore } from '@/stores/auth'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { roleLabel } from '@/api/types'
+import { roleLabel, CAP } from '@/api/types'
 import { navDrawerOpen, closeNav } from '@/composables/nav'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+// AI 助手顶栏入口（C9）：门控与侧边栏同口径（METRICS_READ 能力位 + system.view 权限点），
+// 不可用即隐藏整钮——避免"点过去才发现 501"。
+const assistOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'system.view') === null)
 
 // 命令面板（A11）开关：由全局 ⌘K / Ctrl+K 与顶栏搜索按钮唤起
 const paletteOpen = ref(false)
@@ -142,6 +146,11 @@ function logout() {
         <button class="btn-icon ghost" type="button" title="命令面板（Ctrl / ⌘ + K）" @click="paletteOpen = true">
           <Icon name="search" :size="18" />
         </button>
+
+        <!-- AI 助手顶栏常驻入口（C9）：原先入口埋在侧边栏末位，高频问诊路径太长 -->
+        <RouterLink v-if="assistOk" :to="{ name: 'assistant' }" class="btn-icon ghost" title="AI 助手">
+          <Icon name="sparkles" :size="18" />
+        </RouterLink>
 
         <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
           :title="unread ? `未读通知 ${unread} 条` : '通知'">
