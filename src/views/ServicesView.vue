@@ -25,6 +25,7 @@ import InstallPackageDialog from '@/components/InstallPackageDialog.vue'
 import Icon from '@/components/Icon.vue'
 import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
+import PageLayout from '@/components/PageLayout.vue'
 
 // Svc 直接取 types.ts 的 ServiceInfo（与服务详情页共用，避免两处各自定义漂移）；
 // 以别名引入是为保留本文件既有的 Svc 写法、压低改动面。
@@ -565,7 +566,7 @@ async function doConfirmed() {
 </script>
 
 <template>
-  <div>
+  <PageLayout>
     <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue），
          本页专属信息（init 系统）与刷新按钮归拢到右侧，不再是三处各自孤立。 -->
     <div class="page-head">
@@ -799,7 +800,7 @@ async function doConfirmed() {
                           :loading="dlgLoading"
                           :external="needsExternalSource(dlgPkg)"
                           @confirm="doInstall" @cancel="closeInstallDlg" />
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

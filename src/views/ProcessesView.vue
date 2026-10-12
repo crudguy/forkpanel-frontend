@@ -7,6 +7,7 @@ import { CAP, ProcessInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import PageLayout from '@/components/PageLayout.vue'
 
 // 直接复用契约类型 ProcessInfo（与后端 panel_os::ProcessInfo 逐字段对齐：
 // pid/ppid/name/cpu_pct/rss_kib/cmdline/user）。不再维护仅含子集的局部 Proc——
@@ -171,7 +172,7 @@ async function doKill() {
 </script>
 
 <template>
-  <div>
+  <PageLayout>
     <EmptyState v-if="!auth.supported(CAP.PROCESS_LIST)"
       title="当前环境不支持进程管理" :reason="auth.capabilities[CAP.PROCESS_LIST]?.reason ?? undefined" />
 
@@ -245,7 +246,7 @@ async function doKill() {
       :title="killTitle"
       :detail="killTarget ? ACTION_DETAIL[action](killTarget) : ''"
       @confirm="doKill" @cancel="killTarget = null" />
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

@@ -23,6 +23,7 @@ import { useModal } from '@/composables/useModal'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
 import { toast } from '@/composables/useToast'
+import PageLayout from '@/components/PageLayout.vue'
 
 interface Entry {
   name: string; kind: 'dir' | 'file' | 'symlink' | 'other'
@@ -333,7 +334,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 </script>
 
 <template>
-  <div>
+  <PageLayout>
     <div class="page-head">
       <h2 class="page-title"><Icon name="folder" :size="18" /> 文件</h2>
       <span class="page-sub"><code class="cwd">{{ path }}</code></span>
@@ -465,7 +466,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
     </div>
 
     <TrashPanel v-if="showTrash" @close="showTrash = false" @changed="load()" />
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

@@ -13,6 +13,7 @@ import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import TabBar from '@/components/TabBar.vue'
+import PageLayout from '@/components/PageLayout.vue'
 
 const auth = useAuthStore()
 
@@ -30,10 +31,12 @@ const tabs = computed(() => {
 </script>
 
 <template>
-  <div class="task-center">
-    <TabBar :tabs="tabs" />
-    <RouterView />
-  </div>
+  <PageLayout>
+    <div class="task-center">
+      <TabBar :tabs="tabs" />
+      <RouterView />
+    </div>
+  </PageLayout>
 </template>
 
 <style scoped>

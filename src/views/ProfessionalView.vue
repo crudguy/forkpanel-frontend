@@ -14,6 +14,7 @@ import type { SystemSnapshot } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import PageLayout from '@/components/PageLayout.vue'
 
 const auth = useAuthStore()
 const snap = ref<SystemSnapshot | null>(null)
@@ -124,7 +125,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
+  <PageLayout>
     <div class="page-head">
       <h2 class="page-title">专业快照</h2>
     </div>
@@ -232,7 +233,7 @@ onUnmounted(() => {
 
     </template>
     <EmptyState v-else title="暂无快照数据" hint="采集由内部调度器驱动，稍候自动出现" />
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

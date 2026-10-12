@@ -15,8 +15,8 @@
   --c-bg-glow-2: rgba(56, 189, 248, 0.06);
   --c-surface: #14171f;
   --c-surface-2: #181c26;
-  --c-glass: rgba(255, 255, 255, 0.045);
-  --c-glass-strong: rgba(255, 255, 255, 0.07);
+  --c-glass: rgba(255, 255, 255, 0.055);
+  --c-glass-strong: rgba(255, 255, 255, 0.085);
   --c-border: rgba(255, 255, 255, 0.09);
   --c-border-strong: rgba(255, 255, 255, 0.16);
   --c-text: #e7e9ee;
@@ -50,6 +50,26 @@
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC',
           'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── 字号档位（评估报告 B6）：只允许 5 档，禁止 <12px ──
+     正文统一 14px；指标数值用 28、页面标题用 20、次级标题用 16、元信息下限 12。
+     新代码一律引用 --fs-*，不再写死 px，便于以后整体微调与 CI 口径校验。 */
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+
+  /* ── 语义背景档（评估报告 B1/B2）：相邻档明度差 ≥4，层级自暗至亮 ──
+     侧栏背板（--bg-nav）→ 内容区（--c-bg + 双径向光晕）→ 卡片与页头（--c-glass 白纱）。
+     组件禁止再写死十六进制背景，一律引用这几档。 */
+  --bg-app: var(--c-bg);
+  --bg-panel: var(--c-surface);
+  --bg-elevated: var(--c-surface-2);
+  --bg-inset: rgba(0, 0, 0, 0.22);
+  /* 侧栏背板：比内容区暗一档。此前侧栏与内容区同为 #14 系（明度差约 1），
+     肉眼无法区分层级、仅靠 1px 分隔线「勉强划界」——故独立成档（B1）。 */
+  --bg-nav: #0f1218;
 }
 
 :root[data-theme='light'] {
@@ -58,6 +78,8 @@
   --c-bg-glow-2: rgba(56, 189, 248, 0.05);
   --c-surface: #ffffff;
   --c-surface-2: #f6f8fb;
+  /* 浅色主题侧栏保持纯白（与白卡片一致，层级由边框/阴影表达——浅色下压暗反而不干净） */
+  --bg-nav: #ffffff;
   --c-glass: rgba(255, 255, 255, 0.62);
   --c-glass-strong: rgba(255, 255, 255, 0.85);
   --c-border: #e4e7ec;
@@ -95,7 +117,7 @@ body {
   background-attachment: fixed;
   color: var(--c-text);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--fs-14);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
