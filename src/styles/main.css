@@ -192,11 +192,15 @@ input:disabled, textarea:disabled, select:disabled { opacity: .6; cursor: not-al
 
 /* 键盘焦点环统一（审计 P13）：a 与其他可聚焦元素共用一套指示，
    此前链接完全没有焦点样式，键盘用户无法定位 */
-a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible {
+a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible,
+[role="option"]:focus-visible, [role="menuitem"]:focus-visible,
+[role="tab"]:focus-visible, [role="row"]:focus-visible, [role="checkbox"]:focus-visible {
   outline: 2px solid var(--c-primary);
-  outline-offset: 1px;
+  outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
+/* ⚠ 表格「方向键单元格导航」属更大交互改造（需拦截 keydown + 管理 active cell），
+   不在本次随手清范围；此处只保证任何带 role 的可聚焦元素都有品牌色焦点环。 */
 
 /* ── 按钮变体 ── */
 .btn-primary { background: var(--gradient); border-color: transparent; color: #fff; font-weight: 600; box-shadow: var(--glow); }
