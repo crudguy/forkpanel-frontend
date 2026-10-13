@@ -7,7 +7,7 @@
  * 只是折叠之后品牌区露出半截 "Fo"、折叠按钮被挤出可视区导致**收起来就展不开**。
  * 类型系统对"元素被挤到可视区之外"这件事没有任何意见，所以只能显式断言。
  *
- * 被钉住的五条不变量（改回去立刻变红）：
+ * 被钉住的六条不变量（改回去立刻变红）：
  *   [1] 折叠态隐藏品牌文字——76px 栏宽装不下 logo+文字+按钮，靠挤只会得到 "Fo"
  *   [2] 品牌行里**不得**放按钮——这是"展不开"的成因（`margin-left:auto` 在满行里
  *       被推到可视区外，点不到）
@@ -15,6 +15,9 @@
  *   [4] 开关必须存在且折叠态隐藏其文字——它是唯一的展开入口，且 60px 宽装不下文字
  *   [5] 箭头方向：展开态朝左（收起）、折叠态朝右（展开）——chevron 原生朝右，
  *       靠 rotate 翻转表达"点了会往哪走"；翻转这两条 vue-tsc / build 同样不报错
+ *   [6] 折叠态渲染**全部**条目（图标栏非空）——条目 v-if 必须旁路分组折叠
+ *       `navCollapsed || openGroups.has(...)`；否则折叠后只剩当前组的图标，
+ *       而折叠态组头是 pointer-events:none 的分隔线，用户无法展开其余组
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -103,6 +106,18 @@ must(
   chevCollapsed !== null && /rotate\(\s*0(?:deg)?\s*\)/.test(chevCollapsed),
   '5b',
   '折叠态 chevron 必须 rotate(0deg)：箭头朝右=点它会展开',
+)
+
+// [6] 折叠态必须渲染全部条目（图标栏非空）
+//     条目渲染的 v-if 必须带 `navCollapsed || ` 旁路。折叠态组头已退化为
+//     pointer-events:none 的分隔线，若仍按 openGroups 裁条目，图标栏会只剩
+//     「当前路由所在组」的图标、且用户无法展开其余组——图标栏形同空白
+//     （A10 分组上线后实测：收起后侧栏仅 2 个图标 + 一大片空白）。
+//     这条同样 vue-tsc / build 都不报错，只能显式断言。
+must(
+  /v-if="navCollapsed\s*\|\|\s*openGroups\.has\(/.test(template),
+  '6',
+  '折叠态必须旁路分组折叠：条目 v-if 需 `navCollapsed || openGroups.has(...)`，否则折叠后图标栏只剩当前组、其余菜单既看不到也点不到',
 )
 
 if (failures.length) {

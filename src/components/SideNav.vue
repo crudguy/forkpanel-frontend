@@ -15,6 +15,10 @@
  *    logo 占满，按钮被推到可视区之外，于是**收起来就再也展不开**。
  *    也刻意**不做**"点 logo 展开"：logo 在展开态点击没有语义（既非链接也不是开关），
  *    同一个元素在不同状态下做不同事，用户只会更犹豫该点哪里。
+ * 3. 折叠态**必须渲染全部菜单项**（图标栏），不能沿用展开态的分组折叠（openGroups）：
+ *    折叠后组头是不可点的分隔线，按 openGroups 裁条目会让图标栏只剩当前组的图标、
+ *    且用户再也展不开别的组——图标栏等于空的（A10 分组上线后实测踩到）。
+ *    判据见 scripts/check-sidenav.mjs [6]：条目 v-if 必须 `navCollapsed || …`。
  *
  * ── 箭头方向约定（2026-09-30 调整）──
  * chevron 图标原生朝右（">"）。展开态旋转 180° → 朝左（点我会「收起」）；
@@ -145,7 +149,12 @@ const groups = computed(() => {
           <span class="grp-t">{{ g.name }}</span>
           <Icon name="chevron" :size="12" class="grp-chev" :class="{ open: openGroups.has(g.name) }" />
         </button>
-        <template v-if="openGroups.has(g.name)">
+        <!-- 折叠态**旁路**分组折叠（A10）：76px 图标栏里组头已退化为不可点的分隔线
+             （见 .collapsed .grp 的 pointer-events:none），若仍按 openGroups 裁条目，
+             用户就只能看到「当前路由所在组」的那几个图标、且无法展开其余组——
+             图标栏形同空白（实测折叠后仅 2 个图标）。故折叠态渲染**全部**条目，
+             分组以分隔线区隔，符合 VS Code / Supabase 的图标栏惯例。 -->
+        <template v-if="navCollapsed || openGroups.has(g.name)">
           <RouterLink
             v-for="it in g.list"
             :key="it.to"
@@ -221,7 +230,7 @@ const groups = computed(() => {
 .grp-chev { flex: none; transition: transform .16s ease; }
 .grp-chev.open { transform: rotate(90deg); }
 /* 折叠态（76px）：分组头退化为分隔线——文字放不下、也不要点 */
-.collapsed .grp { height: 1px; margin: 7px 10px 4px; padding: 0; background: var(--c-border); pointer-events: none; }
+.collapsed .grp { height: 1px; margin: 5px 10px 3px; padding: 0; background: var(--c-border); pointer-events: none; }
 .collapsed .grp-t, .collapsed .grp-chev { display: none; }
 
 .item {
@@ -234,7 +243,10 @@ const groups = computed(() => {
 .item:hover:not(.disabled) { background: var(--c-hover); color: var(--c-text); }
 .item .ico { flex: none; }
 .collapsed .label { display: none; }
-.collapsed .item { justify-content: center; padding: 10px; }
+/* 折叠态条目：图标居中。padding 由展开态的横向 11px 收成纵向 8px——
+   折叠态要一屏放下全部 18 个图标（39px→35px 行高），否则 900px 笔记本屏上
+   图标栏会溢出成滚动条。 */
+.collapsed .item { justify-content: center; padding: 8px; }
 
 .item.router-link-exact-active,
 .item.on {
