@@ -13,6 +13,8 @@ import { API } from '@/api/endpoints'
 import { roleLabel, CAP } from '@/api/types'
 import { navDrawerOpen, closeNav } from '@/composables/nav'
 import { useTableDensity, DENSITY_OPTIONS } from '@/composables/useTablePrefs'
+import { timeMode, setTimeMode } from '@/api/types'
+import type { TimeMode } from '@/api/types'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -25,6 +27,12 @@ const assistOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'system.view'
 // 表格密度（B8）：全站共享偏好，放用户菜单里与主题切换同级——它是"看的方式"，
 // 不是某一页的功能，塞进某个视图的工具条会让用户以为只影响那一页。
 const { density, setDensity } = useTableDensity()
+
+// 时区（C4）：绝对时间按本地/UTC 显示，全站共享偏好，与密度同处用户菜单。
+const TIME_MODE_OPTIONS: { value: TimeMode; label: string; hint: string }[] = [
+  { value: 'local', label: '本地', hint: '跟随浏览器时区（默认）' },
+  { value: 'utc', label: 'UTC', hint: '绝对时间按 UTC 显示，便于跨时区核对' },
+]
 
 // 命令面板（A11）开关：由全局 ⌘K / Ctrl+K 与顶栏搜索按钮唤起
 const paletteOpen = ref(false)
@@ -278,6 +286,16 @@ function logout() {
                 <button v-for="o in DENSITY_OPTIONS" :key="o.value" type="button" class="seg-b"
                   :class="{ on: density === o.value }" :title="o.hint"
                   :aria-pressed="density === o.value" @click="setDensity(o.value)">{{ o.label }}</button>
+              </div>
+            </div>
+            <!-- 时区（C4）：绝对时间（下发时间/到期日/扫描时刻）按本地或 UTC 显示，刷新后保持。
+                 与密度同款 role=group + aria-pressed。 -->
+            <div class="mi-group">
+              <span class="mi-label" id="time-mode-label">时区</span>
+              <div class="seg" role="group" aria-labelledby="time-mode-label">
+                <button v-for="o in TIME_MODE_OPTIONS" :key="o.value" type="button" class="seg-b"
+                  :class="{ on: timeMode === o.value }" :title="o.hint"
+                  :aria-pressed="timeMode === o.value" @click="setTimeMode(o.value)">{{ o.label }}</button>
               </div>
             </div>
             <button class="mi" @click="openPwdDialog">

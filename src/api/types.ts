@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 /**
  * 能力矩阵类型与判定。
  *
@@ -721,14 +723,46 @@ export const roleLabel = enumLabel({
 // 此前 9 处各写 `new Date(ts*1000).toLocaleString()`，跟随浏览器 locale：
 // 同一面板里证书到期日是「2026/10/03」，扫描时间可能是「10/3/2026」。
 // 统一到本函数：固定 zh-CN + 24 小时制 + 中文日期格式。
+//
+// 时区：默认跟随浏览器（local）；用户可在菜单切 UTC（C4）。timeMode 是模块级
+// ref——fmt* 在模板渲染期读 timeMode.value，切换时已在视图里的绝对时间会自动重渲染。
+
+export type TimeMode = 'local' | 'utc'
+
+const K_TIME_MODE = 'forkpanel.time.mode'
+
+function readTimeMode(): TimeMode {
+  try { return localStorage.getItem(K_TIME_MODE) === 'utc' ? 'utc' : 'local' } catch { return 'local' }
+}
+
+/** 全局时区偏好（模块级 ref，保证模板渲染反应式）。 */
+export const timeMode = ref<TimeMode>(readTimeMode())
+
+/** 切时区并持久化；同时写到 <html data-time> 供需要 CSS 区分的场景使用。 */
+export function setTimeMode(m: TimeMode) {
+  timeMode.value = m
+  try { localStorage.setItem(K_TIME_MODE, m) } catch { /* 隐私/配额：本次会话仍生效 */ }
+  document.documentElement.dataset.time = m
+}
+// 初始化时同步一次 data-time（刷新后保持）
+document.documentElement.dataset.time = timeMode.value
+
+/** 取年/月/日/时/分，按 timeMode 选本地或 UTC 取值器。 */
+function ymdhmi(d: Date): { y: number; mo: number; da: number; h: number; mi: number } {
+  if (timeMode.value === 'utc') {
+    return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, da: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes() }
+  }
+  return { y: d.getFullYear(), mo: d.getMonth() + 1, da: d.getDate(), h: d.getHours(), mi: d.getMinutes() }
+}
 
 /** 日期时间，如 `2026-10-03 14:05`。入参 Unix 秒。 */
 export function fmtDateTime(ts: number | null | undefined): string {
   if (!ts) return '—'
   const d = new Date(ts * 1000)
   if (Number.isNaN(d.getTime())) return '—'
+  const { y, mo, da, h, mi } = ymdhmi(d)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${y}-${p(mo)}-${p(da)} ${p(h)}:${p(mi)}`
 }
 
 /** 仅日期，如 `2026-10-03`。入参 Unix 秒。 */
@@ -736,8 +770,9 @@ export function fmtDate(ts: number | null | undefined): string {
   if (!ts) return '—'
   const d = new Date(ts * 1000)
   if (Number.isNaN(d.getTime())) return '—'
+  const { y, mo, da } = ymdhmi(d)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  return `${y}-${p(mo)}-${p(da)}`
 }
 
 /** 仅时分，如 `14:05`。入参 Unix 秒。 */
@@ -745,8 +780,9 @@ export function fmtTime(ts: number | null | undefined): string {
   if (!ts) return '—'
   const d = new Date(ts * 1000)
   if (Number.isNaN(d.getTime())) return '—'
+  const { h, mi } = ymdhmi(d)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${p(h)}:${p(mi)}`
 }
 
 /** 字节数格式化，如 `1.5 GB`。此前 FilesView/BackupsView/TrashPanel 各写一份，

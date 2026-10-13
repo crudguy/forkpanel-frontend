@@ -9,7 +9,7 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, type ServerNote } from '@/api/types'
+import { CAP, fmtDateTime, type ServerNote } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import Icon from '@/components/Icon.vue'
@@ -457,7 +457,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
             :saver="(v: string) => saveNote(n.id, v)"
             placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
           <template v-if="canSystemManage">
-            <span class="note-time" :title="new Date(n.updated_at * 1000).toLocaleString()">
+            <span class="note-time" :title="fmtDateTime(n.updated_at)">
               {{ noteTime(n.updated_at) }}
             </span>
             <button class="note-del" title="删除这条便签" @click="delNote = n">
