@@ -12,6 +12,7 @@ import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { roleLabel, CAP } from '@/api/types'
 import { navDrawerOpen, closeNav } from '@/composables/nav'
+import { useTableDensity, DENSITY_OPTIONS } from '@/composables/useTablePrefs'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -20,6 +21,10 @@ const router = useRouter()
 // AI 助手顶栏入口（C9）：门控与侧边栏同口径（METRICS_READ 能力位 + system.view 权限点），
 // 不可用即隐藏整钮——避免"点过去才发现 501"。
 const assistOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'system.view') === null)
+
+// 表格密度（B8）：全站共享偏好，放用户菜单里与主题切换同级——它是"看的方式"，
+// 不是某一页的功能，塞进某个视图的工具条会让用户以为只影响那一页。
+const { density, setDensity } = useTableDensity()
 
 // 命令面板（A11）开关：由全局 ⌘K / Ctrl+K 与顶栏搜索按钮唤起
 const paletteOpen = ref(false)
@@ -265,6 +270,16 @@ function logout() {
                 <div class="m-sub">{{ roleLabel(auth.me?.role) }}</div>
               </div>
             </div>
+            <!-- 表格密度（B8）：三档切换后整页表格立刻跟着变，刷新后仍保持。
+                 用 role=group + aria-pressed 表达"三选一"，不靠颜色单独承载选中态。 -->
+            <div class="mi-group">
+              <span class="mi-label" id="tbl-density-label">表格密度</span>
+              <div class="seg" role="group" aria-labelledby="tbl-density-label">
+                <button v-for="o in DENSITY_OPTIONS" :key="o.value" type="button" class="seg-b"
+                  :class="{ on: density === o.value }" :title="o.hint"
+                  :aria-pressed="density === o.value" @click="setDensity(o.value)">{{ o.label }}</button>
+              </div>
+            </div>
             <button class="mi" @click="openPwdDialog">
               <Icon name="key" :size="16" /> 修改密码
             </button>
@@ -354,8 +369,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .user[aria-expanded='true'] .caret { transform: rotate(90deg); }
 
 .backdrop { position: fixed; inset: 0; z-index: 40; }
+/* 宽度 168 → 200px：表格密度三档分段控件要并排放下（3×56 + 内边距），
+   原先 168px 会把「宽松」挤出去。 */
 .menu {
-  position: absolute; right: 0; top: 46px; z-index: 41; width: 168px;
+  position: absolute; right: 0; top: 46px; z-index: 41; width: 200px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
@@ -368,6 +385,15 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   background: transparent; border: none; font-size: 13.5px; cursor: pointer;
 }
 .mi:hover { background: var(--c-hover); }
+/* 表格密度（B8）：与菜单项之间加一条上分隔线，表明它是"偏好"而非"操作" */
+.mi-group { padding: 8px 10px; margin-top: 4px; border-top: 1px solid var(--c-border); }
+.mi-label { display: block; font-size: 12px; color: var(--c-text-dim); margin-bottom: 6px; }
+.seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--c-border); }
+.seg-b { flex: 1; padding: 5px 0; border: none; border-radius: 6px; background: transparent;
+  color: var(--c-text-dim); font-size: 12px; cursor: pointer; transition: background .12s ease, color .12s ease; }
+.seg-b:hover { color: var(--c-text); }
+/* 选中态 = 品牌色底 + 加粗：不只靠颜色，色觉障碍/灰阶下仍可分辨 */
+.seg-b.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
 
 /* 内容区随视口填满：左内边距与顶栏保持一致（同为 22px），两者左边缘因此对齐。 */
 .content { flex: 1; padding: 22px 22px 40px; }
