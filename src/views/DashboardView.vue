@@ -340,7 +340,6 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 <template>
   <div class="dash">
     <div class="page-head">
-      <h2 class="page-title">概览</h2>
       <span class="spacer" />
       <!-- 卡片设置（A1 个性化）：显隐开关；顺序在下方直接拖拽卡片调整 -->
       <button v-if="canLayout && auth.supported(CAP.METRICS_READ)" class="btn-ghost btn-sm"

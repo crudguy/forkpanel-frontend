@@ -11,7 +11,8 @@
  * - 本组件只做**语义根 + 最小布局**，绝不重复 .content 已有的 22px 内边距
  *   （内边距由 layouts/MainLayout.vue 的 .content 提供），否则会双重内边距把内容挤窄。
  * - 页面标题来自 route.meta.title（前端约定：顶栏标题单一事实源），所以本组件
- *   不再渲染标题，避免与页面内 .page-head 的 h2 重复。
+ *   不再渲染标题；页内 .page-head 也不再写标题，只放工具/操作（13 处手写 h2
+ *   已于 2026-10-13 全量移除，见 main.css 原位注释与守卫 check-page-head.mjs [3]）。
  * - 子内容里的 .page-head / .card / EmptyState 等保持原样，本组件只是把它们
  *   包进一个可识别的根，为后续统一滚动容器、骨架、错误边界留扩展点。
  */

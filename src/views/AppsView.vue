@@ -336,7 +336,6 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 <template>
   <div class="wrap">
     <div class="page-head">
-      <h2 class="page-title">应用</h2>
       <button class="btn-icon ghost" type="button" title="应用说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>

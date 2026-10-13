@@ -155,7 +155,6 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <div class="page-head">
-      <h2 class="page-title"><Icon name="lock" :size="18" /> 证书</h2>
       <button class="btn-icon ghost" type="button" title="证书说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>

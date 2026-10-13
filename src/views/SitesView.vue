@@ -1519,7 +1519,6 @@ async function batchDelete() {
          与真正作用的列表隔了一层，页面顶部还为它们白占一行。
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
     <div class="page-head">
-      <h2 class="page-title"><Icon name="globe" :size="18" /> 网站</h2>
       <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
       <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
       <span class="spacer" />

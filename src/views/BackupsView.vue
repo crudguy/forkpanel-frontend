@@ -284,7 +284,6 @@ function fmtTime(t: number | null) {
 <template>
   <div>
     <div class="page-head">
-      <h2 class="page-title"><Icon name="disk" :size="18" /> 备份</h2>
       <button class="btn-icon ghost" type="button" title="备份说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>

@@ -189,10 +189,6 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 
 <template>
   <div>
-    <div class="page-head">
-      <h2 class="page-title">实时趋势</h2>
-    </div>
-
     <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
     <!-- 顶部读数（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列（环形缓冲），

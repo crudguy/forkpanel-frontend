@@ -224,7 +224,6 @@ async function saveRemark(c: Container, v: string) {
 <template>
   <div>
     <div class="page-head">
-      <h2 class="page-title"><Icon name="docker" :size="18" /> 容器</h2>
       <button class="btn-icon ghost" type="button" title="容器说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>

@@ -175,10 +175,6 @@ onMounted(async () => {
 <template>
   <div>
     <!-- ── 面板设置（仅 settings.manage 可见）── -->
-    <div class="page-head">
-      <h2 class="page-title">设置</h2>
-    </div>
-
     <template v-if="canManage">
       <section class="card">
         <div class="sec-head"><Icon name="sparkles" :size="16" /> AI 助手 · LLM 接入</div>

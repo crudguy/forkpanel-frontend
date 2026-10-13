@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 「每个页面头部至多一个主操作」的结构性守卫。
+ * 页面头部的结构性守卫：主操作唯一 + 页内不重渲染标题。
  * 用法：`pnpm check:ui`（与 check-sidenav.mjs 串联）；退出码非 0 即有违规。
  *
  * 为什么需要一道纯文本检查：`btn-primary` 是橙色渐变 + 外发光，一页的
@@ -14,6 +14,9 @@
  *       **抠出来过**——某一类抠不到就必须失败。否则目录改名/模板改写法都会让
  *       下面那条对那一类恒绿。
  *   [2] 每个 page-head / sec-head 块内 btn-primary 出现次数 ≤ 1。
+ *   [3] 页内**不得**再渲染页面标题（`h2.page-title`）：页面标题由顶栏 h1 按
+ *       route.meta.title 单独渲染，页内再来一份就是「同值、同屏、手写副本」。
+ *       禁止类断言天生有恒绿风险，所以先用探针串自校验正则本身（[3a] 会红）。
  *
  * 为什么 sec-head 也算「页面头部」：主操作不一定挂在页面最上面那行。站点页就把
  * 「新建站点」收进了「站点」列表的区块头（紧贴它操作的表格）。约束若只认
@@ -133,8 +136,21 @@ if (offenders.length) {
   pass('2', '每个 page-head / sec-head 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
 }
 
+// [3] 页内不得再渲染页面标题：顶栏 h1 已按 route.meta.title 渲染，页内再写一份
+// 就是「同值、同屏、手写副本」（13 处 h2.page-title 已于 2026-10-13 全量移除）。
+// 禁止类断言最怕恒绿，所以先用探针自校验正则本身还能命中，再谈扫描结果。
+const TITLE_RE = /<h2\b[^>]*\bclass="[^"]*\bpage-title\b[^"]*"[^>]*>/
+const titleDups = files.filter((f) => TITLE_RE.test(blankComments(readFileSync(join(DIR, f), 'utf8'))))
+if (!TITLE_RE.test('<h2 class="page-title">探针</h2>')) {
+  fail('3a', '「禁止页内标题」的正则自身已失效——这条会恒绿，必须修')
+} else if (titleDups.length) {
+  fail('3', `页内不得重渲染页面标题（顶栏 h1 已渲染），残留 ${titleDups.length} 处：${titleDups.join('、')}`)
+} else {
+  pass('3', `扫过 ${files.length} 个视图，页内无 page-title 标题残留（正则自校验通过）`)
+}
+
 if (failures.length) {
-  console.log(`\nFAIL：页面头部主操作有 ${failures.length} 条违规（${failures.join(', ')}）`)
+  console.log(`\nFAIL：页面头部不变量有 ${failures.length} 条违规（${failures.join(', ')}）`)
   process.exit(1)
 }
-console.log('\nPASS：页面头部主操作不变量全部满足')
+console.log('\nPASS：页面头部不变量全部满足')

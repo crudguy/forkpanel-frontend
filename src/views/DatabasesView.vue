@@ -162,7 +162,6 @@ function closeBrowse() { browse.value = null }
 <template>
   <div>
     <div class="page-head">
-      <h2 class="page-title"><Icon name="database" :size="18" /> 数据库</h2>
       <button class="btn-icon ghost" type="button" title="数据库说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
