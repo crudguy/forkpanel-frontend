@@ -280,7 +280,7 @@ onUnmounted(() => {
 .cores { display: flex; align-items: flex-end; gap: 3px; height: 96px; }
 .core { flex: 1; min-width: 5px; border-radius: 3px 3px 0 0;
   transition: height .4s ease, background .4s; }
-.core-axis { display: flex; justify-content: space-between; font-size: 11px;
+.core-axis { display: flex; justify-content: space-between; font-size: var(--fs-12);
   color: var(--c-text-mute); margin-top: 4px; }
 .load-row { display: flex; gap: 14px; margin-top: 14px; }
 .load-item { flex: 1; }
@@ -313,12 +313,12 @@ onUnmounted(() => {
 .temp { padding: 13px; }
 .temp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .temp-top .tlabel { font-weight: 600; font-size: 14px; }
-.temp-top .chip-name { font-size: 11px; color: var(--c-text-mute); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.temp-top .chip-name { font-size: var(--fs-12); color: var(--c-text-mute); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .temp-val { margin-top: 8px; display: flex; align-items: baseline; gap: 3px; }
 .temp-val b { font-size: 26px; font-weight: 650; line-height: 1; }
 .temp-val .unit { font-size: 13px; opacity: .75; }
 .temp-warn { margin-top: 6px; font-size: 12px; color: var(--c-danger); }
-.badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; }
+.badge { font-size: var(--fs-12); padding: 2px 7px; border-radius: 999px; }
 .badge.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
 
 /* 进程表 */

@@ -179,7 +179,7 @@ function fmtUp(sec: number): string {
 .finding.warn { border-left-color: var(--c-warn); }
 .finding.info { border-left-color: var(--c-ok); }
 .finding header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+.badge { font-size: var(--fs-12); padding: 2px 8px; border-radius: 999px; }
 .badge.crit { background: var(--c-danger-soft, rgba(248,81,73,.15)); color: var(--c-danger); }
 .badge.warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .badge.info { background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok); }

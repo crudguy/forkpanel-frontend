@@ -2484,7 +2484,7 @@ sudo update-ca-certificates</pre>
 @media (max-width: 500px) {
   .waf { grid-template-columns: minmax(0, 1fr); }
 }
-.tiny { font-size: 11.5px; }
+.tiny { font-size: var(--fs-12); }
 .cert-sweep { margin: 0 0 10px; padding-left: 2px; }
 /* 「横幅」语言（与 WafView / LoginView 的 .notice / .warn 同一套）：
    内边距 + 圆角 + 描边，颜色一律走主题变量。
@@ -2857,7 +2857,7 @@ col.w-cst { width: 8%; }
 .site-search { width: min(220px, 40vw); padding: 5px 10px; font-size: 13px; }
 /* 根目录字段下的「站点根目录」边界说明 */
 .root-hint { display: block; margin-top: 5px; }
-.root-hint code { font-size: 11.5px; }
+.root-hint code { font-size: var(--fs-12); }
 /* 状态列：单格最多 3 个徽章，改可换行的 flex 行——行高稳定，不再参差 */
 .st-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* 特性列（021）：图标徽章，含义走 title 悬停 */

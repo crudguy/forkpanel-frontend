@@ -496,8 +496,8 @@ function fmtTime(t: number | null) {
 
 <style scoped>
 /* 远端地址可能很长：缩小 + 允许断行，避免把整张表撑出横向滚动 */
-.tiny { font-size: 11.5px; margin-top: 2px; word-break: break-all; }
-.tip code { font-size: 11.5px; }
+.tiny { font-size: var(--fs-12); margin-top: 2px; word-break: break-all; }
+.tip code { font-size: var(--fs-12); }
 /* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行 */
 .chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; }
 .chk input { width: auto; }

@@ -94,5 +94,5 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
 .cp-row.locked { cursor: default; opacity: .75; }
 /* 全局 input{width:100%} 会把勾选框拉满整行，必须复位 */
 .cp-row input { width: auto; }
-.cp-why { margin-left: auto; font-size: 11.5px; color: var(--c-text-mute); }
+.cp-why { margin-left: auto; font-size: var(--fs-12); color: var(--c-text-mute); }
 </style>

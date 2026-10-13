@@ -328,7 +328,7 @@ async function doDisable() {
 .s-ok { color: var(--c-ok, #3fb950); }
 .s-risk { color: var(--c-danger, #f85149); }
 .dot.na { background: var(--c-text-dim, #8b949e); opacity: .55; }
-.cur-badge { margin-left: 6px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok, #3fb950); }
+.cur-badge { margin-left: 6px; font-size: var(--fs-12); padding: 1px 7px; border-radius: 999px; background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok, #3fb950); }
 .muted { color: var(--c-text-mute); }
 .mono { font-family: var(--mono); }
 .nowrap { white-space: nowrap; }

@@ -160,13 +160,13 @@ onMounted(load)
 }
 .tp-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto auto; gap: 2px 10px; }
 .tp-name { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-kind { font-size: 11.5px; color: var(--c-text-mute); }
+.tp-kind { font-size: var(--fs-12); color: var(--c-text-mute); }
 .tp-path {
-  grid-column: 1 / -1; font-size: 11.5px; color: var(--c-text-mute);
+  grid-column: 1 / -1; font-size: var(--fs-12); color: var(--c-text-mute);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tp-time { grid-column: 1 / -1; font-size: 11.5px; color: var(--c-text-mute); }
+.tp-time { grid-column: 1 / -1; font-size: var(--fs-12); color: var(--c-text-mute); }
 .tp-acts { display: flex; gap: 6px; flex: 0 0 auto; }
 .tp-acts .danger { color: var(--c-danger); }
 .tp-confirm {

@@ -812,7 +812,7 @@ async function doConfirmed() {
 /* 「需配源」小徽标：跟在安装按钮文字后，提示官方仓库通常不含此包。
    用 inline-flex + 小字号，避免把按钮撑宽导致整行换行错位。 */
 .ext-hint { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 5px;
-  font-size: 10.5px; line-height: 1.5; color: var(--c-text-dim);
+  font-size: var(--fs-12); line-height: 1.5; color: var(--c-text-dim);
   border: 1px solid var(--c-border); border-radius: 999px; white-space: nowrap; }
 .acts { white-space: nowrap; }
 
@@ -825,7 +825,7 @@ async function doConfirmed() {
   margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--c-border); }
 .cat-head:first-of-type { margin-top: 2px; }
 /* 类别计数：一眼看出"这类包本机装了几个 / 还剩几个可选"，不用逐个包名去数 */
-.cat-count { margin-left: auto; font-size: 11.5px; font-weight: 500;
+.cat-count { margin-left: auto; font-size: var(--fs-12); font-weight: 500;
   color: var(--c-text-dim); background: var(--c-hover); padding: 1px 8px; border-radius: 999px; }
 
 /* 服务表格：固定列宽，避免长单元名(php8.1-fpm/mariadb-server)把右侧列挤出视口。

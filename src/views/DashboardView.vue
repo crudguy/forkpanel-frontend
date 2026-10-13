@@ -510,7 +510,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 .note-list { display: flex; flex-direction: column; gap: 10px; }
 .note-row { display: flex; align-items: flex-start; gap: 6px; }
 .note-row .note-body { flex: 1; min-width: 0; }
-.note-time { flex: none; padding-top: 4px; font-size: 11.5px; color: var(--c-text-dim); white-space: nowrap; }
+.note-time { flex: none; padding-top: 4px; font-size: var(--fs-12); color: var(--c-text-dim); white-space: nowrap; }
 .note-del { flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; margin-top: 1px; border: none; border-radius: 7px;
   background: none; color: var(--c-text-dim); cursor: pointer; opacity: .45; transition: opacity .12s ease; }

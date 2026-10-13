@@ -131,7 +131,7 @@ async function save() {
   color: var(--c-text); font: inherit; font-size: 13px; line-height: 1.5; }
 .iremark-input:focus { outline: none; border-color: var(--c-primary); }
 .iremark-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 3px;
-  font-size: 11.5px; color: var(--c-text-dim); }
+  font-size: var(--fs-12); color: var(--c-text-dim); }
 .iremark-err { color: var(--c-danger); }
 .iremark-count.over { color: var(--c-danger); font-weight: 600; }
 </style>

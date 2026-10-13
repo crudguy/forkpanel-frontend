@@ -597,7 +597,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .hint-inline { display: block; margin-top: 4px; font-size: 12px; line-height: 1.6;
   color: var(--c-text-dim); }
 .hint-inline b { font-weight: 500; color: var(--c-text); }
-.hint-inline code { font-size: 11.5px; padding: 0 3px; border-radius: 4px;
+.hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: 4px;
   background: var(--c-surface-2); border: 1px solid var(--c-border); }
 /* 5 个操作按钮必须**单行**：flex-wrap 换行会让行高突然变高、表格错位 */
 .app-acts-cell { display: flex; gap: 4px; flex-wrap: nowrap; }

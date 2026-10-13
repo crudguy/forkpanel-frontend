@@ -145,7 +145,7 @@ onMounted(load)
    crit 保留以兼容旧数据。 */
 .item.error { border-left-color: var(--c-danger); }
 .item.crit { border-left-color: var(--c-danger); }
-.lvl { font-size: 11px; color: var(--c-text-dim); }
+.lvl { font-size: var(--fs-12); color: var(--c-text-dim); }
 .item.read { opacity: .55; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tag { font-size: 12px; opacity: .7; }

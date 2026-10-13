@@ -212,7 +212,7 @@ const groups = computed(() => {
   display: flex; align-items: center; gap: 6px;
   width: 100%; padding: 6px 11px 4px; margin-top: 4px;
   border: none; background: transparent; cursor: pointer; text-align: left;
-  color: var(--c-text-mute); font-size: 11.5px; font-weight: 600;
+  color: var(--c-text-mute); font-size: var(--fs-12); font-weight: 600;
   letter-spacing: .5px; font-family: inherit;
 }
 .grp:hover { color: var(--c-text-dim); }

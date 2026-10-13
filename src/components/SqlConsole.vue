@@ -156,7 +156,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
 }
 .sp-samples .spacer, .sp-actions .spacer { flex: 1; }
 .badge {
-  font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  font-size: var(--fs-12); padding: 1px 7px; border-radius: 999px;
   border: 1px solid var(--c-border); color: var(--c-text-mute);
 }
 .sp-samples { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 9px; }

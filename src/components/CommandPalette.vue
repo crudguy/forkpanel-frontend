@@ -159,7 +159,7 @@ function onKey(e: KeyboardEvent) {
 }
 .inp::placeholder { color: var(--c-text-mute); }
 .kbd {
-  flex: none; font-size: 11px; color: var(--c-text-dim);
+  flex: none; font-size: var(--fs-12); color: var(--c-text-dim);
   border: 1px solid var(--c-border); border-radius: 6px;
   padding: 2px 6px; background: var(--c-bg);
 }
@@ -177,14 +177,14 @@ function onKey(e: KeyboardEvent) {
 .list li.on .ci { color: var(--c-primary); }
 .lab { flex: 1; min-width: 0; }
 .grp {
-  flex: none; font-size: 11px; color: var(--c-text-mute);
+  flex: none; font-size: var(--fs-12); color: var(--c-text-mute);
   border: 1px solid var(--c-border); border-radius: 999px; padding: 1px 8px;
 }
 .empty { color: var(--c-text-mute); text-align: center; padding: 20px; cursor: default; }
 .foot {
   display: flex; gap: 16px; padding: 8px 14px;
   border-top: 1px solid var(--c-border);
-  font-size: 11px; color: var(--c-text-mute);
+  font-size: var(--fs-12); color: var(--c-text-mute);
 }
 .foot .kbd { margin-right: 3px; }
 </style>

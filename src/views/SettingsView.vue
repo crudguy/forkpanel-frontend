@@ -405,7 +405,7 @@ onMounted(async () => {
 .kv-row:last-child { border-bottom: none; }
 .kv-row > .k { width: 220px; flex: none; color: var(--c-text-dim); }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }
-.perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono); }
+.perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: var(--fs-12); font-family: var(--mono); }
 /* 能力矩阵表列宽：原因为唯一弹性列；角色表列宽：角色名为唯一弹性列。 */
 col.w-capk { width: 26%; }
 col.w-capst { width: 90px; }

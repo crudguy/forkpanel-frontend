@@ -441,7 +441,7 @@ onUnmounted(closeFollow)
 .seg-btn { border: none; border-radius: 0; background: transparent; padding: 5px 12px; font-size: 13px; color: var(--c-text-dim); }
 .seg-btn:hover:not(.active) { background: var(--c-hover); transform: none; }
 .seg-btn.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
-.rec { font-size: 11px; color: var(--c-ok); margin-left: 4px; }
+.rec { font-size: var(--fs-12); color: var(--c-ok); margin-left: 4px; }
 .cfg-path { font-family: var(--mono); word-break: break-all; margin: 0 0 8px; }
 .cfg-edit { width: 100%; min-height: 320px; resize: vertical; box-sizing: border-box;
            padding: 12px 14px; background: var(--c-bg); color: var(--c-text);

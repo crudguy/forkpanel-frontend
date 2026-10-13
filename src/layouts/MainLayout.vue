@@ -340,7 +340,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .bell:hover { color: var(--c-text); }
 .badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
              padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: #fff;
-             font-size: 11px; line-height: 17px; text-align: center; font-weight: 500;
+             font-size: var(--fs-12); line-height: 17px; text-align: center; font-weight: 500;
              box-shadow: 0 0 0 2px var(--c-surface); }
 .sysinfo {
   display: flex; align-items: center; gap: 7px; flex: none;
