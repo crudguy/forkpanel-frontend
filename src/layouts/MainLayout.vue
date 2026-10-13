@@ -51,22 +51,29 @@ const title = computed(() => {
 // 顶栏副标题：与各视图原先内容区顶部的灰色 page-sub 说明同源，集中到此统一收口。
 // 动态信息（ServicesView 的 init、FirewallView 的启用状态/后端、FilesView 的当前路径）
 // 不在此列，保留在各自视图的 page-head，避免顶栏出现过长/动态文案。
+// 覆盖所有带顶栏的路由（login 无顶栏，不参与）。新加路由必须同步补一条，
+// 否则该页顶栏副标题静默为空——守卫 scripts/check-subtitles.mjs 会拦。
 const SUBTITLES: Record<string, string> = {
+  dashboard: '主机状态总览 · 卡片可自定义显示与排序',
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
   'system-procs': '服务器全部进程 · 点表头可按 CPU / 内存 / 用户排序 · 可结束异常进程',
   'services-software': '白名单软件包的安装与卸载',
   'services-units': '服务启停 · 日志 · 配置',
+  'service-detail': '单个服务的启停 · 日志 · 配置',
   sites: '虚拟主机站点管理',
   apps: 'systemd 托管进程 · 自动反代站点 · 构建请自行完成',
   databases: '连接管理 · 只读浏览 · 备份任务',
+  files: '目录浏览与上传 · 面包屑分段可点直达',
   logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
   'logs-audit': '关键操作追踪',
+  firewall: '端口放行规则 · 改动需应用后下发',
   'firewall-baseline': '基线检查与活跃会话',
   cron: '平台原生调度，表达式语义由后端校验',
   'cron-tasks': '后台任务与执行进度（运行中每 2 秒自动刷新）',
   users: '面板账号与权限',
   settings: '运行环境与能力矩阵排查',
+  notifications: '面板内消息 · 未读计数 · 一键全部已读',
   terminal: '内置 Web 终端（宿主级 shell）· 操作后请务必登出',
   assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
   backups: '本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）',
