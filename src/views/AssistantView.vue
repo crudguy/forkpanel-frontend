@@ -7,7 +7,7 @@
  * 护栏：助手只读——「去处理」仅导航到对应视图，处置由用户人工确认。
  */
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -17,7 +17,19 @@ import EmptyState from '@/components/EmptyState.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const canOpen = computed(() => auth.can('system.view'))
+
+/** 随页上下文（C9）：从顶栏 AI 入口跳过来时带 ?ctx=<当前页标题>，
+ *  用作提问前缀，让"解释这个页面"一句话就能问。后端 diagnose 不消费 ctx
+ *  （纯前端偏好增强），但带上页面名用户更容易把问题说清、关键词路由也更准。 */
+const ctxPage = computed(() => {
+  const c = typeof route.query.ctx === 'string' ? route.query.ctx.trim() : ''
+  return c && c !== 'AI 助手' ? c : ''
+})
+function askAboutPage() {
+  if (ctxPage.value) ask(`解释一下「${ctxPage.value}」这个页面：它负责什么、常见问题有哪些`)
+}
 
 const question = ref('')
 const busy = ref(false)
@@ -74,6 +86,10 @@ function fmtUp(sec: number): string {
       <div class="ask glass">
         <div class="chips">
           <button v-for="c in chips" :key="c" class="chip" :disabled="busy" @click="ask(c)">{{ c }}</button>
+        </div>
+        <div v-if="ctxPage" class="ctx-page">
+          <span class="ctx-chip">正在查看：{{ ctxPage }}</span>
+          <button class="chip ctx-ask" :disabled="busy" @click="askAboutPage">解释这个页面</button>
         </div>
         <div class="row">
           <input
@@ -146,6 +162,9 @@ function fmtUp(sec: number): string {
   padding: 5px 12px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
 }
 .chip:hover:not(:disabled) { border-color: var(--c-primary); color: var(--c-text); }
+.ctx-page { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ctx-chip { font-size: 12px; color: var(--c-text-dim); background: var(--c-surface-2); padding: 3px 9px; border-radius: 999px; }
+.ctx-ask { font-size: 12.5px; }
 .row { display: flex; gap: 8px; }
 .inp {
   flex: 1; background: var(--c-surface); border: 1px solid var(--c-border);

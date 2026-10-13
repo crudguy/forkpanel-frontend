@@ -239,7 +239,7 @@ function logout() {
         </button>
 
         <!-- AI 助手顶栏常驻入口（C9）：原先入口埋在侧边栏末位，高频问诊路径太长 -->
-        <RouterLink v-if="assistOk" :to="{ name: 'assistant' }" class="btn-icon ghost" title="AI 助手">
+        <RouterLink v-if="assistOk" :to="{ name: 'assistant', query: { ctx: (route.meta.title as string) || undefined } }" class="btn-icon ghost" title="AI 助手">
           <Icon name="sparkles" :size="18" />
         </RouterLink>
 
