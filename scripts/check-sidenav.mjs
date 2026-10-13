@@ -15,9 +15,16 @@
  *   [4] 开关必须存在且折叠态隐藏其文字——它是唯一的展开入口，且 60px 宽装不下文字
  *   [5] 箭头方向：展开态朝左（收起）、折叠态朝右（展开）——chevron 原生朝右，
  *       靠 rotate 翻转表达"点了会往哪走"；翻转这两条 vue-tsc / build 同样不报错
- *   [6] 折叠态渲染**全部**条目（图标栏非空）——条目 v-if 必须旁路分组折叠
- *       `navCollapsed || openGroups.has(...)`；否则折叠后只剩当前组的图标，
- *       而折叠态组头是 pointer-events:none 的分隔线，用户无法展开其余组
+ *   [6] 折叠态保留「分组(上级) → 子项(下级)」层级（用户否定了"拍平 18 图标"方案）：
+ *       折叠态（76px）只渲染 8 个分组图标（上级菜单），点之可内联展开子项，
+ *       不是把 18 个平级图标铺进图标栏丢掉上下级关系。旧方案 `navCollapsed ||
+ *       openGroups.has(...)`（拍平）必须不再出现。拆分：
+ *   [6a] 折叠态渲染分组图标（`g.gicon`）——上级菜单是可点按钮
+ *   [6b] 子项按 `openGroups` 内联展开；折叠态「直达组」`isCollapsedDirect` 不重复渲染子项
+ *   [6c] 不得回退到"拍平"旧方案
+ *   [6d] 层级必须**看得见**：折叠态子项块 `.collapsed .sub` 有缩进 + 左引导线
+ *        （只留 DOM 层级、视觉上与他人无异 = 用户看不出上下级，实测踩到）
+ *   [6e] 折叠态子项图标比上级小一档（`.collapsed .sub .item .ico` 覆写尺寸）
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -108,16 +115,44 @@ must(
   '折叠态 chevron 必须 rotate(0deg)：箭头朝右=点它会展开',
 )
 
-// [6] 折叠态必须渲染全部条目（图标栏非空）
-//     条目渲染的 v-if 必须带 `navCollapsed || ` 旁路。折叠态组头已退化为
-//     pointer-events:none 的分隔线，若仍按 openGroups 裁条目，图标栏会只剩
-//     「当前路由所在组」的图标、且用户无法展开其余组——图标栏形同空白
-//     （A10 分组上线后实测：收起后侧栏仅 2 个图标 + 一大片空白）。
-//     这条同样 vue-tsc / build 都不报错，只能显式断言。
+// [6] 折叠态保留「分组(上级) → 子项(下级)」层级（用户否定了"拍平 18 图标"方案）。
+//     折叠态（76px）只渲染 8 个分组图标（上级菜单）；点分组图标 → 内联展开子项，
+//     保留上下级关系。五条断言：
+//       [6a] 父级：`.grp` 按钮在折叠态渲染组图标 `g.gicon`（可点内联展开子项）。
+//       [6b] 子级：`openGroups.has(g.name)` 内联展开（保留层级）；折叠态「直达组」
+//             `isCollapsedDirect(g)` 不重复渲染子项——组图标即自身、点之已直接跳转。
+//       [6c] 旧"拍平"方案 `navCollapsed || openGroups.has(...)` 不得回退出现。
+//       [6d] 层级必须**看得见**：折叠态 `.sub` 块有缩进 + 左引导线。
+//       [6e] 折叠态子项图标比上级小一档。
+//     这些同样 vue-tsc / build 都不报错，只能显式断言。
 must(
-  /v-if="navCollapsed\s*\|\|\s*openGroups\.has\(/.test(template),
-  '6',
-  '折叠态必须旁路分组折叠：条目 v-if 需 `navCollapsed || openGroups.has(...)`，否则折叠后图标栏只剩当前组、其余菜单既看不到也点不到',
+  /<Icon\s+v-if="navCollapsed"\s+:name="g\.gicon"/.test(template),
+  '6a',
+  '折叠态必须渲染分组图标（上级菜单）：`.grp` 按钮在折叠态展示 `g.gicon`，可点内联展开子项',
+)
+must(
+  /v-if="openGroups\.has\(g\.name\)\s*&&\s*!isCollapsedDirect\(g\)"/.test(template),
+  '6b',
+  '子项按 `openGroups.has(g.name)` 内联展开且折叠态「直达组」（`isCollapsedDirect`）不重复渲染——保留分组→子项层级',
+)
+must(
+  !/v-if="navCollapsed\s*\|\|\s*openGroups\.has\(/.test(template),
+  '6c',
+  '不得回退到"拍平 18 图标"旧方案：条目 v-if 不得再含 `navCollapsed || openGroups.has(...)`',
+)
+// [6d/6e] 层级不能只存在于 DOM，还要**看得见**：折叠态子项块整体缩进 + 左引导线，
+//          子项图标比上级小一档。改造前实测上级/下级图标几何完全一致（同为 left 28 / 19×19）——
+//          用户看不出上下级，只靠展开/收起状态表达层级等于没表达。
+const subCollapsed = ruleBody('.collapsed .sub')
+must(
+  subCollapsed !== null && /border-left/.test(subCollapsed) && /padding-left/.test(subCollapsed),
+  '6d',
+  '折叠态子项块 `.collapsed .sub` 必须整体缩进（padding-left）且带左引导线（border-left）——上下级要在视觉上可区分',
+)
+must(
+  ruleBody('.collapsed .sub .item .ico') !== null,
+  '6e',
+  '折叠态子项图标必须比上级小一档：`.collapsed .sub .item .ico` 需覆写尺寸',
 )
 
 if (failures.length) {

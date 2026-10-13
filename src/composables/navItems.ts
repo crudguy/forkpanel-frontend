@@ -7,8 +7,8 @@
  * 可见性口径与 SideNav 完全一致：能力位 AND 权限点，由调用方用
  * `auth.whyDisabled(cap, perm)` 判定。这里只放静态定义。
  *
- * `group` 为能力域分组（对应评估报告的 A10 分组建议），命令面板按它归类展示；
- * 侧边栏目前仍是扁平列表（A10 分组是独立的一期工作），忽略此字段即可。
+ * `group` 为能力域分组（A10 分组建议，已落地）：侧边栏按它分 8 组折叠、
+ * 深链并入当前组、折叠态组图标可点内联展开子项；命令面板也按它归类展示。
  */
 import { CAP } from '@/api/types'
 
@@ -41,3 +41,20 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage', group: '系统' },
 ]
+
+/**
+ * 分组图标（侧边栏**折叠态**用）：折叠栏只显示 8 个分组图标（上级菜单），
+ * 点分组图标 → 内联展开该分组的子项（下级菜单），保持「分组→子项」层级。
+ * 复用各分组代表子项的图标作为组图标即可，不新增图标定义；
+ * 单子项分组（安全/日志/任务）组图标即自身、点之直接跳转。
+ */
+export const GROUP_ICONS: Record<string, string> = {
+  '主机监控': 'cpu',
+  '软件与服务': 'server',
+  '站点': 'globe',
+  '数据': 'database',
+  '安全': 'shield',
+  '日志': 'list',
+  '任务': 'clock',
+  '系统': 'gear',
+}
