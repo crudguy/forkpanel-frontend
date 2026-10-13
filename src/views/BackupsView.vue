@@ -519,4 +519,9 @@ function fmtTime(t: number | null) {
 .w-asize { width: 90px; }
 .w-atime { width: 150px; }
 
+/* B9：数字列右对齐（id / 保留份数 / 产物大小）。<col> 的 text-align 级联到该列
+   所有 th/td（与 SitesView 的 align:'right' 同一范式）；这些列都是纯数值，
+   右对齐后同列数字按个位对齐、便于一眼扫读，与进程表的 PID/CPU/内存一致。 */
+.w-bid, .w-bkeep, .w-asize { text-align: right; }
+
 </style>
