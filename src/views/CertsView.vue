@@ -155,10 +155,11 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <div class="page-head">
+      <span class="spacer" />
+      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
       <button class="btn-icon ghost" type="button" title="证书说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
-      <span class="spacer" />
       <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
       <button class="btn-ghost" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
         <Icon name="shield" :size="15" /> 信任根证书

@@ -170,6 +170,9 @@ onMounted(load)
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
     <div class="page-head">
+      <span class="spacer" />
+      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释）；
+           它右侧的「N 项不可下发」是动作结果计数，跟着动作走才不会悬空 -->
       <button class="btn-icon ghost" type="button" title="WAF 说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
@@ -178,7 +181,6 @@ onMounted(load)
         :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
         · {{ blockedPending }} 项因站点停用不可下发
       </span>
-      <span class="spacer" />
       <button class="btn-ghost" :disabled="!sites.length || batchBusy" @click="load">
         <Icon name="refresh" :size="15" /> 刷新
       </button>

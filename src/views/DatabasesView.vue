@@ -162,10 +162,11 @@ function closeBrowse() { browse.value = null }
 <template>
   <div>
     <div class="page-head">
+      <span class="spacer" />
+      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
       <button class="btn-icon ghost" type="button" title="数据库说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
-      <span class="spacer" />
       <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
 

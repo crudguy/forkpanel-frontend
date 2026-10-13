@@ -336,10 +336,12 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 <template>
   <div class="wrap">
     <div class="page-head">
+      <span class="spacer" />
+      <!-- 说明按钮原是「标题旁的说明」；页内标题移除后它孤在最左，故随整簇操作
+           移到右侧：顺序为「说明 → 次要动作 → 主操作（最右，视觉终点最强）」 -->
       <button class="btn-icon ghost" type="button" title="应用说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
-      <span class="spacer" />
       <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
         :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
         @click="openCreate">
