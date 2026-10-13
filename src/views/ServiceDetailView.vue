@@ -279,7 +279,7 @@ onUnmounted(closeFollow)
       </button>
     </div>
 
-    <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadSvc">重试</button></p>
 
     <EmptyState v-if="!auth.supported(CAP.SERVICE_MANAGE)"
       title="当前环境不支持服务管理"

@@ -176,7 +176,7 @@ function closeBrowse() { browse.value = null }
       :reason="auth.capabilities[CAP.DBMS_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <section class="card">
         <div class="sec-head"><Icon name="database" :size="16" /> 新增连接</div>

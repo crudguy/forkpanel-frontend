@@ -124,7 +124,7 @@ onMounted(load)
         <pre class="cmd">panel passwd &lt;用户名&gt;</pre>
       </div>
 
-      <p v-else-if="error" class="err">{{ error }}</p>
+      <p v-else-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <div v-else-if="loading" class="skeleton box" />
       <div v-else class="card flush">
         <table class="fixed">

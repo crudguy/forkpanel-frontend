@@ -580,7 +580,7 @@ async function doConfirmed() {
       </button>
     </div>
 
-    <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <!-- 安装/卸载/升级任务进度：多任务并行，逐条展示。
          后提交的包任务会先停在「排队中」——后端按 Package 组串行，

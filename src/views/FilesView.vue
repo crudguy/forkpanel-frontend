@@ -357,7 +357,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       title="当前环境不支持文件管理"
       :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
-    <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <!-- batchErr 是批量操作失败，与 error 同类 → 同用红色错误通道（审计 U14）；
          truncated / hasMore 是提示性警告，保留黄色 -->
     <p v-if="batchErr" class="err" role="alert">{{ batchErr }}</p>

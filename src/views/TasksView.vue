@@ -87,7 +87,7 @@ onUnmounted(stopPoll)
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
 
-    <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
     <template v-else>
       <div class="card flush">

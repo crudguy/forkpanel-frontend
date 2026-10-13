@@ -188,7 +188,7 @@ onMounted(() => { load(); loadFail2ban() })
       :reason="auth.capabilities[CAP.FIREWALL_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <p v-if="warn" class="warn" role="status">⚠ {{ warn }}</p>
 
       <section class="card" ref="allowCard">

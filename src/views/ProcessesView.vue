@@ -178,7 +178,7 @@ async function doKill() {
 
     <template v-else>
       <p v-if="pending" class="note">{{ pending }}</p>
-      <p v-if="error" class="err">{{ error }}</p>
+      <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
       <div v-if="loading" class="skeleton box" />
       <div v-else class="card flush procs-card">

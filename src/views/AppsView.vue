@@ -354,7 +354,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         面板只负责把进程拉起来（完整说明见标题旁「?」）。</span>
     </p>
 
-    <p v-if="error" class="err" role="alert">{{ error }}</p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <div v-if="loading && !apps.length" class="skeleton box" />
     <EmptyState v-else-if="!apps.length && !error" title="暂无托管应用"

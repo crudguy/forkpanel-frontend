@@ -359,6 +359,10 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .warn { color: var(--c-warn); }
 .bad, .danger { color: var(--c-danger); }
 .err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
+/* C8：错误态内联「重试」按钮（与 .err 同行，danger 描边）。点击调页面 load()，
+   仅用于通用加载失败（网络/5xx）；isUnsupported 确定性错误与表单错误不加。 */
+.err-retry { color: var(--c-danger); border-color: var(--c-danger); background: transparent; margin-left: 8px; }
+.err-retry:hover:not(:disabled) { background: var(--c-glass); }
 .note { font-size: 13px; color: var(--c-primary); margin: 0 0 12px; }
 .tip { font-size: 12px; color: var(--c-text-dim); margin: 0; }
 

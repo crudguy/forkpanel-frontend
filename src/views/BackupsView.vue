@@ -297,7 +297,7 @@ function fmtTime(t: number | null) {
       :reason="auth.capabilities[CAP.BACKUP_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <section class="card" ref="createSec">
         <div class="sec-head"><Icon name="disk" :size="16" /> 新建备份计划</div>

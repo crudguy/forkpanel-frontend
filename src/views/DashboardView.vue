@@ -450,7 +450,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
           <Icon name="plus" :size="13" />添加
         </button>
       </div>
-      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}</p>
+      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadNotes">重试</button></p>
       <div v-if="notes.length || adding" class="note-list">
         <div v-for="n in notes" :key="n.id" class="note-row">
           <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"

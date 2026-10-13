@@ -274,7 +274,7 @@ async function saveRemark(c: Container, v: string) {
     </div>
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
       <RiskBanner level="info" title="只读 + 生命周期操作"
         text="容器为只读列举，支持启停 / 重启 / 删除；不提供创建容器（docker run 等价宿主级任意代码执行，需独立的镜像白名单与特权 / 挂载禁用设计）。" />

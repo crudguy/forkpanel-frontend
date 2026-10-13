@@ -213,7 +213,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       :reason="auth.capabilities[CAP.LOGS_READ]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <p v-if="capped" class="warn">已达服务端上限（单次最多 2000 行）</p>
       <p v-if="follow" class="live"><span class="dot live-dot" /> 实时跟随中…（新行自动追加）</p>
 

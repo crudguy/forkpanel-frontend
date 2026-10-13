@@ -173,7 +173,7 @@ async function triggerWebhook(j: Job) {
       :reason="auth.capabilities[CAP.SCHEDULER_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
-      <p v-if="error" class="err" role="alert">{{ error }}</p>
+      <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <p v-if="note" class="note" role="status">{{ note }}</p>
 
       <section class="card">
