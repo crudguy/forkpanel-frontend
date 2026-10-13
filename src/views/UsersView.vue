@@ -105,7 +105,8 @@ onMounted(load)
 
 <template>
   <div>
-    <div class="page-head">
+    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
+    <div class="page-head tools">
       <span class="spacer" />
       <button class="btn-primary" :disabled="loading || notReady || !canManage" @click="openCreate">
         <Icon name="user-plus" :size="15" /> 新建用户

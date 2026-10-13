@@ -144,7 +144,8 @@ onMounted(load)
 
 <template>
   <div>
-    <div class="page-head">
+    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
+    <div class="page-head tools">
       <span class="spacer" />
       <button class="btn-ghost" :disabled="loading" @click="reset"><Icon name="refresh" :size="15" /> 重置</button>
       <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
