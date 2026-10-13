@@ -70,7 +70,24 @@
   /* 侧栏背板：比内容区暗一档。此前侧栏与内容区同为 #14 系（明度差约 1），
      肉眼无法区分层级、仅靠 1px 分隔线「勉强划界」——故独立成档（B1）。 */
   --bg-nav: #0f1218;
+
+  /* ── 表格行高（评估报告 B8）──
+     单元格上下内边距抽成变量。**行高 = 行内容高 + 2×--row-py，不要写成"行高 = 32/40/48"**：
+     内容高按表不同（进程表纯文本 ~35px；站点表挂了 25px 高的徽章 ~29px），实测同一档
+     站点表 41/49/57px、进程表 47/55/63px。文案给死数字必然与实机不符。
+
+     ⚠️ 本规则（全局元素选择器 (0,0,1)）压不过任何 scoped 里的 `th, td`（编译成
+     `td[data-v-x]` = (0,1,1)，且后注入）。故视图若自己写了 `th, td { padding: … }`，
+     必须用 `var(--row-py)` 而不是写死 px——写死时该表密度两档静默失效，构建/守卫全绿。
+     已知需盯住的表：ProcessesView / ProfessionalView（各抄了一份，改一处要 grep 全仓）。 */
+  --row-py: 10px;
 }
+
+/* 密度三档（B8）：改的是变量，全站表格一次生效。
+   ⚠️ 不要改成「给每张表加 .compact class」——那种做法必然漏掉某几张表，
+   用户就会觉得"有的表跟着变、有的不跟着变"。 */
+:root[data-density='compact'] { --row-py: 6px; }
+:root[data-density='comfy']   { --row-py: 14px; }
 
 :root[data-theme='light'] {
   --c-bg: #eef1f5;
@@ -281,7 +298,8 @@ td button { vertical-align: middle; }
 
 /* ── 表格 ── */
 table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--c-border); font-size: 13.5px; vertical-align: middle; }
+/* 上下内边距走 --row-py（密度档），左右保持 13px：只改行高，不改变列内缩进而导致列宽全变 */
+th, td { text-align: left; padding: var(--row-py) 13px; border-bottom: 1px solid var(--c-border); font-size: 13.5px; vertical-align: middle; }
 th { color: var(--c-text-dim); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
 tbody tr { transition: background .12s ease; }
 tbody tr:hover { background: var(--c-hover); }
@@ -295,6 +313,22 @@ table.fixed { table-layout: fixed; width: 100%; }
 table.fixed th, table.fixed td { overflow: hidden; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
+
+/* ── 吸顶表头（B8）──
+   只对**自身可滚动**的容器生效（容器加 `.t-scroll` 并限高）。
+   ⚠️ 不给所有表直接加 sticky：页面级滚动时 `top` 要等于顶栏高度(58px)，
+   弹窗内滚动时又要等于 0——同一个值顾此失彼，必然有一处被盖住或悬空。
+   让容器自己滚、表头贴容器顶部，两种上下文都自洽。
+   不设限高 = 容器不滚 = 行为与旧版一致，故可放心作为通用工具类。 */
+.t-scroll { overflow: auto; }
+.t-scroll > table > thead > tr > th {
+  position: sticky; top: 0; z-index: 2;
+  /* 表头必须不透明：半透明会让滚过的行从下面透出来，读起来像叠影 */
+  background: var(--c-surface);
+  /* `border-collapse: collapse` 下 sticky 单元格的 border-bottom 不跟着吸顶，
+     滚动时会"丢线"，用 inset 阴影补一条等效的 1px 下边线。 */
+  box-shadow: inset 0 -1px 0 var(--c-border);
+}
 
 /* ── 表单字段 ── */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
