@@ -45,7 +45,7 @@ import { useNarrow, useTableCols } from '@/composables/useTablePrefs'
 // ⭐收起的列**不会丢信息**：根目录此前被截成 `/home/…` 正是报告点名的痛点，
 //   收起后它的完整取值在**行展开**里以等宽文本呈现并可一键复制——比
 //   "在窄列里截断 + 靠 title 悬停"可靠得多。
-const SITE_COLS = [
+const SITE_COLS: { id: string; label: string; w: number; locked?: boolean; align?: 'left' | 'right' | 'center' }[] = [
   // 名称是这张表的**身份列**：没有它，"站点列表"就只剩一堆域名和按钮。
   // 且它同时是弹性列的兜底（见 elasticId）——允许隐藏会让整表既无身份列、
   // 又无弹性列（余量被平摊成空转留白），故标记为不可隐藏。
@@ -56,7 +56,7 @@ const SITE_COLS = [
   { id: 'feat', label: '特性', w: 84 },
   { id: 'waf', label: 'WAF', w: 116 },
   { id: 'state', label: '状态', w: 120 },
-  { id: 'applied', label: '上次下发', w: 108 },
+  { id: 'applied', label: '上次下发', w: 108, align: 'right' }, // 日期右对齐，便于纵向比对（B9 列类型/对齐规范：数字/日期/字节列 right，文本与徽标 left）
   { id: 'tls', label: 'TLS', w: 84 },
 ]
 // 解构成顶层 ref：模板里 `cols.hidden` 拿到的是 Ref 对象（只有 setup 顶层的 ref
@@ -1558,7 +1558,9 @@ async function batchDelete() {
                同名会让"这一列到底多宽"要翻两处才能回答。 -->
           <template v-for="c in SITE_COLS" :key="c.id">
             <col v-if="shown(c.id)"
-              :style="c.id === elasticId ? { width: 'auto' } : { width: c.w + 'px' }" />
+              :style="c.id === elasticId
+                ? { width: 'auto' }
+                : { width: c.w + 'px', ...(c.align ? { textAlign: c.align } : {}) }" />
           </template>
           <col class="w-sacts" />
         </colgroup>
