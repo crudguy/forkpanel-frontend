@@ -323,7 +323,10 @@ onUnmounted(() => {
 
 /* 进程表 */
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+/* 上下内边距走 --row-py（密度档）：本表与 ProcessesView 各抄了一份同样的规则，
+   两处都写死会让密度切换对进程表失效（scoped 特异性 (0,1,1) 压过全局 th,td）。
+   改一处要 grep 全仓一起改——同控件多份 CSS 必漂移。 */
+th, td { padding: var(--row-py) 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
 th { color: var(--c-text-mute); font-weight: 600; }
 td.num, th.num { text-align: right; }
 tbody tr:hover { background: var(--c-hover); }

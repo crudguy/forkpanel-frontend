@@ -194,7 +194,9 @@ async function doKill() {
             <Icon name="refresh" :size="14" /> 刷新
           </button>
         </div>
-        <div class="procs-scroll">
+        <!-- B8：容器自己滚 + 表头吸顶（.t-scroll）。进程常有数百行，滚动时看不见列头
+             就只能靠记住列序——这是"信息密度"之外同样致命的可读性问题。 -->
+        <div class="procs-scroll t-scroll">
         <table>
           <colgroup>
             <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
@@ -259,10 +261,22 @@ async function doKill() {
 .procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .procs-toolbar .icon { color: var(--c-primary); }
 .procs-toolbar .count { font-weight: 600; font-size: 14px; }
-.procs-scroll { overflow: auto; }
+/* 限高 = 容器真的会滚 = 吸顶表头才有意义（不限高时滚动发生在页面上，
+   sticky 贴的是容器顶边，滚动时它跟着一起走，等于没加）。
+   260px ≈ 顶栏 58 + 内容区上下内边距 62 + 卡片工具条 45 + 页头与留白 ~95。
+   给 min-height：进程很少时不至于把卡片压成一条缝。 */
+.procs-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+  min-height: 200px;
+}
 
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-th, td { padding: 9px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+/* 上下内边距必须走 --row-py（密度档），**不能写死**：scoped 编译成 `td[data-v-x]`
+   = 特异性 (0,1,1)，永远压过 main.css 里全局的 `th, td` (0,0,1)——写死 9px 时
+   这里是"紧凑/宽松"两档完全失效、行高恒定 53px（实机实测），而构建与守卫全绿。
+   左右保持 12px 是本表原有取值，不动。 */
+th, td { padding: var(--row-py) 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
 /* 与全站表格表头一致：用 text-dim 而非更暗的 text-mute，
    此前单列头偏灰、与 Firewall/Services 等列表页对不齐。 */
 th { color: var(--c-text-dim); font-weight: 600; }
