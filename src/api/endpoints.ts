@@ -235,11 +235,13 @@ export const API = {
 
   logs: {
     sources: () => '/api/v1/logs/sources',
-    stream: (source?: string, filter?: string, limit?: number) => {
+    stream: (source?: string, filter?: string, limit?: number, level?: string, since?: number) => {
       const p = new URLSearchParams()
       if (source) p.set('source', source)
       if (filter) p.set('filter', filter)
       if (limit) p.set('limit', String(limit))
+      if (level) p.set('level', level)
+      if (since) p.set('since', String(since))
       const q = p.toString()
       return `/api/v1/logs/stream${q ? '?' + q : ''}`
     },
