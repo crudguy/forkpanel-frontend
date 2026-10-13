@@ -20,10 +20,12 @@ const auth = useAuthStore()
 const snap = ref<SystemSnapshot | null>(null)
 const loading = ref(true)
 
-// 配色：与主机监控页图例一致，彼此对比鲜明
+// 配色：与主机监控页图例一致，彼此对比鲜明。
+// B5 治理：统一引用 :root 的 --chart-* token（品牌橙退场为状态色，正常态数据色走中性/冷色）。
 const C = {
-  cpu: '#ff6a3d', mem: '#36c5d6', swap: '#ffb454', disk: '#4cd07d',
-  netIn: '#4ea1ff', netOut: '#ffb454', load: '#b48cff', danger: '#ff4d4d', hot: '#ff9a3d',
+  cpu: 'var(--chart-cpu)', mem: 'var(--chart-mem)', swap: 'var(--chart-swap)', disk: 'var(--chart-disk)',
+  netIn: 'var(--chart-net-in)', netOut: 'var(--chart-net-out)', load: 'var(--chart-load)',
+  danger: 'var(--chart-danger)', hot: 'var(--chart-hot)',
 }
 
 const perCore = computed<number[]>(() => snap.value?.cpu.per_core_pct ?? [])

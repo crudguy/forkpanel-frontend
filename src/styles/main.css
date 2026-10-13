@@ -36,6 +36,19 @@
   --c-ok: #4ade80;
   --c-ok-soft: rgba(74, 222, 128, 0.14);
 
+  /* ── 图表数据色板（评估报告 B5）：与「状态/操作色」(--c-primary/--c-danger) 解耦。
+     品牌橙退场为纯状态色——普通数据色一律中性/冷色/已分配语义色，
+     橙仅留给 hot≥60% / 危险 / 主操作 / 激活态。两监控视图统一引用本组 token。 ── */
+  --chart-cpu: #94a3b8;     /* CPU 正常态：中性灰（不抢品牌橙） */
+  --chart-mem: #36c5d6;     /* 内存：青 */
+  --chart-swap: #eab308;    /* 交换：琥珀金（与品牌橙区分） */
+  --chart-disk: #4cd07d;    /* 磁盘：绿 */
+  --chart-load: #b48cff;    /* 负载：紫 */
+  --chart-net-in: #4ea1ff;  /* 入站：蓝 */
+  --chart-net-out: #2dd4bf; /* 出站：冷青（退橙） */
+  --chart-hot: #ff9a3d;     /* 热区≥60%：橙（状态色，仅临界用） */
+  --chart-danger: #ff4d4d;  /* 危险≥85%：红 */
+
   --gradient: linear-gradient(135deg, #ff8a4c, #ff5a36);
   --gradient-soft: linear-gradient(135deg, rgba(255, 138, 76, 0.20), rgba(255, 90, 54, 0.12));
   --shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.55);
@@ -125,6 +138,17 @@
   --c-warn-bg: #fef3c7;
   --c-ok: #16a34a;
   --c-ok-soft: rgba(22, 163, 74, 0.10);
+
+  /* 图表数据色板（B5）：浅色主题提升明度对比，语义不变 */
+  --chart-cpu: #64748b;
+  --chart-mem: #0891b2;
+  --chart-swap: #b45309;
+  --chart-disk: #16a34a;
+  --chart-load: #7c3aed;
+  --chart-net-in: #2563eb;
+  --chart-net-out: #0d9488;
+  --chart-hot: #ea7317;
+  --chart-danger: #dc2626;
 
   --shadow: 0 10px 30px -16px rgba(30, 40, 70, 0.18);
   --shadow-lg: 0 24px 60px -26px rgba(30, 40, 70, 0.28);

@@ -32,8 +32,8 @@ type HistRow = [number, number, number, number] // [ts, cpu_pct, mem_used_kib, l
 const auth = useAuthStore()
 
 // 配色：图例与曲线共用同一来源，确保一致且彼此对比鲜明
-const COLOR = { cpu: '#ff6a3d', mem: '#36c5d6', load: '#b48cff', disk: '#4cd07d' } as const
-const NET = { in: '#4ea1ff', out: '#ffb454' } as const
+const COLOR = { cpu: 'var(--chart-cpu)', mem: 'var(--chart-mem)', load: 'var(--chart-load)', disk: 'var(--chart-disk)' } as const
+const NET = { in: 'var(--chart-net-in)', out: 'var(--chart-net-out)' } as const
 
 // 实时数据：客户端维护定长滚动缓冲，避免每次轮询整窗替换导致曲线跳变 / 重缩放
 const MAXN = 120
@@ -214,13 +214,13 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
     </p>
     <div v-if="buf.length" class="card chart">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="cpuPts" fill="none" :stroke="COLOR.cpu" stroke-width="1"
+        <polyline :points="cpuPts" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="memPts" fill="none" :stroke="COLOR.mem" stroke-width="1"
+        <polyline :points="memPts" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="loadPts" fill="none" :stroke="COLOR.load" stroke-width="1"
+        <polyline :points="loadPts" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="diskPts" fill="none" :stroke="COLOR.disk" stroke-width="1"
+        <polyline :points="diskPts" fill="none" :style="{ stroke: COLOR.disk }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
       </svg>
     </div>
@@ -239,9 +239,9 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
     </p>
     <div v-if="buf.length" class="card chart">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="netInPts" fill="none" :stroke="NET.in" stroke-width="1"
+        <polyline :points="netInPts" fill="none" :style="{ stroke: NET.in }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="netOutPts" fill="none" :stroke="NET.out" stroke-width="1"
+        <polyline :points="netOutPts" fill="none" :style="{ stroke: NET.out }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
       </svg>
     </div>
@@ -266,11 +266,11 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
       hint="512MB 机器仅保留内存环形缓冲，升级档位后即可查看长时曲线" />
     <div v-else-if="histRows.length" class="card chart">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="histCpuPts" fill="none" :stroke="COLOR.cpu" stroke-width="1"
+        <polyline :points="histCpuPts" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="histMemPts" fill="none" :stroke="COLOR.mem" stroke-width="1"
+        <polyline :points="histMemPts" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="histLoadPts" fill="none" :stroke="COLOR.load" stroke-width="1"
+        <polyline :points="histLoadPts" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
       </svg>
       <p class="dim pad">CPU / 内存 / 负载 历史趋势 · 当前粒度 {{ gran === '1m' ? '1 分钟' : '1 小时' }}</p>
