@@ -2,6 +2,11 @@
 /**
  * 安全中心：只读安全基线（契约 SecurityBaselineItem[]）+ 活跃会话。
  *
+ * 分区（A9）：本页拆成三块清晰分区——
+ *   1. 汇总卡：通过 / 风险 / 不适用 三张指标卡（顶部 KPI 行，替代原卡片头里的内联文字摘要）；
+ *   2. 清单：安全基线逐项检查清单（系统级配置，如 sshd）；
+ *   3. 账号：账号安全分区，聚合「活跃会话」与「两步验证 MFA」两件账号/会话相关事项。
+ *
  * 分级：applicable=false → 灰（该环境不适用，**非通过**）；ok=true → 绿；ok=false → 红。
  */
 import { ref, onMounted, computed } from 'vue'
@@ -11,6 +16,8 @@ import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import MetricCard from '@/components/MetricCard.vue'
+import { type MetricItem } from '@/components/MetricHeader.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 
@@ -56,6 +63,21 @@ onMounted(load)
 const passed = computed(() => baseline.value.filter(c => c.applicable && c.ok).length)
 const risks = computed(() => baseline.value.filter(c => c.applicable && !c.ok).length)
 const naCount = computed(() => baseline.value.filter(c => !c.applicable).length)
+
+/** 汇总卡（A9）：把原卡片头里「通过 X · 风险 Y · 不适用 Z」的内联文字升级为
+ *  独立的指标卡行，与全局 MetricCard 范式一致；合规率走 progress 条。 */
+const summaryCards = computed<MetricItem[]>(() => {
+  const total = passed.value + risks.value + naCount.value
+  const rate = total ? Math.round((passed.value / total) * 100) : 0
+  return [
+    { label: '通过', value: String(passed.value), icon: 'check', tone: 'ok',
+      sub: total ? `合规率 ${rate}%` : undefined, progress: rate },
+    { label: '风险', value: String(risks.value), icon: 'alert', tone: 'danger',
+      sub: risks.value ? '需处理' : '无风险项' },
+    { label: '不适用', value: String(naCount.value), icon: 'info', tone: 'primary',
+      sub: '当前环境未覆盖' },
+  ]
+})
 
 /** 待吊销会话（审计 U5：window.confirm → ConfirmDialog） */
 const revokeTarget = ref<SessionInfo | null>(null)
@@ -183,14 +205,16 @@ async function doDisable() {
 
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
-    <div v-else class="grid cols-2">
+    <template v-else>
+      <!-- ① 汇总卡：通过 / 风险 / 不适用 -->
+      <div class="grid cols-3 summary">
+        <MetricCard v-for="c in summaryCards" :key="c.label" v-bind="c" />
+      </div>
+
+      <!-- ② 清单：安全基线逐项检查 -->
       <section class="card">
         <div class="sec-head">
-          <Icon name="shield" :size="16" /><span>安全基线</span>
-          <span class="spacer" />
-          <span v-if="baseline.length" class="muted summary">
-            通过 <b class="s-ok">{{ passed }}</b> · 风险 <b class="s-risk">{{ risks }}</b> · 不适用 {{ naCount }}
-          </span>
+          <Icon name="shield" :size="16" /><span>安全基线清单</span>
         </div>
         <ul class="checks">
           <li v-for="c in baseline" :key="c.key" :title="c.advice">
@@ -209,71 +233,80 @@ async function doDisable() {
         </ul>
       </section>
 
-      <section class="card">
-        <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
-        <table v-if="sessions.length" class="fixed" v-table-nav>
-          <!-- 列宽（站点表范式）：用户为唯一弹性列；吊销按钮列定宽 100px。 -->
-          <colgroup>
-            <col class="w-suser" /><col class="w-srole" /><col class="w-sctime" /><col class="w-sidle" /><col class="w-sacts" />
-          </colgroup>
-          <thead><tr><th>用户</th><th>角色</th><th>创建于</th><th>空闲</th><th /></tr></thead>
-          <tbody>
-            <tr v-for="s in sessions" :key="s.id">
-              <td>
-                {{ s.user }}
-                <span v-if="s.current" class="cur-badge">当前</span>
-              </td>
-              <td class="muted">{{ roleLabel(s.role) }}</td>
-              <td class="muted" :title="fmtTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
-              <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
-              <td class="nowrap">
-                <button class="btn-ghost btn-sm danger" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="muted">暂无活跃会话信息</p>
-      </section>
-
-      <section class="card">
-        <div class="sec-head"><Icon name="shield" :size="16" /><span>两步验证（MFA）</span></div>
-
-        <p class="muted">当前状态：<b :class="mfaEnabled ? 's-ok' : 's-risk'">{{ mfaEnabled ? '已启用' : '未启用' }}</b></p>
-
-        <div v-if="!mfaEnabled && !mfaEnrolling" class="ops-row">
-          <button class="btn-primary btn-sm" :disabled="acting" @click="doEnroll">启用 MFA</button>
-          <span class="muted small">登录时除密码外，还需验证器生成的 6 位动态口令</span>
+      <!-- ③ 账号：账号安全分区（活跃会话 + 两步验证 MFA） -->
+      <div class="part">
+        <div class="part-head">
+          <Icon name="users" :size="15" /><span>账号安全</span>
         </div>
+        <div class="grid cols-2">
+          <section class="card">
+            <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
+            <table v-if="sessions.length" class="fixed" v-table-nav>
+              <!-- 列宽（站点表范式）：用户为唯一弹性列；吊销按钮列定宽 100px。 -->
+              <colgroup>
+                <col class="w-suser" /><col class="w-srole" /><col class="w-sctime" /><col class="w-sidle" /><col class="w-sacts" />
+              </colgroup>
+              <thead><tr><th>用户</th><th>角色</th><th>创建于</th><th>空闲</th><th /></tr></thead>
+              <tbody>
+                <tr v-for="s in sessions" :key="s.id">
+                  <td>
+                    {{ s.user }}
+                    <span v-if="s.current" class="cur-badge">当前</span>
+                  </td>
+                  <td class="muted">{{ roleLabel(s.role) }}</td>
+                  <td class="muted" :title="fmtTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
+                  <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
+                  <td class="nowrap">
+                    <button class="btn-ghost btn-sm danger" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="muted">暂无活跃会话信息</p>
+          </section>
 
-        <div v-else-if="mfaEnrolling" class="mfa-box">
-          <p class="muted">用验证器 App 扫码，或手动录入下面的密钥：</p>
-          <p class="mono secret">{{ mfaEnrolling.secret }}</p>
-          <details>
-            <summary class="muted small">otpauth 地址（扫码用）</summary>
-            <p class="mono small break">{{ mfaEnrolling.otpauth_uri }}</p>
-          </details>
-          <p class="warn-tip">
-            以下恢复码<b>只显示这一次</b>，请立即保存——手机丢失时它们是唯一的登录途径。
-          </p>
-          <ul class="codes">
-            <li v-for="c in mfaEnrolling.recovery_codes" :key="c" class="mono">{{ c }}</li>
-          </ul>
-          <div class="ops-row">
-            <input v-model="mfaCode" class="inp" placeholder="6 位动态口令" maxlength="6" />
-            <button
-              class="btn-primary btn-sm"
-              :disabled="acting || mfaCode.trim().length !== 6"
-              @click="doVerify"
-            >验证并启用</button>
-          </div>
-        </div>
+          <section class="card">
+            <div class="sec-head"><Icon name="shield" :size="16" /><span>两步验证（MFA）</span></div>
 
-        <div v-else class="ops-row">
-          <button class="btn-ghost btn-sm danger" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
-          <span class="muted small">关闭需出示动态口令或恢复码</span>
+            <p class="muted">当前状态：<b :class="mfaEnabled ? 's-ok' : 's-risk'">{{ mfaEnabled ? '已启用' : '未启用' }}</b></p>
+
+            <div v-if="!mfaEnabled && !mfaEnrolling" class="ops-row">
+              <button class="btn-primary btn-sm" :disabled="acting" @click="doEnroll">启用 MFA</button>
+              <span class="muted small">登录时除密码外，还需验证器生成的 6 位动态口令</span>
+            </div>
+
+            <div v-else-if="mfaEnrolling" class="mfa-box">
+              <p class="muted">用验证器 App 扫码，或手动录入下面的密钥：</p>
+              <p class="mono secret">{{ mfaEnrolling.secret }}</p>
+              <details>
+                <summary class="muted small">otpauth 地址（扫码用）</summary>
+                <p class="mono small break">{{ mfaEnrolling.otpauth_uri }}</p>
+              </details>
+              <p class="warn-tip">
+                以下恢复码<b>只显示这一次</b>，请立即保存——手机丢失时它们是唯一的登录途径。
+              </p>
+              <ul class="codes">
+                <li v-for="c in mfaEnrolling.recovery_codes" :key="c" class="mono">{{ c }}</li>
+              </ul>
+              <div class="ops-row">
+                <input v-model="mfaCode" class="inp" placeholder="6 位动态口令" maxlength="6" />
+                <button
+                  class="btn-primary btn-sm"
+                  :disabled="acting || mfaCode.trim().length !== 6"
+                  @click="doVerify"
+                >验证并启用</button>
+              </div>
+            </div>
+
+            <div v-else class="ops-row">
+              <button class="btn-ghost btn-sm danger" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
+              <span class="muted small">关闭需出示动态口令或恢复码</span>
+            </div>
+          </section>
         </div>
-      </section>
-    </div>
+      </div>
+    </template>
+
     <!-- 吊销会话（审计 U5 收尾：全项目最后一处 window.confirm） -->
     <ConfirmDialog
       :open="!!revokeTarget" danger title="吊销会话"
@@ -320,6 +353,13 @@ async function doDisable() {
 <style scoped>
 .err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 .box { height: 220px; border-radius: var(--radius); }
+/* 汇总卡与分区之间留足竖向间距（原 grid.cols-2 整页混排 → 三块分区清晰分层） */
+.summary { margin-bottom: 16px; }
+.part { margin-top: 16px; }
+.part-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
+.part-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
 .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
 .checks li { display: flex; align-items: center; gap: 10px; font-size: var(--fs-13-5); }
 .c-name { font-weight: 500; }
