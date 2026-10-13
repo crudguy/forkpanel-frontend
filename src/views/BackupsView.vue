@@ -335,7 +335,7 @@ function fmtTime(t: number | null) {
       </section>
 
       <div class="card flush" v-if="plans.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-bid" /><col class="w-bkind" /><col class="w-btarget" /><col class="w-bdest" /><col class="w-bkeep" /><col class="w-benc" /><col class="w-bremote" /><col class="w-brun" /><col class="w-bacts" />
           </colgroup>
@@ -449,7 +449,7 @@ function fmtTime(t: number | null) {
           </button>
           <button class="btn-ghost btn-sm" @click="curArtifacts = null">关闭</button>
         </div>
-        <table v-if="curArtifacts.items.length" class="fixed">
+        <table v-if="curArtifacts.items.length" class="fixed" v-table-nav>
           <colgroup>
             <col class="w-afile" /><col class="w-asize" /><col class="w-atime" />
           </colgroup>

@@ -127,7 +127,7 @@ onMounted(load)
       <p v-else-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <div v-else-if="loading" class="skeleton box" />
       <div v-else class="card flush">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-uname" /><col class="w-urole" /><col class="w-uroots" /><col class="w-ustate" /><col class="w-umfa" /><col class="w-ulogin" /><col class="w-uacts" />
           </colgroup>

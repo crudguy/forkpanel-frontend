@@ -206,7 +206,7 @@ async function triggerWebhook(j: Job) {
       </section>
 
       <div class="card flush" v-if="jobs.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <!-- 列宽：命令为唯一弹性列；用户列窄屏隐藏（.col-opt，多为 root/面板用户）。 -->
           <colgroup>
             <col class="w-cjid" /><col class="w-cjexpr" /><col class="w-cjcmd" /><col class="w-cjuser" /><col class="w-cjlast" /><col class="w-cjnext" /><col class="w-cjacts" />

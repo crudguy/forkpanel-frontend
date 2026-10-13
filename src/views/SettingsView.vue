@@ -281,7 +281,7 @@ onMounted(async () => {
          故挂在锚点 #caps 上，topbar 系统信息胶囊一键直达。 -->
     <section id="caps" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
-      <table class="fixed">
+      <table class="fixed" v-table-nav>
         <!-- 列宽：原因为唯一弹性列（ellipsis + title 悬停）。 -->
         <colgroup>
           <col class="w-capk" /><col class="w-capst" /><col class="w-capbk" /><col class="w-caprs" />
@@ -317,7 +317,7 @@ onMounted(async () => {
       <p v-if="roleErr" class="err" role="alert">{{ roleErr }}</p>
 
       <div v-if="roles.length" class="card flush">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <!-- 列宽：角色名为唯一弹性列；删除按钮列定宽 90px。 -->
           <colgroup>
             <col class="w-rlname" /><col class="w-rlperm" /><col class="w-rlsrc" /><col class="w-rlacts" />

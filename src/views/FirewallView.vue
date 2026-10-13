@@ -210,7 +210,7 @@ onMounted(() => { load(); loadFail2ban() })
       </section>
 
       <div class="card flush" v-if="rules.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <!-- 列宽（站点表范式）：来源为唯一弹性列；方向列窄屏隐藏（.col-opt，恒为入站/出站枚举）。 -->
           <colgroup>
             <col class="w-fwport" /><col class="w-fwproto" /><col class="w-fwact" /><col class="w-fwdir" /><col class="w-fwsrc" /><col class="w-fwcmt" /><col class="w-fwown" /><col class="w-fwacts" />

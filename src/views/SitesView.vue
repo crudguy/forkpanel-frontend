@@ -1541,7 +1541,7 @@ async function batchDelete() {
            让浏览器按内容分配；此时再压一个 908px 的下限会把 436px 的容器撑出两倍滚动条
            （实测表宽 612 → 908），故窄屏直接撤掉。 -->
       <table class="fixed" aria-label="站点列表"
-        :style="narrow ? undefined : { minWidth: tableMinW + 'px' }">
+        :style="narrow ? undefined : { minWidth: tableMinW + 'px' }" v-table-nav>
         <!-- 站点表列宽独立于证书表：两表的内容分布完全不同（站点表 4 个操作按钮、
              根目录是长路径；证书表 2 个按钮、签发者是长文本），共用一套宽度必然顾此失彼。
              故两表各持一套 class——站点表 w-name/w-sdom/…/w-sacts，

@@ -210,7 +210,7 @@ function closeBrowse() { browse.value = null }
       </HelpDrawer>
 
       <div class="card flush" v-if="conns.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <!-- 列宽同站点表范式：库/文件为唯一弹性列（width:auto）吸收余量；
                操作列 270px 容下浏览/SQL/备份/恢复 4 个带文字按钮；
                备注列（022）固定 170px，ellipsis + title 兜长文。客户端列次要，窄屏隐藏。 -->
@@ -286,7 +286,7 @@ function closeBrowse() { browse.value = null }
         </div>
 
         <div class="card flush" v-if="browse.data">
-          <table>
+          <table v-table-nav>
             <thead><tr><th v-for="col in browse.data.columns" :key="col">{{ col }}</th></tr></thead>
             <tbody>
               <tr v-for="(r, i) in browse.data.rows" :key="i">

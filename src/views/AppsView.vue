@@ -367,7 +367,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     </EmptyState>
 
     <div v-else-if="apps.length" class="card flush">
-      <table class="fixed">
+      <table class="fixed" v-table-nav>
         <!-- 应用表列宽独立一套（不与站点/证书表共用 class，避免改一处漂一片） -->
         <colgroup>
           <col class="app-name" /><col class="app-rt" /><col class="app-port" /><col class="app-dom" />

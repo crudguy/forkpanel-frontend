@@ -7,12 +7,15 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import '@/styles/main.css'
 import { applyTheme } from '@/composables/theme'
+import { tableNav } from '@/composables/tableNav'
 
 applyTheme()
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+// C7：数据表键盘方向键行导航（roving tabindex）。给主数据 <table> 加 v-table-nav 即可。
+app.directive('table-nav', tableNav)
 
 // 全局事件：401 → 先清会话（丢弃残留的 me/权限，避免返回首页短暂渲染越权菜单）→ 跳登录
 window.addEventListener('panel:unauthorized', () => {

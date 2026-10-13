@@ -199,8 +199,11 @@ a:focus-visible, [tabindex]:focus-visible, [role="button"]:focus-visible,
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
-/* ⚠ 表格「方向键单元格导航」属更大交互改造（需拦截 keydown + 管理 active cell），
-   不在本次随手清范围；此处只保证任何带 role 的可聚焦元素都有品牌色焦点环。 */
+/* C7：行级键盘导航（v-table-nav 指令）焦点态——复用上面 [role="row"]:focus-visible 的
+   品牌色描边，这里补一个背景，使键控焦点与鼠标 hover 视觉一致 */
+tbody tr:focus-visible { background: var(--c-hover); }
+/* ⚠ 表格「方向键单元格级导航」属更大交互改造（需拦截 keydown + 管理 active cell），
+   仍延后；C7 落地的是更轻的行级 roving tabindex（↑/↓ 移动行、Home/End 跳首末）。 */
 
 /* ── 按钮变体 ── */
 .btn-primary { background: var(--gradient); border-color: transparent; color: #fff; font-weight: 600; box-shadow: var(--glow); }

@@ -198,7 +198,7 @@ onMounted(load)
     </EmptyState>
 
     <div v-else-if="sites.length" class="card flush">
-      <table class="fixed" aria-label="站点 WAF 配置">
+      <table class="fixed" aria-label="站点 WAF 配置" v-table-nav>
         <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发桶列按控件实测宽（输入框 92px + 内边距）。 -->
         <colgroup>
           <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfacts" />

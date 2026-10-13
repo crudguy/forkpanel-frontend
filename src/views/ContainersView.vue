@@ -288,7 +288,7 @@ async function saveRemark(c: Container, v: string) {
 
       <!-- ── 容器 ── -->
       <div class="card flush" v-if="tab === 'containers' && containers.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <colgroup>
             <!-- 列宽（站点表范式）：镜像为唯一弹性列（width:auto）吸收余量；操作列 320px
                  按「4 个带文字按钮」实测（各 67px + 3×6 间距 + 单元格内边距 26px）；
@@ -337,7 +337,7 @@ async function saveRemark(c: Container, v: string) {
 
       <!-- ── 镜像 ── -->
       <div class="card flush" v-else-if="images.length">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <!-- 列宽与上方容器表同范式；前缀独立（w-i*），不与容器表 w-* 混用。
                镜像 ID 列次要，窄屏隐藏（.col-opt）。 -->
           <colgroup>

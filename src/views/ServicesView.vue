@@ -611,7 +611,7 @@ async function doConfirmed() {
         <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
         <div v-if="loading" class="skeleton box" />
         <template v-else>
-          <table>
+          <table v-table-nav>
             <colgroup>
               <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
             </colgroup>

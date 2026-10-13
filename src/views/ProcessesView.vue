@@ -197,7 +197,7 @@ async function doKill() {
         <!-- B8：容器自己滚 + 表头吸顶（.t-scroll）。进程常有数百行，滚动时看不见列头
              就只能靠记住列序——这是"信息密度"之外同样致命的可读性问题。 -->
         <div class="procs-scroll t-scroll">
-        <table>
+        <table v-table-nav>
           <colgroup>
             <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
           </colgroup>

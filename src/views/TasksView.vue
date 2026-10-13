@@ -91,7 +91,7 @@ onUnmounted(stopPoll)
     <div v-if="loading" class="skeleton box" />
     <template v-else>
       <div class="card flush">
-        <table class="fixed">
+        <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-tid" /><col class="w-tname" /><col class="w-tstate" /><col class="w-tprog" /><col class="w-tstart" /><col class="w-tacts" />
           </colgroup>

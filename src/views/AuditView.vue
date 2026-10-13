@@ -185,7 +185,7 @@ onMounted(load)
 
       <template v-else>
         <div class="card flush">
-          <table class="fixed">
+          <table class="fixed" v-table-nav>
             <!-- 列宽：目标为唯一弹性列；时间/结果/箭头列定宽，避免 19 字符时间戳换行。 -->
             <colgroup>
               <col class="w-atime" /><col class="w-aactor" /><col class="w-aaction" /><col class="w-atarget" /><col class="w-aresult" /><col class="w-achev" />

@@ -190,7 +190,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     </EmptyState>
 
     <div v-else-if="certs.length" class="card flush">
-      <table class="fixed" aria-label="证书列表">
+      <table class="fixed" aria-label="证书列表" v-table-nav>
         <!-- 证书表列宽独立一套（与站点表互不干扰）：域名弹性吸收剩余，其余固定。 -->
         <colgroup>
           <col class="cert-dom" /><col class="cert-site" /><col class="cert-src" /><col class="cert-exp" /><col class="cert-left" /><col class="cert-auto" /><col class="cert-acts" />

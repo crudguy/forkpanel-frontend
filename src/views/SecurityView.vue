@@ -211,7 +211,7 @@ async function doDisable() {
 
       <section class="card">
         <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
-        <table v-if="sessions.length" class="fixed">
+        <table v-if="sessions.length" class="fixed" v-table-nav>
           <!-- 列宽（站点表范式）：用户为唯一弹性列；吊销按钮列定宽 100px。 -->
           <colgroup>
             <col class="w-suser" /><col class="w-srole" /><col class="w-sctime" /><col class="w-sidle" /><col class="w-sacts" />
