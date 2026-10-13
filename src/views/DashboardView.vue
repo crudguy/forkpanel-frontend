@@ -106,7 +106,20 @@ const ovError = ref('')
 
 async function poll() {
   try {
-    const r = await api.get<Overview>(API.system.overview()); apply(r); ovError.value = ''
+    // CPU 是「区间使用率」而不是瞬时值：overview 每次 HTTP 请求现算一次快照，窗口＝
+    // 距上一次 snapshot（通常是采集循环几十~几百毫秒前那次），而 SSE 推送与两个监控页
+    // 用的是采集循环写进环形缓冲的整周期值。三者不同源 ⇒ 同一 ts 也会给出不同读数
+    // （实测 51.14% vs 54.41%；负载抖动时更夸张：23.19% vs 72.80%）。
+    // 首屏就把 CPU 对齐到环形缓冲末样本，之后 SSE 推送（同源自 ring）自然接续。
+    // 根治要后端让 overview 复用环形缓冲、不再独占采样基准——那里属他线 WIP，暂不动。
+    const [r, rt] = await Promise.all([
+      api.get<Overview>(API.system.overview()),
+      api.get<{ samples?: { cpu?: number }[] }>(`${API.metrics.realtime()}?since=1`).catch(() => null),
+    ])
+    const s = rt?.samples
+    const last = s && s.length ? s[s.length - 1] : null
+    if (last && typeof last.cpu === 'number') r.cpu_pct = last.cpu
+    apply(r); ovError.value = ''
   } catch (e) {
     if (isUnsupported(e)) ovError.value = errorText(e)
   }
