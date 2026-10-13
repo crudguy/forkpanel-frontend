@@ -12,6 +12,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { SystemSnapshot } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
+import { cpuTone } from '@/composables/metricTone'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -107,9 +108,9 @@ const hdrItems = computed<MetricItem[]>(() => {
   const memH = h && h.mem_total_kib ? (h.mem_used_kib / h.mem_total_kib * 100) : 0
   const diskH = h && h.disk_total_bytes ? (h.disk_used_bytes / h.disk_total_bytes * 100) : 0
   return [
-    { label: 'CPU', value: (h?.cpu ?? 0).toFixed(1), unit: '%', icon: 'cpu', tone: 'primary', progress: h?.cpu },
+    { label: 'CPU', value: (h?.cpu ?? 0).toFixed(1), unit: '%', icon: 'cpu', tone: cpuTone(h?.cpu), progress: h?.cpu },
     { label: '内存', value: memH.toFixed(1), unit: '%', icon: 'disk', tone: 'cyan', progress: memH },
-    { label: '负载', value: (h?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'gauge', tone: 'warn' },
+    { label: '负载', value: (h?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'gauge', tone: 'load' },
     { label: '磁盘', value: diskH.toFixed(1), unit: '%', icon: 'database', tone: 'ok', progress: diskH },
   ]
 })

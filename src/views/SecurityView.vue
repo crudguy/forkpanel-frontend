@@ -74,7 +74,7 @@ const summaryCards = computed<MetricItem[]>(() => {
       sub: total ? `合规率 ${rate}%` : undefined, progress: rate },
     { label: '风险', value: String(risks.value), icon: 'alert', tone: 'danger',
       sub: risks.value ? '需处理' : '无风险项' },
-    { label: '不适用', value: String(naCount.value), icon: 'info', tone: 'primary',
+    { label: '不适用', value: String(naCount.value), icon: 'info', tone: 'neutral',
       sub: '当前环境未覆盖' },
   ]
 })

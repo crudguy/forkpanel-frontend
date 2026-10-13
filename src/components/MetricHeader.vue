@@ -1,4 +1,6 @@
 <script lang="ts">
+import type { MetricTone } from '@/composables/metricTone'
+
 /** 指标头数据项。导出给两个监控页做类型标注，避免各自复制一份接口后漂移。 */
 export interface MetricItem {
   /** 卡片标识（概览页布局个性化用：cpu/mem/disk/load/net；其余场景可省略） */
@@ -10,7 +12,8 @@ export interface MetricItem {
   /** 副行（总量 / 出站速率等）；见 MetricCard 的恒定预留行说明 */
   sub?: string
   icon?: string
-  tone?: 'primary' | 'cyan' | 'ok' | 'warn' | 'danger'
+  /** 语义色。类型与阈值刻度见 composables/metricTone.ts（单一事实源，勿在此另写联合） */
+  tone?: MetricTone
   progress?: number
 }
 </script>

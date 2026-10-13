@@ -12,6 +12,7 @@ import { API } from '@/api/endpoints'
 import { CAP, fmtDateTime, type ServerNote } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
+import { cpuTone, type MetricTone } from '@/composables/metricTone'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
@@ -121,13 +122,13 @@ const ovCards = computed<MetricItem[]>(() => {
   const du = tb ? 1024 : 1
   const dUnit = tb ? 'TB' : 'GB'
   return [
-    { id: 'cpu', label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: 'primary', progress: Number(cpu.value) },
+    { id: 'cpu', label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: cpuTone(Number(cpu.value)), progress: Number(cpu.value) },
     { id: 'mem', label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GB',
       sub: `总量 ${((ov.value?.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB`,
       icon: 'server', tone: 'cyan', progress: memPct.value },
     { id: 'disk', label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
       sub: `总量 ${(totalG / du).toFixed(1)} ${dUnit}`,
-      icon: 'disk', tone: 'primary', progress: diskPct.value },
+      icon: 'disk', tone: 'ok', progress: diskPct.value },
     { id: 'load', label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'bolt', tone: loadTone.value },
     { id: 'net', label: '网络', value: `↓ ${fmtNet(ov.value?.net_in_bps)}`,
       sub: `↑ ${fmtNet(ov.value?.net_out_bps)}`, icon: 'network', tone: 'cyan' },
@@ -165,9 +166,9 @@ const memPct = computed(() => ov.value && ov.value.mem_total_kib
   ? (ov.value.mem_used_kib / ov.value.mem_total_kib * 100) : 0)
 const diskPct = computed(() => ov.value && ov.value.disk_total_bytes
   ? ((ov.value.disk_used_bytes ?? 0) / ov.value.disk_total_bytes * 100) : 0)
-const loadTone = computed<'primary' | 'warn' | 'danger'>(() => {
+const loadTone = computed<MetricTone>(() => {
   const l = ov.value?.load1 ?? 0
-  return l > 4 ? 'danger' : l > 2 ? 'warn' : 'primary'
+  return l > 4 ? 'danger' : l > 2 ? 'warn' : 'load'
 })
 
 // ── 运行状态总览（替换原"快捷入口"导航网格：侧边栏已覆盖导航，这里改呈真实状态）──

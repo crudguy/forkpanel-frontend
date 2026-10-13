@@ -13,6 +13,7 @@ import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
+import { cpuTone } from '@/composables/metricTone'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -122,11 +123,11 @@ const diskPct = computed(() =>
 /** 指标头数据项（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列 */
 const hdrItems = computed<MetricItem[]>(() => [
   { label: 'CPU', value: (last.value?.cpu ?? 0).toFixed(1), unit: '%',
-    icon: 'cpu', tone: 'primary', progress: last.value?.cpu },
-  { label: '内存', value: memPct.value.toFixed(1), unit: '%',
-    icon: 'disk', tone: 'cyan', progress: memPct.value },
-  { label: '负载', value: (last.value?.load1 ?? 0).toFixed(2), unit: '1m',
-    icon: 'gauge', tone: 'warn' },
+      icon: 'cpu', tone: cpuTone(last.value?.cpu), progress: last.value?.cpu },
+    { label: '内存', value: memPct.value.toFixed(1), unit: '%',
+      icon: 'disk', tone: 'cyan', progress: memPct.value },
+    { label: '负载', value: (last.value?.load1 ?? 0).toFixed(2), unit: '1m',
+      icon: 'gauge', tone: 'load' },
   { label: '磁盘', value: diskPct.value.toFixed(1), unit: '%',
     icon: 'database', tone: 'ok', progress: diskPct.value },
 ])
