@@ -41,6 +41,9 @@ const truncated = ref(false)
 const loading = ref(false)
 const error = ref('')
 const showHidden = ref(false)
+/** 排序：直接走后端 list 的 sort 参数（已支持 name/size/modified，dirs_first 恒真）。
+ *  前端不再本地排序——服务端才是权威，本地排会让「截断 1000 项」的显示与真实顺序脱节。 */
+const sortBy = ref<'name' | 'size' | 'modified'>('name')
 
 const editing = ref<{ name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
 const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
@@ -71,7 +74,7 @@ async function load() {
   loading.value = true; error.value = ''
   try {
     const r = await api.get<ListResp>(API.files.list(), {
-      params: { path: path.value, hidden: showHidden.value },
+      params: { path: path.value, hidden: showHidden.value, sort: sortBy.value },
     })
     if (seq !== loadSeq) return   // 已有更新的请求在途，丢弃本次结果
     entries.value = r.entries ?? []; truncated.value = r.truncated
@@ -85,6 +88,29 @@ async function load() {
 
 onMounted(load)
 watch(showHidden, load)
+watch(sortBy, load)
+
+// ── 面包屑（A7）：路径分段可点，直达任意上级 ──
+// 后端返回的 path 是规范路径（resolve 后的 SafePath 显示值），分段即可逆：
+// 每段 cumulative 拼回去就是合法路径，无需在前端解析 `..`。
+const crumbs = computed(() => {
+  const segs = path.value.split('/').filter(Boolean)
+  const out: { label: string; to: string }[] = [{ label: '根目录', to: '/' }]
+  let acc = ''
+  for (const s of segs) { acc += '/' + s; out.push({ label: s, to: acc }) }
+  return out
+})
+/** 超过 6 段时中段折叠为「…」（可点，跳到折叠前一级）——根目录 + 5 级深度足够定位，
+ *  更深的路径整行会挤爆表头。折叠段取第 2 段（根目录之后第一级）作为落脚点。 */
+const CrumbsShown = 6
+const crumbsVisible = computed(() => {
+  const c = crumbs.value
+  if (c.length <= CrumbsShown) return { items: c, collapsedFrom: -1 }
+  const head = c.slice(0, 2)
+  const tail = c.slice(-3)
+  return { items: [...head, { label: '…', to: c[1].to }, ...tail], collapsedFrom: 2 }
+})
+function goto(p: string) { path.value = p; load() }
 
 function up() {
   const p = path.value.replace(/\/+$/, '')
@@ -337,7 +363,15 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
   <PageLayout>
     <div class="page-head">
       <h2 class="page-title"><Icon name="folder" :size="18" /> 文件</h2>
-      <span class="page-sub"><code class="cwd">{{ path }}</code></span>
+      <!-- A7 面包屑：路径分段可点直达；原先是整行 <code> 全路径 + 只有「上级」，
+           深目录要连点多级。当前目录（末段）为纯文本，其余为按钮。 -->
+      <nav class="crumbs" aria-label="路径">
+        <template v-for="(c, i) in crumbsVisible.items" :key="c.to">
+          <span v-if="i > 0" class="sep" aria-hidden="true">/</span>
+          <button v-if="i < crumbsVisible.items.length - 1" class="crumb" type="button" :title="`跳到 ${c.to}`" @click="goto(c.to)">{{ c.label }}</button>
+          <span v-else class="crumb now" :title="path">{{ c.label }}</span>
+        </template>
+      </nav>
       <span class="spacer" />
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
@@ -383,7 +417,15 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
         </colgroup>
         <thead><tr>
           <th v-if="canWrite" class="chk"><input type="checkbox" aria-label="全选" :checked="allChecked" @change="allChecked = !allChecked" /></th>
-          <th>名称</th><th>大小</th><th>权限</th><th class="col-opt">属主</th><th>修改时间</th><th />
+          <!-- A7 排序：走后端 sort 参数（dirs_first 恒真）。点击已在生效的列头则
+               在 升/降 间不切换——后端只返回一种顺序，前端再反序会让「截断 1000 项」
+               与实际顺序脱节；改排序即重新拉取，selected 由 load 清空。 -->
+          <th class="sortable" :class="{ on: sortBy === 'name' }" @click="sortBy = 'name'">名称</th>
+          <th class="sortable num" :class="{ on: sortBy === 'size' }" @click="sortBy = 'size'">大小</th>
+          <th>权限</th>
+          <th class="col-opt">属主</th>
+          <th class="sortable num" :class="{ on: sortBy === 'modified' }" @click="sortBy = 'modified'">修改时间</th>
+          <th />
         </tr></thead>
         <tbody>
           <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
@@ -470,7 +512,18 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 </template>
 
 <style scoped>
-.cwd { font-family: var(--mono); font-size: var(--fs-12-5); color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
+/* A7 面包屑：替换原整行 cwd 全路径。分段按钮 + 分隔符，当前级加粗纯文本。
+   走 page-head 既有字号（--fs-12-5 与旧 .cwd 一致），不新增视觉变量。 */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; font-size: var(--fs-12-5); }
+.crumbs .sep { color: var(--c-text-mute); user-select: none; }
+.crumbs .crumb { background: none; border: none; padding: 2px 4px; border-radius: 5px; cursor: pointer;
+  font: inherit; color: var(--c-text-dim); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs .crumb:hover { background: var(--c-hover); color: var(--c-text); }
+.crumbs .crumb.now { font-weight: 600; color: var(--c-text); cursor: default; }
+/* A7 排序表头：生效列给主色 + 手型；点击切换（后端排序）。 */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--c-text); }
+th.sortable.on { color: var(--c-primary); }
 .hid { display: flex; align-items: center; gap: 5px; font-size: var(--fs-12); margin: 0; color: var(--c-text-dim); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
