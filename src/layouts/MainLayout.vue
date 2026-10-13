@@ -88,6 +88,31 @@ function openPwdDialog() {
   userMenu.value = false
   pwdOpen.value = true
 }
+
+// ── 用户菜单（下拉）的定位 ───────────────────────────────────────────
+// 遮罩与菜单都 Teleport 到 body（原因见模板注释：顶栏的 backdrop-filter 会成为
+// position:fixed 的包含块，留在顶栏里的遮罩只覆盖顶栏那一条、点页面关不掉菜单）。
+// 菜单跟着脱离顶栏后就失去 absolute 锚点，改 fixed 由这里按触发按钮**实测**下发坐标；
+// 窗口缩放时重算（顶栏在窄屏右侧元素会变少，按钮右移）。
+const userBtn = ref<HTMLElement | null>(null)
+const menuPos = ref({ top: '0px', right: '0px' })
+function placeUserMenu() {
+  const r = userBtn.value?.getBoundingClientRect()
+  if (!r) return
+  // 右偏移用 clientWidth（不含滚动条）算，否则会比顶栏内边距多出一个滚动条宽度
+  menuPos.value = {
+    top: `${Math.round(r.bottom + 6)}px`,
+    right: `${Math.round(document.documentElement.clientWidth - r.right)}px`,
+  }
+}
+function toggleUserMenu() {
+  // 先量后开：否则首帧菜单会先落在 (0,0) 再跳到位
+  if (!userMenu.value) placeUserMenu()
+  userMenu.value = !userMenu.value
+}
+function onWinResize() { if (userMenu.value) placeUserMenu() }
+onMounted(() => window.addEventListener('resize', onWinResize))
+onUnmounted(() => window.removeEventListener('resize', onWinResize))
 const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
 
 // 通知未读数：原先只有「通知」页内部才显示，备份失败/恢复失败这类"必须知道"的事件
@@ -258,10 +283,11 @@ function logout() {
              触发器与下拉面板分离（HTML 不允许 button 嵌套 button）。 -->
         <div class="user-wrap">
           <button
+            ref="userBtn"
             type="button" class="user"
             :aria-expanded="userMenu" aria-haspopup="menu"
             :aria-label="`用户菜单（${auth.me?.user ?? ''}）`"
-            @click="userMenu = !userMenu"
+            @click="toggleUserMenu"
             @keydown.escape="userMenu = false"
           >
             <span class="avatar">{{ initial }}</span>
@@ -269,42 +295,51 @@ function logout() {
             <Icon name="chevron" :size="14" class="caret" />
           </button>
 
-          <div v-if="userMenu" class="backdrop" @click.stop="userMenu = false" />
-          <div v-if="userMenu" class="menu">
-            <div class="menu-head">
-              <span class="avatar sm">{{ initial }}</span>
-              <div>
-                <div class="m-name">{{ auth.me?.user }}</div>
-                <div class="m-sub">{{ roleLabel(auth.me?.role) }}</div>
+          <!-- ⭐ 必须 Teleport 到 body：本菜单挂在 .topbar 里，而 topbar 有
+               `backdrop-filter: blur(14px) saturate(150%)` —— **backdrop-filter 会让该
+               元素成为 position:fixed 的包含块**，`.backdrop{position:fixed;inset:0}`
+               于是按顶栏盒子解算（实测遮罩只有 1036×57，而视口是 1280×577）→
+               点内容区根本碰不到遮罩、菜单关不掉（用户报「点其他地方关不了」）。
+               移到 body 下就与页面结构无关（同 ColumnPicker 的处置）。菜单随之脱离
+               absolute 锚点，改 fixed + 由 placeUserMenu() 按触发按钮实测下发坐标。 -->
+          <Teleport to="body">
+            <div v-if="userMenu" class="backdrop" @click="userMenu = false" />
+            <div v-if="userMenu" class="menu" :style="menuPos">
+              <div class="menu-head">
+                <span class="avatar sm">{{ initial }}</span>
+                <div>
+                  <div class="m-name">{{ auth.me?.user }}</div>
+                  <div class="m-sub">{{ roleLabel(auth.me?.role) }}</div>
+                </div>
               </div>
-            </div>
-            <!-- 表格密度（B8）：三档切换后整页表格立刻跟着变，刷新后仍保持。
-                 用 role=group + aria-pressed 表达"三选一"，不靠颜色单独承载选中态。 -->
-            <div class="mi-group">
-              <span class="mi-label" id="tbl-density-label">表格密度</span>
-              <div class="seg" role="group" aria-labelledby="tbl-density-label">
-                <button v-for="o in DENSITY_OPTIONS" :key="o.value" type="button" class="seg-b"
-                  :class="{ on: density === o.value }" :title="o.hint"
-                  :aria-pressed="density === o.value" @click="setDensity(o.value)">{{ o.label }}</button>
+              <!-- 表格密度（B8）：三档切换后整页表格立刻跟着变，刷新后仍保持。
+                   用 role=group + aria-pressed 表达"三选一"，不靠颜色单独承载选中态。 -->
+              <div class="mi-group">
+                <span class="mi-label" id="tbl-density-label">表格密度</span>
+                <div class="seg" role="group" aria-labelledby="tbl-density-label">
+                  <button v-for="o in DENSITY_OPTIONS" :key="o.value" type="button" class="seg-b"
+                    :class="{ on: density === o.value }" :title="o.hint"
+                    :aria-pressed="density === o.value" @click="setDensity(o.value)">{{ o.label }}</button>
+                </div>
               </div>
-            </div>
-            <!-- 时区（C4）：绝对时间（下发时间/到期日/扫描时刻）按本地或 UTC 显示，刷新后保持。
-                 与密度同款 role=group + aria-pressed。 -->
-            <div class="mi-group">
-              <span class="mi-label" id="time-mode-label">时区</span>
-              <div class="seg" role="group" aria-labelledby="time-mode-label">
-                <button v-for="o in TIME_MODE_OPTIONS" :key="o.value" type="button" class="seg-b"
-                  :class="{ on: timeMode === o.value }" :title="o.hint"
-                  :aria-pressed="timeMode === o.value" @click="setTimeMode(o.value)">{{ o.label }}</button>
+              <!-- 时区（C4）：绝对时间（下发时间/到期日/扫描时刻）按本地或 UTC 显示，刷新后保持。
+                   与密度同款 role=group + aria-pressed。 -->
+              <div class="mi-group">
+                <span class="mi-label" id="time-mode-label">时区</span>
+                <div class="seg" role="group" aria-labelledby="time-mode-label">
+                  <button v-for="o in TIME_MODE_OPTIONS" :key="o.value" type="button" class="seg-b"
+                    :class="{ on: timeMode === o.value }" :title="o.hint"
+                    :aria-pressed="timeMode === o.value" @click="setTimeMode(o.value)">{{ o.label }}</button>
+                </div>
               </div>
+              <button class="mi" @click="openPwdDialog">
+                <Icon name="key" :size="16" /> 修改密码
+              </button>
+              <button class="mi" @click="logout">
+                <Icon name="logout" :size="16" /> 退出登录
+              </button>
             </div>
-            <button class="mi" @click="openPwdDialog">
-              <Icon name="key" :size="16" /> 修改密码
-            </button>
-            <button class="mi" @click="logout">
-              <Icon name="logout" :size="16" /> 退出登录
-            </button>
-          </div>
+          </Teleport>
         </div>
       </header>
 
@@ -388,9 +423,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .backdrop { position: fixed; inset: 0; z-index: 40; }
 /* 宽度 168 → 200px：表格密度三档分段控件要并排放下（3×56 + 内边距），
-   原先 168px 会把「宽松」挤出去。 */
+   原先 168px 会把「宽松」挤出去。
+   fixed（不是 absolute）：菜单已 Teleport 到 body、脱离了 .user-wrap 的锚点，
+   坐标由 placeUserMenu() 实测下发（top = 按钮底 + 6px；right = 视口右 − 按钮右）。
+   z-index 41 与 main.css 层级总表一致（40 遮罩 / 41 菜单）。 */
 .menu {
-  position: absolute; right: 0; top: 46px; z-index: 41; width: 200px;
+  position: fixed; z-index: 41; width: 200px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
