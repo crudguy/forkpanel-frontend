@@ -35,6 +35,100 @@ import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import NginxEditor from '@/components/NginxEditor.vue'
+import ColumnPicker from '@/components/ColumnPicker.vue'
+import { useNarrow, useTableCols } from '@/composables/useTablePrefs'
+
+// ── A3 列治理：10 列挤在内容区 → 主表 6 列 + 行展开 ──
+// 默认收起 4 个次要列（根目录 / 类型 / 特性 / 上次下发），主表只剩
+// 「站点 / 域名 / WAF / 状态 / TLS / 操作」（外加选择列）。想要的列可在「列」里
+// 勾回来（记在本机，下次仍有效）。
+// ⭐收起的列**不会丢信息**：根目录此前被截成 `/home/…` 正是报告点名的痛点，
+//   收起后它的完整取值在**行展开**里以等宽文本呈现并可一键复制——比
+//   "在窄列里截断 + 靠 title 悬停"可靠得多。
+const SITE_COLS = [
+  // 名称是这张表的**身份列**：没有它，"站点列表"就只剩一堆域名和按钮。
+  // 且它同时是弹性列的兜底（见 elasticId）——允许隐藏会让整表既无身份列、
+  // 又无弹性列（余量被平摊成空转留白），故标记为不可隐藏。
+  { id: 'name', label: '名称', w: 200, locked: true },
+  { id: 'dom', label: '域名', w: 180 },
+  { id: 'root', label: '根目录', w: 220 }, // 弹性列：这个值只是它的**下限**
+  { id: 'kind', label: '类型', w: 64 },
+  { id: 'feat', label: '特性', w: 84 },
+  { id: 'waf', label: 'WAF', w: 116 },
+  { id: 'state', label: '状态', w: 120 },
+  { id: 'applied', label: '上次下发', w: 108 },
+  { id: 'tls', label: 'TLS', w: 84 },
+]
+// 解构成顶层 ref：模板里 `cols.hidden` 拿到的是 Ref 对象（只有 setup 顶层的 ref
+// 才会自动解包），故必须拆出来用
+const { hidden: hiddenCols, shown: rawShown, toggle: toggleCol, reset: resetCols } =
+  useTableCols('sites.main', ['root', 'kind', 'feat', 'applied'])
+
+/** 锁定列（名称）不受偏好影响：本机 localStorage 里若存着脏值（手改 / 旧版本写坏），
+ *  仅靠选择器把勾选框置灰挡不住——必须在这里兜住，否则渲染层会真的把它藏掉。 */
+const LOCKED_IDS = SITE_COLS.filter((c) => c.locked).map((c) => c.id)
+
+/** 窄屏隐藏的次要列：与 main.css 里 `.col-opt` 的标记一致。
+ *  ⚠️ 由 JS 判而不是只交给 CSS：colgroup 列数 / 行展开的 colspan 都得跟着少这 4 列，
+ *  只靠 CSS 隐藏时 JS 仍按 11 列算——实测（480px + 全列开启）表格凭空多出 4 个空列、
+ *  操作列被压到 58px、展开行错位。 */
+const NARROW_HIDDEN = ['root', 'kind', 'feat', 'applied']
+
+const narrow = useNarrow()
+
+/** 「这一列现在渲染吗」的唯一出口：锁定列恒真，其余看偏好，窄屏再砍掉次要列。 */
+const shown = (id: string) =>
+  LOCKED_IDS.includes(id) || (!(narrow.value && NARROW_HIDDEN.includes(id)) && rawShown(id))
+
+/** 唯一弹性列：`table-layout:fixed` 下若所有列都有固定宽度，多出来的宽度会被**平摊
+ *  到每一列**变成空转留白（此前踩过）。根目录是首选弹性列；它被隐藏时让域名吃余量，
+ *  再退到名称（名称恒可见，故兜底一定成立）。
+ *  ⚠️ 弹性列**不能靠 min-width 兜底**：实测 `col` 与 `th` 上的 min-width 在
+ *  `table-layout:fixed` 下都被忽略（三态量出来都是 9px）。真正管用的是给 `<table>`
+ *  一个下限宽度（见 tableMinW）——它小于内容时表格横向滚动，弹性列就不会被压成 0。 */
+const elasticId = computed(() => ['root', 'dom', 'name'].find((id) => shown(id)) ?? null)
+
+/** 表格下限宽度 = 勾选列宽之和 + 选择列 + 操作列。
+ *  低于它就让表格横向滚动（容器 .card.flush 自带 overflow-x:auto）——
+ *  11 列在 1160px 表宽里本来就不可能都可读，硬挤的结果是某列被压到 0。 */
+const SEL_W = 40
+/** 与 main.css `@media (max-width:1799px) { col.w-sacts }` 一致；≥1800 时容器够宽，
+ *  下限根本用不上，故这里恒取窄档值即可，不必把断点也复制到 JS。 */
+const ACTS_W = 168
+const tableMinW = computed(
+  () => SEL_W + ACTS_W + SITE_COLS.filter((c) => shown(c.id)).reduce((s, c) => s + c.w, 0),
+)
+/** 行展开 / 空态行的 colspan：必须等于**实际渲染的列数**（含选择列与操作列），
+ *  写死 11 会在用户收起列之后错位。 */
+const colCount = computed(() => 2 + SITE_COLS.filter((c) => shown(c.id)).length)
+
+// 行展开：完整取值（等宽、不截断）
+const expanded = ref<number[]>([])
+const isExpanded = (id: number) => expanded.value.includes(id)
+function toggleExpand(id: number) {
+  expanded.value = expanded.value.includes(id)
+    ? expanded.value.filter((x) => x !== id)
+    : [...expanded.value, id]
+}
+async function copyText(t: string, what: string) {
+  try {
+    await navigator.clipboard.writeText(t)
+    toast(`${what}已复制`)
+  } catch {
+    // 非安全上下文（http 域名访问）或无剪贴板权限时 clipboard API 会抛——
+    // 给一句可操作的提示，别让按钮"点了没反应"
+    toast(`复制失败，请手动选中${what}后复制`, 'warn')
+  }
+}
+/** 特性的文字化（图标列收起后仍需知道开了什么）：图标本身不带文字，读屏也读不到 */
+function featText(s: Site): string {
+  const out: string[] = []
+  if (s.auth_basic) out.push('Basic Auth')
+  if (s.log_access || s.log_error) out.push('独立日志')
+  if ((s.ip_allow ?? []).length) out.push('IP 白名单')
+  else if ((s.ip_deny ?? []).length) out.push('IP 黑名单')
+  return out.length ? out.join(' · ') : '未启用'
+}
 
 // Site / Cert 已移入 src/api/types.ts（跨视图共享类型，避免各存删减副本而漂移）
 
@@ -1429,6 +1523,13 @@ async function batchDelete() {
       <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
       <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
       <span class="spacer" />
+      <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
+           偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
+           怎么看"，不是面板级共享配置，故不占用后端 settings。
+           两处不出这个入口：① 空列表——没有表可择列；② 窄屏——此时次要列由 JS 统一
+           强制隐藏（见 NARROW_HIDDEN），勾选框会呈现"勾了也不生效"的假象。 -->
+      <ColumnPicker v-if="sites.length && !narrow" :cols="SITE_COLS" :hidden="hiddenCols" label="站点列表"
+        @toggle="toggleCol" @reset="resetCols" />
       <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
       <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
         <Icon name="plus" :size="13" /> 新建站点
@@ -1436,44 +1537,77 @@ async function batchDelete() {
     </div>
     <div v-if="loading && !sites.length" class="skeleton box" />
     <div v-else-if="sites.length" class="card flush">
-      <table class="fixed" aria-label="站点列表">
+      <!-- 下限宽度只给 fixed 布局：窄屏（<=720px）main.css 会把 table-layout 转成 auto，
+           让浏览器按内容分配；此时再压一个 908px 的下限会把 436px 的容器撑出两倍滚动条
+           （实测表宽 612 → 908），故窄屏直接撤掉。 -->
+      <table class="fixed" aria-label="站点列表"
+        :style="narrow ? undefined : { minWidth: tableMinW + 'px' }">
         <!-- 站点表列宽独立于证书表：两表的内容分布完全不同（站点表 4 个操作按钮、
              根目录是长路径；证书表 2 个按钮、签发者是长文本），共用一套宽度必然顾此失彼。
-             故两表各持一套 class——站点表 w-name/w-sdom/w-sroot/…/w-sacts，
+             故两表各持一套 class——站点表 w-name/w-sdom/…/w-sacts，
              证书表 w-dom/w-iss/…/w-cst/w-acts（含同为「状态」列的 w-cst），互不影响。 -->
+        <!-- A3：列可显隐。colgroup 与 SITE_COLS 同序遍历，`<col>` 只跟 shown() 同步——
+             列数必须与渲染出的 th/td 完全一致，少一个就会整表错位（fixed 布局按序分发宽度）。
+             宽度由 SITE_COLS 的 `w` 直接给（inline style）：**不写进 CSS**，否则同一份
+             列宽在 JS 与 CSS 各存一套，改一处漏一处必然漂移。
+             唯一弹性列由 elasticId 决定，取 auto 吃掉剩余宽度。 -->
         <colgroup>
-          <col class="w-sel" /><col class="w-name" /><col class="w-sdom" /><col class="w-sroot" /><col class="w-kind" /><col class="w-feat" /><col class="w-waf" /><col class="w-st" /><col class="w-sapp" /><col class="w-tls" /><col class="w-sacts" />
+          <col class="w-sel" />
+          <!-- 数据列不给 class：宽度已在 inline style 里。曾经的 w-sdom/w-st/… 若留着，
+               读者 grep 不到对应 CSS 会以为是死代码；而证书表恰好也有 w-dom（24%），
+               同名会让"这一列到底多宽"要翻两处才能回答。 -->
+          <template v-for="c in SITE_COLS" :key="c.id">
+            <col v-if="shown(c.id)"
+              :style="c.id === elasticId ? { width: 'auto' } : { width: c.w + 'px' }" />
+          </template>
+          <col class="w-sacts" />
         </colgroup>
         <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
-             窄屏（<=720px）由 main.css 公共规则隐藏，9 列降到 6 列才放得下。 -->
+             窄屏（<=720px）由 main.css 公共规则隐藏。 -->
         <thead><tr>
           <th scope="col" class="col-sel"><input type="checkbox" :checked="allSelected"
             @change="allSelected = ($event.target as HTMLInputElement).checked"
             :disabled="!visibleSites.length" aria-label="全选站点" /></th>
-          <th scope="col">名称</th><th scope="col">域名</th><th scope="col" class="col-opt">根目录</th>
-          <th scope="col" class="col-opt">类型</th><th scope="col" class="col-opt">特性</th>
-          <th scope="col">WAF</th><th scope="col">状态</th>
-          <th scope="col" class="col-opt">上次下发</th>
-          <th scope="col">TLS</th><th scope="col">操作</th>
+          <th v-if="shown('name')" scope="col">名称</th>
+          <th v-if="shown('dom')" scope="col">域名</th>
+          <th v-if="shown('root')" scope="col" class="col-opt">根目录</th>
+          <th v-if="shown('kind')" scope="col" class="col-opt">类型</th>
+          <th v-if="shown('feat')" scope="col" class="col-opt">特性</th>
+          <th v-if="shown('waf')" scope="col">WAF</th>
+          <th v-if="shown('state')" scope="col">状态</th>
+          <th v-if="shown('applied')" scope="col" class="col-opt">上次下发</th>
+          <th v-if="shown('tls')" scope="col">TLS</th>
+          <th scope="col">操作</th>
         </tr></thead>
         <tbody>
           <!-- 过滤无结果 ≠ 没有站点：单列一行说明，避免落到「暂无站点」空态造成误判 -->
           <tr v-if="!visibleSites.length">
-            <td colspan="11" class="dim">没有匹配「{{ q }}」的站点</td>
+            <!-- colspan 必须按**实际渲染列数**算：用户收起列之后写死 11 会错位 -->
+            <td :colspan="colCount" class="dim">没有匹配「{{ q }}」的站点</td>
           </tr>
-          <tr v-for="s in visibleSites" :key="s.id">
+          <!-- 用 <template v-for> 包住「主行 + 展开行」：展开行是同一站点的兄弟 <tr>，
+               塞进 <tr v-for> 内部不合法（tr 里不能套 tr）。 -->
+          <template v-for="s in visibleSites" :key="s.id">
+          <tr>
             <td class="col-sel"><input type="checkbox" :checked="selected.includes(s.id)"
               @change="toggleSelect(s.id)" :disabled="!canManage"
               :title="canManage ? '选择此站点' : '无管理权限'" aria-label="选择站点" /></td>
-            <td class="ellipsis" :title="s.name">{{ s.name }}</td>
+            <!-- 名称列挂展开开关（A3）：被收起的次要列在这行里给出**完整不截断**的取值 -->
+            <td v-if="shown('name')" class="name-cell">
+              <button class="exp" type="button" :class="{ on: isExpanded(s.id) }"
+                :aria-expanded="isExpanded(s.id)"
+                :title="isExpanded(s.id) ? '收起详情' : '展开完整信息（根目录 / 全部域名 / 类型 / 特性 / 上次下发）'"
+                @click="toggleExpand(s.id)"><Icon name="chevron" :size="12" /></button>
+              <span class="nm" :title="s.name">{{ s.name }}</span>
+            </td>
             <!-- 多域名：只列第一个 + 「+N」，完整列表走 title——否则 15% 列宽下
                  后半段被截掉，用户不知道到底配了几个域名。 -->
-            <td class="ellipsis" :title="s.domains.join(', ')">{{ s.domains[0] ?? '—' }}<span
+            <td v-if="shown('dom')" class="ellipsis" :title="s.domains.join(', ')">{{ s.domains[0] ?? '—' }}<span
               v-if="s.domains.length > 1" class="dim tiny"> +{{ s.domains.length - 1 }}</span></td>
-            <td class="mono dim ellipsis col-opt" :title="s.root">{{ s.root }}</td>
-            <td class="col-opt">{{ kindLabel(s.kind) }}</td>
+            <td v-if="shown('root')" class="mono dim ellipsis col-opt" :title="s.root">{{ s.root }}</td>
+            <td v-if="shown('kind')" class="col-opt">{{ kindLabel(s.kind) }}</td>
             <!-- 特性（021）：访问控制 / 独立日志此前只能逐个点开编辑才知道，列表里一眼看不到 -->
-            <td class="col-opt feat-cell">
+            <td v-if="shown('feat')" class="col-opt feat-cell">
               <span v-if="s.auth_basic" class="feat" title="已启用 Basic Auth（HTTP 基础认证）"><Icon name="key" :size="13" /></span>
               <span v-if="s.log_access || s.log_error" class="feat"
                 :title="`已开启独立站点日志（${[s.log_access ? 'access' : '', s.log_error ? 'error' : ''].filter(Boolean).join(' / ')}）`"><Icon name="file" :size="13" /></span>
@@ -1482,7 +1616,7 @@ async function batchDelete() {
               <span v-if="!s.auth_basic && !s.log_access && !s.log_error
                 && !(s.ip_allow ?? []).length && !(s.ip_deny ?? []).length" class="dim">—</span>
             </td>
-            <td>
+            <td v-if="shown('waf')">
               <template v-if="s.waf_enabled">
                 <span class="badge badge-ok">{{ wafProfileLabel(s.waf_profile ?? 'basic') }}</span>
                 <span v-if="s.waf_rate_per_sec" class="dim tiny">· {{ s.waf_rate_per_sec }}/s</span>
@@ -1491,7 +1625,7 @@ async function batchDelete() {
             </td>
             <!-- .st-cell：单格最多 3 个徽章（状态 + 未同步 + 外部改动），6% 列宽放不下会
                  参差不齐地换行；改 flex 换行并给列加下限，行高才稳定。 -->
-            <td class="st-cell">
+            <td v-if="shown('state')" class="st-cell">
               <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
               <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
                    「面板所见 ≠ nginx 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
@@ -1506,9 +1640,9 @@ async function batchDelete() {
             <!-- 上次下发（023）：「这个站多久没管了」此前只能翻日志。null = 从未成功
                  下发过——与 0（1970）语义相反，不能把 NULL 格式化成 1970 谎报下发。
                  单元格只到分（无年份），完整时间走 title；窄屏随 col-opt 隐藏。 -->
-            <td class="mono dim col-opt"
+            <td v-if="shown('applied')" class="mono dim col-opt"
               :title="s.last_applied_at ? `上次下发：${fmtDateTime(s.last_applied_at)}` : '从未下发过：尚无「配置写入磁盘且重载成功」的记录'">{{ fmtApplied(s.last_applied_at) }}</td>
-            <td><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
+            <td v-if="shown('tls')"><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
                  新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
                  文字装在 .btn-label 里：窄屏（<=720px）由 main.css 收起只留图标，
@@ -1520,6 +1654,34 @@ async function batchDelete() {
               <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /><span class="btn-label">删除</span></button>
             </td>
           </tr>
+
+          <!-- 行展开（A3）：收起或截断掉的取值在这里给出**完整原文**。
+               根目录用等宽 + 可复制——报告点名它此前被截成 `/home/…`，而它是
+               "这个站的文件到底在哪"的唯一线索，只靠 title 悬停远远不够。 -->
+          <tr v-if="isExpanded(s.id)" class="detail-row">
+            <td :colspan="colCount">
+              <div class="detail">
+                <div class="d-item">
+                  <span class="d-k">根目录</span>
+                  <code class="d-v mono">{{ s.root }}</code>
+                  <button class="btn-ghost btn-sm" @click="copyText(s.root, '根目录')">复制</button>
+                </div>
+                <div class="d-item">
+                  <span class="d-k">域名</span>
+                  <code class="d-v mono">{{ s.domains.length ? s.domains.join('  ') : '—' }}</code>
+                  <button v-if="s.domains.length" class="btn-ghost btn-sm"
+                    @click="copyText(s.domains.join(','), '域名')">复制</button>
+                </div>
+                <div class="d-item"><span class="d-k">类型</span><span class="d-v">{{ kindLabel(s.kind) }}</span></div>
+                <div class="d-item"><span class="d-k">特性</span><span class="d-v">{{ featText(s) }}</span></div>
+                <div class="d-item">
+                  <span class="d-k">上次下发</span>
+                  <span class="d-v">{{ s.last_applied_at ? fmtDateTime(s.last_applied_at) : '从未下发过' }}</span>
+                </div>
+              </div>
+            </td>
+          </tr>
+          </template>
         </tbody>
       </table>
       <div class="batch-bar" v-if="selected.length">
@@ -2627,29 +2789,48 @@ table.fixed th, table.fixed td { overflow: hidden; }
      名称 94 ／ 域名两条 226 ／ 类型「反向代理」80 ／ WAF「basic · 10/s」112 ／
      状态 82 ／ TLS「已签发·未生效」122 ／ 操作 4 个带文字按钮 309 ／ 根目录 68 字符 465。
    合计 1490 < 1640，故 1920 下各列均不裁剪，余量（约 150px）全部落给根目录（弹性列）。 */
-col.w-name { width: 7%; }
-col.w-sdom { width: 15%; }
-col.w-sroot { width: auto; }   /* 唯一弹性列：table-layout:fixed 把剩余宽度全部给它 */
-col.w-kind { width: 6%; }
-col.w-feat { width: 7%; }   /* 特性（021）：Basic Auth / 独立日志 / IP 名单图标 */
-col.w-waf { width: 8%; }
-/* 状态列可能同时挂 3 个徽章（状态 + 未同步 + 外部改动），6% 放不下会参差换行 → 9% */
-col.w-st { width: 9%; }
-/* 上次下发（023）：单元格形如 `10-12 14:05`（等宽 11 字符 ≈ 79px）+ 内边距 26 ≈ 105，
-   取 108 留余量；固定 px 同操作列的理由（百分比随表宽缩放，1440 下 8% 只剩 94px 会裁掉分钟）。
-   该宽度从域名列借：sdom 15%→14%（实测域名最长值 226px，14%@1640=230 仍够）。 */
-col.w-sapp { width: 108px; }
-col.w-tls { width: 8%; }
+/* ── A3 名称列与行展开 ── */
+/* 名称列：展开按钮 + 可截断的站点名。用 flex 而非让 td 直接 ellipsis——
+   td 里放了按钮，纯 text-overflow 会把按钮一起算进溢出区域而挤掉图标。 */
+.name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.name-cell .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: none; border-radius: 6px;
+  background: none; color: var(--c-text-dim); cursor: pointer;
+  transition: transform .15s ease, color .12s ease, background .12s ease; }
+.exp:hover { color: var(--c-primary); background: var(--c-primary-soft); }
+/* 展开态箭头转 90°，与「收起/展开」的语义一致（同侧边栏折叠开关的旋转约定） */
+.exp.on { transform: rotate(90deg); color: var(--c-primary); }
+
+/* 展开行：不抢主行的视觉重量——左侧一条品牌色竖线 + 更暗的底，
+   表明它是"这一行的补充说明"而不是新的一行数据。 */
+.detail-row > td { padding: 0 13px 10px; background: var(--bg-inset); }
+.detail-row:hover > td { background: var(--bg-inset); }
+.detail { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 10px 12px 10px 36px;
+  border-left: 2px solid var(--c-primary); }
+.d-item { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.d-k { flex: none; color: var(--c-text-dim); font-size: 12px; }
+/* 完整取值：等宽 + 允许换行（这里就是要看全，不做截断） */
+.d-v { min-width: 0; word-break: break-all; color: var(--c-text); }
+
+/* 站点表的列宽**不在这里**：统一由脚本里的 SITE_COLS[].w 通过 <col> 的 inline style 下发
+   （单一来源，见该数组的注释）。这里只留两张「响应式/固定」列：
+
+   ⚠️ 曾经这里写的是百分比（w-name 7% / w-sdom 15% / w-waf 8% …），有两个必然的坏结果：
+   ① 百分比随表宽缩放——1440（表宽 1160）下名称 7% 只有 81px，扣掉展开按钮 20 + 间距 6
+      + 内边距 26 后站名只剩 29px，实测被截成「ex…」；② 用户把列全打开时，所有百分比列
+      一起放大，把唯一弹性列（根目录）压到 **9px**——连表头都看不见。
+   现在非弹性列一律实测 px，余量全部给弹性列；装不下就让表格横向滚动（tableMinW）。 */
+
 col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 间距 = 286，加单元格左右内边距 26
                                   = 312；取 320 留 8px 余量。⚠️ 内边距要从里面扣——写 310 时内容区只有
                                   284px，仍差 2px，第 4 个按钮照样掉到第二行（实测行高 91px）。
-                                  用固定 px 而非百分比：百分比随表宽缩放，1440 窗口下 19% 只剩 220px。
-                                  ⚠️ 320px 按 1920 表宽实测；<1800px 收纯图标见下方 @media（023）。 */
-/* 中宽屏动作列收纯图标（023 引入「上次下发」列后追加）：
-   固定列 sel 40 + sapp 108 + sacts 320 = 468px，再加 60% 百分比列，<1800px 时
-   超过表宽——实测 1440（表宽 1160）下唯一弹性列「根目录」被压成 0px，连表头
-   都看不见。故此宽度以下动作列收成纯图标：4×29 + 3×6 间距 + 单元格内边距 34
-   = 168px（与 <=720 全局规则同规格，main.css 实测值），省出的 152px 还给根目录。
+                                  ⚠️ 320px 按 1920 表宽实测；<1800px 收纯图标见下方 @media。 */
+/* 中宽屏动作列收纯图标：
+   1×40(sel) + 1×320(sacts 带文字) + 其余固定列，在 <1800px 会超过表宽——动作列收成纯图标
+   后只需 4×29 + 3×6 间距 + 单元格内边距 34 = 168px（与 <=720 全局规则同规格，main.css 实测值），
+   省出的 152px 还给弹性列，多数窗口下就不必横向滚动了。
+   ⚠️ 脚本里的 ACTS_W 常量必须与此处的 168 保持一致（它参与 tableMinW 计算）。
    按钮可辨识性由 title / aria-label 保留（<=720 本就只显图标）。 */
 @media (max-width: 1799px) {
   col.w-sacts { width: 168px; }
