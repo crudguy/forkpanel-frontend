@@ -24,8 +24,8 @@ defineProps<{
 
 <style scoped>
 .empty { padding: 32px; text-align: center; border: 1px dashed var(--c-border); border-radius: var(--radius); }
-.title { margin: 0 0 6px; font-size: 14px; }
-.hint { margin: 0; font-size: 13px; color: var(--c-text-dim); }
-.reason { margin: 6px 0 0; font-size: 12px; color: var(--c-warn); font-family: var(--mono); }
+.title { margin: 0 0 6px; font-size: var(--fs-14); }
+.hint { margin: 0; font-size: var(--fs-13); color: var(--c-text-dim); }
+.reason { margin: 6px 0 0; font-size: var(--fs-12); color: var(--c-warn); font-family: var(--mono); }
 .cta { margin-top: 14px; display: flex; justify-content: center; }
 </style>

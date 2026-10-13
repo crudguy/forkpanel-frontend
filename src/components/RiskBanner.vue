@@ -44,12 +44,12 @@ const level = props.level ?? 'info'
   padding: 11px 13px; border-radius: 10px;
   border: 1px solid var(--c-border);
   margin: 0 0 14px;
-  font-size: 13px; line-height: 1.55;
+  font-size: var(--fs-13); line-height: 1.55;
   color: var(--c-text-dim);
 }
 .ico { flex: none; margin-top: 1px; color: var(--c-primary); }
 .body { min-width: 0; }
-.t { margin: 0 0 2px; font-weight: 600; font-size: 13px; color: var(--c-text); }
+.t { margin: 0 0 2px; font-weight: 600; font-size: var(--fs-13); color: var(--c-text); }
 .x { margin: 0; }
 
 .is-info { background: var(--c-glass); }

@@ -102,7 +102,7 @@ function syncScroll() {
   border: 1px solid var(--c-border-strong);
   border-radius: var(--radius-xs);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.55;
   tab-size: 2;
   white-space: pre-wrap;

@@ -243,7 +243,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 .box { height: 300px; border-radius: var(--radius); }
 .muted { color: var(--c-text-dim); }
 .nowrap { white-space: nowrap; }
@@ -252,12 +252,12 @@ onMounted(load)
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
 .filters input, .filters select {
   background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
-  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-family: inherit; }
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: var(--fs-13); font-family: inherit; }
 .filters input { flex: 1 1 150px; min-width: 130px; }
 /* 时间列：显式「起始 / 截止」标签——datetime-local 空值无法用 placeholder 说明（评估 C5）。
    nowrap 必要：flex 收缩会把两个字断成两行（实测「起/始」竖排）。 */
 .filters .dt { display: flex; align-items: center; gap: 6px; flex: 0 1 auto;
-  font-size: 12px; color: var(--c-text-dim); white-space: nowrap; }
+  font-size: var(--fs-12); color: var(--c-text-dim); white-space: nowrap; }
 .filters .dt input[type=datetime-local] { flex: 0 1 170px; }
 .filters .quick { display: flex; align-items: center; gap: 6px; }
 
@@ -273,11 +273,11 @@ onMounted(load)
 .detail-row td { background: var(--c-surface-2, transparent); }
 .detail { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
 .detail > div { display: flex; gap: 10px; align-items: flex-start; }
-.k { color: var(--c-text-dim); font-size: 12.5px; min-width: 64px; }
+.k { color: var(--c-text-dim); font-size: var(--fs-12-5); min-width: 64px; }
 .detail-json {
   margin: 0; padding: 8px 10px; border-radius: var(--radius-sm);
   background: var(--c-bg); border: 1px solid var(--c-border);
-  font-size: 12px; white-space: pre-wrap; word-break: break-all; flex: 1; }
+  font-size: var(--fs-12); white-space: pre-wrap; word-break: break-all; flex: 1; }
 
 /* 结果徽标 */
 .b-ok { color: var(--c-ok); }
@@ -285,10 +285,10 @@ onMounted(load)
 .b-wait { color: var(--c-warn); }
 
 /* 分页 */
-.pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; }
+.pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: var(--fs-13); }
 .pager select {
   background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
-  border-radius: var(--radius-sm); padding: 6px 9px; font-size: 13px; font-family: inherit; }
+  border-radius: var(--radius-sm); padding: 6px 9px; font-size: var(--fs-13); font-family: inherit; }
 /* 审计表列宽（站点表范式）：目标为唯一弹性列；时间/结果/箭头列定宽不换行。 */
 col.w-atime { width: 170px; }
 col.w-aactor { width: 11%; }

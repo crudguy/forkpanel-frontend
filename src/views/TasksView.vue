@@ -145,15 +145,15 @@ onUnmounted(stopPoll)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
-.meta { margin: 0 0 10px; font-size: 12.5px; color: var(--c-text-dim); }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
+.meta { margin: 0 0 10px; font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .box { height: 320px; border-radius: var(--radius); }
 .mini { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .mini .progress { flex: 1; }
-.mini span { font-size: 12px; color: var(--c-text-dim); font-variant-numeric: tabular-nums; }
+.mini span { font-size: var(--fs-12); color: var(--c-text-dim); font-variant-numeric: tabular-nums; }
 tr.active { background: var(--c-active) !important; }
 .out { margin: 0; padding: 14px; background: var(--c-bg); border: 1px solid var(--c-border);
-       border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
+       border-radius: var(--radius-sm); font-family: var(--mono); font-size: var(--fs-12-5);
        white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
 /* 任务表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    任务标识（kind/key）为唯一弹性列，可能较长，ellipsis 截断、完整值走 title。 */

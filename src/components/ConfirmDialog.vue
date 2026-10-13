@@ -69,6 +69,6 @@ const { close } = useModal(() => props.open, box, cancel)
 <style scoped>
 /* 遮罩 / 弹窗框 / 标题 / 关闭按钮 / 操作条统一取 main.css 公共类，
    此处只留本组件独有的「确认词输入框」排布。 */
-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
 code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
 </style>

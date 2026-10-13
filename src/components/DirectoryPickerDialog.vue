@@ -270,7 +270,7 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 .tree .empty { padding: 18px; text-align: center; }
 .tree .row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
   background: none; border: none; color: var(--c-text); padding: 7px 10px 7px 8px; border-radius: 6px;
-  cursor: pointer; font-size: 13px; }
+  cursor: pointer; font-size: var(--fs-13); }
 .tree .row:hover { background: rgba(255, 138, 76, .1); }
 .tree .row.sel { background: rgba(255, 138, 76, .18); outline: 1px solid var(--c-primary); }
 .tree .row .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -281,7 +281,7 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 .tree .row .tw.open { transform: rotate(90deg); transition: transform .12s ease; }
 .tree .row .link { margin-left: 2px; }
 .tree .row .check { color: var(--c-primary); margin-left: 4px; flex: 0 0 auto; }
-.tree .err { color: var(--c-danger, #f85149); font-size: 12px; margin: 2px 0 4px; }
+.tree .err { color: var(--c-danger, #f85149); font-size: var(--fs-12); margin: 2px 0 4px; }
 
 .newdir { display: flex; gap: 8px; margin: 10px 0 4px; }
 .newdir input { flex: 1; }

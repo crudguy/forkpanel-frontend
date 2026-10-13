@@ -48,7 +48,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
   display: flex; align-items: center; gap: 9px;
   padding: 14px 16px; border-bottom: 1px solid var(--c-border);
 }
-.hd-title { font-weight: 600; font-size: 15px; }
+.hd-title { font-weight: 600; font-size: var(--fs-15); }
 .spacer { flex: 1; }
 .hd-x {
   width: 32px; height: 32px; border: none; background: transparent;
@@ -56,13 +56,13 @@ const emit = defineEmits<{ (e: 'close'): void }>()
   display: grid; place-items: center;
 }
 .hd-x:hover { background: var(--c-hover); color: var(--c-text); }
-.hd-body { padding: 16px; overflow-y: auto; font-size: 13.5px; line-height: 1.7; color: var(--c-text); }
-.hd-body :deep(h4) { margin: 18px 0 6px; font-size: 13px; color: var(--c-text-dim); }
+.hd-body { padding: 16px; overflow-y: auto; font-size: var(--fs-13-5); line-height: 1.7; color: var(--c-text); }
+.hd-body :deep(h4) { margin: 18px 0 6px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .hd-body :deep(p) { margin: 0 0 10px; }
 .hd-body :deep(ul) { margin: 0 0 10px; padding-left: 18px; }
 .hd-body :deep(li) { margin: 2px 0; }
 .hd-body :deep(code) {
   font-family: var(--mono); background: var(--c-glass);
-  padding: 1px 5px; border-radius: 5px; font-size: 12px;
+  padding: 1px 5px; border-radius: 5px; font-size: var(--fs-12);
 }
 </style>

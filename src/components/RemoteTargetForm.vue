@@ -84,7 +84,7 @@ function set<K extends keyof RemoteConfig>(k: K, v: RemoteConfig[K]) {
 /* 与 BackupsView 的 .row 保持同一套排布（label 纵向、自动换行），
    免得"新建"与"改远端"两处的表单长得不一样 */
 .remote { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 10px; }
-.remote label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
+.remote label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .remote label.wide { flex: 1 1 280px; }
-.remote input, .remote select { font-size: 13px; }
+.remote input, .remote select { font-size: var(--fs-13); }
 </style>

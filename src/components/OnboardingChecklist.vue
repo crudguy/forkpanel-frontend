@@ -113,10 +113,10 @@ function toggle(s: { id: OnboardingStepId; auto: boolean; checked: boolean }) {
 </template>
 
 <style scoped>
-.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-14); margin-bottom: 12px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
 .spacer { flex: 1; }
-.prog { font-size: 12.5px; font-weight: 500; color: var(--c-text-dim); font-family: var(--mono); }
+.prog { font-size: var(--fs-12-5); font-weight: 500; color: var(--c-text-dim); font-family: var(--mono); }
 
 .bar { height: 5px; border-radius: 999px; background: var(--c-surface-2); overflow: hidden; margin-bottom: 10px; }
 .bar i { display: block; height: 100%; border-radius: 999px; background: var(--c-primary); transition: width .25s ease; }
@@ -128,9 +128,9 @@ li:first-child { border-top: none; }
 li input { width: auto; margin-top: 2px; flex: none; accent-color: var(--c-primary); }
 li input:disabled { cursor: not-allowed; }
 .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.t { font-size: 13.5px; font-weight: 500; }
-.d { font-size: 12.5px; color: var(--c-text-dim); line-height: 1.5; }
+.t { font-size: var(--fs-13-5); font-weight: 500; }
+.d { font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.5; }
 li.done .t { color: var(--c-text-dim); }
 .go { flex: none; display: inline-flex; align-items: center; gap: 3px; }
-.err { color: var(--c-danger); font-size: 13px; margin: 6px 0 0; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 6px 0 0; }
 </style>

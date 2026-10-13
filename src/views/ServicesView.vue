@@ -821,7 +821,7 @@ async function doConfirmed() {
 
 /* 软件类别小标题：把同类包聚在一起，避免白名单式长列表难扫读 */
 .cat-head { display: flex; align-items: center; gap: 8px;
-  font-size: 12px; font-weight: 600; color: var(--c-text-dim);
+  font-size: var(--fs-12); font-weight: 600; color: var(--c-text-dim);
   margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--c-border); }
 .cat-head:first-of-type { margin-top: 2px; }
 /* 类别计数：一眼看出"这类包本机装了几个 / 还剩几个可选"，不用逐个包名去数 */
@@ -832,7 +832,7 @@ async function doConfirmed() {
    类名用 w- 前缀，与单元格自身 class 区分（同进程页范式）。 */
 .svc-card { overflow: hidden; }
 .svc-card table { table-layout: fixed; }
-.svc-card th, .svc-card td { font-size: 13px; }
+.svc-card th, .svc-card td { font-size: var(--fs-13); }
 .svc-card th.num, .svc-card td.num { text-align: right; }
 .svc-card th.acts-col, .svc-card td.acts-col { text-align: right; }
 col.w-state { width: 96px; }
@@ -850,12 +850,12 @@ col.w-acts { width: 96px; }
 .taskstrip { padding: 12px 16px; margin-bottom: 14px; border-color: var(--c-primary-soft); }
 .ts-row + .ts-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--c-border); }
 .ts-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.ts-head strong { font-size: 13.5px; }
+.ts-head strong { font-size: var(--fs-13-5); }
 .progress { height: 6px; background: var(--c-hover); border-radius: 3px; overflow: hidden; }
 .progress i { display: block; height: 100%; background: var(--c-primary); transition: width .4s; }
 .taskstrip .out { margin-top: 10px; }
 .out { margin: 0; padding: 12px 14px; background: var(--c-bg); border: 1px solid var(--c-border);
-       border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
+       border-radius: var(--radius-sm); font-family: var(--mono); font-size: var(--fs-12-5);
        white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; }
 
 /* 软件卡片：两行布局（第一行包名 + 操作图标，第二行版本/管理器/状态徽标）。
@@ -873,7 +873,7 @@ col.w-acts { width: 96px; }
 .icon-btn.is-held { color: var(--c-primary); background: var(--c-primary-soft); }
 /* white-space: nowrap 是 ellipsis 生效的前提——缺它时长包名只会换行出第二行，
    而不是显示省略号。 */
-.pkg-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pkg-name { font-size: var(--fs-13-5); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pkg-meta { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; min-width: 0; }
 /* 版本号是唯一可收缩项：本机版本号可很长（如 8.0.36-0ubuntu0.22.04.1），
    加「有新版」徽标后三者常超卡片宽度 → flex-wrap 把徽标折到第二行，

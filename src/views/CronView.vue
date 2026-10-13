@@ -298,7 +298,7 @@ async function triggerWebhook(j: Job) {
 <style scoped>
 /* 弹窗取公共 .mask / .modal.wide.stack / .modal-head / .modal-close / .modal-actions；
    本页不再保留 .m-head / .m-desc / .m-acts 私有结构式样（与全站弹窗漂移） */
-.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
+.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 /* 实心主色底 + 白滑块、42×24：旧版 --c-primary-soft 浅色底开销/关都偏浅橙、对比弱。
    与 ServiceDetailView（开机自启）、SitesView（自动续期）保持同一套开关外观。 */
 /* 任务表列宽（站点表范式）：命令为唯一弹性列；操作列 220px 容下

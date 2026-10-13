@@ -389,17 +389,17 @@ async function saveRemark(c: Container, v: string) {
 </template>
 
 <style scoped>
-.ok-note { color: var(--c-ok, #3fb950); font-size: 13px; margin: 0 0 12px; }
+.ok-note { color: var(--c-ok, #3fb950); font-size: var(--fs-13); margin: 0 0 12px; }
 .diag { max-width: 720px; margin: 8px 0 16px; padding: 20px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-card); }
 .diag-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.diag-head h3 { margin: 0; font-size: 16px; }
+.diag-head h3 { margin: 0; font-size: var(--fs-16); }
 .diag-head :deep(.icon) { color: var(--c-primary); }
-.diag-hint { color: var(--c-text-dim); font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
+.diag-hint { color: var(--c-text-dim); font-size: var(--fs-13); line-height: 1.7; margin: 0 0 14px; }
 .diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 /* 顶部 Tab（容器/镜像）改用通用 TabBar 组件后的间距保留 */
 .tabs-wrap { margin-bottom: 12px; }
-.status-text { margin-left: 8px; font-size: 12px; }
-.tip { font-size: 12px; color: var(--c-text-dim); line-height: 1.7; margin-top: 14px; }
+.status-text { margin-left: 8px; font-size: var(--fs-12); }
+.tip { font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.7; margin-top: 14px; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长单元名/镜像名/状态文本 ellipsis 截断、完整值走 title 悬停。 */

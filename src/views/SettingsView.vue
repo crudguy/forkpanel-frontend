@@ -370,14 +370,14 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.sec-sub { color: var(--c-text-mute); font-size: 12.5px; margin: 4px 0 10px; }
-.sec-note { color: var(--c-text-mute); font-size: 12px; margin: 8px 0 0; }
+.sec-sub { color: var(--c-text-mute); font-size: var(--fs-12-5); margin: 4px 0 10px; }
+.sec-note { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
 .form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
-.lbl { font-size: 12.5px; color: var(--c-text-dim); }
+.lbl { font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .inp {
   background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
-  padding: 9px 12px; color: var(--c-text); font-size: 13.5px; font-family: var(--mono);
+  padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5); font-family: var(--mono);
 }
 .inp:focus { outline: none; border-color: var(--c-primary); }
 .key-row { display: flex; gap: 8px; align-items: center; }
@@ -394,14 +394,14 @@ onMounted(async () => {
 .test-out.is-ok :deep(.icon) { color: var(--c-ok); }
 .test-out.is-bad :deep(.icon) { color: var(--c-danger); }
 .to-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.to-detail { font-size: 13.5px; color: var(--c-text); word-break: break-word; }
-.to-meta { font-size: 12px; color: var(--c-text-dim); font-family: var(--mono); }
+.to-detail { font-size: var(--fs-13-5); color: var(--c-text); word-break: break-word; }
+.to-meta { font-size: var(--fs-12); color: var(--c-text-dim); font-family: var(--mono); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
-.perm-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.perm-chk { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); cursor: pointer; }
 .perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
-.err { color: var(--c-danger); font-size: 13px; margin: 8px 0 0; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 8px 0 0; }
 .kv { display: flex; flex-direction: column; }
-.kv-row { display: flex; gap: 12px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--c-border); }
+.kv-row { display: flex; gap: 12px; font-size: var(--fs-13); padding: 7px 0; border-bottom: 1px solid var(--c-border); }
 .kv-row:last-child { border-bottom: none; }
 .kv-row > .k { width: 220px; flex: none; color: var(--c-text-dim); }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }

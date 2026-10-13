@@ -205,16 +205,16 @@ async function submitBootstrap() {
   background: var(--gradient); box-shadow: var(--glow);
 }
 .card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
-h1 { font-size: 20px; margin: 0; text-align: center; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.error { color: var(--c-danger); font-size: 13px; margin: 0; }
+h1 { font-size: var(--fs-20); margin: 0; text-align: center; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
+.error { color: var(--c-danger); font-size: var(--fs-13); margin: 0; }
 .warn {
   color: var(--c-warn); background: var(--c-warn-bg);
-  border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0;
+  border-radius: 8px; padding: 10px 12px; font-size: var(--fs-13); margin: 0;
 }
-.warn code { font-size: 12px; }
-.hint { color: var(--c-text-dim); font-size: 12px; margin: -6px 0 0; }
+.warn code { font-size: var(--fs-12); }
+.hint { color: var(--c-text-dim); font-size: var(--fs-12); margin: -6px 0 0; }
 .hint.ok { color: var(--c-ok); }
-.tip { color: var(--c-text-dim); font-size: 12px; margin: 4px 0 0; text-align: center; }
-.tip code { font-size: 12px; }
+.tip { color: var(--c-text-dim); font-size: var(--fs-12); margin: 4px 0 0; text-align: center; }
+.tip code { font-size: var(--fs-12); }
 </style>

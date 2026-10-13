@@ -160,19 +160,19 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
   border: 1px solid var(--c-border); color: var(--c-text-mute);
 }
 .sp-samples { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 9px; }
-.lim { font-size: 12px; color: var(--c-text-mute); display: flex; align-items: center; gap: 4px; }
-.lim-input { width: 66px; padding: 3px 6px; font-size: 12px; }
+.lim { font-size: var(--fs-12); color: var(--c-text-mute); display: flex; align-items: center; gap: 4px; }
+.lim-input { width: 66px; padding: 3px 6px; font-size: var(--fs-12); }
 .sp-sql {
   width: 100%; min-height: 118px; resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-12-5);
   line-height: 1.5; padding: 9px 11px;
   background: var(--c-surface-2, rgba(255, 255, 255, .03));
   border: 1px solid var(--c-border); border-radius: 9px; color: var(--c-text);
 }
 .sp-actions { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
-.sp-actions .muted { font-size: 12px; color: var(--c-text-mute); }
+.sp-actions .muted { font-size: var(--fs-12); color: var(--c-text-mute); }
 .sp-scroll { overflow: auto; max-height: 46vh; border: 1px solid var(--c-border); border-radius: 9px; }
-.sp-scroll table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.sp-scroll table { border-collapse: collapse; width: 100%; font-size: var(--fs-12-5); }
 .sp-scroll th, .sp-scroll td {
   text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--c-border);
   white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis;

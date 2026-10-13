@@ -167,7 +167,7 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
 </template>
 
 <style scoped>
-.stat { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--c-text-mute); }
+.stat { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-12-5); color: var(--c-text-mute); }
 .stat.on { color: var(--c-ok, #3fb950); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-mute); }
 .stat.on .dot { background: var(--c-ok, #3fb950); box-shadow: 0 0 8px var(--c-ok, #3fb950); }
@@ -178,6 +178,6 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
   padding: 10px; transition: opacity .2s ease;
 }
 .term.dim { opacity: .55; }
-.hint { color: var(--c-text-mute); font-size: 12px; margin: 8px 0 0; }
-.err { color: var(--c-danger); font-size: 13px; }
+.hint { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
+.err { color: var(--c-danger); font-size: var(--fs-13); }
 </style>

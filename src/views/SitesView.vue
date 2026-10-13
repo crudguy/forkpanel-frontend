@@ -2479,7 +2479,7 @@ sudo update-ca-certificates</pre>
   align-items: start; gap: 10px 14px; margin-top: 10px;
   border-top: 1px dashed var(--c-border); padding-top: 10px; }
 .waf > label.inline { grid-column: 1 / -1; }
-.waf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); }
+.waf label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .waf label.inline { flex-direction: row; align-items: center; }
 .waf label.inline input { width: auto; }
 /* 窄窗（弹窗退到 94vw 后内容区不足 ~470px）：字段行退回单列堆叠，防止数值列挤没「档位」 */
@@ -2498,7 +2498,7 @@ sudo update-ca-certificates</pre>
 /* （.tip.warn 已删除：本页那处「未检测到 nginx」警示已改用公共 .hint-note.is-warn，
    留着这套私有警告样式只会让同一语义出现两种长相。） */
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.blk { display: block; margin-bottom: 12px; font-size: 13px; color: var(--c-text-dim); }
+.blk { display: block; margin-bottom: 12px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
 /* 备注块（022）：标签与其它 blk 字段同规格；组件与标签间距同 input 的 margin-top */
 .remark-lb { display: block; }
@@ -2506,8 +2506,8 @@ sudo update-ca-certificates</pre>
 /* 多路由表：一个站点内多条 `location ^~ <前缀>`。逐行一条，窄屏自然换行。 */
 .routes { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
 .routes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.routes-title { font-size: 12.5px; color: var(--c-text); }
-.routes-title em { font-style: normal; margin-left: 8px; color: var(--c-text-dim); font-size: 12px; }
+.routes-title { font-size: var(--fs-12-5); color: var(--c-text); }
+.routes-title em { font-style: normal; margin-left: 8px; color: var(--c-text-dim); font-size: var(--fs-12); }
 /* 一条路由 = 一行：root 是唯一可伸缩项（grow/shrink），其余固定列永不错行；
    窄到放不下时由 root 收缩兜底，避免 SPA/删除被挤到第二行 */
 .route-row { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
@@ -2516,7 +2516,7 @@ sudo update-ca-certificates</pre>
 .route-row .rt-kind   { flex: 0 0 80px; }
 .route-row .rt-target { flex: 1 1 220px; min-width: 0; }
 .route-row .rt-spa { flex: none; display: flex; align-items: center; gap: 5px;
-  font-size: 12.5px; color: var(--c-text-dim); white-space: nowrap; }
+  font-size: var(--fs-12-5); color: var(--c-text-dim); white-space: nowrap; }
 /* 原生勾选框必须复位 width——全局 `input { width: 100% }` 会让它撑满整行 */
 .route-row .rt-spa input { width: auto; }
 /* 路由级根目录：label 包 input + 目录按钮，整体占弹性宽 */
@@ -2526,14 +2526,14 @@ sudo update-ca-certificates</pre>
 .route-row .rt-del { flex: none; }
 .routes.has-err .rt-prefix, .routes.has-err .rt-kind { border-color: var(--c-danger); }
 .routes-note { margin: 2px 0 0; }
-.routes-note code { font-size: 12px; }
+.routes-note code { font-size: var(--fs-12); }
 
 /* 反向代理的「应用模板」选择条。Node/Java/Python/.NET 的接入方式相同（都是
    proxy_pass 到本机端口），差异只在运行时与启动命令——故做成预填模板而非新类型。 */
 .tpl-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px;
   align-items: center; margin-top: 2px; }
-.tpl-label { font-size: 12.5px; color: var(--c-text-dim); }
-.tpl-chip { font: inherit; font-size: 12.5px; line-height: 1; padding: 6px 13px;
+.tpl-label { font-size: var(--fs-12-5); color: var(--c-text-dim); }
+.tpl-chip { font: inherit; font-size: var(--fs-12-5); line-height: 1; padding: 6px 13px;
   cursor: pointer; border-radius: 999px; border: 1px solid var(--c-border);
   background: var(--c-surface-2); color: var(--c-text);
   transition: border-color .15s, background .15s; }
@@ -2606,7 +2606,7 @@ sudo update-ca-certificates</pre>
   display: block; width: 100%; text-align: left;
   border: 0; background: none; cursor: pointer;
   padding: 8px 10px; border-radius: 8px;
-  font: inherit; font-size: 13px; color: var(--c-text);
+  font: inherit; font-size: var(--fs-13); color: var(--c-text);
 }
 .nav-item:hover { background: var(--c-hover); }
 .nav-item.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
@@ -2638,7 +2638,7 @@ sudo update-ca-certificates</pre>
 .modal-body .sector > .ssl,
 .modal-body .sector > .conf,
 .modal-body .sector > .hint-note { grid-column: 1 / -1; }
-.modal-body .sector-h { grid-column: 1 / -1; font-size: 14px; font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
+.modal-body .sector-h { grid-column: 1 / -1; font-size: var(--fs-14); font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
 
 /* 通用宽版弹窗（CA 指引等）操作条吸底：站点弹窗已在上方用 grid 行固定，不受影响 */
 .modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
@@ -2653,11 +2653,11 @@ sudo update-ca-certificates</pre>
    公共规则；本页只保留 CA 指引的步骤式样。 */
 .ca-actions { display: flex; gap: 10px; margin: 0 0 18px; }
 .ca-steps { display: flex; flex-direction: column; gap: 14px; }
-.ca-step-h { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--c-primary); }
-.ca-step p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.65; }
-.ca-code { margin: 6px 0; padding: 9px 11px; border-radius: 8px; font-size: 12px; line-height: 1.6;
+.ca-step-h { font-weight: 600; font-size: var(--fs-13); margin-bottom: 6px; color: var(--c-primary); }
+.ca-step p { margin: 0 0 6px; font-size: var(--fs-12-5); line-height: 1.65; }
+.ca-code { margin: 6px 0; padding: 9px 11px; border-radius: 8px; font-size: var(--fs-12); line-height: 1.6;
   overflow-x: auto; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); }
-.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: 13px; line-height: 1.5; }
+.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
 .ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
 .ssl-opt input { width: auto; margin-top: 2px; }
 /* 自动续期开关：与 ServiceDetailView 的开机自启开关同款——实心主色底 + 白滑块、42×24。
@@ -2667,12 +2667,12 @@ sudo update-ca-certificates</pre>
 /* SSL 证书区块：位于「编辑站点」弹窗内，与 WAF 同用虚线分隔，表明它是站点配置的一部分 */
 .ssl { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
 .ssl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.ssl-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
+.ssl-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
 .ssl-list { display: flex; flex-direction: column; gap: 8px; }
 .ssl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px;
   border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-hover); }
 .ssl-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ssl-meta .mono { font-family: var(--mono); font-size: 13px; }
+.ssl-meta .mono { font-family: var(--mono); font-size: var(--fs-13); }
 .ssl-ops { display: flex; align-items: center; gap: 6px; flex: none; }
 .ca-link { margin-top: 10px; }
 
@@ -2680,7 +2680,7 @@ sudo update-ca-certificates</pre>
    原文用等宽字体承载；nginx -t 的原始输出按**原样换行**展示（pre-wrap）。 */
 .conf { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; display: grid; gap: 8px; }
 .conf-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.conf-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); flex: none; }
+.conf-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); flex: none; }
 .conf-path { margin-left: auto; max-width: 56%; text-align: right; }
 .conf-msg { margin: 0; white-space: pre-wrap; }
 /* （.conf-text 已删除：该 class 落在 NginxEditor 的**根容器**上，resize 无效、
@@ -2697,8 +2697,8 @@ sudo update-ca-certificates</pre>
    原文用等宽字体；只读态（非 owner）仍可选中复制。 */
 .cc { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
 .cc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.cc-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
-.cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: 12px; line-height: 1.55; }
+.cc-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
+.cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: var(--fs-12); line-height: 1.55; }
 .cc-note { margin: 6px 0 0; }
 
 /* 高级配置（020）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
@@ -2718,10 +2718,10 @@ sudo update-ca-certificates</pre>
 .modal-body .adv > .log-actions,
 .modal-body .adv > .log-confirm { grid-column: 1 / -1; }
 .adv-head { margin-bottom: 6px; }
-.adv-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--c-text); }
+.adv-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
 .adv-row { margin-bottom: 8px; }
 .adv-row select { width: 100%; margin-top: 4px; }
-.adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: 12px; line-height: 1.55; margin-top: 4px; }
+.adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: var(--fs-12); line-height: 1.55; margin-top: 4px; }
 .adv-warn { margin: 6px 0 8px; }
 .adv-note { margin: 8px 0 0; }
 /* 021：IP 黑名单在白名单非空时禁用 + 视觉降权 */
@@ -2734,7 +2734,7 @@ sudo update-ca-certificates</pre>
   margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
   background: color-mix(in srgb, var(--c-danger, #e5484d) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--c-danger, #e5484d) 35%, transparent);
-  font-size: 12px; color: var(--c-text);
+  font-size: var(--fs-12); color: var(--c-text);
 }
 .log-confirm > span { flex: 1 1 auto; min-width: 180px; }
 /* 外部修改警示条：与 .conf-stale 同款（.conf 是 grid，归零外边距防双重留白） */
@@ -2770,13 +2770,13 @@ sudo update-ca-certificates</pre>
   padding: 5px 0; border-bottom: 1px dashed var(--c-border); }
 .vers-row:last-child { border-bottom: 0; }
 .vers-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.vers-src { flex: none; font-size: 12.5px; color: var(--c-text); }
+.vers-src { flex: none; font-size: var(--fs-12-5); color: var(--c-text); }
 .vers-when { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vers-cur { flex: none; }
 .vers-ops { display: flex; gap: 4px; flex: none; }
 .vers-content { grid-column: 1 / -1; margin: 4px 0 2px; padding: 8px 10px; max-height: 240px; overflow: auto;
   background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 6px;
-  font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
+  font-size: var(--fs-12); line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
 
 /* 显式列宽（与服务/进程页统一范式）：table-layout:fixed + colgroup 宽度，
    长域名/根目录/签发者 ellipsis 截断、完整值走 title 悬停。
@@ -2810,8 +2810,8 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .detail-row:hover > td { background: var(--bg-inset); }
 .detail { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 10px 12px 10px 36px;
   border-left: 2px solid var(--c-primary); }
-.d-item { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
-.d-k { flex: none; color: var(--c-text-dim); font-size: 12px; }
+.d-item { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-13); }
+.d-k { flex: none; color: var(--c-text-dim); font-size: var(--fs-12); }
 /* 完整取值：等宽 + 允许换行（这里就是要看全，不做截断） */
 .d-v { min-width: 0; word-break: break-all; color: var(--c-text); }
 
@@ -2856,7 +2856,7 @@ col.w-cst { width: 8%; }
 
 /* ══ UX 审计整改（2026-10-11）新增样式 ══ */
 /* 页头检索框：与工具按钮同高，窄屏下不跟标题抢空间 */
-.site-search { width: min(220px, 40vw); padding: 5px 10px; font-size: 13px; }
+.site-search { width: min(220px, 40vw); padding: 5px 10px; font-size: var(--fs-13); }
 /* 根目录字段下的「站点根目录」边界说明 */
 .root-hint { display: block; margin-top: 5px; }
 .root-hint code { font-size: var(--fs-12); }
@@ -2868,7 +2868,7 @@ col.w-cst { width: 8%; }
 /* 路由表条数无上限会让分区无限增长，给可视上限、滚动收在表内 */
 .routes { max-height: 45vh; overflow-y: auto; }
 /* 标题层级统一：区块标题一律 13px/600（.routes-title 原 12.5px 比同级低半级） */
-.routes-title { font-size: 13px; }
+.routes-title { font-size: var(--fs-13); }
 /* 配置区读取失败条：要塞一个「重试」按钮（.err-bar 是 flex，单独排布） */
 .conf-fail { align-items: center; flex-wrap: wrap; gap: 8px; }
 .conf-fail > span { flex: 1 1 auto; min-width: 0; }
@@ -2888,6 +2888,6 @@ col.w-sel { width: 40px; }
 .col-sel { text-align: center; width: 40px; padding-left: 0; padding-right: 0; }
 .col-sel input { width: auto; vertical-align: middle; cursor: pointer; }
 .batch-bar { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-top: 1px solid var(--c-border); margin-top: 4px; flex-wrap: wrap; }
-.batch-count { font-size: 13px; color: var(--c-text-dim); }
+.batch-count { font-size: var(--fs-13); color: var(--c-text-dim); }
 .batch-bar .spacer { flex: 1; }
 </style>

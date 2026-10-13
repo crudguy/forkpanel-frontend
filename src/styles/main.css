@@ -51,13 +51,23 @@
           'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* ── 字号档位（评估报告 B6）：只允许 5 档，禁止 <12px ──
-     正文统一 14px；指标数值用 28、页面标题用 20、次级标题用 16、元信息下限 12。
-     新代码一律引用 --fs-*，不再写死 px，便于以后整体微调与 CI 口径校验。 */
+  /* ── 字号档位（评估报告 B6）：禁 <12px；档位=当前全仓实际在用值 ──
+     收敛原则（第十批）：token 值逐字符等于替换前的渲染值 → 零视觉变化；
+     整体微调只改这里一处，全站生效（此前 45 文件 239 处写死 px 各自为政）。
+     12.5=表头/辅助说明、13=控件与提示行、13.5=表格正文与浮层正文、
+     15=弹层/副标题、17=详情页标题、18=页面主标题、26=指标大数。
+     新代码一律引用 --fs-*，不再写死 px。 */
   --fs-12: 12px;
+  --fs-12-5: 12.5px;
+  --fs-13: 13px;
+  --fs-13-5: 13.5px;
   --fs-14: 14px;
+  --fs-15: 15px;
   --fs-16: 16px;
+  --fs-17: 17px;
+  --fs-18: 18px;
   --fs-20: 20px;
+  --fs-26: 26px;
   --fs-28: 28px;
 
   /* ── 语义背景档（评估报告 B1/B2）：相邻档明度差 ≥4，层级自暗至亮 ──
@@ -216,7 +226,7 @@ tbody tr:focus-visible { background: var(--c-hover); }
    判据：这个按钮是不是弹窗的底部主操作？是 →.btn-danger；否则 →.btn-ghost.danger。 */
 .btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: #fff; font-weight: 600; }
 .btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
-.btn-sm { padding: 4px 10px; font-size: 13px; border-radius: var(--radius-xs); }
+.btn-sm { padding: 4px 10px; font-size: var(--fs-13); border-radius: var(--radius-xs); }
 .btn-icon { padding: 7px; width: 34px; height: 34px; }
 /* 表格操作列：带 icon 与纯文字按钮混排时，inline-block 默认 baseline 对齐会让
    两者 top 相差 3px（实测数据库表「浏览/SQL」与「备份/恢复」），统一 middle 消除。 */
@@ -261,14 +271,14 @@ td button { vertical-align: middle; }
   box-shadow: var(--shadow);
   padding: 12px 16px;
 }
-.page-sub { color: var(--c-text-dim); font-size: 13px; margin: 2px 0 0; }
+.page-sub { color: var(--c-text-dim); font-size: var(--fs-13); margin: 2px 0 0; }
 /* 页面级标题（图标 + 名称）：所有管理页顶部标题栏统一字号/字重/颜色，
    与顶栏 h1(17px/650) 协调但低半级。Sites/Waf/Certs 此前用卡片级 .sec-head(14px)
    当页面标题、Apps 用裸 <h2>（浏览器默认约 24px）——二者字号都不一致，统一到此。 */
-.page-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 650; line-height: 1.3; color: var(--c-text); }
+.page-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-18); font-weight: 650; line-height: 1.3; color: var(--c-text); }
 .spacer { flex: 1; }
 .muted { color: var(--c-text-dim); }
-.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+.sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-14); margin-bottom: 14px; }
 /* 页面级区块标题（`站点` / `证书` 这类直接排在卡片流之间的标题）加 .block。
    卡片内的 .sec-head 是卡片标题，不能加上间距——它会顶掉卡片 padding；
    而顶层标题若只有下间距，就与上方块级元素贴合（实测 0px），看上去比它自己的
@@ -280,7 +290,7 @@ td button { vertical-align: middle; }
 /* ── 徽章 / 状态点 ── */
 .badge {
   display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px;
-  border-radius: 999px; font-size: 12px; border: 1px solid var(--c-border);
+  border-radius: 999px; font-size: var(--fs-12); border: 1px solid var(--c-border);
   color: var(--c-text-dim); background: var(--c-surface-2); white-space: nowrap;
 }
 .badge-ok { color: var(--c-ok); background: var(--c-ok-soft); border-color: transparent; }
@@ -306,8 +316,8 @@ td button { vertical-align: middle; }
 /* ── 表格 ── */
 table { border-collapse: collapse; width: 100%; }
 /* 上下内边距走 --row-py（密度档），左右保持 13px：只改行高，不改变列内缩进而导致列宽全变 */
-th, td { text-align: left; padding: var(--row-py) 13px; border-bottom: 1px solid var(--c-border); font-size: 13.5px; vertical-align: middle; }
-th { color: var(--c-text-dim); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+th, td { text-align: left; padding: var(--row-py) 13px; border-bottom: 1px solid var(--c-border); font-size: var(--fs-13-5); vertical-align: middle; }
+th { color: var(--c-text-dim); font-weight: 600; font-size: var(--fs-12-5); white-space: nowrap; }
 tbody tr { transition: background .12s ease; }
 tbody tr:hover { background: var(--c-hover); }
 tbody tr:last-child td { border-bottom: none; }
@@ -339,8 +349,8 @@ table.fixed th, table.fixed td { overflow: hidden; }
 
 /* ── 表单字段 ── */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.field > label { font-size: 13px; color: var(--c-text-dim); }
-.field .hint { font-size: 12px; color: var(--c-text-mute); }
+.field > label { font-size: var(--fs-13); color: var(--c-text-dim); }
+.field .hint { font-size: var(--fs-12); color: var(--c-text-mute); }
 
 /* ── 骨架屏 ── */
 .skeleton {
@@ -361,17 +371,17 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .ok { color: var(--c-ok); }
 .warn { color: var(--c-warn); }
 .bad, .danger { color: var(--c-danger); }
-.err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 /* C8：错误态内联「重试」按钮（与 .err 同行，danger 描边）。点击调页面 load()，
    仅用于通用加载失败（网络/5xx）；isUnsupported 确定性错误与表单错误不加。 */
 .err-retry { color: var(--c-danger); border-color: var(--c-danger); background: transparent; margin-left: 8px; }
 .err-retry:hover:not(:disabled) { background: var(--c-glass); }
-.note { font-size: 13px; color: var(--c-primary); margin: 0 0 12px; }
-.tip { font-size: 12px; color: var(--c-text-dim); margin: 0; }
+.note { font-size: var(--fs-13); color: var(--c-primary); margin: 0 0 12px; }
+.tip { font-size: var(--fs-12); color: var(--c-text-dim); margin: 0; }
 
 /* ── 表单行（新增/筛选区通用） ── */
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.row > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--c-text-dim); flex: 1; min-width: 140px; }
+.row > label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); flex: 1; min-width: 140px; }
 .row > label input, .row > label select { width: 100%; }
 
 /* 目录选择行：输入框 + 「浏览…」按钮并排（站点根目录 / 应用工作目录复用）。
@@ -436,7 +446,7 @@ table.fixed th, table.fixed td { overflow: hidden; }
 }
 .modal-title { flex: 1; min-width: 0; }
 .modal-title, .modal h3 {
-  margin: 0; font-size: 16px; font-weight: 650; letter-spacing: .2px; color: var(--c-text);
+  margin: 0; font-size: var(--fs-16); font-weight: 650; letter-spacing: .2px; color: var(--c-text);
 }
 /* 危险标题（删除类确认框）。⚠️ 必须写成 (0,2,1)：上面的 `.modal h3` 是 (0,1,1)，
    会压过工具类 `.danger`（0,1,0），导致 danger 标题**静默不变红**。 */
@@ -457,12 +467,12 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .modal-close:disabled { opacity: .5; cursor: not-allowed; }
 
 /* 正文：弹窗内的说明段统一字号与次色，别再各自写 .detail / .muted / .ca-lede */
-.modal > p, .modal-lead { font-size: 13px; line-height: 1.65; color: var(--c-text-dim); margin: 0 0 12px; }
-.modal .blk { display: block; margin: 12px 0; font-size: 13px; color: var(--c-text-dim); }
+.modal > p, .modal-lead { font-size: var(--fs-13); line-height: 1.65; color: var(--c-text-dim); margin: 0 0 12px; }
+.modal .blk { display: block; margin: 12px 0; font-size: var(--fs-13); color: var(--c-text-dim); }
 .modal .blk select, .modal .blk input {
   width: 100%; margin-top: 6px; padding: 8px 10px;
   border: 1px solid var(--c-border); border-radius: var(--radius-xs);
-  background: var(--c-surface); color: var(--c-text); font-size: 14px; font-family: inherit;
+  background: var(--c-surface); color: var(--c-text); font-size: var(--fs-14); font-family: inherit;
 }
 
 /* 底部操作条：统一「次按钮在左、主 / 危险按钮在最右」。
@@ -531,7 +541,7 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .toast {
   display: flex; align-items: flex-start; gap: 8px; pointer-events: auto;
   padding: 10px 14px; border-radius: var(--radius-sm);
-  font-size: 13px; line-height: 1.55; color: var(--c-text);
+  font-size: var(--fs-13); line-height: 1.55; color: var(--c-text);
   background: var(--c-surface-2); border: 1px solid var(--c-border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .28); cursor: pointer;
 }
@@ -570,7 +580,7 @@ table.fixed th, table.fixed td { overflow: hidden; }
 .hint-note {
   display: flex; gap: 8px; align-items: flex-start;
   margin: 0 0 14px; padding: 9px 11px; border-radius: var(--radius-xs);
-  font-size: 13px; line-height: 1.6; color: var(--c-text-dim);
+  font-size: var(--fs-13); line-height: 1.6; color: var(--c-text-dim);
   background: var(--c-hover); border: 1px solid var(--c-border);
 }
 .hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
@@ -592,7 +602,7 @@ table.fixed th, table.fixed td { overflow: hidden; }
 
 /* 字段级错误 */
 .field-err {
-  display: block; margin-top: 4px; font-size: 12px; line-height: 1.5;
+  display: block; margin-top: 4px; font-size: var(--fs-12); line-height: 1.5;
   color: var(--c-danger); animation: panel-shake .3s ease;
 }
 /* 出错的输入框 / 下拉本身也标红：扫一眼就知道是哪个框 */

@@ -349,9 +349,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   border-bottom: 1px solid var(--c-border);
 }
-.title { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
+.title { font-size: var(--fs-17); font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
 .title-block { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 1px; }
-.subtitle { font-size: 12px; line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
+.subtitle { font-size: var(--fs-12); line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
 
 /* 系统基础信息胶囊：右侧状态簇的一员，紧凑、hover 出详情，点击直达能力矩阵 */
 .bell { position: relative; color: var(--c-text-dim); }
@@ -365,7 +365,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   height: 34px; padding: 0 12px;
   border: 1px solid var(--c-border); border-radius: 999px;
   background: var(--c-bg); color: var(--c-text-dim);
-  font-size: 12.5px; white-space: nowrap; text-decoration: none;
+  font-size: var(--fs-12-5); white-space: nowrap; text-decoration: none;
   transition: color .15s ease, background .15s ease;
 }
 .sysinfo:hover { color: var(--c-text); background: var(--c-hover); }
@@ -378,11 +378,11 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .user:hover { background: var(--c-hover); }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px;
+  display: grid; place-items: center; color: #fff; font-weight: 700; font-size: var(--fs-14);
   background: var(--gradient); box-shadow: var(--glow);
 }
-.avatar.sm { width: 36px; height: 36px; font-size: 15px; }
-.uname { font-size: 13.5px; font-weight: 500; }
+.avatar.sm { width: 36px; height: 36px; font-size: var(--fs-15); }
+.uname { font-size: var(--fs-13-5); font-weight: 500; }
 .caret { color: var(--c-text-dim); transition: transform .15s; }
 .user[aria-expanded='true'] .caret { transform: rotate(90deg); }
 
@@ -395,20 +395,20 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
 .menu-head { display: flex; align-items: center; gap: 11px; padding: 8px 10px 10px; }
-.m-name { font-weight: 600; font-size: 14px; }
-.m-sub { font-size: 12px; color: var(--c-text-dim); }
+.m-name { font-weight: 600; font-size: var(--fs-14); }
+.m-sub { font-size: var(--fs-12); color: var(--c-text-dim); }
 .mi {
   display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
   padding: 9px 10px; border-radius: 8px; color: var(--c-text);
-  background: transparent; border: none; font-size: 13.5px; cursor: pointer;
+  background: transparent; border: none; font-size: var(--fs-13-5); cursor: pointer;
 }
 .mi:hover { background: var(--c-hover); }
 /* 表格密度（B8）：与菜单项之间加一条上分隔线，表明它是"偏好"而非"操作" */
 .mi-group { padding: 8px 10px; margin-top: 4px; border-top: 1px solid var(--c-border); }
-.mi-label { display: block; font-size: 12px; color: var(--c-text-dim); margin-bottom: 6px; }
+.mi-label { display: block; font-size: var(--fs-12); color: var(--c-text-dim); margin-bottom: 6px; }
 .seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--c-border); }
 .seg-b { flex: 1; padding: 5px 0; border: none; border-radius: 6px; background: transparent;
-  color: var(--c-text-dim); font-size: 12px; cursor: pointer; transition: background .12s ease, color .12s ease; }
+  color: var(--c-text-dim); font-size: var(--fs-12); cursor: pointer; transition: background .12s ease, color .12s ease; }
 .seg-b:hover { color: var(--c-text); }
 /* 选中态 = 品牌色底 + 加粗：不只靠颜色，色觉障碍/灰阶下仍可分辨 */
 .seg-b.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
@@ -436,7 +436,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .task-chip {
   display: inline-flex; align-items: center; gap: 4px; flex: none;
   height: 24px; padding: 0 9px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; text-decoration: none;
+  font-size: var(--fs-12); font-weight: 600; text-decoration: none;
   color: var(--c-primary); background: var(--c-primary-soft);
   transition: box-shadow .15s ease;
 }

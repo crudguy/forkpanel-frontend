@@ -299,7 +299,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
 <style scoped>
 .view { display: flex; flex-direction: column; gap: 14px; }
-.sweep { display: flex; align-items: center; gap: 6px; color: var(--c-text-dim); font-size: 12.5px; }
+.sweep { display: flex; align-items: center; gap: 6px; color: var(--c-text-dim); font-size: var(--fs-12-5); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0; }
 
 /* 表基础 + 列宽（独立一套，与站点表互不干扰） */
@@ -316,7 +316,7 @@ table.fixed { table-layout: fixed; width: 100%; }
    不再私有重定义（审计 V1：证书页自造按钮样式曾与全局漂移）。
    状态色 .ok/.warn/.bad 取公共工具类；.skeleton 取公共基础，仅补高度。 */
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-.radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: 10px; cursor: pointer; font-size: 13px; }
+.radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: 10px; cursor: pointer; font-size: var(--fs-13); }
 .radios label.on { border-color: var(--c-primary); background: var(--c-active); }
 .skeleton.box { height: 160px; }
 </style>

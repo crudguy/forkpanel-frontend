@@ -101,13 +101,13 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 
 <style scoped>
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条 / 提示条统一取 main.css 公共类 */
-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
 /* 版本下拉：原先用 --c-border/--c-glass（弱边框弱背景），在弹窗里几乎看不出是个
    可点的控件。改对齐全站输入基线（--c-border-strong + --c-bg），并补一个明确的
    箭头指示——原生箭头在深色主题下几乎不可见。
    版本号可能很长（如 5:8.0.2-3+deb13u3），故右侧留足箭头空间 + 文本溢出省略。 */
 select {
-  width: 100%; padding: 9px 34px 9px 11px; font-size: 13.5px; color: var(--c-text);
+  width: 100%; padding: 9px 34px 9px 11px; font-size: var(--fs-13-5); color: var(--c-text);
   background-color: var(--c-bg);
   border: 1px solid var(--c-border-strong);
   border-radius: var(--radius-xs);
@@ -122,5 +122,5 @@ select:hover:not(:disabled) { border-color: var(--c-primary-2); }
 select:focus-visible { outline: none; border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-soft); }
 select:disabled { opacity: .55; cursor: not-allowed; }
-.hint { margin: 0; font-size: 12.5px; color: var(--c-text-dim); }
+.hint { margin: 0; font-size: var(--fs-12-5); color: var(--c-text-dim); }
 </style>

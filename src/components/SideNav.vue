@@ -198,7 +198,7 @@ const groups = computed(() => {
   display: grid; place-items: center; color: #fff;
   background: var(--gradient); box-shadow: var(--glow);
 }
-.brand-name { font-weight: 700; font-size: 16px; letter-spacing: .3px; }
+.brand-name { font-weight: 700; font-size: var(--fs-16); letter-spacing: .3px; }
 /* 折叠态：只留图标。文字必须 display:none 而不是靠容器裁切——
    76px 的栏宽装不下 logo+文字+按钮，靠挤只会得到 "Fo" 这种半截文本。 */
 .collapsed .brand { justify-content: center; gap: 0; padding: 16px 0 14px; }
@@ -228,7 +228,7 @@ const groups = computed(() => {
   position: relative;
   display: flex; align-items: center; gap: 11px;
   padding: 7px 11px; border-radius: 10px;
-  color: var(--c-text-dim); text-decoration: none; font-size: 14px;
+  color: var(--c-text-dim); text-decoration: none; font-size: var(--fs-14);
   transition: background .14s ease, color .14s ease;
 }
 .item:hover:not(.disabled) { background: var(--c-hover); color: var(--c-text); }
@@ -255,7 +255,7 @@ const groups = computed(() => {
 .toggle {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border: none; background: transparent; cursor: pointer;
-  color: var(--c-text-dim); border-radius: 10px; font-size: 13px; font-family: inherit;
+  color: var(--c-text-dim); border-radius: 10px; font-size: var(--fs-13); font-family: inherit;
   transition: background .14s ease, color .14s ease;
 }
 .toggle:hover { background: var(--c-hover); color: var(--c-text); }

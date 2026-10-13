@@ -416,15 +416,15 @@ onUnmounted(closeFollow)
 .icon-only { display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0; }
 .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.title-row h2 { margin: 0; font-size: 17px; }
-.desc { margin: 6px 0 0; font-size: 13px; color: var(--c-text-dim); }
+.title-row h2 { margin: 0; font-size: var(--fs-17); }
+.desc { margin: 6px 0 0; font-size: var(--fs-13); color: var(--c-text-dim); }
 .m-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .mono { font-family: var(--mono); }
 .warn-tip { color: var(--c-warn); }
 .dim { color: var(--c-text-dim); }
 
 .m-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--c-border); }
-.tab { background: none; border: none; padding: 8px 14px; font-size: 13.5px; color: var(--c-text-dim);
+.tab { background: none; border: none; padding: 8px 14px; font-size: var(--fs-13-5); color: var(--c-text-dim);
       cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover:not(:disabled) { color: var(--c-text); }
 .tab.active { color: var(--c-text); border-bottom-color: var(--c-primary); font-weight: 600; }
@@ -436,9 +436,9 @@ onUnmounted(closeFollow)
 
 .m-config { padding-top: 14px; }
 .cfg-target { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.seg-label { font-size: 13px; color: var(--c-text-dim); }
+.seg-label { font-size: var(--fs-13); color: var(--c-text-dim); }
 .seg { display: inline-flex; border: 1px solid var(--c-border-strong); border-radius: var(--radius-xs); overflow: hidden; }
-.seg-btn { border: none; border-radius: 0; background: transparent; padding: 5px 12px; font-size: 13px; color: var(--c-text-dim); }
+.seg-btn { border: none; border-radius: 0; background: transparent; padding: 5px 12px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .seg-btn:hover:not(.active) { background: var(--c-hover); transform: none; }
 .seg-btn.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
 .rec { font-size: var(--fs-12); color: var(--c-ok); margin-left: 4px; }
@@ -446,19 +446,19 @@ onUnmounted(closeFollow)
 .cfg-edit { width: 100%; min-height: 320px; resize: vertical; box-sizing: border-box;
            padding: 12px 14px; background: var(--c-bg); color: var(--c-text);
            border: 1px solid var(--c-border); border-radius: var(--radius-sm);
-           font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+           font-family: var(--mono); font-size: var(--fs-12-5); line-height: 1.55;
            white-space: pre; overflow: auto; tab-size: 2; }
 .cfg-edit:focus { outline: none; border-color: var(--c-primary); }
 .cfg-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 
 .out { margin: 0; padding: 12px 14px; background: var(--c-bg); border: 1px solid var(--c-border);
-       border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px;
+       border-radius: var(--radius-sm); font-family: var(--mono); font-size: var(--fs-12-5);
        white-space: pre-wrap; word-break: break-all; max-height: 420px; overflow: auto; }
 
-.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
+.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 .switch-row.on { color: var(--c-primary); font-weight: 600; }
 .sl-label { line-height: 1; }
-.sl-state { font-size: 12px; padding: 2px 9px; border-radius: 999px; line-height: 1.4; white-space: nowrap; }
+.sl-state { font-size: var(--fs-12); padding: 2px 9px; border-radius: 999px; line-height: 1.4; white-space: nowrap; }
 .switch-row.on .sl-state { color: var(--c-primary); background: var(--c-primary-soft); }
 .switch-row:not(.on) .sl-state { color: var(--c-text-dim); background: var(--c-hover); }
 </style>

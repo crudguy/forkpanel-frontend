@@ -317,17 +317,17 @@ col.w-fwacts { width: 100px; }
 .f2b-list { display: flex; flex-direction: column; gap: 10px; }
 .f2b-jail { border: 1px solid var(--c-border); border-radius: 10px; padding: 10px 12px; background: var(--c-surface-2); }
 .f2b-jail-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.f2b-name { font-weight: 600; font-size: 13px; }
-.f2b-stats { font-size: 12px; }
+.f2b-name { font-weight: 600; font-size: var(--fs-13); }
+.f2b-stats { font-size: var(--fs-12); }
 .f2b-ips { margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.ip-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--c-border-strong); border-radius: 999px; background: var(--c-bg); font-size: 12px; }
+.ip-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--c-border-strong); border-radius: 999px; background: var(--c-bg); font-size: var(--fs-12); }
 .ip-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; color: var(--c-text-dim); cursor: pointer; }
 .ip-x:hover:not(:disabled) { background: var(--c-danger-soft); color: var(--c-danger); }
 .ip-x:disabled { opacity: .5; cursor: not-allowed; }
 .badge-dim { background: var(--c-surface-2); color: var(--c-text-dim); border: 1px solid var(--c-border); }
-.tiny { font-size: 12px; }
+.tiny { font-size: var(--fs-12); }
 /* 开关（与 CronView / SitesView 自动续期同一套外观：实心主色底 + 白滑块 42×24） */
-.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-dim); cursor: pointer; user-select: none; }
+.switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-border-strong); transition: background .15s; pointer-events: none; }

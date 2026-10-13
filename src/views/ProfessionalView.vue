@@ -269,10 +269,10 @@ onUnmounted(() => {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 
 .sec-head { display: flex; align-items: center; gap: 8px; margin: 22px 2px 10px;
-  font-size: 15px; font-weight: 600; color: var(--c-text); }
-.sec-note { margin: 8px 2px 4px; font-size: 12.5px; line-height: 1.7; color: var(--c-text-dim); }
+  font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
+.sec-note { margin: 8px 2px 4px; font-size: var(--fs-12-5); line-height: 1.7; color: var(--c-text-dim); }
 .dim { color: var(--c-text-mute); }
-.err { color: var(--c-danger); font-size: 13px; margin: 0 2px 8px; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 2px 8px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* CPU 每核 + 负载 */
@@ -284,8 +284,8 @@ onUnmounted(() => {
   color: var(--c-text-mute); margin-top: 4px; }
 .load-row { display: flex; gap: 14px; margin-top: 14px; }
 .load-item { flex: 1; }
-.lk { font-size: 12px; color: var(--c-text-dim); }
-.load-item b { font-size: 16px; margin-left: 6px; }
+.lk { font-size: var(--fs-12); color: var(--c-text-dim); }
+.load-item b { font-size: var(--fs-16); margin-left: 6px; }
 
 /* 进度条（通用） */
 .prog { height: 7px; border-radius: 999px; background: var(--c-border); overflow: hidden; margin-top: 5px; }
@@ -294,30 +294,30 @@ onUnmounted(() => {
 /* 内存明细 */
 .mem-detail { padding: 14px; }
 .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.kvi { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--c-text-dim); }
-.kvi b { font-size: 15px; color: var(--c-text); }
-.swap-head { display: flex; align-items: center; gap: 8px; margin: 12px 0 5px; font-size: 13px; }
+.kvi { display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.kvi b { font-size: var(--fs-15); color: var(--c-text); }
+.swap-head { display: flex; align-items: center; gap: 8px; margin: 12px 0 5px; font-size: var(--fs-13); }
 .swap-head .dim { margin-left: auto; }
 
 /* 磁盘 / 网络网格 */
 .cards-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .disk, .net { padding: 13px; }
 .disk-top, .net-top { display: flex; align-items: center; justify-content: space-between; }
-.mount { font-weight: 600; font-size: 14px; word-break: break-all; }
-.disk-sub { font-size: 12px; color: var(--c-text-mute); margin: 3px 0 9px; }
-.disk-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; font-size: 12px; }
-.disk-foot b { font-size: 14px; }
-.net-top .iface { font-weight: 600; font-size: 14px; }
-.net-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; }
-.net-row b { font-size: 14px; }
+.mount { font-weight: 600; font-size: var(--fs-14); word-break: break-all; }
+.disk-sub { font-size: var(--fs-12); color: var(--c-text-mute); margin: 3px 0 9px; }
+.disk-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; font-size: var(--fs-12); }
+.disk-foot b { font-size: var(--fs-14); }
+.net-top .iface { font-weight: 600; font-size: var(--fs-14); }
+.net-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: var(--fs-13); }
+.net-row b { font-size: var(--fs-14); }
 .temp { padding: 13px; }
 .temp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.temp-top .tlabel { font-weight: 600; font-size: 14px; }
+.temp-top .tlabel { font-weight: 600; font-size: var(--fs-14); }
 .temp-top .chip-name { font-size: var(--fs-12); color: var(--c-text-mute); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .temp-val { margin-top: 8px; display: flex; align-items: baseline; gap: 3px; }
-.temp-val b { font-size: 26px; font-weight: 650; line-height: 1; }
-.temp-val .unit { font-size: 13px; opacity: .75; }
-.temp-warn { margin-top: 6px; font-size: 12px; color: var(--c-danger); }
+.temp-val b { font-size: var(--fs-26); font-weight: 650; line-height: 1; }
+.temp-val .unit { font-size: var(--fs-13); opacity: .75; }
+.temp-warn { margin-top: 6px; font-size: var(--fs-12); color: var(--c-danger); }
 .badge { font-size: var(--fs-12); padding: 2px 7px; border-radius: 999px; }
 .badge.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
 
@@ -326,7 +326,7 @@ table { width: 100%; border-collapse: collapse; }
 /* 上下内边距走 --row-py（密度档）：本表与 ProcessesView 各抄了一份同样的规则，
    两处都写死会让密度切换对进程表失效（scoped 特异性 (0,1,1) 压过全局 th,td）。
    改一处要 grep 全仓一起改——同控件多份 CSS 必漂移。 */
-th, td { padding: var(--row-py) 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+th, td { padding: var(--row-py) 12px; text-align: left; font-size: var(--fs-13); border-bottom: 1px solid var(--c-border); }
 th { color: var(--c-text-mute); font-weight: 600; }
 td.num, th.num { text-align: right; }
 tbody tr:hover { background: var(--c-hover); }

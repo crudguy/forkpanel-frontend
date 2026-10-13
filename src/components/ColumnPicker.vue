@@ -88,7 +88,7 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
 .cp-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px; }
 .cp-row {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-  border-radius: 9px; cursor: pointer; font-size: 13.5px;
+  border-radius: 9px; cursor: pointer; font-size: var(--fs-13-5);
 }
 .cp-row:hover { background: var(--c-hover); }
 .cp-row.locked { cursor: default; opacity: .75; }

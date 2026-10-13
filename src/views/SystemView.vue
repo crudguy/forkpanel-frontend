@@ -285,17 +285,17 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 .chart svg.multi { height: 150px; }
 .pad { padding: 4px 2px 0; margin: 0; }
 /* 模块说明：与图例/曲线配套，避免与页面副标重复 */
-.sec-note { margin: 6px 2px 12px; font-size: 12.5px; line-height: 1.7; color: var(--c-text-dim); }
+.sec-note { margin: 6px 2px 12px; font-size: var(--fs-12-5); line-height: 1.7; color: var(--c-text-dim); }
 .sec-note b { color: var(--c-text); font-weight: 600; }
 .sec-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: color-mix(in srgb, var(--c-border) 60%, transparent);
   padding: 1px 5px; border-radius: 4px; color: var(--c-text); }
 .legend { margin-left: auto; display: inline-flex; gap: 14px; align-items: center;
-  font-size: 12px; color: var(--c-text-dim); font-weight: 500; }
+  font-size: var(--fs-12); color: var(--c-text-dim); font-weight: 500; }
 .lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px;
   vertical-align: middle; }
 .gran { margin-left: auto; display: inline-flex; gap: 6px; }
-.chip { font: inherit; font-size: 12px; padding: 3px 11px; border-radius: 999px; cursor: pointer;
+.chip { font: inherit; font-size: var(--fs-12); padding: 3px 11px; border-radius: 999px; cursor: pointer;
   color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
 .chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
 .chip.on { color: #fff; background: var(--gradient); border-color: transparent; }

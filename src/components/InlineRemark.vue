@@ -113,7 +113,7 @@ async function save() {
 </template>
 
 <style scoped>
-.iremark { font-size: 13px; max-width: 100%; }
+.iremark { font-size: var(--fs-13); max-width: 100%; }
 .iremark-show { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 8px;
   border: 1px dashed transparent; border-radius: 8px; background: none; color: var(--c-text);
   font: inherit; cursor: pointer; text-align: left; }
@@ -128,7 +128,7 @@ async function save() {
    会在下一次 input 时被重算冲掉，保留只会造成「拖了又弹回」的割裂感 */
 .iremark-input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 6px 9px;
   border: 1px solid var(--c-border-strong); border-radius: 8px; background: var(--c-surface);
-  color: var(--c-text); font: inherit; font-size: 13px; line-height: 1.5; }
+  color: var(--c-text); font: inherit; font-size: var(--fs-13); line-height: 1.5; }
 .iremark-input:focus { outline: none; border-color: var(--c-primary); }
 .iremark-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 3px;
   font-size: var(--fs-12); color: var(--c-text-dim); }

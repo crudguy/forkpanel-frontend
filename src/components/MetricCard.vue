@@ -40,13 +40,13 @@ defineProps<{
 .ico.ok { background: var(--c-ok-soft); color: var(--c-ok); }
 .ico.warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .ico.danger { background: var(--c-danger-soft); color: var(--c-danger); }
-.label { font-size: 12.5px; color: var(--c-text-dim); }
+.label { font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .val { display: flex; align-items: baseline; gap: 5px; min-width: 0;
-      font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+      font-size: var(--fs-26); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 .val .num { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.val em { font-style: normal; font-size: 13px; color: var(--c-text-dim); font-weight: 500; white-space: nowrap; }
+.val em { font-style: normal; font-size: var(--fs-13); color: var(--c-text-dim); font-weight: 500; white-space: nowrap; }
 /* 副行恒定占位：无副行的卡片也保留一行高度，同行卡片等高、数值行基线对齐（B7） */
-.sub { min-height: 15px; font-size: 12px; color: var(--c-text-dim); line-height: 1.25;
+.sub { min-height: 15px; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.25;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .progress { height: 6px; }
 .progress > i { display: block; height: 100%; border-radius: 999px; background: var(--gradient); }

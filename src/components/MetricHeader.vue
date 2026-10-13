@@ -63,7 +63,7 @@ function hms(ts?: number | null) {
 .cap {
   margin: 8px 2px 0; align-self: flex-end;
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; color: var(--c-text-mute);
+  font-size: var(--fs-12); color: var(--c-text-mute);
 }
 .cap-ico { flex: none; }
 </style>

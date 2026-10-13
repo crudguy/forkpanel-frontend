@@ -148,7 +148,7 @@ onMounted(load)
 .lvl { font-size: var(--fs-12); color: var(--c-text-dim); }
 .item.read { opacity: .55; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.tag { font-size: 12px; opacity: .7; }
-.time { font-size: 12px; opacity: .6; margin-left: auto; }
-.body { margin: 6px 0; white-space: pre-wrap; font-size: 13px; opacity: .85; }
+.tag { font-size: var(--fs-12); opacity: .7; }
+.time { font-size: var(--fs-12); opacity: .6; margin-left: auto; }
+.body { margin: 6px 0; white-space: pre-wrap; font-size: var(--fs-13); opacity: .85; }
 </style>

@@ -470,15 +470,15 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 </template>
 
 <style scoped>
-.cwd { font-family: var(--mono); font-size: 12.5px; color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
-.hid { display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0; color: var(--c-text-dim); }
+.cwd { font-family: var(--mono); font-size: var(--fs-12-5); color: var(--c-text-dim); background: var(--c-surface-2); padding: 1px 7px; border-radius: 6px; }
+.hid { display: flex; align-items: center; gap: 5px; font-size: var(--fs-12); margin: 0; color: var(--c-text-dim); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
 .batch { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }
 .chk { width: 34px; text-align: center; }
 .editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
-.editor textarea { min-height: 320px; font-family: var(--mono); font-size: 13px; }
+.editor textarea { min-height: 320px; font-family: var(--mono); font-size: var(--fs-13); }
 /* 通用输入弹窗（与 DatabasesView 同形态） */
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 /* .modal-actions 已取 main.css 公共规则（此前本页另抄一份） */

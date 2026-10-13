@@ -155,7 +155,7 @@ function onKey(e: KeyboardEvent) {
 .si { color: var(--c-text-dim); flex: none; }
 .inp {
   flex: 1; min-width: 0; border: none; outline: none; background: transparent;
-  color: var(--c-text); font: inherit; font-size: 15px;
+  color: var(--c-text); font: inherit; font-size: var(--fs-15);
 }
 .inp::placeholder { color: var(--c-text-mute); }
 .kbd {
@@ -170,7 +170,7 @@ function onKey(e: KeyboardEvent) {
 .list li {
   display: flex; align-items: center; gap: 11px;
   padding: 9px 11px; border-radius: 9px; cursor: pointer;
-  color: var(--c-text); font-size: 14px;
+  color: var(--c-text); font-size: var(--fs-14);
 }
 .list li.on { background: var(--c-active); color: var(--c-primary); }
 .ci { flex: none; color: var(--c-text-dim); }

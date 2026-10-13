@@ -591,10 +591,10 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .app-en   { width: 7%; }
 .app-acts { width: 18%; }
 
-.field-err { display: block; color: var(--c-danger); font-size: 12px; margin-top: 4px; }
+.field-err { display: block; color: var(--c-danger); font-size: var(--fs-12); margin-top: 4px; }
 /* 字段下的补充说明（非错误）。与 .hint-note 不同：没有底色/图标，
    只是把「这个字段留空会发生什么」讲清楚，避免用户误以为留空 = root。 */
-.hint-inline { display: block; margin-top: 4px; font-size: 12px; line-height: 1.6;
+.hint-inline { display: block; margin-top: 4px; font-size: var(--fs-12); line-height: 1.6;
   color: var(--c-text-dim); }
 .hint-inline b { font-weight: 500; color: var(--c-text); }
 .hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: 4px;
@@ -617,7 +617,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .env-head { display: flex; align-items: center; justify-content: space-between; }
 .env-warn {
   display: flex; gap: 6px; align-items: flex-start; margin: 0;
-  font-size: 12.5px; color: var(--c-warn); line-height: 1.55;
+  font-size: var(--fs-12-5); color: var(--c-warn); line-height: 1.55;
 }
 .env-warn .ic { flex: none; margin-top: 2px; }
 .env-row { display: flex; gap: 8px; align-items: flex-start; }

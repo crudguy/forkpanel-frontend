@@ -159,7 +159,7 @@ onMounted(load)
   border: 1px solid var(--c-border); border-radius: 9px; padding: 9px 11px;
 }
 .tp-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto auto; gap: 2px 10px; }
-.tp-name { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-name { font-weight: 600; font-size: var(--fs-13-5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-kind { font-size: var(--fs-12); color: var(--c-text-mute); }
 .tp-path {
   grid-column: 1 / -1; font-size: var(--fs-12); color: var(--c-text-mute);
@@ -173,5 +173,5 @@ onMounted(load)
   margin-top: 12px; border: 1px solid #6b3a3a; background: rgba(255, 107, 107, .07);
   border-radius: 9px; padding: 11px 13px;
 }
-.tp-confirm p { margin: 0 0 9px; font-size: 13px; }
+.tp-confirm p { margin: 0 0 9px; font-size: var(--fs-13); }
 </style>

@@ -260,7 +260,7 @@ async function doKill() {
    视觉上是一整块"表头"而非悬浮条 + 卡片列头两层。 */
 .procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .procs-toolbar .icon { color: var(--c-primary); }
-.procs-toolbar .count { font-weight: 600; font-size: 14px; }
+.procs-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
 /* 限高 = 容器真的会滚 = 吸顶表头才有意义（不限高时滚动发生在页面上，
    sticky 贴的是容器顶边，滚动时它跟着一起走，等于没加）。
    260px ≈ 顶栏 58 + 内容区上下内边距 62 + 卡片工具条 45 + 页头与留白 ~95。
@@ -276,7 +276,7 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
    = 特异性 (0,1,1)，永远压过 main.css 里全局的 `th, td` (0,0,1)——写死 9px 时
    这里是"紧凑/宽松"两档完全失效、行高恒定 53px（实机实测），而构建与守卫全绿。
    左右保持 12px 是本表原有取值，不动。 */
-th, td { padding: var(--row-py) 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--c-border); }
+th, td { padding: var(--row-py) 12px; text-align: left; font-size: var(--fs-13); border-bottom: 1px solid var(--c-border); }
 /* 与全站表格表头一致：用 text-dim 而非更暗的 text-mute，
    此前单列头偏灰、与 Firewall/Services 等列表页对不齐。 */
 th { color: var(--c-text-dim); font-weight: 600; }

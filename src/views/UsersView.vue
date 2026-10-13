@@ -215,11 +215,11 @@ onMounted(load)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: 13px; margin: 0 0 12px; }
+.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 /* 弹窗外观统一取 main.css 的公共 .mask / .modal（原 .box 是本页独有的一套，已废弃） */
-.tip p { font-size: 13.5px; color: var(--c-text-dim); line-height: 1.7; margin: 6px 0; }
+.tip p { font-size: var(--fs-13-5); color: var(--c-text-dim); line-height: 1.7; margin: 6px 0; }
 .cmd { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm);
-       padding: 12px 14px; font-family: var(--mono); font-size: 13px; color: var(--c-primary); margin: 10px 0; }
+       padding: 12px 14px; font-family: var(--mono); font-size: var(--fs-13); color: var(--c-primary); margin: 10px 0; }
 .nowrap { white-space: nowrap; }
 .muted { color: var(--c-text-dim); }
 .badge-ok { color: var(--c-ok); }
@@ -229,10 +229,10 @@ onMounted(load)
 /* 标题行（.modal-head）/ 关闭按钮（.modal-close）/ 操作条（.modal-actions）统一取 main.css，
    本页不再保留 .m-head / .m-acts 私有副本（与全站弹窗漂移） */
 .field { margin-bottom: 14px; }
-.field > label { display: block; font-size: 12.5px; color: var(--c-text-dim); margin-bottom: 6px; }
+.field > label { display: block; font-size: var(--fs-12-5); color: var(--c-text-dim); margin-bottom: 6px; }
 .field input, .field select, .field textarea {
   width: 100%; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
-  border-radius: var(--radius-sm); padding: 9px 11px; font-size: 13.5px; font-family: inherit; }
+  border-radius: var(--radius-sm); padding: 9px 11px; font-size: var(--fs-13-5); font-family: inherit; }
 .field textarea { resize: vertical; }
 .field.row { display: flex; align-items: center; }
 /* ⚠ 本页的 .switch **不是** main.css 里那个 input+i 结构的开关，而是把 .switch 直接
