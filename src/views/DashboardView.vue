@@ -111,7 +111,9 @@ async function poll() {
     // 用的是采集循环写进环形缓冲的整周期值。三者不同源 ⇒ 同一 ts 也会给出不同读数
     // （实测 51.14% vs 54.41%；负载抖动时更夸张：23.19% vs 72.80%）。
     // 首屏就把 CPU 对齐到环形缓冲末样本，之后 SSE 推送（同源自 ring）自然接续。
-    // 根治要后端让 overview 复用环形缓冲、不再独占采样基准——那里属他线 WIP，暂不动。
+    // 后端已根治（0cb9c93：采集循环独占采样、overview 只读缓存），两者现为同源；
+    // 这段覆盖保留作冗余兜底——旧后端或未合并他线 WIP 时仍能对齐，可随后端版本
+    // 全面落地后再移除（届时 overview 与 realtime 末样本必然逐位相同）。
     const [r, rt] = await Promise.all([
       api.get<Overview>(API.system.overview()),
       api.get<{ samples?: { cpu?: number }[] }>(`${API.metrics.realtime()}?since=1`).catch(() => null),
