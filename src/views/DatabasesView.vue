@@ -18,6 +18,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useModal } from '@/composables/useModal'
+import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -40,7 +41,7 @@ const PAGE_SIZE = 50
 
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
-const error = ref('')
+const { error, run } = useAsync()
 const busy = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载引擎差异与能力边界的完整说明 */
 const helpOpen = ref(false)
@@ -55,9 +56,10 @@ const form = ref(emptyForm())
 /** 成功类提示走独立通道（此前备份成功却写 error，被渲染成红色错误条）。 */
 
 async function load() {
-  error.value = ''
-  try { conns.value = await api.get<Conn[]>(API.db.connections()) }
-  catch (e) { error.value = errorText(e); conns.value = [] }
+  await run(
+    async () => { conns.value = await api.get<Conn[]>(API.db.connections()) },
+    (e) => { conns.value = []; error.value = errorText(e) },
+  )
 }
 onMounted(load)
 

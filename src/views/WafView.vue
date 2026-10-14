@@ -24,6 +24,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
+import { useAsync } from '@/composables/useAsync'
 
 /** 每站点一份草稿：就地编辑，点「应用」才下发 */
 interface Draft { on: boolean; profile: string; rate: number; burst: number }
@@ -31,7 +32,7 @@ interface Draft { on: boolean; profile: string; rate: number; burst: number }
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
 const drafts = ref<Record<number, Draft>>({})
-const error = ref('')
+const { error, run } = useAsync()
 const busyId = ref<number | null>(null)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载 WAF 完整约束说明 */
 const helpOpen = ref(false)
@@ -51,12 +52,11 @@ function toDraft(s: Site): Draft {
 }
 
 async function load() {
-  error.value = ''
-  try {
+  await run(async () => {
     sites.value = await api.get<Site[]>(API.sites.list())
     // 每次加载都重置草稿：下拉/输入是"当前生效值"的镜像，不留上次未应用的脏值
     drafts.value = Object.fromEntries(sites.value.map(s => [s.id, toDraft(s)]))
-  } catch (e) { error.value = errorText(e) }
+  })
 }
 
 /** 是否有未应用的改动 */
