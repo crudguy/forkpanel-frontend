@@ -22,6 +22,7 @@ import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
+import { useAsync } from '@/composables/useAsync'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const auth = useAuthStore()
@@ -65,7 +66,8 @@ const installedPkgs = ref<Set<string>>(new Set())
 /** 包状态是否可探测（能力位 + 权限点双门控；失败静默降级为不显示） */
 const pkgDetectable = ref(false)
 
-const error = ref('')
+const { loading, error, run } = useAsync(true)
+const onError = (e: unknown) => { error.value = errorText(e) }
 const formError = ref('')
 /** 帮助抽屉（A6）：页面头部「?」打开，承载「应用 = systemd + 反代站点」的完整说明 */
 const helpOpen = ref(false)
@@ -83,8 +85,6 @@ async function loadSystemUsers() {
 const fieldErrs = ref<Record<string, string>>({})
 const errSeq = ref(0)
 const busy = ref(false)
-const loading = ref(false)
-
 const canManage = computed(() => auth.can('service.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
 const curRuntime = computed(() => runtimes.value.find(r => r.key === form.value.runtime) ?? null)
@@ -117,14 +117,11 @@ const modalBox = ref<HTMLElement | null>(null)
 const { close: modalClose } = useModal(() => modalOpen.value, modalBox, close)
 
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = '' }
-  try {
-    apps.value = await api.get<AppInfo[]>(API.apps.list()) ?? []
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    loading.value = false
-  }
+  await run(
+    async () => { apps.value = (await api.get<AppInfo[]>(API.apps.list())) ?? [] },
+    onError,
+    { silent },
+  )
 }
 
 /**

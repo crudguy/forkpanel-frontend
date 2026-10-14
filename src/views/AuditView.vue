@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, auditResultLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import { useAsync } from '@/composables/useAsync'
 
 /**
  * 审计日志（操作日志）。
@@ -34,8 +35,8 @@ interface AuditEntry {
 }
 
 const rows = ref<AuditEntry[]>([])
-const error = ref('')
-const loading = ref(true)
+const { loading, error, run } = useAsync(true)
+const onError = (e: unknown) => { error.value = errorText(e) }
 
 // ── 筛选条件（空值不下传，等价于"不过滤"）──
 const f = ref({ actor: '', action: '', result: '', q: '', since: '', until: '' })
@@ -84,16 +85,15 @@ function toTs(s: string): number | undefined {
 }
 
 async function load() {
-  error.value = ''; loading.value = true; expanded.value = null
-  const since = toTs(f.value.since)
-  const until = toTs(f.value.until)
-  // 客户端先拦一次（服务端也会校验，这里是即时反馈，省一次往返）
-  if (since != null && until != null && since > until) {
-    error.value = '起始时间不能晚于截止时间'
-    loading.value = false
-    return
-  }
-  try {
+  await run(async () => {
+    expanded.value = null
+    const since = toTs(f.value.since)
+    const until = toTs(f.value.until)
+    // 客户端先拦一次（服务端也会校验，这里是即时反馈，省一次往返）
+    if (since != null && until != null && since > until) {
+      error.value = '起始时间不能晚于截止时间'
+      return
+    }
     const params: Record<string, any> = { page: page.value, page_size: pageSize.value }
     if (f.value.actor.trim()) params.actor = f.value.actor.trim()
     if (f.value.action.trim()) params.action = f.value.action.trim()
@@ -111,8 +111,7 @@ async function load() {
     }
     // 筛选后总页数可能变小：越界则回退到最后一页
     if (page.value > totalPages.value) { page.value = totalPages.value; await load(); return }
-  } catch (e) { error.value = errorText(e) }
-  finally { loading.value = false }
+  }, onError)
 }
 
 function applyFilters() { page.value = 1; load() }

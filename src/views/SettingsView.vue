@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { SettingsReport, LlmTestResult } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
+import { useAsync } from '@/composables/useAsync'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -38,9 +39,13 @@ const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).
 
 // ── 面板设置（三段）──
 const report = ref<SettingsReport | null>(null)
-const loading = ref(false)
 const saving = ref(false)
 const formError = ref('')
+// ── 首屏面板设置加载：useAsync 收敛 loading/error 状态机 ──
+// formError 被 save/clearKey/testConn 共享，故 onError 写回 formError（不改名）；
+// 用 useAsync(false)：load 有 canManage 早退，权限不足时不应卡在「加载中…」。
+const { loading, run } = useAsync(false)
+const onError = (e: unknown) => { formError.value = errorText(e) }
 const llmEndpoint = ref('')
 const llmModel = ref('')
 const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
@@ -120,15 +125,12 @@ async function deleteRole(name: string) {
 
 async function load() {
   if (!canManage.value) return
-  loading.value = true
   formError.value = ''
-  try {
+  await run(async () => {
     report.value = await api.get<SettingsReport>(API.settings.get())
     llmEndpoint.value = report.value.runtime.endpoint ?? ''
     llmModel.value = report.value.runtime.model ?? ''
-  } catch (e) {
-    formError.value = errorText(e)
-  } finally { loading.value = false }
+  }, onError)
 }
 
 async function save() {
