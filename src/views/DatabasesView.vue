@@ -163,15 +163,6 @@ function closeBrowse() { browse.value = null }
 
 <template>
   <div>
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
-      <button class="btn-icon ghost" type="button" title="数据库说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
-      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <EmptyState v-if="!auth.supported(CAP.DBMS_MANAGE)"
       title="未检测到可用的数据库引擎"
       hint="SQLite 为内建引擎；MySQL/PostgreSQL 需外部客户端"
@@ -181,7 +172,14 @@ function closeBrowse() { browse.value = null }
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <section class="card">
-        <div class="sec-head"><Icon name="database" :size="16" /> 新增连接</div>
+        <!-- 说明按钮挂在常驻的新增卡上：列表卡在零连接时不渲染，挂上去会随空列表消失 -->
+        <div class="sec-head">
+          <Icon name="database" :size="16" /> 新增连接
+          <span class="spacer" />
+          <button class="btn-icon ghost" type="button" title="数据库说明" aria-label="数据库说明" @click="helpOpen = true">
+            <Icon name="help" :size="16" />
+          </button>
+        </div>
         <div class="row">
           <label>名称<input v-model="form.name" placeholder="myapp" /></label>
           <label>引擎
@@ -204,14 +202,21 @@ function closeBrowse() { browse.value = null }
         </div>
       </section>
 
-      <!-- 完整说明收进帮助抽屉（A6）：能力边界不再铺在页面上；「?」在页面头部 -->
+      <!-- 完整说明收进帮助抽屉（A6）：能力边界不再铺在页面上；「?」在「新增连接」卡头 -->
       <HelpDrawer :open="helpOpen" title="数据库说明" @close="helpOpen = false">
         <p>SQLite 为内建引擎，可<b>只读浏览与查询</b>（SQL 控制台仅接受只读语句）；MySQL / PostgreSQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
         <h4>客户端就绪 ≠ 连接可达</h4>
         <p>「客户端」列只表示本机有没有 psql / mysqldump 这类工具，<b>不代表目标库连得上</b>；连接可用性以实际执行结果为准。</p>
       </HelpDrawer>
 
-      <div class="card flush" v-if="conns.length">
+      <div class="card flush toolbar-card" v-if="conns.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ conns.length }} 个连接</span>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+        </div>
+        <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽同站点表范式：库/文件为唯一弹性列（width:auto）吸收余量；
                操作列 270px 容下浏览/SQL/备份/恢复 4 个带文字按钮；
@@ -259,6 +264,7 @@ function closeBrowse() { browse.value = null }
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <EmptyState v-else title="暂无连接" />
 

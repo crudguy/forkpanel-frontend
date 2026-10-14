@@ -284,7 +284,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <span class="spacer" />
       <select v-model="cur" :disabled="!canView" class="ctl">
         <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.label }}</option>

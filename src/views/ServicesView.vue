@@ -569,7 +569,7 @@ async function doConfirmed() {
   <PageLayout>
     <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue），
          本页专属信息（init 系统）与刷新按钮归拢到右侧，不再是三处各自孤立。 -->
-    <div class="page-head">
+    <div class="tools-row">
       <TabBar :tabs="TABS" />
       <span class="spacer" />
       <span v-if="init" class="badge badge-primary"

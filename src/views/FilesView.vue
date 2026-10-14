@@ -361,7 +361,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 
 <template>
   <PageLayout>
-    <div class="page-head">
+    <div class="tools-row">
       <!-- A7 面包屑：路径分段可点直达；原先是整行 <code> 全路径 + 只有「上级」，
            深目录要连点多级。当前目录（末段）为纯文本，其余为按钮。 -->
       <nav class="crumbs" aria-label="路径">

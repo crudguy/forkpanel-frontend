@@ -1518,27 +1518,32 @@ async function batchDelete() {
          （与 ProcessesView 把工具条收进卡片顶栏同范式）。此前二者悬在页面级 page-head，
          与真正作用的列表隔了一层，页面顶部还为它们白占一行。
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
-    <div class="page-head">
-      <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
-      <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
-      <span class="spacer" />
-      <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
-           偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
-           怎么看"，不是面板级共享配置，故不占用后端 settings。
-           两处不出这个入口：① 空列表——没有表可择列；② 窄屏——此时次要列由 JS 统一
-           强制隐藏（见 NARROW_HIDDEN），勾选框会呈现"勾了也不生效"的假象。 -->
-      <ColumnPicker v-if="sites.length && !narrow" :cols="SITE_COLS" :hidden="hiddenCols" label="站点列表"
-        @toggle="toggleCol" @reset="resetCols" />
-      <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
-      <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
-        <Icon name="plus" :size="13" /> 新建站点
-      </button>
-    </div>
     <div v-if="loading && !sites.length" class="skeleton box" />
-    <div v-else-if="sites.length" class="card flush">
+    <div v-else-if="sites.length" class="card flush toolbar-card">
+      <!-- 页级筛选与动作收进卡顶栏：它们过滤 / 操作的就是这张表；原先单独占一条
+           页面级横条时，横条本身比「搜索框」这个内容还重。 -->
+      <div class="card-toolbar">
+        <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
+        <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
+        <span class="count">共 {{ sites.length }} 个站点</span>
+        <span class="spacer" />
+        <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
+             偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
+             怎么看"，不是面板级共享配置，故不占用后端 settings。
+             进卡后 sites.length 已由卡片保证，只剩窄屏这一处不出入口：此时次要列由 JS
+             统一强制隐藏（见 NARROW_HIDDEN），勾选框会呈现"勾了也不生效"的假象。 -->
+        <ColumnPicker v-if="!narrow" :cols="SITE_COLS" :hidden="hiddenCols" label="站点列表"
+          @toggle="toggleCol" @reset="resetCols" />
+        <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
+        <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
+          <Icon name="plus" :size="13" /> 新建站点
+        </button>
+      </div>
       <!-- 下限宽度只给 fixed 布局：窄屏（<=720px）main.css 会把 table-layout 转成 auto，
            让浏览器按内容分配；此时再压一个 908px 的下限会把 436px 的容器撑出两倍滚动条
            （实测表宽 612 → 908），故窄屏直接撤掉。 -->
+      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+      <div class="t-scroll">
       <table class="fixed" aria-label="站点列表"
         :style="narrow ? undefined : { minWidth: tableMinW + 'px' }" v-table-nav>
         <!-- 站点表列宽独立于证书表：两表的内容分布完全不同（站点表 4 个操作按钮、
@@ -1685,6 +1690,7 @@ async function batchDelete() {
           </template>
         </tbody>
       </table>
+      </div>
       <div class="batch-bar" v-if="selected.length">
         <span class="batch-count">已选 {{ selected.length }} 项</span>
         <span class="spacer" />
@@ -1697,10 +1703,24 @@ async function batchDelete() {
     <!-- 加载失败 ≠ 没有数据：sites 保持空数组时若一律走「暂无站点」，会与顶部错误红字
          自相矛盾（一边说失败、一边说没有）。空态文案也要跟着 canCreate 走——未接入
          底座时「新建站点」是禁用态，还让人去点它就是误导。 -->
-    <EmptyState v-else-if="loadFailed" title="站点列表加载失败" hint="请确认后端服务正常后点上方「刷新」重试"
-      :reason="error || undefined" />
+    <!-- 「刷新 / 新建站点」已随工具条收进列表卡顶栏，而这两个空态下卡片并不渲染——
+         所以空态必须自带 CTA：否则加载失败时既没有表也没有重试入口，用户被卡死。 -->
+    <EmptyState v-else-if="loadFailed" title="站点列表加载失败" hint="请确认后端服务正常后重试"
+      :reason="error || undefined">
+      <template #cta>
+        <button class="btn-primary btn-sm" :disabled="busy" @click="load()">
+          <Icon name="refresh" :size="13" /> 重试
+        </button>
+      </template>
+    </EmptyState>
     <EmptyState v-else title="暂无站点"
-      :hint="canCreate ? '点击上方「新建站点」添加虚拟主机' : '当前未接入 Web 服务器（nginx）：需先安装并启动，才能新建站点'" />
+      :hint="canCreate ? '添加第一个虚拟主机：面板会写好 nginx 配置并按需签发证书' : '当前未接入 Web 服务器（nginx）：需先安装并启动，才能新建站点'">
+      <template #cta>
+        <button v-if="canCreate" class="btn-primary btn-sm" :disabled="!canCreate || busy" @click="openCreate">
+          <Icon name="plus" :size="13" /> 新建站点
+        </button>
+      </template>
+    </EmptyState>
 
     <!-- 新建 / 编辑弹窗 -->
     <div v-if="modalOpen" class="mask" @click.self="modalClose">

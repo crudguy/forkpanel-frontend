@@ -46,12 +46,13 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
       <Icon name="list" :size="13" /> 列
     </button>
 
-    <!-- ⭐ 必须 Teleport 到 body：本组件挂在 .page-head 里，而 page-head 有
+    <!-- ⭐ 必须 Teleport 到 body：本组件原先挂在 .page-head 里，而 page-head 有
          `backdrop-filter: blur(14px)` —— **backdrop-filter 会让该元素成为
          position:fixed 的包含块**，`.mask{position:fixed;inset:0}` 于是按 page-head
          的盒子解算（实测遮罩只有 1160×64），弹窗被居中到这个 64px 高的盒子里 →
          顶部全是负坐标，标题、说明、大半个列表全在视口外（截图看着像"弹窗没背景"）。
-         移到 body 下就与页面结构无关，以后 page-head 再加 filter/transform 也不会复现。 -->
+         移到 body 下就与页面结构无关：本组件现已搬进 .card-toolbar（站点列表卡顶栏），
+         将来任何祖先再加 filter/transform/will-change 也不会复现。 -->
     <Teleport to="body">
       <div v-if="open" class="mask" @click.self="close">
         <div ref="box" class="modal" role="dialog" aria-modal="true" :aria-label="`${label}：选择显示的列`">

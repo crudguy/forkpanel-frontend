@@ -169,28 +169,6 @@ onMounted(load)
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释）；
-           它右侧的「N 项不可下发」是动作结果计数，跟着动作走才不会悬空 -->
-      <button class="btn-icon ghost" type="button" title="WAF 说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
-      <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
-      <span v-if="blockedPending" class="dim tiny"
-        :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
-        · {{ blockedPending }} 项因站点停用不可下发
-      </span>
-      <button class="btn-ghost" :disabled="!sites.length || batchBusy" @click="load">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
-      <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
-      <button class="btn-primary" :disabled="!pending.length || batchBusy" @click="applyAll"
-        :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
-        <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
-      </button>
-    </div>
-
     <EmptyState v-if="!sites.length && !error" title="暂无站点"
       hint="先在「网站」建站，再回来统一配置 WAF">
       <template #cta>
@@ -198,7 +176,29 @@ onMounted(load)
       </template>
     </EmptyState>
 
-    <div v-else-if="sites.length" class="card flush">
+    <div v-else-if="sites.length" class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <span class="count">共 {{ sites.length }} 个站点</span>
+        <span class="spacer" />
+        <button class="btn-icon ghost" type="button" title="WAF 说明" aria-label="WAF 说明" @click="helpOpen = true">
+          <Icon name="help" :size="16" />
+        </button>
+        <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
+        <span v-if="blockedPending" class="dim tiny"
+          :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
+          · {{ blockedPending }} 项不可下发
+        </span>
+        <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="load">
+          <Icon name="refresh" :size="15" /> 刷新
+        </button>
+        <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
+        <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
+          :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
+          <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
+        </button>
+      </div>
+      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+      <div class="t-scroll">
       <table class="fixed" aria-label="站点 WAF 配置" v-table-nav>
         <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发桶列按控件实测宽（输入框 92px + 内边距）。 -->
         <colgroup>
@@ -251,9 +251,10 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
-    <!-- 完整说明收进帮助抽屉（A6）：底部不再重复长文；「?」在页面头部。
+    <!-- 完整说明收进帮助抽屉（A6）：底部不再重复长文；「?」在列表卡顶栏。
          浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
       <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 状态收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。</p>

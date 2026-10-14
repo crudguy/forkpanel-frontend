@@ -134,7 +134,7 @@ onUnmounted(() => { window.removeEventListener('resize', onResizeWin); disconnec
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <span class="spacer" />
       <span class="stat" :class="{ on: connected }">
         <span class="dot" /> {{ status }}

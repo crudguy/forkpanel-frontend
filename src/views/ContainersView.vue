@@ -224,7 +224,7 @@ async function saveRemark(c: Container, v: string) {
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <span class="spacer" />
       <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
       <button class="btn-icon ghost" type="button" title="容器说明" @click="helpOpen = true">

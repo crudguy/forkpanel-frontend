@@ -149,24 +149,6 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
-      <button class="btn-icon ghost" type="button" title="证书说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
-      <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
-      <button class="btn-ghost" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
-        <Icon name="shield" :size="15" /> 信任根证书
-      </button>
-      <button class="btn-ghost" :disabled="busy" @click="load()">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
-      <button class="btn-primary" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
-        <Icon name="plus" :size="15" /> 申请证书
-      </button>
-    </div>
-
     <!-- 自动续期扫描状态（全局，非单站） -->
     <p v-if="sweep.last_at || sweep.next_at" class="sweep">
       <Icon name="clock" :size="14" />
@@ -177,14 +159,33 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
     <div v-if="loading && !certs.length" class="skeleton box" />
     <EmptyState v-else-if="!certs.length && !error" title="暂无证书"
-      hint="先在「网站」建站并申请证书，或点上方「申请证书」">
+      hint="先在「网站」建站并申请证书，或用下方按钮直接申请">
       <template #cta>
         <RouterLink v-if="!sites.length" class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
         <button v-else class="btn-primary btn-sm" :disabled="!sslReady" :title="sslHint" @click="openApply">申请证书</button>
       </template>
     </EmptyState>
 
-    <div v-else-if="certs.length" class="card flush">
+    <div v-else-if="certs.length" class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <span class="count">共 {{ certs.length }} 张证书</span>
+        <span class="spacer" />
+        <button class="btn-icon ghost" type="button" title="证书说明" aria-label="证书说明" @click="helpOpen = true">
+          <Icon name="help" :size="16" />
+        </button>
+        <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
+        <button class="btn-ghost btn-sm" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
+          <Icon name="shield" :size="15" /> 信任根证书
+        </button>
+        <button class="btn-ghost btn-sm" :disabled="busy" @click="load()">
+          <Icon name="refresh" :size="15" /> 刷新
+        </button>
+        <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
+          <Icon name="plus" :size="15" /> 申请证书
+        </button>
+      </div>
+      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+      <div class="t-scroll">
       <table class="fixed" aria-label="证书列表" v-table-nav>
         <!-- 证书表列宽独立一套（与站点表互不干扰）：域名弹性吸收剩余，其余固定。 -->
         <colgroup>
@@ -222,9 +223,10 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
-    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
+    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在列表卡顶栏 -->
     <HelpDrawer :open="helpOpen" title="证书说明" @close="helpOpen = false">
       <p>证书是<b>站点维度</b>的资源：单站申请 / 查看在「网站 → 编辑站点」弹窗里；本页把<b>全部站点</b>的证书汇总到一屏，便于统一巡检到期与续期。</p>
       <h4>信任根证书</h4>

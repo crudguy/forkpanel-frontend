@@ -50,7 +50,7 @@ const title = computed(() => {
 
 // 顶栏副标题：与各视图原先内容区顶部的灰色 page-sub 说明同源，集中到此统一收口。
 // 动态信息（ServicesView 的 init、FirewallView 的启用状态/后端、FilesView 的当前路径）
-// 不在此列，保留在各自视图的 page-head，避免顶栏出现过长/动态文案。
+// 不在此列，保留在各自视图的工具行/卡片顶栏，避免顶栏出现过长/动态文案。
 // 覆盖所有带顶栏的路由（login 无顶栏，不参与）。新加路由必须同步补一条，
 // 否则该页顶栏副标题静默为空——守卫 scripts/check-subtitles.mjs 会拦。
 const SUBTITLES: Record<string, string> = {

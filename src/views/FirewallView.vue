@@ -166,7 +166,7 @@ onMounted(() => { load(); loadFail2ban() })
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <div>
         <!-- 无可用后端时 `active/backend` 从未被赋值（请求被门控挡掉），此时若照常渲染
              「未启用 / 后端：—」，会被读成"防火墙关了，点『启用』就行"——而真实情况是

@@ -282,38 +282,23 @@ td button { vertical-align: middle; }
 .card.flush { padding: 0; overflow: auto; }
 
 /* ── 页面头部 / 工具条 ── */
-/* 页头做成与主机监控页卡片（.card / MetricCard）同款的玻璃面板：
-   --c-glass + 背景模糊 + 边框 + 圆角 + 阴影，标题与工具栏同处一条带，
-   视觉上呼应顶栏与监控卡片，避免纯文字标题在内容区「悬空」。 */
-.page-head {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
-  background: var(--c-glass);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 12px 16px;
-}
-/* 纯工具条变体：页头只剩 1~2 个右对齐动作（任务中心 / 用户 / 审计 / 安全基线 /
-   计划任务）时，上面那条 64px 玻璃面板会变成一个「大空盒子」——整条容器里只有一个
-   按钮。去掉玻璃/边框/阴影与内边距、高度随按钮走，让它退化成一排贴着内容的工具，
-   把纵向空间还给表格。带筛选控件或状态徽章的页（日志/防火墙/终端/服务详情）仍是
-   有内容的页头，保持原玻璃样式不变。 */
-.page-head.tools {
-  background: none;
-  border: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  padding: 0;
-  margin-bottom: 14px;
+/* ⭐ .page-head（64px 玻璃页头）已于 2026-10-14 全量下放：容器重量必须随内容走——
+   一行里只剩 1~2 个右对齐动作时，--c-glass 面板就是「比内容还重的空盒」；
+   真删掉它之后，动作按归属各找落点：
+     ① 动作属于某张卡片（刷新这张表 / 往这张表新建一行）→ .card-toolbar，收进卡片顶部；
+     ② 页级导航或全局状态（TabBar、面包屑、防火墙总开关徽章、返回上一页）
+        → 下面的 .tools-row。
+   .tools-row 刻意不画盒子：无玻璃/边框/阴影/内边距，只是一排贴着内容的控件，
+   让"这一行是控件本身"而不是"这一行是个面板"。守卫：check-page-head.mjs [1b]
+   断言全站不得再出现 .page-head。 */
+.tools-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
 }
 .page-sub { color: var(--c-text-dim); font-size: var(--fs-13); margin: 2px 0 0; }
 /* 页内标题已移除：页面标题只由顶栏 h1 渲染（MainLayout 读 route.meta.title）。
-   此前 13 个视图在 .page-head 里各手写一份 <h2 class="page-title">，与顶栏同值、
+   此前 13 个视图在页头里各手写一份 <h2 class="page-title">，与顶栏同值、
    同屏相距 ~94px，且是手写副本（与 meta.title 无关联，改一处漏一处）。新页面
-   不要在页内重渲染标题——页头只放工具/操作（守卫：check-page-head.mjs [3]）。 */
+   不要在页内重渲染标题（守卫：check-page-head.mjs [3]）。 */
 .spacer { flex: 1; }
 .muted { color: var(--c-text-dim); }
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-14); margin-bottom: 14px; }

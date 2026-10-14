@@ -1,29 +1,31 @@
 #!/usr/bin/env node
 /**
- * 页面头部的结构性守卫：主操作唯一 + 页内不重渲染标题。
+ * 页面头部 / 工具条的结构性守卫：主操作唯一 + 页内不重渲染标题 + 无 page-head 残留。
  * 用法：`pnpm check:ui`（与 check-sidenav.mjs 串联）；退出码非 0 即有违规。
  *
- * 为什么需要一道纯文本检查：`btn-primary` 是橙色渐变 + 外发光，一页的
- * `.page-head` 里出现两个就是两块发光并排——主次被拉平，用户看不出该点哪个
- * （站点页曾把「刷新」与「新建站点」都写成 btn-primary）。这纯粹是模板层的
- * 视觉层级问题：`vue-tsc` 看不见、`vite build` 照常成功、页面照常渲染，
- * 所以只能显式断言。
+ * 为什么需要一道纯文本检查：`btn-primary` 是橙色渐变 + 外发光，一个工具条里出现两个
+ * 就是两块发光并排——主次被拉平，用户看不出该点哪个（站点页曾把「刷新」与「新建站点」
+ * 都写成 btn-primary）。这纯粹是模板层的视觉层级问题：`vue-tsc` 看不见、`vite build`
+ * 照常成功、页面照常渲染，所以只能显式断言。
  *
  * 断言口径（刻意收窄，避免误报）：
- *   [1] 至少要扫描到 N 个视图、且 page-head 与 sec-head **两类块各自**都真的被
- *       **抠出来过**——某一类抠不到就必须失败。否则目录改名/模板改写法都会让
+ *   [1] 至少要扫描到 N 个视图，且 sec-head / card-toolbar / tools-row **三类块各自**
+ *       都真的被**抠出来过**——某一类抠不到就必须失败。否则目录改名/模板改写法都会让
  *       下面那条对那一类恒绿。
- *   [2] 每个 page-head / sec-head 块内 btn-primary 出现次数 ≤ 1。
+ *   [1b] `.page-head`（64px 玻璃页头）已全量下放：全站必须 0 处。禁止类断言天生有恒绿
+ *       风险，所以先用探针串自校验正则本身（[1b-a] 会红）。
+ *        动作归卡片 → .card-toolbar；页级导航/筛选/状态 → .tools-row（无玻璃）。
+ *   [2] 每个受检块内 btn-primary 出现次数 ≤ 1。
  *   [3] 页内**不得**再渲染页面标题（`h2.page-title`）：页面标题由顶栏 h1 按
  *       route.meta.title 单独渲染，页内再来一份就是「同值、同屏、手写副本」。
  *       禁止类断言天生有恒绿风险，所以先用探针串自校验正则本身（[3a] 会红）。
  *
  * 为什么 sec-head 也算「页面头部」：主操作不一定挂在页面最上面那行。站点页就把
- * 「新建站点」收进了「站点」列表的区块头（紧贴它操作的表格）。约束若只认
- * page-head，主操作一搬家就没人看着了。
+ * 「新建站点」收进了「站点」列表的区块头（紧贴它操作的表格）。约束若只认一类块，
+ * 主操作一搬家就没人看着了。
  *
  * 为什么只数 btn-primary：`.btn-ghost`（工具动作）、`.btn-danger`（危险动作）、
- * `.btn-sm`（表格内小按钮）都按语义着色，不限个数——FilesView 的头部一列四个
+ * `.btn-sm`（表格内小按钮）都按语义着色，不限个数——FilesView 的工具行一列四个
  * ghost 就是正确写法。只有"橙色实心 CTA"才代表主操作。
  */
 import { readFileSync, readdirSync } from 'node:fs'
@@ -82,13 +84,16 @@ function elementAt(src, startIdx) {
 }
 
 /** 施加「至多一个橙色主操作」约束的块。
- *  sec-head 必须一起扫：站点页已把主操作从 page-head 搬到列表区块头（「站点」右侧），
- *  只盯 page-head 会留下盲区——主操作换了位置，约束却还看着旧位置。
- *  用 `<div … class="… x …">` 的宽松匹配（属性顺序、`class="sec-head block"` 这类
- *  多 class 都要覆盖），否则改个写法这条就静默失效。 */
+ *  page-head 已于 2026-10-14 全量下放，工具条只剩这三个落点，每类都必须被扫到：
+ *    - sec-head：卡片/区块标题行（主操作紧贴它作用的对象）
+ *    - card-toolbar：卡片顶栏（动作收进它操作的那张表）
+ *    - tools-row：页级轻量工具行（筛选 / 导航 / 全局状态，无玻璃容器）
+ *  用 `<div … class="… x …">` 的宽松匹配（属性顺序、`class="card flush toolbar-card"`
+ *  这类多 class 都要覆盖），否则改个写法这条就静默失效。 */
 const HEAD_MARKERS = [
-  { label: 'page-head', re: /<div\b[^>]*\bclass="[^"]*\bpage-head\b[^"]*"[^>]*>/g },
   { label: 'sec-head', re: /<div\b[^>]*\bclass="[^"]*\bsec-head\b[^"]*"[^>]*>/g },
+  { label: 'card-toolbar', re: /<div\b[^>]*\bclass="[^"]*\bcard-toolbar\b[^"]*"[^>]*>/g },
+  { label: 'tools-row', re: /<div\b[^>]*\bclass="[^"]*\btools-row\b[^"]*"[^>]*>/g },
 ]
 
 const offenders = []
@@ -130,10 +135,24 @@ for (const mk of HEAD_MARKERS) {
   }
 }
 
-if (offenders.length) {
-  fail('2', `每个 page-head / sec-head 至多一个橙色主操作，违规 ${offenders.length} 处：\n      - ${offenders.join('\n      - ')}`)
+// [1b] .page-head 玻璃页头必须清零：容器重量要随内容走，一行只剩 1~2 个按钮时不该
+// 占一条 64px 的 --c-glass 面板。禁止类断言先自校验正则本身（探针必须命中）。
+const PAGE_HEAD_RE = /<div\b[^>]*\bclass="[^"]*\bpage-head\b[^"]*"[^>]*>/
+if (!PAGE_HEAD_RE.test('<div class="page-head">探针</div>')) {
+  fail('1b-a', '「禁止 .page-head」的正则自身已失效——这条会恒绿，必须修')
 } else {
-  pass('2', '每个 page-head / sec-head 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
+  const headLeft = files.filter((f) => PAGE_HEAD_RE.test(blankComments(readFileSync(join(DIR, f), 'utf8'))))
+  if (headLeft.length) {
+    fail('1b', `全站不得再出现 .page-head（已下放到 card-toolbar / tools-row），残留 ${headLeft.length} 处：${headLeft.join('、')}`)
+  } else {
+    pass('1b', `扫过 ${files.length} 个视图，无 .page-head 残留（正则自校验通过）`)
+  }
+}
+
+if (offenders.length) {
+  fail('2', `每个工具条块至多一个橙色主操作，违规 ${offenders.length} 处：\n      - ${offenders.join('\n      - ')}`)
+} else {
+  pass('2', '每个 sec-head / card-toolbar / tools-row 的 btn-primary 均 ≤ 1（工具动作请用 btn-ghost）')
 }
 
 // [3] 页内不得再渲染页面标题：顶栏 h1 已按 route.meta.title 渲染，页内再写一份

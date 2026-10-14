@@ -69,7 +69,8 @@ const pkgDetectable = ref(false)
 const { loading, error, run } = useAsync(true)
 const onError = (e: unknown) => { error.value = errorText(e) }
 const formError = ref('')
-/** 帮助抽屉（A6）：页面头部「?」打开，承载「应用 = systemd + 反代站点」的完整说明 */
+/** 帮助抽屉（A6）：hint-note 行右侧的「?」打开，承载「应用 = systemd + 反代站点」的完整说明。
+ *  按钮挂在常驻的 hint-note 而非列表卡顶栏：零应用时列表卡不渲染，说明不能跟着消失。 */
 const helpOpen = ref(false)
 
 // 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
@@ -332,24 +333,15 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 
 <template>
   <div class="wrap">
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 说明按钮原是「标题旁的说明」；页内标题移除后它孤在最左，故随整簇操作
-           移到右侧：顺序为「说明 → 次要动作 → 主操作（最右，视觉终点最强）」 -->
-      <button class="btn-icon ghost" type="button" title="应用说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
-      <button class="btn-primary" :disabled="(!canManage || !webSupported) || busy"
-        :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
-        @click="openCreate">
-        <Icon name="plus" :size="14" /> 新建应用
-      </button>
-    </div>
-
+    <!-- 页面级 page-head 横条已去掉：主操作收进它操作的卡片顶栏（紧贴表格）。
+         说明按钮挂进下方常驻的 hint-note——空列表时卡片根本不渲染，说明不能跟着消失。 -->
     <p class="hint-note">
       <Icon name="info" :size="14" class="ic" />
       <span>每个应用 = 面板托管的 systemd 进程 + 自动维护的反代站点。<b>构建与依赖安装需你自己完成</b>，
-        面板只负责把进程拉起来（完整说明见标题旁「?」）。</span>
+        面板只负责把进程拉起来（完整说明见右侧「?」）。</span>
+      <button class="btn-icon ghost hint-help" type="button" title="应用说明" aria-label="应用说明" @click="helpOpen = true">
+        <Icon name="help" :size="16" />
+      </button>
     </p>
 
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
@@ -364,7 +356,18 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       </template>
     </EmptyState>
 
-    <div v-else-if="apps.length" class="card flush">
+    <div v-else-if="apps.length" class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <span class="count">共 {{ apps.length }} 个应用</span>
+        <span class="spacer" />
+        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busy"
+          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
+          @click="openCreate">
+          <Icon name="plus" :size="14" /> 新建应用
+        </button>
+      </div>
+      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+      <div class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 应用表列宽独立一套（不与站点/证书表共用 class，避免改一处漂一片） -->
         <colgroup>
@@ -413,6 +416,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <!-- 新建 / 编辑弹窗 -->
@@ -600,6 +604,8 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 /* 5 个操作按钮必须**单行**：flex-wrap 换行会让行高突然变高、表格错位 */
 .app-acts-cell { display: flex; gap: 4px; flex-wrap: nowrap; }
 .app-acts-cell .btn-sm { flex: none; padding: 4px 7px; }
+/* 说明按钮挂进 hint-note（该行是 flex）：margin-left:auto 推到最右，flex:none 防变形 */
+.hint-note .hint-help { flex: none; margin-left: auto; }
 .modal > label.has-err input,
 .modal > label.has-err select { border-color: var(--c-danger); }
 

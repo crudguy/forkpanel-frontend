@@ -81,7 +81,7 @@ onMounted(load)
 
 <template>
   <section class="page">
-    <div class="page-head">
+    <div class="tools-row">
       <span class="spacer" />
       <span v-if="unread > 0" class="badge badge-danger">未读 {{ unread }}</span>
       <button class="btn-ghost btn-sm" :disabled="!unread" @click="readAll">全部已读</button>

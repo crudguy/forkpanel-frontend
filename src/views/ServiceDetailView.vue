@@ -264,7 +264,7 @@ onUnmounted(closeFollow)
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <!-- 返回**上一页面**而非硬编码跳服务页签：本页可从软件页、概览等多处进入，
            写死跳 services-units 会把用户送到一个他从没待过的地方。
            深链直接进入（无历史）时才兜底回服务列表。 -->

@@ -55,7 +55,7 @@ const createSec = ref<HTMLElement | null>(null)
 function scrollToCreate() {
   nextTick(() => createSec.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
-/** 帮助抽屉（A6）：页面头部的「?」打开，承载完整的备份约束说明 */
+/** 帮助抽屉（A6）：「新建备份计划」卡头的「?」打开，承载完整的备份约束说明 */
 const helpOpen = ref(false)
 const form = ref({
   kind: 'panel', target: 'panel', dest_dir: 'plans',
@@ -285,15 +285,6 @@ function fmtTime(t: number | null) {
 
 <template>
   <div>
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
-      <button class="btn-icon ghost" type="button" title="备份说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
-      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <EmptyState v-if="!auth.supported(CAP.BACKUP_MANAGE)"
       title="当前环境不支持备份"
       :reason="auth.capabilities[CAP.BACKUP_MANAGE]?.reason ?? undefined" />
@@ -302,7 +293,15 @@ function fmtTime(t: number | null) {
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <section class="card" ref="createSec">
-        <div class="sec-head"><Icon name="disk" :size="16" /> 新建备份计划</div>
+        <!-- 说明按钮挂在这里而非列表卡顶栏：它讲的是"备份"这项能力，而新建卡常驻，
+             列表卡在零计划时不渲染——挂到列表上会随空列表一起消失。 -->
+        <div class="sec-head">
+          <Icon name="disk" :size="16" /> 新建备份计划
+          <span class="spacer" />
+          <button class="btn-icon ghost" type="button" title="备份说明" aria-label="备份说明" @click="helpOpen = true">
+            <Icon name="help" :size="16" />
+          </button>
+        </div>
         <div class="row">
           <label>类型
             <select v-model="form.kind">
@@ -336,7 +335,14 @@ function fmtTime(t: number | null) {
         </p>
       </section>
 
-      <div class="card flush" v-if="plans.length">
+      <div class="card flush toolbar-card" v-if="plans.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ plans.length }} 个计划</span>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+        </div>
+        <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-bid" /><col class="w-bkind" /><col class="w-btarget" /><col class="w-bdest" /><col class="w-bkeep" /><col class="w-benc" /><col class="w-bremote" /><col class="w-brun" /><col class="w-bacts" />
@@ -374,6 +380,7 @@ function fmtTime(t: number | null) {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <EmptyState v-else title="暂无备份计划">
         <template #cta>
