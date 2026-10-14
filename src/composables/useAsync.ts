@@ -19,15 +19,21 @@ import { errorText } from '@/api/client'
  * 传 useAsync(true)；默认 false（与多数视图一致）。
  *
  * 可选 onError：个别视图对失败有**自定义分流**——如 isUnsupported/占位端点要落到
- * placeholder 而非报错条（users 的 notReady、services 的能力提示）。传第二个参数
- * 接管 catch，行为与原先各写各的 catch 逐字一致；不传则统一 errorText(e) 落到
- * error（含 10009 能力未接入的通用中文兜底）。**保留这条**是因为全量迁移时多数
- * 视图都带 isUnsupported 分支，没有它就无法在不改行为的前提下收敛。
+ * placeholder 而非报错条（users 的 notReady），或失败要顺带清空列表（backups 清
+ * plans / containers 清 lists）。传第二个参数接管 catch，行为与原先各写各的 catch
+ * 逐字一致。**有 onError 时它恒被调用（含 silent）**，由它自己决定 silent 时做不
+ * 做什么——run 不再替它吞。
  *
- * run 语义（与视图原 try/catch 对齐）：
- * - 进入即 error='' + loading=true；
- * - await fn() 成功返回 true；异常进 onError（有则）或 errorText→error，返回 false；
- * - finally 恒清 loading——成败都清，骨架绝不卡死（审计里首屏静默卡骨架的大坑）。
+ * 可选 opts.silent：**后台静默刷新**（轮询 / 可见性补拉）。true 时 run 完全不碰
+ * loading 与 error（不置加载中、不清错、不因失败落错），让轮询不闪骨架、不打扰用户；
+ * 需要"轮询成功自愈清错"的视图在 fn 里自己 `if (silent) error.value = ''`。
+ * 省略/false 时行为与早期版本逐字一致（对已接管视图零影响）。
+ *
+ * run 语义：
+ * - 非 silent：进入即 error='' + loading=true；finally 恒清 loading（成败都清）。
+ * - silent：不置 loading、不清 error；finally 不动 loading。
+ * - 异常：有 onError 恒调 onError(e)；否则非 silent 才 error.value = errorText(e)
+ *   （silent 且无 onError ⇒ 静默吞掉，交由下一轮轮询自愈）。
  */
 export function useAsync(initialLoading = false) {
   const loading = ref(initialLoading)
@@ -36,18 +42,22 @@ export function useAsync(initialLoading = false) {
   async function run(
     fn: () => Promise<unknown>,
     onError?: (e: unknown) => void,
+    opts?: { silent?: boolean },
   ): Promise<boolean> {
-    error.value = ''
-    loading.value = true
+    const silent = opts?.silent === true
+    if (!silent) {
+      error.value = ''
+      loading.value = true
+    }
     try {
       await fn()
       return true
     } catch (e) {
       if (onError) onError(e)
-      else error.value = errorText(e)
+      else if (!silent) error.value = errorText(e)
       return false
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 

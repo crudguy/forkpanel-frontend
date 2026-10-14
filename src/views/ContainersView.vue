@@ -16,6 +16,7 @@
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
+import { useAsync } from '@/composables/useAsync'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, containerStateLabel, containerStateBadge } from '@/api/types'
@@ -48,9 +49,8 @@ const tabs = [
 ]
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
-const error = ref('')
+const { loading, error, run } = useAsync()
 const busy = ref(false)
-const loading = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载「刻意不提供哪些操作」的完整说明 */
 const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
@@ -138,18 +138,19 @@ async function restartPanel() {
 }
 
 async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = '' }
-  if (!supported.value) { if (!silent) loading.value = false; return }
-  try {
-    if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
-    else images.value = await api.get<Image[]>(API.containers.images())
-    if (silent) error.value = '' // 自愈：轮询成功清旧错
-  } catch (e) {
-    if (!silent) error.value = errorText(e)
-    containers.value = []; images.value = []
-  } finally {
-    if (!silent) loading.value = false
-  }
+  await run(
+    async () => {
+      if (!supported.value) return
+      if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
+      else images.value = await api.get<Image[]>(API.containers.images())
+      if (silent) error.value = '' // 自愈：轮询成功清旧错
+    },
+    (e) => {
+      containers.value = []; images.value = []
+      if (!silent) error.value = errorText(e)
+    },
+    { silent },
+  )
 }
 
 // 自动轮询：5s 拉一次；隐藏标签页时暂停、可见时补一次；卸载清理。

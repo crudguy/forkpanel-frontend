@@ -20,6 +20,7 @@ import Icon from '@/components/Icon.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
+import { useAsync } from '@/composables/useAsync'
 
 interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 
@@ -27,9 +28,8 @@ const auth = useAuthStore()
 const certs = ref<Cert[]>([])
 const sites = ref<Site[]>([])
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
-const error = ref('')
+const { loading, error, run } = useAsync()
 const busy = ref(false)
-const loading = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载证书与根 CA 的完整说明 */
 const helpOpen = ref(false)
 
@@ -46,9 +46,8 @@ const sslHint = computed(() => {
   return '需 openssl 或 ACME'
 })
 
-async function load(silent = false) {
-  if (!silent) { loading.value = true; error.value = '' }
-  try {
+async function load() {
+  await run(async () => {
     const [cs, ss] = await Promise.all([
       api.get<Cert[]>(API.certs.list()),
       api.get<Site[]>(API.sites.list()),
@@ -57,11 +56,7 @@ async function load(silent = false) {
     sites.value = ss
     try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
     catch { /* 扫描状态缺失不阻断证书列表 */ }
-  } catch (e) {
-    if (!silent) error.value = errorText(e)
-  } finally {
-    if (!silent) loading.value = false
-  }
+  })
 }
 onMounted(load)
 
