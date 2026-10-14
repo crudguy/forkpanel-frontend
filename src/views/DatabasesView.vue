@@ -350,7 +350,7 @@ function closeBrowse() { browse.value = null }
 .crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
 .crumb { padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--c-text-dim); }
 .crumb:hover { color: var(--c-text); }
-.crumb.active { background: rgba(255, 90, 54, .16); color: #FF5A36; }
+.crumb.active { background: var(--c-primary-soft); color: var(--c-primary); }
 .sep { color: var(--c-text-dim); }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 字段 / 操作条 / 后果预警一律取 main.css 的公共式样。
