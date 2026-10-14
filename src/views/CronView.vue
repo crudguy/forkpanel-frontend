@@ -26,7 +26,7 @@ interface Job {
 
 const auth = useAuthStore()
 const jobs = ref<Job[]>([])
-const { error, run } = useAsync()
+const { error, loading, run } = useAsync()
 const note = ref('')
 const form = ref({ name: '', expr: '', command: '', user: 'root' })
 const del = ref<Job | null>(null)
@@ -212,10 +212,11 @@ async function triggerWebhook(j: Job) {
           <Icon name="clock" :size="16" />
           <span class="count">共 {{ jobs.length }} 个任务</span>
           <span class="spacer" />
-          <button class="btn-primary btn-sm" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+          <button class="btn-ghost btn-sm" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
         </div>
         <div class="t-scroll">
-        <table v-if="jobs.length" class="fixed" v-table-nav>
+        <div v-if="loading && !jobs.length" class="skeleton box" />
+        <table v-else-if="jobs.length" class="fixed" v-table-nav>
           <!-- 列宽：命令为唯一弹性列；用户列窄屏隐藏（.col-opt，多为 root/面板用户）。 -->
           <colgroup>
             <col class="w-cjid" /><col class="w-cjexpr" /><col class="w-cjcmd" /><col class="w-cjuser" /><col class="w-cjlast" /><col class="w-cjnext" /><col class="w-cjacts" />
@@ -236,15 +237,17 @@ async function triggerWebhook(j: Job) {
                   title="立即执行一次（不等到表达式触发的时刻）" @click="runNow(j)">
                   <Icon name="play" :size="14" /> {{ runBusy === j.id ? '提交中' : '执行' }}
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(j)">编辑</button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="del = j">删除</button>
+                <button class="btn-ghost btn-sm" :disabled="!canManage"
+          :title="canManage ? '' : '无 cron.manage 权限'" @click="openEdit(j)">编辑</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canManage"
+          :title="canManage ? '' : '无 cron.manage 权限'" @click="del = j">删除</button>
               </td>
             </tr>
           </tbody>
         </table>
         </div>
       </div>
-      <EmptyState v-if="!jobs.length" title="暂无计划任务" />
+      <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务" />
 
       <ConfirmDialog :open="!!del" danger title="删除计划任务"
         :detail="`将删除 ${del?.id}，该任务的后续执行会一并取消。`"

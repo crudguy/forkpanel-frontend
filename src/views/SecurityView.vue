@@ -211,7 +211,7 @@ async function doDisable() {
         <div class="sec-head">
           <Icon name="shield" :size="16" /><span>安全基线清单</span>
           <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="loading" @click="load">
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="load">
             <Icon name="refresh" :size="14" /> 刷新
           </button>
         </div>

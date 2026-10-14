@@ -183,7 +183,7 @@ onMounted(load)
           <div class="card-toolbar">
             <span class="spacer" />
             <button class="btn-ghost btn-sm" :disabled="loading" @click="reset"><Icon name="refresh" :size="14" /> 重置</button>
-            <button class="btn-primary btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+            <button class="btn-ghost btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
           </div>
           <div class="t-scroll">
           <table class="fixed" v-table-nav>

@@ -128,7 +128,8 @@ onMounted(load)
           <Icon name="users" :size="16" />
           <span class="count">共 {{ users.length }} 个用户</span>
           <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="loading || notReady || !canManage" @click="openCreate">
+          <button class="btn-primary btn-sm" :disabled="loading || notReady || !canManage"
+        :title="canManage ? '' : '无 user.manage 权限'" @click="openCreate">
             <Icon name="user-plus" :size="14" /> 新建用户
           </button>
           <button class="btn-ghost btn-sm" :disabled="loading || notReady" @click="load">
@@ -154,10 +155,12 @@ onMounted(load)
               <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : ''">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
               <td class="muted">{{ u.last_login_at ? fmtDateTime(u.last_login_at) : '从未登录' }}</td>
               <td class="nowrap">
-                <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage" @click="openEdit(u)">
+                <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage"
+          :title="canManage ? '' : '无 user.manage 权限'" @click="openEdit(u)">
                   <Icon name="edit" :size="14" /> 编辑
                 </button>
-                <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm danger" :disabled="!canManage" @click="askDelete(u)">
+                <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm danger" :disabled="!canManage"
+          :title="canManage ? '' : '无 user.manage 权限'" @click="askDelete(u)">
                   <Icon name="trash" :size="14" /> 删除
                 </button>
               </td>

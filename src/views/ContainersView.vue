@@ -256,10 +256,12 @@ async function saveRemark(c: Container, v: string) {
       <!-- daemon_unreachable：可视化修复（按钮代替"复制命令去执行"） -->
       <div v-else-if="unavailableReason === 'daemon_unreachable'" class="diag-actions">
         <p class="dim">点击下方按钮依次修复即可管理容器：</p>
-        <button class="btn-primary" :disabled="fixBusy || !canService" @click="startOpen = true">
+        <button class="btn-primary" :disabled="fixBusy || !canService"
+          :title="canService ? '' : '需要 service.manage 权限'" @click="startOpen = true">
           <Icon name="play" :size="15" /> 启动 Docker 服务
         </button>
-        <button class="btn-primary" :disabled="fixBusy || !canJoin" @click="joinOpen = true">
+        <button class="btn-primary" :disabled="fixBusy || !canJoin"
+          :title="canJoin ? '' : '需要 container.manage 权限'" @click="joinOpen = true">
           <Icon name="docker" :size="15" /> 把面板用户加入 docker 组
         </button>
         <button class="btn-ghost" :disabled="fixBusy || !canService" @click="restartOpen = true">
@@ -391,7 +393,7 @@ async function saveRemark(c: Container, v: string) {
 
 <style scoped>
 .ok-note { color: var(--c-ok, #3fb950); font-size: var(--fs-13); margin: 0 0 12px; }
-.diag { max-width: 720px; margin: 8px 0 16px; padding: 20px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-card); }
+.diag { max-width: 720px; margin: 8px 0 16px; padding: 20px; border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-glass); }
 .diag-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .diag-head h3 { margin: 0; font-size: var(--fs-16); }
 .diag-head :deep(.icon) { color: var(--c-primary); }

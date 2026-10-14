@@ -350,7 +350,8 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     <EmptyState v-else-if="!apps.length && !error" title="暂无托管应用"
       hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点">
       <template #cta>
-        <button class="btn-primary btn-sm" :disabled="!canManage || !webSupported" @click="openCreate">
+        <button class="btn-primary btn-sm" :disabled="!canManage || !webSupported"
+          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'" @click="openCreate">
           <Icon name="plus" :size="14" /> 新建第一个应用
         </button>
       </template>

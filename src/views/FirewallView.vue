@@ -178,8 +178,9 @@ onMounted(() => { load(); loadFail2ban() })
         <span v-else class="badge">不可用</span>
       </div>
       <span class="spacer" />
-      <button class="btn-ghost" :disabled="busy || !canManage" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
-      <button class="btn-primary" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="busy || !canManage"
+        :title="canManage ? '' : '无 firewall.manage 权限'" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
+      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.FIREWALL_MANAGE)"
@@ -203,7 +204,8 @@ onMounted(() => { load(); loadFail2ban() })
           <label>备注
             <input v-model="comment" placeholder="web" />
           </label>
-          <button class="btn-primary" :disabled="busy || !canManage || !ports" @click="apply">应用</button>
+          <button class="btn-primary" :disabled="busy || !canManage || !ports"
+            :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填要放行的端口')" @click="apply">应用</button>
         </div>
         <RiskBanner level="warn" title="仅支持放行（allow）"
           text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
@@ -296,9 +298,12 @@ onMounted(() => { load(); loadFail2ban() })
       :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"
       @confirm="doDelete" @cancel="delTarget = null" />
 
-    <ConfirmDialog :open="confirmOff" danger title="关闭防火墙"
-      detail="关闭后本机所有端口将直接对外暴露，不再有任何过滤。确认继续？"
-      @confirm="toggleActive" @cancel="confirmOff = false" />
+    <!-- ⚠️ 此前这里还挂着**第二个**同样 `:open="confirmOff"` 的确认框（detail 与
+         @confirm 各不相同）：点一次「关闭」会同时弹两个矛盾的确认框——一个说
+         「规则将不再生效、可能影响 SSH」，另一个说「所有端口直接暴露」。而后者
+         的 @confirm 又回调 `toggleActive`，该函数在 active 为真时只会再把
+         confirmOff 置回 true，等于点了没反应。保留上面那条（文案更准确、直接调
+         setActive(false)），删掉这一个。 -->
   </div>
 </template>
 

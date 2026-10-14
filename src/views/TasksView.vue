@@ -92,7 +92,7 @@ onUnmounted(stopPoll)
           <Icon name="clock" :size="16" />
           <span class="count">共 {{ tasks.length }} 个任务</span>
           <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+          <button class="btn-ghost btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
         </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>

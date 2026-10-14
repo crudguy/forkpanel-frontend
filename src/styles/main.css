@@ -240,6 +240,20 @@ tbody tr:focus-visible { background: var(--c-hover); }
    仍延后；C7 落地的是更轻的行级 roving tabindex（↑/↓ 移动行、Home/End 跳首末）。 */
 
 /* ── 按钮变体 ── */
+/* ⚠ 上面 `button { … }` 是**元素选择器**：`<RouterLink class="btn-primary btn-sm">`
+   渲染成 <a> 后吃不到它——缺 display:inline-flex、缺边框，且 inline 元素的垂直
+   padding 不占布局空间，只剩「渐变底 + 白字」孤零零一片。链接当按钮用是本项目
+   既有写法（证书 / WAF 空态的「去建站」），故在此补齐，让 <a> 与 <button> 同款。
+   只给 border 的 style/width，颜色留给下面的 .btn-* 决定——否则 (0,1,1) 的
+   border-color 会盖掉 .btn-primary 的 transparent 边框。 */
+a[class*="btn-"] {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-style: solid; border-width: 1px; border-color: var(--c-border-strong);
+  text-decoration: none;
+}
+/* 与 `a[class*="btn-"]` 同为 (0,1,1)，靠「后出现」取胜，把颜色还给各自的变体 */
+a.btn-primary { border-color: transparent; }
+a.btn-danger { border-color: var(--c-danger); }
 .btn-primary { background: var(--gradient); border-color: transparent; color: #fff; font-weight: 600; box-shadow: var(--glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-ghost { background: transparent; }
@@ -352,6 +366,11 @@ td button { vertical-align: middle; }
 table { border-collapse: collapse; width: 100%; }
 /* 上下内边距走 --row-py（密度档），左右保持 13px：只改行高，不改变列内缩进而导致列宽全变 */
 th, td { text-align: left; padding: var(--row-py) 13px; border-bottom: 1px solid var(--c-border); font-size: var(--fs-13-5); vertical-align: middle; }
+/* ⭐ 数字列右对齐**必须落在单元格自身**，不能写在 <col> 上：col 的 text-align 只是
+   **继承值**，而上一条 `th,td{text-align:left}` 是显式声明——继承永远赢不了显式。
+   实测：BackupsView 的 `.w-bid,.w-bkeep{text-align:right}` 写了很久，td 的计算值
+   一直是 left（死规则）。故统一走单元格上的 .num（(0,1,1) 压过 (0,0,1) 的 th,td）。 */
+th.num, td.num { text-align: right; }
 th { color: var(--c-text-dim); font-weight: 600; font-size: var(--fs-12-5); white-space: nowrap; }
 tbody tr { transition: background .12s ease; }
 tbody tr:hover { background: var(--c-hover); }

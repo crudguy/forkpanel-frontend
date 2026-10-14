@@ -413,4 +413,11 @@ col.w-rlname { width: 26%; }
 col.w-rlperm { width: 120px; }
 col.w-rlsrc { width: 100px; }
 col.w-rlacts { width: 90px; }
+
+/* 窄屏：键名固定 220px 时，360px 视口的值区只剩 ~70px（长值全被截断）。
+   改为上下堆叠，键名不再占位。 */
+@media (max-width: 720px) {
+  .kv-row { flex-direction: column; gap: 2px; }
+  .kv-row > .k { width: auto; }
+}
 </style>

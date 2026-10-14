@@ -305,10 +305,12 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       <label class="ctl chk" :class="{ on: foldRepeats }" title="折叠相邻重复行">
         <input type="checkbox" v-model="foldRepeats" /> 折叠重复
       </label>
-      <button class="btn-primary" :class="{ active: follow }" :disabled="!canView" @click="toggleFollow">
+      <button class="btn-primary" :class="{ active: follow }" :disabled="!canView"
+        :title="canView ? '' : '无 log.view 权限'" @click="toggleFollow">
         <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
       </button>
-      <button class="btn-ghost" :disabled="!canView || follow" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <button class="btn-ghost" :disabled="!canView || follow"
+        :title="!canView ? '无 log.view 权限' : (follow ? '实时跟随中无需手动刷新' : '')" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
       <button class="btn-ghost" :class="{ active: showStats }" :disabled="!canView || follow || !cur" title="聚合统计：level 分布 + 时间直方图 + 高频模式（最多扫 2000 行，随当前筛选）" @click="toggleStats">
         <Icon name="chart" :size="15" /> 统计
       </button>

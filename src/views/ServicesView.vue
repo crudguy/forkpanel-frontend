@@ -860,7 +860,9 @@ col.w-acts { width: 96px; }
 
 /* 软件卡片：两行布局（第一行包名 + 操作图标，第二行版本/管理器/状态徽标）。
    此前单行放置时，包名是唯一的可收缩 flex 项，被长版本号挤到 0 宽度 → 名称整个消失。 */
-.pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.pkg-grid { display: grid; gap: 10px;
+  /* min(290px,100%)：容器比 290px 还窄时轨道跟着收缩，否则 320px 视口横向溢出 */
+  grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); }
 .pkg { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); }
 .pkg-head { display: flex; align-items: center; gap: 8px; }

@@ -32,7 +32,7 @@ interface Draft { on: boolean; profile: string; rate: number; burst: number }
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
 const drafts = ref<Record<number, Draft>>({})
-const { error, run } = useAsync()
+const { error, loading, run } = useAsync()
 const busyId = ref<number | null>(null)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载 WAF 完整约束说明 */
 const helpOpen = ref(false)
@@ -169,7 +169,11 @@ onMounted(load)
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
-    <EmptyState v-if="!sites.length && !error" title="暂无站点"
+    <!-- 首屏必须先给骨架：此前本页 `useAsync()` 只解构了 `{ error, run }`，
+         请求还在飞就渲染了「暂无…」空态（带 CTA），数据到达后整块跳变；
+         且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
+    <div v-if="loading && !sites.length" class="skeleton box" />
+    <EmptyState v-else-if="!sites.length && !error" title="暂无站点"
       hint="先在「网站」建站，再回来统一配置 WAF">
       <template #cta>
         <RouterLink class="btn-primary btn-sm" to="/sites">去建站</RouterLink>

@@ -2196,7 +2196,8 @@ async function batchDelete() {
                   <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy" @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
                 </span>
                 <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '续期这张证书' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canSsl" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canSsl"
+            :title="canSsl ? '' : '无 ssl.manage 权限'" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
               </div>
             </div>
           </div>

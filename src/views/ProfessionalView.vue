@@ -329,4 +329,10 @@ th, td { padding: var(--row-py) 12px; text-align: left; font-size: var(--fs-13);
 th { color: var(--c-text-mute); font-weight: 600; }
 td.num, th.num { text-align: right; }
 tbody tr:hover { background: var(--c-hover); }
+
+/* 窄屏：四列等分在 720px 下每列只剩 ~60px，数值（如 12.4 GB）被挤断行。
+   降到两列，数值与标签各自都有余量。 */
+@media (max-width: 720px) {
+  .kv { grid-template-columns: repeat(2, 1fr); }
+}
 </style>

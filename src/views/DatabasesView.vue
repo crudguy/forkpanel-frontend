@@ -41,7 +41,7 @@ const PAGE_SIZE = 50
 
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
-const { error, run } = useAsync()
+const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载引擎差异与能力边界的完整说明 */
 const helpOpen = ref(false)
@@ -209,7 +209,11 @@ function closeBrowse() { browse.value = null }
         <p>「客户端」列只表示本机有没有 psql / mysqldump 这类工具，<b>不代表目标库连得上</b>；连接可用性以实际执行结果为准。</p>
       </HelpDrawer>
 
-      <div class="card flush toolbar-card" v-if="conns.length">
+    <!-- 首屏必须先给骨架：此前本页 `useAsync()` 只解构了 `{ error, run }`，
+         请求还在飞就渲染了「暂无…」空态（带 CTA），数据到达后整块跳变；
+         且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
+      <div v-if="loading && !conns.length" class="skeleton box" />
+      <div v-else-if="conns.length" class="card flush toolbar-card">
         <div class="card-toolbar">
           <span class="count">共 {{ conns.length }} 个连接</span>
           <span class="spacer" />
@@ -246,14 +250,16 @@ function closeBrowse() { browse.value = null }
                 </span>
               </td>
               <td class="nowrap acts">
-                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
+                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || busy"
+          :title="c.client_ready ? '' : '该引擎缺少客户端工具，无法浏览'" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
                 <button
                   class="btn-ghost btn-sm"
                   :disabled="busy"
                   :title="c.engine === 'sqlite' ? '执行只读查询' : '仅 SQLite 支持只读查询（其它引擎的连接不是只读的）'"
                   @click="sqlConn = c"
                 ><Icon name="terminal" :size="13" /> SQL</button>
-                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || !canManage || busy" @click="backup(c)">备份</button>
+                <button class="btn-ghost btn-sm" :disabled="!c.client_ready || !canManage || busy"
+          :title="!canManage ? '无 db.manage 权限' : (c.client_ready ? '' : '该引擎缺少客户端工具，无法备份')" @click="backup(c)">备份</button>
                 <button
                   class="btn-ghost btn-sm"
                   :disabled="!c.client_ready || !canManage || busy"

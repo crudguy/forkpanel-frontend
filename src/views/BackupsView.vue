@@ -48,7 +48,7 @@ interface Artifact { name: string; size: number; mtime: number }
 
 const auth = useAuthStore()
 const plans = ref<Plan[]>([])
-const { error, run } = useAsync()
+const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
 const createSec = ref<HTMLElement | null>(null)
@@ -335,7 +335,11 @@ function fmtTime(t: number | null) {
         </p>
       </section>
 
-      <div class="card flush toolbar-card" v-if="plans.length">
+    <!-- 首屏必须先给骨架：此前本页 `useAsync()` 只解构了 `{ error, run }`，
+         请求还在飞就渲染了「暂无…」空态（带 CTA），数据到达后整块跳变；
+         且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
+      <div v-if="loading && !plans.length" class="skeleton box" />
+      <div v-else-if="plans.length" class="card flush toolbar-card">
         <div class="card-toolbar">
           <span class="count">共 {{ plans.length }} 个计划</span>
           <span class="spacer" />
@@ -347,14 +351,14 @@ function fmtTime(t: number | null) {
           <colgroup>
             <col class="w-bid" /><col class="w-bkind" /><col class="w-btarget" /><col class="w-bdest" /><col class="w-bkeep" /><col class="w-benc" /><col class="w-bremote" /><col class="w-brun" /><col class="w-bacts" />
           </colgroup>
-          <thead><tr><th>#</th><th>类型</th><th>目标</th><th>产物目录</th><th class="col-opt">保留</th><th class="col-opt">加密</th><th>远端</th><th>上次执行</th><th /></tr></thead>
+          <thead><tr><th class="num">#</th><th>类型</th><th>目标</th><th>产物目录</th><th class="col-opt num">保留</th><th class="col-opt">加密</th><th>远端</th><th>上次执行</th><th /></tr></thead>
           <tbody>
             <tr v-for="p in plans" :key="p.id">
-              <td>{{ p.id }}</td>
+              <td class="num">{{ p.id }}</td>
               <td>{{ backupKindLabel(p.kind) }}</td>
               <td class="mono ellipsis" :title="p.target">{{ p.target }}</td>
               <td class="dim mono ellipsis" :title="p.dest_dir">{{ p.dest_dir }}</td>
-              <td class="col-opt">{{ p.keep_count }}</td>
+              <td class="col-opt num">{{ p.keep_count }}</td>
               <td :class="p.encrypt ? 'col-opt' : 'dim col-opt'">{{ p.encrypt ? '已加密' : '未加密' }}</td>
               <td class="dim">
                 <template v-if="p.remote_kind">
@@ -371,11 +375,14 @@ function fmtTime(t: number | null) {
                 </span>
               </td>
               <td class="nowrap">
-                <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="runPlan(p)"><Icon name="play" :size="13" /> 执行</button>
+                <button class="btn-ghost btn-sm" :disabled="!canManage || busy"
+            :title="canManage ? '' : '无 backup.manage 权限'" @click="runPlan(p)"><Icon name="play" :size="13" /> 执行</button>
                 <button class="btn-ghost btn-sm" @click="showArtifacts(p)"><Icon name="list" :size="13" /> 产物</button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
+                <button class="btn-ghost btn-sm" :disabled="!canManage"
+            :title="canManage ? '' : '无 backup.manage 权限'" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="openRemote(p)"><Icon name="globe" :size="13" /> 远端</button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canManage" @click="delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
+                <button class="btn-ghost btn-sm danger" :disabled="!canManage"
+            :title="canManage ? '' : '无 backup.manage 权限'" @click="delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
               </td>
             </tr>
           </tbody>
@@ -531,6 +538,8 @@ function fmtTime(t: number | null) {
 /* B9：数字列右对齐（id / 保留份数 / 产物大小）。<col> 的 text-align 级联到该列
    所有 th/td（与 SitesView 的 align:'right' 同一范式）；这些列都是纯数值，
    右对齐后同列数字按个位对齐、便于一眼扫读，与进程表的 PID/CPU/内存一致。 */
-.w-bid, .w-bkeep, .w-asize { text-align: right; }
+/* 数字列右对齐**不写在这里**：<col> 上的 text-align 只是继承值，压不过 main.css 的
+   `th,td{text-align:left}`（显式声明优先）——这条规则曾静默失效很久。
+   实际由公共 `th.num, td.num{text-align:right}` 承担，单元格上标 .num 即可。 */
 
 </style>
