@@ -7,6 +7,7 @@ import { CAP, fmtDateTime, roleLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import { useModal } from '@/composables/useModal'
+import { useAsync } from '@/composables/useAsync'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 /** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
@@ -25,8 +26,7 @@ interface UserOut {
 
 const auth = useAuthStore()
 const users = ref<UserOut[]>([])
-const error = ref('')
-const loading = ref(true)
+const { loading, error, run } = useAsync(true)
 const notReady = ref(false)
 
 /** 可分配的内置角色（owner 不可经 API 分配，故不在列）。 */
@@ -48,16 +48,19 @@ const formErr = ref('')
 const delTarget = ref<UserOut | null>(null)
 
 async function load() {
-  error.value = ''; loading.value = true; notReady.value = false
-  try {
-    // 后端 GET /users 返回**裸数组** UserOut[]（不是包装对象）
-    users.value = await api.get<UserOut[]>(API.users.list())
-  } catch (e) {
-    const t = errorText(e)
-    // 后端用户管理仍占位（返回 unsupported）→ 友好提示而非报错
-    if (t.includes('尚未接入') || t.includes('M5')) notReady.value = true
-    else error.value = t
-  } finally { loading.value = false }
+  await run(
+    async () => {
+      notReady.value = false
+      // 后端 GET /users 返回**裸数组** UserOut[]（不是包装对象）
+      users.value = await api.get<UserOut[]>(API.users.list())
+    },
+    (e) => {
+      const t = errorText(e)
+      // 后端用户管理仍占位（返回 unsupported）→ 友好提示而非报错
+      if (t.includes('尚未接入') || t.includes('M5')) notReady.value = true
+      else error.value = t
+    },
+  )
 }
 
 function openCreate() {

@@ -14,6 +14,7 @@ import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { fmtDateTime, notifLevelLabel } from '@/api/types'
+import { useAsync } from '@/composables/useAsync'
 
 interface NotificationItem {
   id: number
@@ -27,27 +28,20 @@ interface NotificationItem {
 
 const items = ref<NotificationItem[]>([])
 const unread = ref(0)
-const loading = ref(false)
-const error = ref('')
+const { loading, error, run } = useAsync()
 
 function fmt(ts: number): string {
   return fmtDateTime(ts)
 }
 
 async function load() {
-  loading.value = true
-  error.value = ''
-  try {
+  await run(async () => {
     items.value = await api.get<NotificationItem[]>(API.notifications.list(), {
       params: { limit: 100 },
     })
     const r = await api.get<{ count: number }>(API.notifications.unreadCount())
     unread.value = r.count
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 async function markRead(n: NotificationItem) {
