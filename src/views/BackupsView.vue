@@ -17,6 +17,7 @@
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -47,7 +48,7 @@ interface Artifact { name: string; size: number; mtime: number }
 
 const auth = useAuthStore()
 const plans = ref<Plan[]>([])
-const error = ref('')
+const { error, run } = useAsync()
 const busy = ref(false)
 /** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
 const createSec = ref<HTMLElement | null>(null)
@@ -132,9 +133,10 @@ const curArtifacts = ref<{ plan: Plan; items: Artifact[] } | null>(null)
 const canManage = computed(() => auth.enabled(CAP.BACKUP_MANAGE, 'backup.manage'))
 
 async function load() {
-  error.value = ''
-  try { plans.value = await api.get<Plan[]>(API.backups.list()) }
-  catch (e) { error.value = errorText(e); plans.value = [] }
+  await run(
+    async () => { plans.value = await api.get<Plan[]>(API.backups.list()) },
+    (e) => { plans.value = []; error.value = errorText(e) },
+  )
 }
 onMounted(load)
 

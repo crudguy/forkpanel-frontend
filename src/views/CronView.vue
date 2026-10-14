@@ -9,6 +9,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
+import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -25,7 +26,7 @@ interface Job {
 
 const auth = useAuthStore()
 const jobs = ref<Job[]>([])
-const error = ref('')
+const { error, run } = useAsync()
 const note = ref('')
 const form = ref({ name: '', expr: '', command: '', user: 'root' })
 const del = ref<Job | null>(null)
@@ -40,8 +41,10 @@ async function load() {
   error.value = ''; note.value = ''
   // 请求级门控：系统无 crontab 时 scheduler.manage=no，列表端点返 501
   if (!auth.supported(CAP.SCHEDULER_MANAGE)) return
-  try { jobs.value = await api.get<Job[]>(API.cron.jobs()) }
-  catch (e) { error.value = errorText(e); jobs.value = [] }
+  await run(
+    async () => { jobs.value = await api.get<Job[]>(API.cron.jobs()) },
+    (e) => { jobs.value = []; error.value = errorText(e) },
+  )
 }
 
 // 手动触发一次：后端把它排进任务队列并立刻返回 task_id，

@@ -20,6 +20,7 @@ import MetricCard from '@/components/MetricCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
+import { useAsync } from '@/composables/useAsync'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -45,18 +46,15 @@ interface SessionInfo {
 const baseline = ref<BaselineItem[]>([])
 const auth = useAuthStore()
 const sessions = ref<SessionInfo[]>([])
-const error = ref('')
-const loading = ref(true)
+const { loading, error, run } = useAsync(true)
 
 async function load() {
-  error.value = ''; loading.value = true
-  try {
+  await run(async () => {
     const b = await api.get<BaselineItem[]>(API.security.baseline()).catch(() => null)
     baseline.value = Array.isArray(b) ? b : []
     const s = await api.get<{ sessions: SessionInfo[] }>(API.security.sessions()).catch(() => null)
     sessions.value = s?.sessions ?? []
-  } catch (e) { error.value = errorText(e) }
-  finally { loading.value = false }
+  })
 }
 onMounted(load)
 
