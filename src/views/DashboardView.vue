@@ -7,10 +7,11 @@
  */
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { api, errorText, isUnsupported } from '@/api/client'
+import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { CAP, fmtDateTime, type ServerNote } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
+import SkeletonCard from '@/components/SkeletonCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone, type MetricTone } from '@/composables/metricTone'
 import Icon from '@/components/Icon.vue'
@@ -123,7 +124,10 @@ async function poll() {
     if (last && typeof last.cpu === 'number') r.cpu_pct = last.cpu
     apply(r); ovError.value = ''
   } catch (e) {
-    if (isUnsupported(e)) ovError.value = errorText(e)
+    // 任何拉取失败（能力未接入 10009 / 网络抖动 / 超时）都给出可重试的错误态，
+    // 不再静默卡在骨架（审计 U-首屏错误态一致性）：此前非 isUnsupported 的失败会让
+    // 5 张骨架永久停留、无任何提示与重试入口。errorText 已按码给出中文文案。
+    ovError.value = errorText(e)
   }
 }
 
@@ -372,10 +376,11 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
     </p>
 
     <template v-else>
-      <p v-if="ovError" class="err" role="alert">{{ ovError }}</p>
-      <!-- 首屏骨架（审计 U11）：此前 ov=null 时指标卡全显示 0 值，故障与"真的空闲"无法区分 -->
-      <div v-if="!ov" class="grid cols-5">
-        <div v-for="i in 5" :key="i" class="card skeleton" style="height:96px" />
+      <p v-if="ovError" class="err" role="alert">{{ ovError }}<button class="btn-ghost btn-sm err-retry" type="button" @click="poll()">重试</button></p>
+      <!-- 首屏骨架（审计 U11）：ov 尚未到达且无误时，用与 MetricCard 同形的 SkeletonCard
+           占位，列数与真实卡片一致、零跳动；此前写死 height:96px 的方块与各卡基线不齐。 -->
+      <div v-else-if="!ov" class="grid" :class="`cols-${Math.max(1, shownCards.length)}`">
+        <SkeletonCard v-for="c in shownCards" :key="c.id" :progress="c.progress !== undefined" />
       </div>
       <!-- 指标卡（A1 个性化）：顺序/显隐按后端布局渲染；管理员可拖拽排序 -->
       <div v-else class="grid" :class="`cols-${Math.max(1, shownCards.length)}`">
