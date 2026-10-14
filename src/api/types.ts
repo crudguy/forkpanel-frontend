@@ -665,7 +665,7 @@ export interface Cert {
   /** 距到期天数（后端计算，可能为 null）。 */
   days_left: number | null
   auto_renew: boolean
-  renew_state?: string | null
+  renew_state?: 'idle' | 'pending' | 'ok' | 'failed'
   /** 落库来源：acme / selfsigned / manual（见 certSourceLabel）。 */
   source: string
 }
