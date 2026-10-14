@@ -366,6 +366,10 @@ tbody tr:last-child td { border-bottom: none; }
    弹性列用 width:auto 吸收剩余宽度。窄屏（<=720px）由下方 .card.flush table.fixed 转回 auto。 */
 table.fixed { table-layout: fixed; width: 100%; }
 table.fixed th, table.fixed td { overflow: hidden; }
+/* 操作列（数据表末列）恒不换行（审计 U-窄屏回归）：auto 布局下若末列宽度不足，
+   带文字的操作按钮会被竖堆成多行（实测证书页操作列压到 64px、按钮换行）——统一
+   保单行。列宽下限由各视图在自身 scoped 里按按钮实宽给（.acts 的 min-width）。 */
+table.fixed tbody td:last-child { white-space: nowrap; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 

@@ -242,7 +242,7 @@ onMounted(load)
                 :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
               <span v-else class="dim">—</span>
             </td>
-            <td>
+            <td class="acts">
               <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id || batchBusy"
                 :title="blockedReason(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
                 {{ busyId === s.id ? '应用中…' : '应用' }}
@@ -285,4 +285,7 @@ col.w-wfprof { width: 104px; }
 col.w-wfrate { width: 120px; }
 col.w-wfburst { width: 120px; }
 col.w-wfacts { width: 130px; }
+/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落
+   在 td 上；单「应用」按钮在窄列里也需保住完整宽，避免「应用中…」被裁。 */
+.acts { white-space: nowrap; min-width: 130px; }
 </style>

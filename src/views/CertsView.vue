@@ -216,7 +216,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
                 <i />
               </label>
             </td>
-            <td>
+            <td class="acts">
               <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '续期' : sslHint" @click="renewCert(c)">
                 <Icon name="refresh" :size="13" /><span class="btn-label">续期</span>
               </button>
@@ -311,6 +311,9 @@ table.fixed { table-layout: fixed; width: 100%; }
 .cert-left { width: 78px; }
 .cert-auto { width: 112px; }
 .cert-acts { width: 168px; }
+/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议、会被压到按钮
+   min-content（实测 64px 竖堆）；min-width 必须落在 td 上才生效，保两按钮单行。 */
+.acts { white-space: nowrap; min-width: 168px; }
 
 /* 按钮 / 文字色 / 区块标题 / 弹窗 / 骨架屏 一律复用 main.css 公共类，
    不再私有重定义（审计 V1：证书页自造按钮样式曾与全局漂移）。

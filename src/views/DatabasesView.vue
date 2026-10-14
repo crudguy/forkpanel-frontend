@@ -217,11 +217,11 @@ function closeBrowse() { browse.value = null }
           <colgroup>
             <col class="w-dbname" /><col class="w-dbremark" /><col class="w-dbeng" /><col class="w-dbhost" /><col class="w-dbdb" /><col class="w-dbcli" /><col class="w-dbacts" />
           </colgroup>
-          <thead><tr><th scope="col">名称</th><th scope="col">备注</th><th scope="col">引擎</th><th scope="col">主机</th><th scope="col">库 / 文件</th><th scope="col" class="col-opt">客户端</th><th /></tr></thead>
+          <thead><tr><th scope="col">名称</th><th scope="col" class="col-opt">备注</th><th scope="col">引擎</th><th scope="col">主机</th><th scope="col">库 / 文件</th><th scope="col" class="col-opt">客户端</th><th /></tr></thead>
           <tbody>
             <tr v-for="c in conns" :key="c.id">
               <td class="ellipsis" :title="c.name">{{ c.name }}</td>
-              <td class="remark-cell">
+              <td class="remark-cell col-opt">
                 <InlineRemark :model-value="c.remark" :editable="canManage"
                   :saver="(v) => saveRemark(c, v)" />
               </td>
@@ -238,7 +238,7 @@ function closeBrowse() { browse.value = null }
                   {{ c.client_ready ? '客户端就绪' : '缺客户端' }}
                 </span>
               </td>
-              <td class="nowrap">
+              <td class="nowrap acts">
                 <button class="btn-ghost btn-sm" :disabled="!c.client_ready || busy" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
                 <button
                   class="btn-ghost btn-sm"
@@ -364,6 +364,10 @@ col.w-dbhost { width: 14%; }
 col.w-dbdb { width: auto; }
 col.w-dbcli { width: 11%; }
 col.w-dbacts { width: 270px; }
+/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落
+   在 td 上；浏览/SQL/备份/恢复 4 按钮需 270px，窄屏随「备注」列隐藏一并收敛。
+   注意 .nowrap 已在单元格 class 上提供不换行，这里只补下限宽度。 */
+.acts { white-space: nowrap; min-width: 270px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
 td.remark-cell { padding: 4px 10px; }
 </style>
