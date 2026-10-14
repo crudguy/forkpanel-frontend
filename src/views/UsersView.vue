@@ -108,17 +108,6 @@ onMounted(load)
 
 <template>
   <div>
-    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
-    <div class="page-head tools">
-      <span class="spacer" />
-      <button class="btn-primary" :disabled="loading || notReady || !canManage" @click="openCreate">
-        <Icon name="user-plus" :size="15" /> 新建用户
-      </button>
-      <button class="btn-ghost" :disabled="loading || notReady" @click="load">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
-    </div>
-
     <EmptyState v-if="!canManage" title="无用户管理权限" reason="需要 user.manage 权限" />
 
     <template v-else>
@@ -130,7 +119,23 @@ onMounted(load)
 
       <p v-else-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <div v-else-if="loading" class="skeleton box" />
-      <div v-else class="card flush">
+      <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放两个按钮的页面级
+           page-head 横条，主操作紧贴它操作的表；横滚交给内部 .t-scroll。
+           notReady / 无权限态下这张表本就不渲染，按钮随之不出现（它们在这些态下
+           原本也是 disabled，隐藏比摆一排灰钮更干净）。 -->
+      <div v-else class="card flush toolbar-card">
+        <div class="card-toolbar">
+          <Icon name="users" :size="16" />
+          <span class="count">共 {{ users.length }} 个用户</span>
+          <span class="spacer" />
+          <button class="btn-primary btn-sm" :disabled="loading || notReady || !canManage" @click="openCreate">
+            <Icon name="user-plus" :size="14" /> 新建用户
+          </button>
+          <button class="btn-ghost btn-sm" :disabled="loading || notReady" @click="load">
+            <Icon name="refresh" :size="14" /> 刷新
+          </button>
+        </div>
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-uname" /><col class="w-urole" /><col class="w-uroots" /><col class="w-ustate" /><col class="w-umfa" /><col class="w-ulogin" /><col class="w-uacts" />
@@ -162,6 +167,7 @@ onMounted(load)
             <tr v-if="!users.length"><td colspan="7"><EmptyState title="无用户" /></td></tr>
           </tbody>
         </table>
+        </div>
       </div>
     </template>
 

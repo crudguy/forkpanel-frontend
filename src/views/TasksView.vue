@@ -82,16 +82,19 @@ onUnmounted(stopPoll)
 
 <template>
   <div>
-    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
-    <div class="page-head tools">
-      <span class="spacer" />
-      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
     <template v-else>
-      <div class="card flush">
+      <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
+           page-head 横条，工具条紧贴它操作的表；横滚交给内部 .t-scroll。 -->
+      <div class="card flush toolbar-card">
+        <div class="card-toolbar">
+          <Icon name="clock" :size="16" />
+          <span class="count">共 {{ tasks.length }} 个任务</span>
+          <span class="spacer" />
+          <button class="btn-primary btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+        </div>
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <colgroup>
             <col class="w-tid" /><col class="w-tname" /><col class="w-tstate" /><col class="w-tprog" /><col class="w-tstart" /><col class="w-tacts" />
@@ -123,6 +126,7 @@ onUnmounted(stopPoll)
             <tr v-if="!tasks.length"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <div v-if="sel" class="card">

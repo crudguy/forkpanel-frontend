@@ -323,6 +323,18 @@ td button { vertical-align: middle; }
    内容还近，层级是反的。故用显式修饰类补间距，只加在需要的地方。 */
 .sec-head.block { margin-top: 26px; }
 .sec-head .icon { color: var(--c-primary); }
+
+/* ── 卡片顶栏工具条 ── */
+/* 范式见 ProcessesView（.procs-toolbar + .card.flush.procs-card）：把「刷新 / 新建」
+   这类页面级动作收进它操作的那张卡片顶部，与下方表格合成一个统一的表头区，
+   从而去掉「整条容器只放一个按钮」的页面级 .page-head 横条。
+   ⚠️ 卡片必须改 overflow:hidden、横滚交给内部 .t-scroll——否则窄屏表格横滚时
+   工具条（含按钮）会跟着滚出视野（与 ProcessesView 同一处置）。
+   选择器 (0,3,0) 压过 .card.flush 的 (0,2,0)。 */
+.card.flush.toolbar-card { overflow: hidden; }
+.card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
+.card-toolbar .icon { color: var(--c-primary); }
+.card-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
 .mono { font-family: var(--mono); }
 
 /* ── 徽章 / 状态点 ── */

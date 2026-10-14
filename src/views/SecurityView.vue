@@ -196,12 +196,6 @@ async function doDisable() {
 
 <template>
   <div>
-    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
-    <div class="page-head tools">
-      <span class="spacer" />
-      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
     <template v-else>
@@ -212,8 +206,14 @@ async function doDisable() {
 
       <!-- ② 清单：安全基线逐项检查 -->
       <section class="card">
+        <!-- 刷新并到卡片标题右侧（同 ProcessesView「动作收进卡片顶栏」范式）：
+             去掉只放一个按钮的页面级 page-head 横条，动作紧贴它刷新的清单。 -->
         <div class="sec-head">
           <Icon name="shield" :size="16" /><span>安全基线清单</span>
+          <span class="spacer" />
+          <button class="btn-primary btn-sm" :disabled="loading" @click="load">
+            <Icon name="refresh" :size="14" /> 刷新
+          </button>
         </div>
         <ul class="checks">
           <li v-for="c in baseline" :key="c.key" :title="c.advice">

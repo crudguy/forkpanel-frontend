@@ -143,13 +143,6 @@ onMounted(load)
 
 <template>
   <div>
-    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
-    <div class="page-head tools">
-      <span class="spacer" />
-      <button class="btn-ghost" :disabled="loading" @click="reset"><Icon name="refresh" :size="15" /> 重置</button>
-      <button class="btn-primary" :disabled="loading" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <EmptyState v-if="!canView" title="无审计查看权限" reason="需要 audit.view" />
 
     <template v-else>
@@ -184,7 +177,15 @@ onMounted(load)
       <div v-if="loading" class="skeleton box" />
 
       <template v-else>
-        <div class="card flush">
+        <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放「重置 / 刷新」的
+             页面级 page-head 横条，工具条紧贴它操作的表；横滚交给内部 .t-scroll。 -->
+        <div class="card flush toolbar-card">
+          <div class="card-toolbar">
+            <span class="spacer" />
+            <button class="btn-ghost btn-sm" :disabled="loading" @click="reset"><Icon name="refresh" :size="14" /> 重置</button>
+            <button class="btn-primary btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+          </div>
+          <div class="t-scroll">
           <table class="fixed" v-table-nav>
             <!-- 列宽：目标为唯一弹性列；时间/结果/箭头列定宽，避免 19 字符时间戳换行。 -->
             <colgroup>
@@ -223,6 +224,7 @@ onMounted(load)
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
         <!-- 分页 -->

@@ -358,11 +358,11 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <template>
   <div class="dash">
-    <div class="page-head">
-      <span class="spacer" />
-      <!-- 卡片设置（A1 个性化）：显隐开关；顺序在下方直接拖拽卡片调整 -->
-      <button v-if="canLayout && auth.supported(CAP.METRICS_READ)" class="btn-ghost btn-sm"
-        title="卡片显示与排序（在页面上直接拖拽卡片调整顺序）" @click="layoutOpen = true">
+    <!-- 卡片设置（A1 个性化）：显隐开关；顺序在下方直接拖拽卡片调整。
+         原 page-head 横条已去掉（只为一个设置钮不值得占一条页面级空横条），
+         改为内容区右上角工具行——与 SitesView/ProcessesView「工具条收进卡片顶栏」同范式。 -->
+    <div v-if="canLayout && auth.supported(CAP.METRICS_READ)" class="dash-tools">
+      <button class="btn-ghost btn-sm" title="卡片显示与排序（在页面上直接拖拽卡片调整顺序）" @click="layoutOpen = true">
         <Icon name="gear" :size="14" /> 卡片设置
       </button>
     </div>
@@ -522,6 +522,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
 
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
+
+/* 概览无卡头，页面级 page-head 横条已去掉，卡片设置收为内容区右上角工具行
+   （与 SitesView/ProcessesView「工具条收进卡片顶栏」同范式）。 */
+.dash-tools { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* 本机便签（025）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
    但不改填充色——避免和告警/热区提示抢视觉权重。 */

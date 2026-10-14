@@ -166,12 +166,6 @@ async function triggerWebhook(j: Job) {
 
 <template>
   <div>
-    <!-- tools：本页页头只有右侧动作，用瘦身变体（见 main.css .page-head.tools） -->
-    <div class="page-head tools">
-      <span class="spacer" />
-      <button class="btn-primary" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
-    </div>
-
     <EmptyState v-if="!auth.supported(CAP.SCHEDULER_MANAGE)"
       title="当前环境不支持计划任务"
       :reason="auth.capabilities[CAP.SCHEDULER_MANAGE]?.reason ?? undefined" />
@@ -209,8 +203,19 @@ async function triggerWebhook(j: Job) {
         <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
       </section>
 
-      <div class="card flush" v-if="jobs.length">
-        <table class="fixed" v-table-nav>
+      <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
+           page-head 横条；横滚交给内部 .t-scroll。
+           ⚠️ 卡片不再用 v-if="jobs.length"——否则空列表时整张卡（含刷新）一起消失，
+           刷新按钮就点不到了。空态改为下方独立的 v-if="!jobs.length"。 -->
+      <div class="card flush toolbar-card">
+        <div class="card-toolbar">
+          <Icon name="clock" :size="16" />
+          <span class="count">共 {{ jobs.length }} 个任务</span>
+          <span class="spacer" />
+          <button class="btn-primary btn-sm" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+        </div>
+        <div class="t-scroll">
+        <table v-if="jobs.length" class="fixed" v-table-nav>
           <!-- 列宽：命令为唯一弹性列；用户列窄屏隐藏（.col-opt，多为 root/面板用户）。 -->
           <colgroup>
             <col class="w-cjid" /><col class="w-cjexpr" /><col class="w-cjcmd" /><col class="w-cjuser" /><col class="w-cjlast" /><col class="w-cjnext" /><col class="w-cjacts" />
@@ -237,8 +242,9 @@ async function triggerWebhook(j: Job) {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
-      <EmptyState v-else title="暂无计划任务" />
+      <EmptyState v-if="!jobs.length" title="暂无计划任务" />
 
       <ConfirmDialog :open="!!del" danger title="删除计划任务"
         :detail="`将删除 ${del?.id}，该任务的后续执行会一并取消。`"
