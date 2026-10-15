@@ -67,8 +67,17 @@ const canManage = computed(() => auth.enabled(CAP.DBMS_MANAGE, 'db.manage'))
 
 async function create() {
   busy.value = true; error.value = ''
+  const ext = form.value.engine !== 'sqlite'
+  // P2：外部引擎端口范围校验（仅当填写了端口时；留空走后端默认端口）
+  if (ext && form.value.port !== '' && form.value.port != null) {
+    const p = Number(form.value.port)
+    if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      error.value = '端口需为 1-65535 之间的整数'
+      busy.value = false
+      return
+    }
+  }
   try {
-    const ext = form.value.engine !== 'sqlite'
     await api.post(API.db.connections(), {
       name: form.value.name, engine: form.value.engine,
       host: form.value.host || undefined, default_db: form.value.default_db || undefined,

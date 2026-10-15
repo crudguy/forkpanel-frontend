@@ -611,6 +611,7 @@ async function doConfirmed() {
         <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
         <div v-if="loading" class="skeleton box" />
         <template v-else>
+          <div class="t-scroll">
           <table v-table-nav>
             <colgroup>
               <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
@@ -633,6 +634,7 @@ async function doConfirmed() {
               <tr v-if="!svcs.length"><td colspan="5"><EmptyState title="未发现服务" /></td></tr>
             </tbody>
           </table>
+        </div>
         </template>
       </div>
     </div>

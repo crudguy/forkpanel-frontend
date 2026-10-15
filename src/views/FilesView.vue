@@ -407,6 +407,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
     </div>
 
     <div v-if="entries.length" class="card flush">
+      <div class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 勾选列仅在可写时渲染，colgroup 须同步 v-if —— 否则列宽与列数错位。
              名称为唯一弹性列；属主列窄屏隐藏（.col-opt）。名称超长时裁切 + title 悬停。 -->
@@ -454,6 +455,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
     <EmptyState v-else-if="!loading" title="空目录" />
 

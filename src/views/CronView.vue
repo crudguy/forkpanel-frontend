@@ -122,6 +122,12 @@ async function doPreview(expr: string) {
 async function saveEdit() {
   if (!edit.value) return
   if (!canManage.value) { editError.value = '无计划任务管理权限'; return }
+  // P2：超时清空后 v-model.number 得 '' → Number('')=0，会下发非法超时；显式拦截
+  const to = Number(editForm.value.timeout_sec)
+  if (!Number.isFinite(to) || to < 1 || to > 604800) {
+    editError.value = '超时需为 1-604800 之间的整数（秒）'
+    return
+  }
   editBusy.value = true; editError.value = ''
   try {
     await api.patch(API.cron.job(edit.value.id), {
@@ -129,7 +135,7 @@ async function saveEdit() {
       command: editForm.value.command,
       user: editForm.value.user,
       enabled: editForm.value.enabled,
-      timeout_sec: Number(editForm.value.timeout_sec),
+      timeout_sec: to,
     })
     closeEdit(); load()
   } catch (e) { editError.value = errorText(e) }
@@ -296,7 +302,7 @@ async function triggerWebhook(j: Job) {
               <Icon name="bell" :size="14" /> {{ trigBusy === edit?.id ? '触发中…' : '触发 Webhook' }}
             </button>
             <span class="spacer" />
-            <button class="btn-primary" :disabled="editBusy || !editForm.expr || !editForm.command"
+            <button class="btn-primary" :disabled="editBusy || !editForm.expr || !editForm.command || !(Number(editForm.timeout_sec) >= 1 && Number.isFinite(Number(editForm.timeout_sec)))"
                     @click="saveEdit">
               {{ editBusy ? '保存中…' : '保存' }}
             </button>

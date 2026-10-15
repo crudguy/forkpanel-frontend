@@ -85,7 +85,8 @@ async function loadSystemUsers() {
 }
 const fieldErrs = ref<Record<string, string>>({})
 const errSeq = ref(0)
-const busy = ref(false)
+const busyId = ref<number | null>(null)
+const saving = ref(false)
 const canManage = computed(() => auth.can('service.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
 const curRuntime = computed(() => runtimes.value.find(r => r.key === form.value.runtime) ?? null)
@@ -208,7 +209,7 @@ function removeEnvRow(i: number) {
 }
 
 async function save() {
-  busy.value = true
+  saving.value = true
   formError.value = ''
   const errs: Record<string, string> = {}
   try {
@@ -269,12 +270,12 @@ async function save() {
     }
     showErr(errorText(e))
   } finally {
-    busy.value = false
+    saving.value = false
   }
 }
 
 async function act(a: AppInfo, action: 'start' | 'stop' | 'restart') {
-  busy.value = true
+  busyId.value = a.id
   try {
     await api.post(API.apps.act(a.id), { act: action })
     await load(true)
@@ -282,12 +283,12 @@ async function act(a: AppInfo, action: 'start' | 'stop' | 'restart') {
   } catch (e) {
     toast(errorText(e), 'err')
   } finally {
-    busy.value = false
+    busyId.value = null
   }
 }
 
 async function toggleEnabled(a: AppInfo, val: boolean) {
-  busy.value = true
+  busyId.value = a.id
   try {
     await api.patch(API.apps.patch(a.id), { enabled: val })
     await load(true)
@@ -296,7 +297,7 @@ async function toggleEnabled(a: AppInfo, val: boolean) {
     toast(errorText(e), 'err')
     await load(true) // 失败时回滚开关的真实状态，不靠前端猜
   } finally {
-    busy.value = false
+    busyId.value = null
   }
 }
 
@@ -307,7 +308,7 @@ async function doRemove() {
   const a = pendingRemove.value
   pendingRemove.value = null
   if (!a) return
-  busy.value = true
+  busyId.value = a.id
   try {
     await api.del(API.apps.remove(a.id))
     await load()
@@ -315,7 +316,7 @@ async function doRemove() {
   } catch (e) {
     toast(errorText(e), 'err')
   } finally {
-    busy.value = false
+    busyId.value = null
   }
 }
 
@@ -361,7 +362,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       <div class="card-toolbar">
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
-        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busy"
+        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
           <Icon name="plus" :size="14" /> 新建应用
@@ -395,22 +396,22 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
             <td class="mono ellipsis dim" :title="a.unit">{{ a.unit }}</td>
             <td>
               <label class="switch" :title="a.enabled ? '点击停止托管（撤站点 + 删单元）' : '点击托管（装单元 + 建站点）'">
-                <input type="checkbox" :checked="a.enabled" :disabled="!canManage || busy"
+                <input type="checkbox" :checked="a.enabled" :disabled="!canManage || busyId === a.id"
                   @change="toggleEnabled(a, ($event.target as HTMLInputElement).checked)" />
                 <i />
               </label>
             </td>
             <td class="app-acts-cell">
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busy" title="启动"
+              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '先启用托管才能启动' : '启动'"
                 @click="act(a, 'start')"><Icon name="play" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busy" title="停止"
+              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '应用未托管，无法停止' : '停止'"
                 @click="act(a, 'stop')"><Icon name="stop" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busy" title="重启"
+              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '先启用托管才能重启' : '重启'"
                 @click="act(a, 'restart')"><Icon name="refresh" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="busy" title="编辑" @click="openEdit(a)">
+              <button class="btn-ghost btn-sm" :disabled="busyId === a.id" title="编辑" @click="openEdit(a)">
                 <Icon name="edit" :size="13" />
               </button>
-              <button class="btn-ghost btn-sm" :disabled="busy" title="删除" @click="askRemove(a)">
+              <button class="btn-ghost btn-sm" :disabled="busyId === a.id" title="删除" @click="askRemove(a)">
                 <Icon name="trash" :size="13" />
               </button>
             </td>
@@ -553,8 +554,8 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" @click="modalClose">取消</button>
-            <button class="btn-primary" :disabled="busy" @click="save">
-              {{ busy ? '保存中…' : (editing ? '保存' : '创建并托管') }}
+            <button class="btn-primary" :disabled="saving" @click="save">
+              {{ saving ? '保存中…' : (editing ? '保存' : '创建并托管') }}
             </button>
           </div>
         </div>

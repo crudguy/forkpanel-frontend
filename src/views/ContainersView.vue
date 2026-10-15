@@ -291,6 +291,7 @@ async function saveRemark(c: Container, v: string) {
 
       <!-- ── 容器 ── -->
       <div class="card flush" v-if="tab === 'containers' && containers.length">
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <colgroup>
             <!-- 列宽（站点表范式）：镜像为唯一弹性列（width:auto）吸收余量；操作列 320px
@@ -334,12 +335,14 @@ async function saveRemark(c: Container, v: string) {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <EmptyState v-else-if="tab === 'containers' && !loading" title="没有容器"
         hint="该 Docker 守护进程上没有任何容器（含已停止）。" />
 
       <!-- ── 镜像 ── -->
       <div class="card flush" v-else-if="images.length">
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽与上方容器表同范式；前缀独立（w-i*），不与容器表 w-* 混用。
                镜像 ID 列次要，窄屏隐藏（.col-opt）。 -->
@@ -359,6 +362,7 @@ async function saveRemark(c: Container, v: string) {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <EmptyState v-else-if="!loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
 

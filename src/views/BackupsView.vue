@@ -83,12 +83,18 @@ function openEditPlan(p: Plan) {
 
 async function saveEditPlan() {
   const e = editPlan.value; if (!e) return
+  // P2：保留份数 JS 校验
+  const kc = Number(e.keep)
+  if (!Number.isInteger(kc) || kc < 1 || kc > 365) {
+    error.value = '保留份数需为 1-365 之间的整数'
+    return
+  }
   busy.value = true; error.value = ''
   try {
     await api.patch(API.backups.patch(e.plan.id), {
       // cron：Some("") = 清空（仅手动执行）；表单已回填现值，只改想要的字段即可
       cron_expr: e.cron.trim(),
-      keep_count: e.keep,
+      keep_count: kc,
       encrypt: e.encrypt,
       enabled: e.enabled,
       dest_dir: e.dest.trim() || undefined, // 留空 = 不改目标目录
@@ -142,13 +148,20 @@ onMounted(load)
 
 async function create() {
   busy.value = true; error.value = ''
+  // P2：保留份数 JS 校验（HTML min/max 可被绕过）
+  const kc = Number(form.value.keep_count)
+  if (!Number.isInteger(kc) || kc < 1 || kc > 365) {
+    error.value = '保留份数需为 1-365 之间的整数'
+    busy.value = false
+    return
+  }
   try {
     await api.post(API.backups.create(), {
       kind: form.value.kind,
       target: form.value.kind === 'panel' ? 'panel' : form.value.target.trim(),
       dest_dir: form.value.dest_dir.trim() || 'plans',
       cron_expr: form.value.cron_expr.trim() || undefined,
-      keep_count: form.value.keep_count,
+      keep_count: kc,
       encrypt: form.value.encrypt,
       remote: remotePayload(form.value.remote),
     })
@@ -323,7 +336,7 @@ function fmtTime(t: number | null) {
           <label>cron（可空）
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
-          <button class="btn-primary" :disabled="!canManage || busy || (form.kind === 'site' && !form.target.trim())" @click="create">添加</button>
+          <button class="btn-primary" :disabled="!canManage || busy || (form.kind === 'site' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
 
         <RemoteTargetForm v-model="form.remote" :disabled="!canManage" />
