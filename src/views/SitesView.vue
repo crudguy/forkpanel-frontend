@@ -212,13 +212,21 @@ const canManage = computed(() => auth.can('site.manage'))
 const canSsl = computed(() => auth.can('ssl.manage'))
 // 配置下发 / SSL 受平台能力位约束
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
+/** 当前 Web 服务器后端（`nginx` / `caddy` / null）。caddy 下**部分字段照常可填、渲染器却不产出**，
+ *  必须置灰并说明原因——项目纪律：绝不提供「能填但不生效」的假控件。 */
+const webBackend = computed(() => auth.backend(CAP.WEBSERVER_MANAGE))
+const isCaddy = computed(() => webSupported.value && webBackend.value === 'caddy')
+/** 后端名（文案用；未接入时为通称） */
+const webName = computed(() => webBackend.value ?? 'Web 服务器')
+/** caddy 未实装项的统一 tooltip：说清「为什么灰」，而不是让用户自己猜 */
+const caddyNoop = '当前 Web 服务器为 Caddy：此项目前未实装，已置灰（填了也不会写进配置）'
 const sslSupported = computed(() => auth.supported(CAP.SSL_ACME))
 const selfSignedSupported = computed(() => auth.supported(CAP.SSL_SELFSIGNED))
 // SSL 需基础设施齐备：① 底座（nginx）能加载证书 ② 签发渠道（自签/ACME）③ 权限
 const sslReady = computed(() => webSupported.value && (sslSupported.value || selfSignedSupported.value) && canSsl.value)
 const sslHint = computed(() => {
   if (!canSsl.value) return '无 ssl.manage 权限'
-  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx）——证书没有进程可加载'
+  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx / caddy）——证书没有进程可加载'
   return '需 openssl 或 ACME'
 })
 const canReload = computed(() => webSupported.value && canManage.value)
@@ -226,7 +234,7 @@ const canReload = computed(() => webSupported.value && canManage.value)
 const canCreate = computed(() => webSupported.value && canManage.value)
 const createHint = computed(() => {
   if (!canManage.value) return '无 site.manage 权限'
-  return webSupported.value ? '' : '需先安装并启动 Web 服务器（nginx）——否则站点建了也无法访问'
+  return webSupported.value ? '' : '需先安装并启动 Web 服务器（nginx / caddy）——否则站点建了也无法访问'
 })
 
 /**
@@ -776,7 +784,7 @@ async function save() {
       // 64 KiB 的权威校验仍在后端（前端判断不等于后端校验）。非 owner 不发送该字段。
       if (isOwner.value && form.value.customConf.trim()
         && new TextEncoder().encode(form.value.customConf).length > 64 * 1024) {
-        errs.customConf = '自定义片段超过 64 KiB 上限（原始 nginx 文本按字节计）'
+        errs.customConf = '自定义片段超过 64 KiB 上限（原始配置文本按字节计）'
       }
       // 访问控制（021）：Basic Auth 开启时必须填用户名；新站点首次开启还需口令
       if (form.value.authBasic) {
@@ -1182,9 +1190,9 @@ const isOwner = computed(() => auth.me?.role === 'owner')
 const confHint = computed(() => {
   if (!canManage.value) return '无 site.manage 权限'
   if (!isOwner.value) return '仅 owner 可保存原始配置'
-  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  if (!webSupported.value) return '需安装并启动 Web 服务器'
   if (!editing.value?.enabled) return '站点已停用（配置已移除）；先在下方勾选「启用」并保存，再回来编辑'
-  return '保存到磁盘并重载（保存前自动 nginx -t 校验；失败不会动旧文件）'
+  return '保存到磁盘并重载（保存前自动做配置校验；失败不会动旧文件）'
 })
 
 /** 当前编辑中的配置字节数（UTF-8）：给超长配置一个可感知的量级（后端上限 64 KiB）。 */
@@ -1196,7 +1204,7 @@ const confTooBig = computed(() => confSize.value > 64 * 1024)
 const regenHint = computed(() => {
   if (!canManage.value) return '无 site.manage 权限'
   if (!isOwner.value) return '仅 owner 可重新生成配置'
-  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  if (!webSupported.value) return '需安装并启动 Web 服务器'
   return '按当前表单重新渲染并覆盖磁盘上的这份配置：丢弃手工修改（覆盖前自动备份到服务器），站点恢复为面板托管'
 })
 
@@ -1299,7 +1307,7 @@ function confErrText(e: unknown) {
   if ((e as { code?: number } | null)?.code === 40002) {
     const out = (e as { detail?: { output?: unknown } }).detail?.output
     const s = typeof out === 'string' ? out.trim() : ''
-    if (s) return `配置校验未通过（nginx -t）：\n${s}`
+    if (s) return `配置校验未通过（${webName.value}）：\n${s}`
   }
   return errorText(e)
 }
@@ -1415,11 +1423,11 @@ async function toggleVersDetail(v: ConfVersion) {
 /** 回滚按钮的禁用原因（tooltip）；可执行时讲清动作与后果。 */
 function rollbackHint(v: ConfVersion): string {
   if (!canManage.value) return '无 site.manage 权限'
-  if (!isOwner.value) return '仅 owner 可回滚配置（原始 nginx 文本属 root 级写入面）'
-  if (!webSupported.value) return '需安装并启动 Web 服务器（nginx）'
+  if (!isOwner.value) return '仅 owner 可回滚配置（原始配置文本属 root 级写入面）'
+  if (!webSupported.value) return '需安装并启动 Web 服务器'
   if (!editing.value?.enabled) return '站点已停用（配置已移除）；请先启用并保存后再回滚'
   if (v.current) return '该版本与磁盘上的当前文件一致，无需回滚'
-  return `回滚到 ${fmtDateTime(v.created_at)} 的这版（${versSourceLabel(v.source)}）：先 nginx -t 校验，替换前把当前文件留档进版本链（可再次回滚找回），然后重载生效`
+  return `回滚到 ${fmtDateTime(v.created_at)} 的这版（${versSourceLabel(v.source)}）：先做配置校验，替换前把当前文件留档进版本链（可再次回滚找回），然后重载生效`
 }
 
 /** 回滚（二次确认后执行）：成功后整区重取——磁盘内容、手动/未同步态、版本列表。 */
@@ -1510,8 +1518,8 @@ async function batchDelete() {
          是另一套长相（无圆角内边距由各处自造），同一语义两种外观。 -->
     <p v-if="!webSupported" class="hint-note is-warn">
       <Icon name="alert" :size="15" class="ic" />
-      <span>未检测到 Web 服务器（nginx）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
-        请先在主机上安装并启动 nginx，再回到此页刷新。</span>
+      <span>未检测到 Web 服务器（nginx / caddy）：<b>无法新建站点</b>。没有底座时建站只会得到一个打不开的站点，
+        请先在主机上安装并启动其一，再回到此页刷新。</span>
     </p>
 
     <!-- 站点列表。刷新与新建收进本区块头：它们是「对这张表」的动作，紧贴其操作对象
@@ -1634,10 +1642,10 @@ async function batchDelete() {
             <td v-if="shown('state')" class="st-cell">
               <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
               <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
-                   「面板所见 ≠ nginx 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
+                   「面板所见 ≠ 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
               <span v-if="s.manual_conf" class="badge conf-badge" :class="s.conf_stale ? 'badge-danger' : 'badge-warn'"
                 :title="s.conf_stale
-                  ? '未同步：表单规格已变更，但磁盘配置没有跟着更新——面板显示 ≠ nginx 实际生效；编辑该站点可「按表单重新生成」同步'
+                  ? '未同步：表单规格已变更，但磁盘配置没有跟着更新——面板显示 ≠ 实际生效；编辑该站点可「按表单重新生成」同步'
                   : '站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「按表单重新生成」）'">
                 {{ s.conf_stale ? '未同步' : '手动' }}</span>
               <span v-if="s.conf_external" class="badge conf-badge badge-warn"
@@ -1714,7 +1722,7 @@ async function batchDelete() {
       </template>
     </EmptyState>
     <EmptyState v-else title="暂无站点"
-      :hint="canCreate ? '添加第一个虚拟主机：面板会写好 nginx 配置并按需签发证书' : '当前未接入 Web 服务器（nginx）：需先安装并启动，才能新建站点'">
+      :hint="canCreate ? '添加第一个虚拟主机：面板会生成站点配置并按需签发证书' : '当前未接入 Web 服务器（nginx / caddy）：需先安装并启动，才能新建站点'">
       <template #cta>
         <button v-if="canCreate" class="btn-primary btn-sm" :disabled="!canCreate || busy" @click="openCreate">
           <Icon name="plus" :size="13" /> 新建站点
@@ -1752,7 +1760,7 @@ async function batchDelete() {
         <!-- 未接入底座时：站点仍可登记，但配置下发不了。如实说明，不装作能开 -->
         <div v-if="!webSupported" class="hint-note is-warn">
           <Icon name="alert" :size="15" class="ic" />
-          <span>未接入 Web 服务器（nginx）：<b>只能保存站点登记信息，无法下发配置</b>；
+          <span>未接入 Web 服务器：<b>只能保存站点登记信息，无法下发配置</b>；
             下方的类型 / 反代 / PHP / WAF 也需底座才能生效。</span>
         </div>
         <section class="sector" id="sec-basic">
@@ -1909,7 +1917,9 @@ async function batchDelete() {
               </label>
             </template>
             <input v-if="r.kind === 'php'" v-model="r.frontController" class="rt-target"
-              placeholder="/public/index.php" :aria-label="`第 ${i + 1} 条路由的入口脚本`" />
+              placeholder="/public/index.php" :disabled="isCaddy"
+              :title="isCaddy ? 'Caddy 下路由型 PHP 的入口脚本精确语义尚未实装，已置灰' : ''"
+              :aria-label="`第 ${i + 1} 条路由的入口脚本`" />
             <button type="button" class="btn-ghost btn-sm rt-del" title="删除该路由"
               :disabled="form.routes.length <= 1" @click="removeRoute(i)">
               <Icon name="trash" :size="13" />
@@ -1942,22 +1952,28 @@ async function batchDelete() {
               </select>
               <span v-if="fieldErrs.wafProfile" :key="'wp' + errSeq" class="field-err">{{ fieldErrs.wafProfile }}</span>
             </label>
-            <label :class="{ 'has-err': fieldErrs.wafRate }" data-f="wafRate"
-              title="单客户端每秒最大请求数；0 = 不限速">CC 限速（次/秒，0 = 不限）
-              <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported"
+            <label :class="{ 'has-err': fieldErrs.wafRate, 'is-dim': isCaddy }" data-f="wafRate"
+              :title="isCaddy ? caddyNoop : '单客户端每秒最大请求数；0 = 不限速'">CC 限速（次/秒，0 = 不限）
+              <input v-model.number="form.wafRate" type="number" min="0" max="1000" :disabled="!webSupported || isCaddy"
                 :aria-invalid="!!fieldErrs.wafRate" @input="clearFieldErr('wafRate')" />
               <span v-if="fieldErrs.wafRate" :key="'wr' + errSeq" class="field-err">{{ fieldErrs.wafRate }}</span>
             </label>
-            <label :title="form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝'"
-              :class="{ 'has-err': fieldErrs.wafBurst }" data-f="wafBurst">
+            <label :title="isCaddy ? caddyNoop : (form.wafRate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速，否则后端会拒绝')"
+              :class="{ 'has-err': fieldErrs.wafBurst, 'is-dim': isCaddy }" data-f="wafBurst">
               突发桶（0 = 自动）
               <input v-model.number="form.wafBurst" type="number" min="0" max="10000"
-                :disabled="!webSupported || !form.wafRate" :aria-invalid="!!fieldErrs.wafBurst"
+                :disabled="!webSupported || !form.wafRate || isCaddy" :aria-invalid="!!fieldErrs.wafBurst"
                 @input="clearFieldErr('wafBurst')" />
               <span v-if="fieldErrs.wafBurst" :key="'wb' + errSeq" class="field-err">{{ fieldErrs.wafBurst }}</span>
             </label>
           </template>
         </div>
+        <!-- caddy：WAF **规则集档位生效、限速不生效**（标准版无 rate_limit 指令，
+             需第三方模块）。如实写明，否则用户会以为填了就在防 CC。 -->
+        <p v-if="isCaddy && form.wafOn" class="hint-note is-warn">
+          <Icon name="info" :size="14" class="ic" />
+          <span>当前 Web 服务器为 Caddy：<b>规则集档位生效、限速不生效</b>——标准 Caddy 无 rate_limit 指令。</span>
+        </p>
 
         <!-- 自定义配置片段（019）：原始 nginx 文本，插在主 server 块尾部（所有
              location 之后）。属**托管态**——随「保存并应用」重新渲染下发（与
@@ -1969,13 +1985,17 @@ async function batchDelete() {
             <span v-if="!isOwner" class="dim tiny">仅 owner 可编辑</span>
           </div>
           <textarea v-model="form.customConf" class="mono cc-text" rows="5" spellcheck="false"
-            :readonly="!canManage || !isOwner" :disabled="!webSupported"
+            :readonly="!canManage || !isOwner" :disabled="!webSupported || isCaddy"
             :aria-invalid="!!fieldErrs.customConf" data-f="customConf"
             placeholder="例如：location /static/ { expires 7d; }"></textarea>
           <span v-if="fieldErrs.customConf" :key="'cc' + errSeq" class="field-err">{{ fieldErrs.customConf }}</span>
           <p class="hint-note cc-note">
             <Icon name="info" :size="14" class="ic" />
-            <span>插入在 server 块<b>尾部</b>（所有 location 之后），随「保存并应用」重新渲染下发；下发前经 nginx -t 校验——写错不会上线。留空 = 不使用。</span>
+            <span>插入在 server 块<b>尾部</b>（所有 location 之后），随「保存并应用」重新渲染下发；下发前经配置校验——写错不会上线。留空 = 不使用。</span>
+          </p>
+          <p v-if="isCaddy" class="hint-note cc-note is-warn">
+            <Icon name="info" :size="14" class="ic" />
+            <span>当前 Web 服务器为 Caddy：自定义片段是<b>原始 nginx 语法</b>，与 Caddyfile 语法不同、无法透传，已置灰。</span>
           </p>
         </div>
 
@@ -1995,18 +2015,20 @@ async function batchDelete() {
               <option value="to_bare">www → 裸域（www.example.com → example.com）</option>
             </select>
           </label>
-          <label class="blk adv-row" title="影响 ssl_protocols：只有下限及以上会被启用">
+          <label class="blk adv-row"
+            :title="isCaddy ? '影响启用的 TLS 版本：Caddy 最低只支持 TLSv1.2，更低的档位会如实回落' : '影响 ssl_protocols：只有下限及以上会被启用'">
             TLS 版本下限
             <select v-model="form.tlsMin">
-              <option value="TLSv1">TLSv1（最老客户端，不安全）</option>
-              <option value="TLSv1.1">TLSv1.1</option>
+              <option value="TLSv1" :disabled="isCaddy">TLSv1（最老客户端，不安全{{ isCaddy ? '，Caddy 不支持' : '' }}）</option>
+              <option value="TLSv1.1" :disabled="isCaddy">TLSv1.1{{ isCaddy ? '（Caddy 不支持）' : '' }}</option>
               <option value="TLSv1.2">TLSv1.2（推荐）</option>
               <option value="TLSv1.3">TLSv1.3（仅新客户端）</option>
             </select>
           </label>
-          <label class="blk adv-row" title="影响 ssl_ciphers：档位越高越安全、老客户端越可能连不上">
+          <label class="blk adv-row" :class="{ 'is-dim': isCaddy }"
+            :title="isCaddy ? caddyNoop : '影响 ssl_ciphers：档位越高越安全、老客户端越可能连不上'">
             加密套件档位
-            <select v-model="form.tlsProfile">
+            <select v-model="form.tlsProfile" :disabled="isCaddy">
               <option value="compat">兼容（老客户端，含弱套件）</option>
               <option value="modern">现代（默认）</option>
               <option value="strict">严格（仅 TLSv1.3 + 前向保密）</option>
@@ -2033,9 +2055,10 @@ async function batchDelete() {
             </p>
           </template>
           <template v-if="form.kind === 'php'">
-            <label class="blk adv-row" title="预置模板替换默认的 try_files 兜底；不确定就选「无」">
+            <label class="blk adv-row" :class="{ 'is-dim': isCaddy }"
+              :title="isCaddy ? caddyNoop : '预置模板替换默认的 try_files 兜底；不确定就选「无」'">
               伪静态模板
-              <select v-model="form.rewritePreset">
+              <select v-model="form.rewritePreset" :disabled="isCaddy">
                 <option value="none">无</option>
                 <option value="wordpress">WordPress</option>
                 <option value="laravel">Laravel</option>
@@ -2049,7 +2072,7 @@ async function batchDelete() {
               title="原样进 location / 内；上限 64 KiB">
               自定义 rewrite（location / 内）
               <textarea v-model="form.rewriteCustom" class="mono adv-text" rows="4" spellcheck="false"
-                placeholder="try_files $uri $uri/ /index.php?$args;"></textarea>
+                :disabled="isCaddy" placeholder="try_files $uri $uri/ /index.php?$args;"></textarea>
             </label>
           </template>
           <p class="hint-note adv-note">
@@ -2081,45 +2104,47 @@ async function batchDelete() {
             <span>已启用白名单：黑名单被忽略（白名单优先，名单外全部拒绝）。</span>
           </p>
           <!-- HTTP Basic Auth：口令不落库，仅设置时经 openssl 生成 apr1 摘要写入 htpasswd -->
-          <label class="blk row-inline" title="开启后访问站点需输入用户名口令（口令不落库）">
-            <input type="checkbox" v-model="form.authBasic" /> <span>启用 Basic Auth（HTTP 基础认证）</span>
+          <label class="blk row-inline" :class="{ 'is-dim': isCaddy }"
+            :title="isCaddy ? caddyNoop : '开启后访问站点需输入用户名口令（口令不落库）'">
+            <input type="checkbox" v-model="form.authBasic" :disabled="isCaddy" /> <span>启用 Basic Auth（HTTP 基础认证）</span>
           </label>
           <template v-if="form.authBasic">
             <label class="blk full adv-row" data-f="authUser" :class="{ 'has-err': fieldErrs.authUser }"
               title="Basic Auth 用户名（不能含冒号或空白）">
               用户名
-              <input v-model="form.authUser" @input="clearFieldErr('authUser')"
+              <input v-model="form.authUser" @input="clearFieldErr('authUser')" :disabled="isCaddy"
                 :aria-invalid="!!fieldErrs.authUser" placeholder="admin" />
               <span v-if="fieldErrs.authUser" :key="'authUser' + errSeq" class="field-err">{{ fieldErrs.authUser }}</span>
             </label>
             <label class="blk full adv-row" data-f="authPass" :class="{ 'has-err': fieldErrs.authPass }"
               title="留空 = 保留现有口令（仅设置时经 openssl 生成摘要写入 htpasswd，不落库、不回显）">
               口令{{ editing ? '（留空保留）' : '' }}
-              <input type="password" v-model="form.authPass" @input="clearFieldErr('authPass')"
+              <input type="password" v-model="form.authPass" @input="clearFieldErr('authPass')" :disabled="isCaddy"
                 :aria-invalid="!!fieldErrs.authPass" placeholder="********" />
               <span v-if="fieldErrs.authPass" :key="'authPass' + errSeq" class="field-err">{{ fieldErrs.authPass }}</span>
             </label>
           </template>
           <!-- 反代增强：仅 proxy 类型有意义（单后端无 upstream 块、策略不生效） -->
           <template v-if="form.kind === 'proxy'">
-            <label class="blk adv-row" title="多后端时的负载均衡策略">
+            <label class="blk adv-row" :class="{ 'is-dim': isCaddy }"
+              :title="isCaddy ? caddyNoop : '多后端时的负载均衡策略'">
               负载均衡策略
-              <select v-model="form.lbPolicy">
+              <select v-model="form.lbPolicy" :disabled="isCaddy">
                 <option value="least_conn">最小连接（默认）</option>
                 <option value="ip_hash">按客户端 IP 哈希</option>
               </select>
             </label>
             <label class="blk adv-row" title="与上游建连超时（秒，1~3600）">
               建连超时（秒）
-              <input v-model.number="form.proxyConnectTimeout" type="number" min="1" max="3600" />
+              <input v-model.number="form.proxyConnectTimeout" type="number" min="1" max="3600" :disabled="isCaddy" />
             </label>
             <label class="blk adv-row" title="向上游发送超时（秒，1~3600）">
               发送超时（秒）
-              <input v-model.number="form.proxySendTimeout" type="number" min="1" max="3600" />
+              <input v-model.number="form.proxySendTimeout" type="number" min="1" max="3600" :disabled="isCaddy" />
             </label>
             <label class="blk adv-row" title="从上游读取超时（秒，1~3600）">
               读取超时（秒）
-              <input v-model.number="form.proxyReadTimeout" type="number" min="1" max="3600" />
+              <input v-model.number="form.proxyReadTimeout" type="number" min="1" max="3600" :disabled="isCaddy" />
             </label>
           </template>
         </div>
@@ -2132,15 +2157,18 @@ async function batchDelete() {
           <div class="adv-head">
             <span class="adv-title"><Icon name="file" :size="14" /> 站点日志</span>
           </div>
-          <label class="blk row-inline" title="开启后由面板指定路径记录本站访问日志，可查看/下载/清空">
-            <input type="checkbox" v-model="form.logAccess" /> <span>记录访问日志（access.log）</span>
+          <label class="blk row-inline" :class="{ 'is-dim': isCaddy }"
+            :title="isCaddy ? caddyNoop : '开启后由面板指定路径记录本站访问日志，可查看/下载/清空'">
+            <input type="checkbox" v-model="form.logAccess" :disabled="isCaddy" /> <span>记录访问日志（access.log）</span>
           </label>
-          <label class="blk row-inline" title="开启后由面板指定路径记录本站错误日志">
-            <input type="checkbox" v-model="form.logError" /> <span>记录错误日志（error.log）</span>
+          <label class="blk row-inline" :class="{ 'is-dim': isCaddy }"
+            :title="isCaddy ? caddyNoop : '开启后由面板指定路径记录本站错误日志'">
+            <input type="checkbox" v-model="form.logError" :disabled="isCaddy" /> <span>记录错误日志（error.log）</span>
           </label>
-          <label class="blk adv-row" v-if="form.logError" title="错误日志级别">
+          <label class="blk adv-row" v-if="form.logError" :class="{ 'is-dim': isCaddy }"
+            :title="isCaddy ? caddyNoop : '错误日志级别'">
             错误级别
-            <select v-model="form.logErrorLevel">
+            <select v-model="form.logErrorLevel" :disabled="isCaddy">
               <option value="debug">debug</option>
               <option value="info">info</option>
               <option value="notice">notice</option>
@@ -2168,7 +2196,7 @@ async function batchDelete() {
           </div>
           <p class="hint-note adv-note" v-if="!form.logAccess && !form.logError">
             <Icon name="info" :size="14" class="ic" />
-            <span>未开启独立日志：站点沿用 nginx 全局日志（无法按站点查看/下载/清空）。</span>
+            <span>未开启独立日志：站点沿用 Web 服务器全局日志（无法按站点查看/下载/清空）。</span>
           </p>
         </div>
 

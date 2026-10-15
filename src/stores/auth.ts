@@ -31,6 +31,11 @@ export const useAuthStore = defineStore('auth', () => {
   /** 平台能力是否支持（与权限无关，纯平台维度） */
   const supported = (key: string) => capabilities.value[key]?.supported ?? false
 
+  /** 能力的后端实现名（`webserver.manage` → `nginx` / `caddy`；未接入或无后端为 null）。
+   *  ⚠ 同一能力位在不同后端下**覆盖面并不相同**（如 caddy 无 rate_limit、不开放加密套件），
+   *  前端据此决定哪些字段真能生效——否则就是「能填但不生效」的假控件。 */
+  const backend = (key: string) => capabilities.value[key]?.backend ?? null
+
   /** 是否有某个 RBAC 权限点 */
   const can = (perm: string) => me.value?.permissions.includes(perm) ?? false
 
@@ -92,9 +97,11 @@ export const useAuthStore = defineStore('auth', () => {
   const pollingMode = computed(() => me.value?.tier === 'nano')
 
   const metricsAvailable = computed(() => supported(CAP.METRICS_READ))
+  /** 当前 Web 服务器后端（nginx / caddy；未接入为 null）——站点表单按它收窄可填项 */
+  const webBackend = computed(() => backend(CAP.WEBSERVER_MANAGE))
 
   return {
-    me, capabilities, platform, loading, loggedIn, pollingMode, metricsAvailable,
-    supported, can, enabled, whyDisabled, loadMe, loadCapabilities, login, logout, clearSession,
+    me, capabilities, platform, loading, loggedIn, pollingMode, metricsAvailable, webBackend,
+    supported, backend, can, enabled, whyDisabled, loadMe, loadCapabilities, login, logout, clearSession,
   }
 })

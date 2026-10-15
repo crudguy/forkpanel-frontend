@@ -33,7 +33,7 @@ export const CAP = {
   PACKAGE_INSTALL: 'package.install',
   PACKAGE_UPGRADE: 'package.upgrade',
   FIREWALL_MANAGE: 'firewall.manage',
-  /// fail2ban 入侵防御：取决于宿主是否有 fail2ban-client 且后端为 iptables（nftables 下恒不支持）
+  /// fail2ban 入侵防御：只取决于宿主是否有 fail2ban-client——与防火墙后端正交（nftables 下同样可用）
   FAIL2BAN: 'fail2ban.manage',
   WEBSERVER_MANAGE: 'webserver.manage',
   SCHEDULER_MANAGE: 'scheduler.manage',
@@ -68,7 +68,6 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
     // 直接显示英文原文（2026-10-03 核对时发现）
     case 'certbot_missing': return '未安装 certbot，无法申请 ACME 证书'
     case 'openssl_missing': return '未安装 openssl，无法签发自签证书'
-    case 'caddy_render_not_implemented': return '已检测到 caddy，但配置渲染尚未实装'
     case 'no_engine': return '未检测到可用的数据库引擎'
     case 'no_log_source': return '未检测到可用的日志源'
     case 'daemon_unreachable': return '守护进程不可达（面板用户需加入 docker 组）'

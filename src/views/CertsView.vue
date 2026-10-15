@@ -42,7 +42,7 @@ const sslReady = computed(() =>
   webSupported.value && (sslSupported.value || selfSignedSupported.value) && canSsl.value)
 const sslHint = computed(() => {
   if (!canSsl.value) return '无 ssl.manage 权限'
-  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx）——证书没有进程可加载'
+  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx / caddy）——证书没有进程可加载'
   return '需 openssl 或 ACME'
 })
 
