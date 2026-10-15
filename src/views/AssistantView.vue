@@ -3,7 +3,7 @@
  * AI 运维助手（#52 / 后端 routes/assistant.rs）。
  *
  * 诚实定位：内核为**内置规则诊断引擎**（确定性、可解释、零外部依赖），
- * 问句经关键词路由到诊断域；LLM 叙事层为可选后续。
+ * 问句经关键词路由到诊断域；若面板设置已配置 LLM，后端会附加 `narrative` 人话解读。
  * 护栏：助手只读——「去处理」仅导航到对应视图，处置由用户人工确认。
  */
 import { ref, computed } from 'vue'
@@ -122,6 +122,12 @@ function fmtUp(sec: number): string {
               {{ t.report.summary }}
             </p>
 
+            <!-- LLM 人话解读（仅当面板已配置 LLM 时返回） -->
+            <p v-if="t.report.narrative" class="narrative">
+              <Icon name="sparkles" :size="14" />
+              <span>{{ t.report.narrative }}</span>
+            </p>
+
             <!-- 体检基线 -->
             <div class="ctx">
               <span>CPU {{ t.report.ctx.cpu_pct.toFixed(0) }}%</span>
@@ -183,6 +189,15 @@ function fmtUp(sec: number): string {
 .summary { display: flex; align-items: center; gap: 7px; font-size: var(--fs-13-5); margin: 0 0 10px; color: var(--c-text); }
 .report.crit .summary { color: var(--c-danger); }
 .report.warn .summary { color: var(--c-warn); }
+.narrative {
+  display: flex; align-items: flex-start; gap: 7px; font-size: var(--fs-13-5);
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; line-height: 1.55;
+  background: var(--c-primary-soft, rgba(255, 90, 54, .10));
+  border: 1px solid var(--c-primary-soft, rgba(255, 90, 54, .28));
+  color: var(--c-text);
+}
+.narrative :deep(svg) { color: var(--c-primary); flex: 0 0 auto; margin-top: 2px; }
+.narrative span { white-space: pre-wrap; }
 
 .ctx {
   display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-12); color: var(--c-text-mute);

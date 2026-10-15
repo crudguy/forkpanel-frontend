@@ -460,6 +460,7 @@ export interface AssistantReport {
   scope: AssistantScope
   generated_at: number
   summary: string
+  narrative?: string
   findings: AssistantFinding[]
   ctx: AssistantContext
 }
