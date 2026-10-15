@@ -33,6 +33,8 @@ export const CAP = {
   PACKAGE_INSTALL: 'package.install',
   PACKAGE_UPGRADE: 'package.upgrade',
   FIREWALL_MANAGE: 'firewall.manage',
+  /// fail2ban 入侵防御：取决于宿主是否有 fail2ban-client 且后端为 iptables（nftables 下恒不支持）
+  FAIL2BAN: 'fail2ban.manage',
   WEBSERVER_MANAGE: 'webserver.manage',
   SCHEDULER_MANAGE: 'scheduler.manage',
   LOGS_READ: 'logs.read',

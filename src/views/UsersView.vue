@@ -56,7 +56,8 @@ async function load() {
     },
     (e) => {
       const t = errorText(e)
-      // 后端用户管理仍占位（返回 unsupported）→ 友好提示而非报错
+      // 仅当后端真正返回 unsupported（如能力未开通）才降级为「即将推出」；
+      // 标准宿主上 GET /users 返回数组，用户管理完整可用（users.rs 已完整实现）。
       if (t.includes('尚未接入') || t.includes('M5')) notReady.value = true
       else error.value = t
     },
@@ -78,8 +79,34 @@ function openEdit(u: UserOut) {
   formErr.value = ''
   showModal.value = true
 }
+
+// P1：新建用户必须校验用户名非空 + 口令强度（与占位文案「≥10 位含两类」一致）；
+// 编辑时口令留空=不改，填了也要满足强度。提交前在 save() 内兜底，按钮同步禁用。
+function pwStrong(p: string): boolean {
+  if (p.length < 10) return false
+  let cls = 0
+  if (/[a-z]/.test(p)) cls++
+  if (/[A-Z]/.test(p)) cls++
+  if (/[0-9]/.test(p)) cls++
+  if (/[^a-zA-Z0-9]/.test(p)) cls++
+  return cls >= 2
+}
+const formValid = computed(() => {
+  if (!form.value.username.trim() || form.value.username.trim().length > 64) return false
+  if (!editing.value) {
+    if (!pwStrong(form.value.password)) return false
+  } else if (form.value.password && !pwStrong(form.value.password)) {
+    return false
+  }
+  return true
+})
+
 async function save() {
   saving.value = true; formErr.value = ''
+  // 双保险：即便按钮被绕过也拦截非法提交
+  if (!form.value.username.trim()) { formErr.value = '用户名不能为空'; saving.value = false; return }
+  if (!editing.value && !pwStrong(form.value.password)) { formErr.value = '密码至少 10 位且含两类字符'; saving.value = false; return }
+  if (editing.value && form.value.password && !pwStrong(form.value.password)) { formErr.value = '密码至少 10 位且含两类字符'; saving.value = false; return }
   const roots = form.value.rootsText.split(',').map(s => s.trim()).filter(Boolean)
   try {
     if (editing.value) {
@@ -88,7 +115,7 @@ async function save() {
       await api.patch(API.users.patch(editing.value.id), body)
     } else {
       await api.post(API.users.create(), {
-        username: form.value.username, password: form.value.password,
+        username: form.value.username.trim(), password: form.value.password,
         role: form.value.role, allowed_roots: roots,
       })
     }
@@ -213,7 +240,8 @@ onMounted(load)
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" :disabled="saving" @click="closeUserModal">取消</button>
-            <button class="btn-primary" :disabled="saving" @click="save">
+            <button class="btn-primary" :disabled="saving || !formValid"
+              :title="formValid ? '' : '用户名必填；新建需填强度达标（≥10 位含两类）的口令'" @click="save">
               {{ saving ? '保存中…' : '保存' }}
             </button>
           </div>

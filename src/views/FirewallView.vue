@@ -5,7 +5,7 @@
  * 三个刻意的安全设计：
  * 1. 表单只允许 Allow（放行端口）。封禁端口是"把自己锁在门外"的主因，
  *    需要单独的高危流程 + 输入端口确认词，MVP 不提供图形入口。
- * 2. 提交前展示"本次将放行哪些端口"，让用户看清再点。
+ * 2. 提交前用确认弹窗展示"本次将放行哪些端口 / 来源"，让用户看清再点（prepareApply 实现）。
  * 3. 后端在 apply 前会无条件做快照并在失败时回滚，UI 明确告知这一点。
  */
 import { ref, onMounted, computed, nextTick } from 'vue'
@@ -57,7 +57,7 @@ async function load() {
 const canManage = computed(() => auth.enabled(CAP.FIREWALL_MANAGE, 'firewall.manage'))
 
 async function apply() {
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; confirmAllow.value = false
   try {
     const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[] }>(
       API.firewall.rules(),
@@ -68,6 +68,43 @@ async function apply() {
     load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
+}
+
+// P1：放行端口校验 + 提交前确认（注释设计点 2 的落地）
+const confirmAllow = ref(false)
+const allowSummary = ref('')
+const allowErr = ref('')
+function parsePorts(s: string): { ok: boolean; msg?: string } {
+  const toks = s.split(',').map(t => t.trim()).filter(Boolean)
+  if (!toks.length) return { ok: false, msg: '请填写要放行的端口' }
+  for (const t of toks) {
+    if (/^\d+$/.test(t)) {
+      const n = Number(t)
+      if (n < 1 || n > 65535) return { ok: false, msg: `端口 ${t} 超出范围（1-65535）` }
+    } else {
+      const m = t.match(/^(\d+)-(\d+)$/)
+      if (!m) return { ok: false, msg: `无法识别的端口「${t}」（支持单端口或范围，如 80 或 8000-8100）` }
+      const a = Number(m[1]), b = Number(m[2])
+      if (a < 1 || b > 65535 || a > b) return { ok: false, msg: `端口范围 ${t} 无效` }
+    }
+  }
+  return { ok: true }
+}
+function validSource(s: string): boolean {
+  if (!s.trim()) return true
+  const ip = s.trim()
+  if (!/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(ip)) return false
+  return ip.split('/')[0].split('.').every(o => Number(o) <= 255)
+}
+function prepareApply() {
+  allowErr.value = ''
+  if (!canManage.value) return
+  const p = parsePorts(ports.value)
+  if (!p.ok) { allowErr.value = p.msg!; return }
+  if (!validSource(source.value)) { allowErr.value = '来源格式无效（应为 IPv4 或 IPv4/CIDR，如 1.2.3.4 或 1.2.3.0/24）'; return }
+  const list = ports.value.split(',').map(t => t.trim()).filter(Boolean).join('、')
+  allowSummary.value = `将放行端口：${list}${source.value.trim() ? `（来源：${source.value.trim()}）` : '（来源：任意）'}`
+  confirmAllow.value = true
 }
 
 /** 待确认的关闭动作（审计 U5：window.confirm → ConfirmDialog）。开启无风险不需确认。 */
@@ -108,7 +145,7 @@ async function doDelete() {
   finally { busy.value = false }
 }
 
-// ── fail2ban 入侵防御（与防火墙相邻，复用 FIREWALL_MANAGE 门控）──
+// ── fail2ban 入侵防御（独立能力位 fail2ban.manage 门控；nftables 后端下恒不支持）──
 interface Jail {
   name: string; enabled: boolean
   currently_failed: number; total_failed: number; banned: number
@@ -122,7 +159,7 @@ const unbanBusy = ref<string | null>(null)  // 正在解封的 `${jail}|${ip}`
 
 async function loadFail2ban() {
   f2bError.value = ''
-  if (!auth.supported(CAP.FIREWALL_MANAGE)) return
+  if (!auth.supported(CAP.FAIL2BAN)) return
   f2bBusy.value = true
   try {
     const r = await api.get<{ available: boolean; active: boolean; jails: Jail[] }>(API.firewall.fail2ban())
@@ -205,13 +242,15 @@ onMounted(() => { load(); loadFail2ban() })
             <input v-model="comment" placeholder="web" />
           </label>
           <button class="btn-primary" :disabled="busy || !canManage || !ports"
-            :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填要放行的端口')" @click="apply">应用</button>
+            :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填要放行的端口')" @click="prepareApply">应用</button>
         </div>
+        <p v-if="allowErr" class="err">{{ allowErr }}</p>
         <RiskBanner level="warn" title="仅支持放行（allow）"
           text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
       </section>
 
       <div class="card flush" v-if="rules.length">
+        <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽（站点表范式）：来源为唯一弹性列；方向列窄屏隐藏（.col-opt，恒为入站/出站枚举）。 -->
           <colgroup>
@@ -240,6 +279,7 @@ onMounted(() => { load(); loadFail2ban() })
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <EmptyState v-else title="暂无规则">
         <template #cta>
@@ -247,8 +287,8 @@ onMounted(() => { load(); loadFail2ban() })
         </template>
       </EmptyState>
 
-      <!-- fail2ban 入侵防御：与防火墙同一能力门控；未装时 f2b.available=false 走空态 -->
-      <section class="card f2b" v-if="auth.supported(CAP.FIREWALL_MANAGE)">
+      <!-- fail2ban 入侵防御：独立能力位 fail2ban.manage 门控（nftables 下恒不支持）；未装时 f2b.available=false 走空态 -->
+      <section class="card f2b" v-if="auth.supported(CAP.FAIL2BAN)">
         <div class="sec-head"><Icon name="shield" :size="16" /> fail2ban 入侵防御
           <span v-if="f2b" class="badge" :class="f2b.active ? 'badge-ok' : 'badge-dim'">{{ f2b.active ? '运行中' : '未运行' }}</span>
         </div>
@@ -297,6 +337,10 @@ onMounted(() => { load(); loadFail2ban() })
     <ConfirmDialog :open="!!delTarget" danger title="删除防火墙规则"
       :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"
       @confirm="doDelete" @cancel="delTarget = null" />
+
+    <ConfirmDialog :open="confirmAllow" title="确认放行端口"
+      :detail="allowSummary"
+      @confirm="apply" @cancel="confirmAllow = false" />
 
     <!-- ⚠️ 此前这里还挂着**第二个**同样 `:open="confirmOff"` 的确认框（detail 与
          @confirm 各不相同）：点一次「关闭」会同时弹两个矛盾的确认框——一个说
