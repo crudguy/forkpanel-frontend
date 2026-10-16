@@ -49,6 +49,9 @@ const { close } = useModal(() => props.open, box, cancel)
       </div>
       <p v-if="detail" class="modal-lead">{{ detail }}</p>
 
+      <!-- 可选自定义内容（如强制删除开关）；全项目复用，不传则无影响 -->
+      <div v-if="$slots.default" class="modal-extra"><slot /></div>
+
       <label v-if="confirmWord">
         <span>请输入 <code>{{ confirmWord }}</code> 以确认</span>
         <input v-model="typed" :placeholder="confirmWord" />
@@ -71,4 +74,6 @@ const { close } = useModal(() => props.open, box, cancel)
    此处只留本组件独有的「确认词输入框」排布。 */
 label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
 code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
+.modal-extra { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; margin: 8px 0 4px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); font-size: var(--fs-13); color: var(--c-text); line-height: 1.5; }
+.modal-extra :deep(input[type="checkbox"]) { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--c-primary); }
 </style>

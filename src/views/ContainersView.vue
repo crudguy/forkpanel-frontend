@@ -64,6 +64,8 @@ function setActing(id: string, on: boolean) {
 /** 帮助抽屉（A6）：页面头部「?」打开，承载「刻意不提供哪些操作」的完整说明 */
 const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
+/** 强制删除开关（确认框内默认不勾选的显式 opt-in）：勾选→后端 docker rm -f */
+const delForce = ref(false)
 
 // 安装 Docker：诊断分支下的交互状态
 const installOpen = ref(false)
@@ -207,12 +209,13 @@ async function act(c: Container, op: 'start' | 'stop' | 'restart') {
 async function doRemove() {
   const c = delTarget.value
   if (!c) return
+  const force = delForce.value
   setActing(c.id, true)
   try {
-    await api.del(API.containers.remove(c.id))
+    await api.del(API.containers.remove(c.id, force))
     toast(`已删除容器 ${c.name}`)
   } catch (e) { toast(errorText(e), 'err') }
-  finally { setActing(c.id, false); delTarget.value = null; await load() }
+  finally { setActing(c.id, false); delForce.value = false; delTarget.value = null; await load() }
 }
 
 /** 短 ID（12 位，与 `docker ps` 默认展示一致）；完整值放 title 供核对。 */
@@ -226,9 +229,20 @@ function startable(c: Container) { return c.state === 'created' || c.state === '
 function stoppable(c: Container) { return c.state === 'running' }
 function restartable(c: Container) { return c.state === 'running' }
 function removable(c: Container) {
-  // paused 需 `docker rm -f`（后端未支持）；restarting 为瞬态；其余状态均可删
-  return c.state !== 'paused' && c.state !== 'restarting'
+  // restarting 为瞬态跳过；running/paused 需 force（确认框提供显式 opt-in），其余状态均可删
+  return c.state !== 'restarting'
 }
+/** 删除确认框动态说明：运行/暂停容器提示先停或勾选强制删除 */
+const delDetail = computed(() => {
+  if (!delTarget.value) return ''
+  const c = delTarget.value
+  let base = `将删除容器「${c.name}」（镜像 ${c.image}）。\n\n容器内未持久化到卷或宿主目录的数据会一并丢失，且无法恢复。`
+  if (c.state === 'running' || c.state === 'paused') {
+    base += delForce.value ? '\n\n已勾选强制删除：将先强制停止再移除。' : '\n\n该容器正在运行 / 已暂停，需先停止，或勾选下方「强制删除」。'
+  }
+  return base
+})
+function onDelCancel() { delForce.value = false; delTarget.value = null }
 
 // 容器内搜索 + 状态筛选（常见场景：容器多时快速定位；纯前端过滤，不打后端）。
 const q = ref('')
@@ -371,7 +385,7 @@ async function saveRemark(c: Container, v: string) {
                   <Icon name="restart" :size="13" /> 重启
                 </button>
                 <button class="btn-ghost btn-sm danger" :disabled="!canManage || isActing(c.id) || !removable(c)"
-                  :title="removable(c) ? '' : '请先停止容器'" @click="delTarget = c">
+                  :title="removable(c) ? '' : '正在重启中'" @click="delTarget = c; delForce = false">
                   <Icon name="trash" :size="13" /> 删除
                 </button>
               </td>
@@ -428,8 +442,12 @@ async function saveRemark(c: Container, v: string) {
     </HelpDrawer>
 
     <ConfirmDialog :open="!!delTarget" danger title="删除容器"
-      :detail="delTarget ? `将删除容器「${delTarget.name}」（镜像 ${delTarget.image}）。\n\n容器内未持久化到卷或宿主目录的数据会一并丢失，且无法恢复。运行中的容器需先停止。` : ''"
-      confirm-word="删除" @confirm="doRemove" @cancel="delTarget = null" />
+      :detail="delDetail" confirm-word="删除" @confirm="doRemove" @cancel="onDelCancel">
+      <label v-if="delTarget && (delTarget.state === 'running' || delTarget.state === 'paused')" class="force-row">
+        <input type="checkbox" v-model="delForce" />
+        <span>强制删除（先强制停止运行中的容器，<b>数据不保留</b>）</span>
+      </label>
+    </ConfirmDialog>
 
     <ConfirmDialog :open="installOpen" danger title="安装 Docker"
       :detail="'将在宿主机上通过包管理器安装 Docker 引擎。这是高危系统变更；安装完成后仍需把面板运行用户加入 docker 组并重启面板，才能在此管理容器。'"
@@ -480,6 +498,11 @@ td.remark-cell { padding: 4px 10px; }
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }
 .box { height: 260px; }
 @keyframes ct-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* 删除确认框内的强制删除开关（嵌在 ConfirmDialog 的 .modal-extra 插槽里） */
+.force-row { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
+.force-row input { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--c-primary); }
+.force-row b { color: var(--c-danger, #e5484d); }
+
 /* 容器内搜索框 + 状态分段筛选（容器页工具栏，.card-toolbar 内） */
 .filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-input, var(--c-glass)); color: var(--c-text); font-size: var(--fs-13); }
 .filter:focus { outline: none; border-color: var(--c-primary); }

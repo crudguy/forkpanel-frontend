@@ -205,7 +205,7 @@ export const API = {
     start: (id: string) => `/api/v1/containers/${id}/start`,
     stop: (id: string) => `/api/v1/containers/${id}/stop`,
     restart: (id: string) => `/api/v1/containers/${id}/restart`,
-    remove: (id: string) => `/api/v1/containers/${id}`,
+    remove: (id: string, force = false) => `/api/v1/containers/${id}${force ? '?force=true' : ''}`,
     /** 容器备注（022）：GET 读 / PATCH 写（container.manage）。容器不入库，存引用表 */
     remark: (id: string) => `/api/v1/containers/${enc(id)}/remark`,
   },
