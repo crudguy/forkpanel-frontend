@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, ProcessInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PageLayout from '@/components/PageLayout.vue'
 
@@ -190,9 +191,7 @@ async function doKill() {
           <Icon name="process" :size="16" />
           <span class="count">共 {{ sorted.length }} 个进程</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="loading" @click="load()">
-            <Icon name="refresh" :size="14" /> 刷新
-          </button>
+          <RefreshBtn :disabled="loading" sm @click="load()" />
         </div>
         <!-- B8：容器自己滚 + 表头吸顶（.t-scroll）。进程常有数百行，滚动时看不见列头
              就只能靠记住列序——这是"信息密度"之外同样致命的可读性问题。 -->

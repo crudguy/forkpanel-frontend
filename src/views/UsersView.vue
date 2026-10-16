@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, roleLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -159,9 +160,7 @@ onMounted(load)
         :title="canManage ? '' : '无 user.manage 权限'" @click="openCreate">
             <Icon name="user-plus" :size="14" /> 新建用户
           </button>
-          <button class="btn-ghost btn-sm" :disabled="loading || notReady" @click="load">
-            <Icon name="refresh" :size="14" /> 刷新
-          </button>
+          <RefreshBtn :disabled="loading || notReady" sm @click="load" />
         </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>

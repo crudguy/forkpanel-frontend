@@ -24,6 +24,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const route = useRoute()
@@ -274,9 +275,7 @@ onUnmounted(closeFollow)
       </button>
       <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
       <span class="spacer" />
-      <button class="btn-primary" :disabled="loading || !!busy" @click="loadSvc">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
+      <RefreshBtn :disabled="loading || !!busy" @click="loadSvc" />
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadSvc">重试</button></p>
@@ -349,9 +348,7 @@ onUnmounted(closeFollow)
               <button class="btn-ghost btn-sm" :class="{ 'tab-active': follow }" @click="toggleFollow">
                 <Icon name="refresh" :size="14" /> {{ follow ? '停止跟随' : '实时跟随' }}
               </button>
-              <button class="btn-ghost btn-sm" :disabled="jLoading || follow" @click="loadJournal">
-                <Icon name="refresh" :size="14" /> 刷新
-              </button>
+              <RefreshBtn :disabled="jLoading || follow" sm @click="loadJournal" />
             </div>
             <p v-if="jError" class="err">{{ jError }}</p>
             <pre v-if="jLoading" class="skeleton" style="height:220px" />

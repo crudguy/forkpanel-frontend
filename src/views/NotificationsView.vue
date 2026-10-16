@@ -12,6 +12,7 @@ import { onMounted, ref } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { fmtDateTime, notifLevelLabel } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
@@ -85,7 +86,7 @@ onMounted(load)
       <span class="spacer" />
       <span v-if="unread > 0" class="badge badge-danger">未读 {{ unread }}</span>
       <button class="btn-ghost btn-sm" :disabled="!unread" @click="readAll">全部已读</button>
-      <button class="btn-ghost btn-sm" @click="load">刷新</button>
+      <RefreshBtn @click="load" />
     </div>
 
     <p v-if="error" class="err-bar">{{ error }}</p>
@@ -94,7 +95,7 @@ onMounted(load)
       title="暂无通知"
       hint="备份失败、恢复失败等需要人工处置的事件会出现在这里">
       <template #cta>
-        <button class="btn-primary btn-sm" :disabled="loading" @click="load">刷新</button>
+        <RefreshBtn :disabled="loading" @click="load" />
       </template>
     </EmptyState>
 

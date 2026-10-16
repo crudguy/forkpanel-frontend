@@ -5,6 +5,7 @@ import { API } from '@/api/endpoints'
 import { fmtDateTime, taskStateBadge, taskStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 
 /** 与后端 task_runs 实态对齐（契约 Task schema） */
 interface Task {
@@ -92,7 +93,7 @@ onUnmounted(stopPoll)
           <Icon name="clock" :size="16" />
           <span class="count">共 {{ tasks.length }} 个任务</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+          <RefreshBtn :disabled="loading" sm @click="load" />
         </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>

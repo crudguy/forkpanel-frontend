@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
@@ -177,9 +178,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         <button class="btn-ghost btn-sm" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
           <Icon name="shield" :size="15" /> 信任根证书
         </button>
-        <button class="btn-ghost btn-sm" :disabled="busy" @click="load()">
-          <Icon name="refresh" :size="15" /> 刷新
-        </button>
+        <RefreshBtn :disabled="busy" sm @click="load()" />
         <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
           <Icon name="plus" :size="15" /> 申请证书
         </button>

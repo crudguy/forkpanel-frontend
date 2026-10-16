@@ -16,6 +16,7 @@ import { CAP, fwActionLabel, fwBackendLabel, fwProtocolLabel } from '@/api/types
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { toast } from '@/composables/useToast'
 
@@ -217,7 +218,7 @@ onMounted(() => { load(); loadFail2ban() })
       <span class="spacer" />
       <button class="btn-ghost" :disabled="busy || !canManage"
         :title="canManage ? '' : '无 firewall.manage 权限'" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
-      <button class="btn-ghost" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <RefreshBtn :disabled="busy" @click="load" />
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.FIREWALL_MANAGE)"

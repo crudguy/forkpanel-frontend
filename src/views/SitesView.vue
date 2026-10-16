@@ -31,6 +31,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type ConfVersion, type ConfVersionDetail, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
@@ -1542,7 +1543,7 @@ async function batchDelete() {
              统一强制隐藏（见 NARROW_HIDDEN），勾选框会呈现"勾了也不生效"的假象。 -->
         <ColumnPicker v-if="!narrow" :cols="SITE_COLS" :hidden="hiddenCols" label="站点列表"
           @toggle="toggleCol" @reset="resetCols" />
-        <button class="btn-ghost btn-sm" :disabled="busy" @click="load()"><Icon name="refresh" :size="13" /> 刷新</button>
+        <RefreshBtn :disabled="busy" sm @click="load()" />
         <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
           <Icon name="plus" :size="13" /> 新建站点
         </button>

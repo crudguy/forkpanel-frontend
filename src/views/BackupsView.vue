@@ -25,6 +25,7 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { toast } from '@/composables/useToast'
 
@@ -356,7 +357,7 @@ function fmtTime(t: number | null) {
         <div class="card-toolbar">
           <span class="count">共 {{ plans.length }} 个计划</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+          <RefreshBtn :disabled="busy" sm @click="load" />
         </div>
         <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
         <div class="t-scroll">

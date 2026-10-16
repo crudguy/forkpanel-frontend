@@ -23,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
@@ -226,7 +227,7 @@ function closeBrowse() { browse.value = null }
         <div class="card-toolbar">
           <span class="count">共 {{ conns.length }} 个连接</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="busy" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+          <RefreshBtn :disabled="busy" sm @click="load" />
         </div>
         <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
         <div class="t-scroll">

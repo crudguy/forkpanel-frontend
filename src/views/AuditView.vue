@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, auditResultLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import { useAsync } from '@/composables/useAsync'
 
 /**
@@ -183,7 +184,7 @@ onMounted(load)
           <div class="card-toolbar">
             <span class="spacer" />
             <button class="btn-ghost btn-sm" :disabled="loading" @click="reset"><Icon name="refresh" :size="14" /> 重置</button>
-            <button class="btn-ghost btn-sm" :disabled="loading" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+            <RefreshBtn :disabled="loading" sm @click="load" />
           </div>
           <div class="t-scroll">
           <table class="fixed" v-table-nav>

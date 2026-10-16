@@ -23,6 +23,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import InstallPackageDialog from '@/components/InstallPackageDialog.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -575,9 +576,7 @@ async function doConfirmed() {
       <span v-if="init" class="badge badge-primary"
             title="面板探测到的 init 系统，决定服务命令走 systemd 还是其它">init: {{ init }}</span>
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
-      <button class="btn-primary" :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
+      <RefreshBtn :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()" />
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>

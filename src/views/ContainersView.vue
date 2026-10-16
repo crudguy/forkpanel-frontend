@@ -24,6 +24,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
@@ -230,9 +231,7 @@ async function saveRemark(c: Container, v: string) {
       <button class="btn-icon ghost" type="button" title="容器说明" @click="helpOpen = true">
         <Icon name="help" :size="16" />
       </button>
-      <button class="btn-ghost" :disabled="busy || !supported" @click="load()">
-        <Icon name="refresh" :size="15" /> 刷新
-      </button>
+      <RefreshBtn :disabled="busy || !supported" @click="load()" />
     </div>
 
     <!-- 不可用：诊断/引导视图（菜单已常亮，不置灰）。按 reason 分流展示。 -->

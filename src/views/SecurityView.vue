@@ -15,6 +15,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
@@ -211,9 +212,7 @@ async function doDisable() {
         <div class="sec-head">
           <Icon name="shield" :size="16" /><span>安全基线清单</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="loading" @click="load">
-            <Icon name="refresh" :size="14" /> 刷新
-          </button>
+          <RefreshBtn :disabled="loading" sm @click="load" />
         </div>
         <ul class="checks">
           <li v-for="c in baseline" :key="c.key" :title="c.advice">

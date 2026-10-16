@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, fmtTime as fmtClock } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 
 interface Src { id: string; label: string; kind: string }
 interface Line { ts: number | null; level: string | null; text: string }
@@ -309,8 +310,8 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         :title="canView ? '' : '无 log.view 权限'" @click="toggleFollow">
         <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
       </button>
-      <button class="btn-ghost" :disabled="!canView || follow"
-        :title="!canView ? '无 log.view 权限' : (follow ? '实时跟随中无需手动刷新' : '')" @click="load"><Icon name="refresh" :size="15" /> 刷新</button>
+      <RefreshBtn :disabled="!canView || follow"
+        :title="!canView ? '无 log.view 权限' : (follow ? '实时跟随中无需手动刷新' : '')" @click="load" />
       <button class="btn-ghost" :class="{ active: showStats }" :disabled="!canView || follow || !cur" title="聚合统计：level 分布 + 时间直方图 + 高频模式（最多扫 2000 行，随当前筛选）" @click="toggleStats">
         <Icon name="chart" :size="15" /> 统计
       </button>

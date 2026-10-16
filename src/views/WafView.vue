@@ -23,6 +23,7 @@ import { CAP, wafProfileLabel, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 
@@ -192,9 +193,7 @@ onMounted(load)
           :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
           · {{ blockedPending }} 项不可下发
         </span>
-        <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="load">
-          <Icon name="refresh" :size="15" /> 刷新
-        </button>
+        <RefreshBtn :disabled="batchBusy" sm @click="load" />
         <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
         <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
           :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">

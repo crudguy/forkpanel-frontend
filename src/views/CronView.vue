@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
@@ -218,7 +219,7 @@ async function triggerWebhook(j: Job) {
           <Icon name="clock" :size="16" />
           <span class="count">共 {{ jobs.length }} 个任务</span>
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" @click="load"><Icon name="refresh" :size="14" /> 刷新</button>
+          <RefreshBtn sm @click="load" />
         </div>
         <div class="t-scroll">
         <div v-if="loading && !jobs.length" class="skeleton box" />
