@@ -52,7 +52,15 @@ const tabs = [
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
 const { loading, error, run } = useAsync()
-const busy = ref(false)
+/** 按容器 ID 跟踪"正在执行生命周期动作"的行级状态——避免一个动作禁用整页所有按钮
+ *  （旧实现用单个 busy，会误伤其它行）。 */
+const acting = ref<Set<string>>(new Set())
+function isActing(id: string) { return acting.value.has(id) }
+function setActing(id: string, on: boolean) {
+  const s = new Set(acting.value)
+  if (on) s.add(id); else s.delete(id)
+  acting.value = s
+}
 /** 帮助抽屉（A6）：页面头部「?」打开，承载「刻意不提供哪些操作」的完整说明 */
 const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
@@ -184,27 +192,27 @@ async function switchTab(t: string) {
   await load()
 }
 
-/** 生命周期动作的三种入口共用同一实现（后端是 204，无响应体）。 */
+/** 生命周期动作的三种入口共用同一实现（后端是 204，无响应体）。
+ *  行级 busy：只禁用正在操作的这一行；失败走 toast 而非列表级 .err 红条（动作错误不污染列表错误态）。 */
 async function act(c: Container, op: 'start' | 'stop' | 'restart') {
-  busy.value = true; error.value = ''
   const labels = { start: '启动', stop: '停止', restart: '重启' } as const
+  setActing(c.id, true)
   try {
     await api.post(API.containers[op](c.id), {})
     toast(`已${labels[op]}容器 ${c.name}`)
-  } catch (e) { error.value = errorText(e) }
-  finally { busy.value = false; await load() }
+  } catch (e) { toast(errorText(e), 'err') }
+  finally { setActing(c.id, false); await load() }
 }
 
 async function doRemove() {
   const c = delTarget.value
   if (!c) return
-  busy.value = true; error.value = ''
+  setActing(c.id, true)
   try {
     await api.del(API.containers.remove(c.id))
     toast(`已删除容器 ${c.name}`)
-    delTarget.value = null
-  } catch (e) { error.value = errorText(e); delTarget.value = null }
-  finally { busy.value = false; await load() }
+  } catch (e) { toast(errorText(e), 'err') }
+  finally { setActing(c.id, false); delTarget.value = null; await load() }
 }
 
 /** 短 ID（12 位，与 `docker ps` 默认展示一致）；完整值放 title 供核对。 */
@@ -212,8 +220,33 @@ function shortId(id: string) {
   if (id.startsWith('sha256:')) return id.slice(7, 19)
   return id.length > 12 ? id.slice(0, 12) : id
 }
-function canStart(c: Container) { return c.state !== 'running' }
-function canStop(c: Container) { return c.state === 'running' }
+/** 生命周期按钮可用性（边界处理）：按归一化状态精确判定，避免对 paused/restarting/dead
+ *  发出后端会拒绝的动作（如 paused 需 docker unpause、restarting 为瞬态）。 */
+function startable(c: Container) { return c.state === 'created' || c.state === 'exited' }
+function stoppable(c: Container) { return c.state === 'running' }
+function restartable(c: Container) { return c.state === 'running' }
+function removable(c: Container) {
+  // paused 需 `docker rm -f`（后端未支持）；restarting 为瞬态；其余状态均可删
+  return c.state !== 'paused' && c.state !== 'restarting'
+}
+
+// 容器内搜索 + 状态筛选（常见场景：容器多时快速定位；纯前端过滤，不打后端）。
+const q = ref('')
+const stateFilter = ref<'all' | 'running' | 'exited'>('all')
+const filtered = computed(() => {
+  let list = containers.value
+  if (stateFilter.value !== 'all') {
+    list = list.filter((c) => (stateFilter.value === 'running' ? c.state === 'running' : c.state !== 'running'))
+  }
+  const k = q.value.trim().toLowerCase()
+  if (k) {
+    list = list.filter((c) =>
+      c.name.toLowerCase().includes(k) ||
+      c.image.toLowerCase().includes(k) ||
+      c.status.toLowerCase().includes(k))
+  }
+  return list
+})
 
 /** 对象说明（备注，022）：内联保存。**按容器名称**存——完整 ID 随重建变化，
  *  名称在重建时通常保留，按 ID 存会让重建后备注变孤儿。失败由 InlineRemark
@@ -230,7 +263,7 @@ async function saveRemark(c: Container, v: string) {
       <span class="spacer" />
       <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
       <HelpBtn title="容器说明" aria-label="容器说明" :expanded="helpOpen" @click="helpOpen = true" />
-      <RefreshBtn :disabled="busy || !supported" @click="load()" />
+      <RefreshBtn :disabled="!supported" @click="load()" />
     </div>
 
     <!-- 不可用：诊断/引导视图（菜单已常亮，不置灰）。按 reason 分流展示。 -->
@@ -288,8 +321,18 @@ async function saveRemark(c: Container, v: string) {
       <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton box" />
 
       <!-- ── 容器 ── -->
-      <div class="card flush" v-if="tab === 'containers' && containers.length">
-        <div class="t-scroll">
+      <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ containers.length }} 个容器<span v-if="filtered.length !== containers.length">（匹配 {{ filtered.length }}）</span></span>
+          <span class="spacer" />
+          <input class="filter" v-model="q" type="search" placeholder="搜索名称 / 镜像 / 状态" aria-label="搜索容器" />
+          <div class="seg" role="group" aria-label="状态筛选">
+            <button type="button" :class="{ on: stateFilter === 'all' }" @click="stateFilter = 'all'">全部</button>
+            <button type="button" :class="{ on: stateFilter === 'running' }" @click="stateFilter = 'running'">运行</button>
+            <button type="button" :class="{ on: stateFilter === 'exited' }" @click="stateFilter = 'exited'">已停止</button>
+          </div>
+        </div>
+        <div class="t-scroll" v-if="filtered.length">
         <table class="fixed" v-table-nav>
           <colgroup>
             <!-- 列宽（站点表范式）：镜像为唯一弹性列（width:auto）吸收余量；操作列 320px
@@ -301,7 +344,7 @@ async function saveRemark(c: Container, v: string) {
             <tr><th scope="col">名称</th><th scope="col">备注</th><th scope="col">镜像</th><th scope="col">状态</th><th scope="col">端口</th><th scope="col" class="col-opt">ID</th><th /></tr>
           </thead>
           <tbody>
-            <tr v-for="c in containers" :key="c.id">
+            <tr v-for="c in filtered" :key="c.id">
               <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
               <td class="remark-cell">
                 <InlineRemark :model-value="c.remark" :editable="canManage"
@@ -315,18 +358,20 @@ async function saveRemark(c: Container, v: string) {
               <td class="mono dim ellipsis" :title="c.ports">{{ c.ports || '—' }}</td>
               <td class="mono dim" :title="c.id">{{ shortId(c.id) }}</td>
               <td class="nowrap">
-                <button class="btn-ghost btn-sm" :disabled="!canManage || busy || !canStart(c)"
-                  :title="canStart(c) ? '' : '已在运行'" @click="act(c, 'start')">
+                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !startable(c)"
+                  :title="startable(c) ? '' : '当前状态不可启动'" @click="act(c, 'start')">
                   <Icon name="play" :size="13" /> 启动
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || busy || !canStop(c)"
-                  :title="canStop(c) ? '' : '未在运行'" @click="act(c, 'stop')">
+                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !stoppable(c)"
+                  :title="stoppable(c) ? '' : '未在运行'" @click="act(c, 'stop')">
                   <Icon name="stop" :size="13" /> 停止
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="act(c, 'restart')">
+                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !restartable(c)"
+                  :title="restartable(c) ? '' : '仅运行中可重启'" @click="act(c, 'restart')">
                   <Icon name="restart" :size="13" /> 重启
                 </button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy" @click="delTarget = c">
+                <button class="btn-ghost btn-sm danger" :disabled="!canManage || isActing(c.id) || !removable(c)"
+                  :title="removable(c) ? '' : '请先停止容器'" @click="delTarget = c">
                   <Icon name="trash" :size="13" /> 删除
                 </button>
               </td>
@@ -334,12 +379,19 @@ async function saveRemark(c: Container, v: string) {
           </tbody>
         </table>
         </div>
+        <EmptyState v-else title="无匹配容器"
+          hint="当前搜索 / 筛选条件下没有容器，试试调整关键词或状态筛选。" />
       </div>
       <EmptyState v-else-if="tab === 'containers' && !loading" title="没有容器"
         hint="该 Docker 守护进程上没有任何容器（含已停止）。" />
 
       <!-- ── 镜像 ── -->
-      <div class="card flush" v-else-if="images.length">
+      <div class="card flush toolbar-card" v-else-if="images.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ images.length }} 个镜像</span>
+          <span class="spacer" />
+          <span class="dim">镜像为只读列举（删除 / 拉取未开放）</span>
+        </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽与上方容器表同范式；前缀独立（w-i*），不与容器表 w-* 混用。
@@ -428,6 +480,15 @@ td.remark-cell { padding: 4px 10px; }
 .skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }
 .box { height: 260px; }
 @keyframes ct-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* 容器内搜索框 + 状态分段筛选（容器页工具栏，.card-toolbar 内） */
+.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-input, var(--c-glass)); color: var(--c-text); font-size: var(--fs-13); }
+.filter:focus { outline: none; border-color: var(--c-primary); }
+.seg { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--c-text-dim); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--c-border); }
+.seg button.on { background: var(--c-primary); color: #fff; }
+.seg button:not(.on):hover { background: var(--c-hover); }
+
 /* 镜像表列宽（与上方容器表同范式；前缀 w-i* 避免与容器表 w-* 混用）。 */
 col.w-irepo { width: auto; }
 col.w-itag { width: 110px; }
