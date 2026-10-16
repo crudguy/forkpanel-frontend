@@ -29,6 +29,7 @@ import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
@@ -93,6 +94,58 @@ async function create() {
     load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
+}
+
+// ── 编辑 / 删除连接（PATCH/DELETE /db/connections/{id}）──
+// username/password 列表不回显（后端只回 has_password）→ 编辑态留空 = 不修改
+const editTarget = ref<Conn | null>(null)
+const editForm = ref(emptyForm())
+const editSaving = ref(false)
+const editError = ref('')
+const delTarget = ref<Conn | null>(null)
+
+function openEdit(c: Conn) {
+  editTarget.value = c
+  editError.value = ''
+  editForm.value = {
+    name: c.name, engine: c.engine, host: c.host ?? '127.0.0.1',
+    port: c.port != null ? String(c.port) : '', user: '', password: '',
+    default_db: c.default_db ?? '',
+  }
+}
+
+async function saveEdit() {
+  const c = editTarget.value; if (!c) return
+  const ext = editForm.value.engine !== 'sqlite'
+  if (ext && editForm.value.port !== '' && editForm.value.port != null) {
+    const p = Number(editForm.value.port)
+    if (!Number.isInteger(p) || p < 1 || p > 65535) { editError.value = '端口需为 1-65535 之间的整数'; return }
+  }
+  editSaving.value = true; editError.value = ''
+  try {
+    await api.patch(API.db.conn(c.id), {
+      name: editForm.value.name, engine: editForm.value.engine,
+      host: editForm.value.host || undefined, default_db: editForm.value.default_db || undefined,
+      port: ext && editForm.value.port ? Number(editForm.value.port) : undefined,
+      // user/password 留空 = 不修改（后端缺省保留现值）
+      user: ext && editForm.value.user ? editForm.value.user : undefined,
+      password: ext && editForm.value.password ? editForm.value.password : undefined,
+    })
+    editTarget.value = null
+    toast('连接已更新')
+    load()
+  } catch (e) { editError.value = errorText(e) }
+  finally { editSaving.value = false }
+}
+
+async function doDel() {
+  const c = delTarget.value; delTarget.value = null
+  if (!c) return
+  try {
+    await api.del(API.db.conn(c.id))
+    toast(`已删除连接 ${c.name}`)
+    load()
+  } catch (e) { error.value = errorText(e) }
 }
 
 async function backup(c: Conn) {
@@ -275,6 +328,8 @@ function closeBrowse() { browse.value = null }
                   :title="c.engine === 'sqlite' ? '从备份文件恢复（覆盖当前库）' : 'mysql/postgres 恢复需外部客户端，本环境不可用'"
                   @click="openRestore(c)"
                 >恢复</button>
+                <button v-if="canManage" class="btn-ghost btn-sm" :disabled="busy" @click="openEdit(c)"><Icon name="edit" :size="13" /> 编辑</button>
+                <button v-if="canManage" class="btn-ghost btn-sm danger" :disabled="busy" @click="delTarget = c"><Icon name="trash" :size="13" /> 删除</button>
               </td>
             </tr>
           </tbody>
@@ -366,6 +421,55 @@ function closeBrowse() { browse.value = null }
         </div>
       </div>
     </div>
+
+    <!-- 编辑连接弹窗：username/password 不回显 → 留空=不修改 -->
+    <div v-if="editTarget" class="mask" @click.self="editTarget = null">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">编辑连接「{{ editTarget.name }}」</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="editTarget = null">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p v-if="editError" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ editError }}</span>
+        </p>
+        <div class="row">
+          <label>名称<input v-model="editForm.name" :disabled="editSaving" /></label>
+          <label>引擎
+            <select v-model="editForm.engine" :disabled="editSaving">
+              <option value="sqlite">SQLite</option>
+              <option value="mysql">MySQL</option>
+              <option value="postgres">PostgreSQL</option>
+            </select>
+          </label>
+          <label>主机<input v-model="editForm.host" :disabled="editForm.engine === 'sqlite' || editSaving" /></label>
+          <template v-if="editForm.engine !== 'sqlite'">
+            <label>端口<input v-model="editForm.port" inputmode="numeric" :disabled="editSaving" /></label>
+            <label>用户名<input v-model="editForm.user" autocomplete="off" placeholder="留空=不修改" :disabled="editSaving" /></label>
+            <label>口令<input v-model="editForm.password" type="password" autocomplete="new-password"
+              :placeholder="editTarget.has_password ? '已设口令，留空=不修改' : '未设口令'" :disabled="editSaving" /></label>
+          </template>
+          <label>{{ editForm.engine === 'sqlite' ? '数据库文件' : '库名' }}
+            <input v-model="editForm.default_db" :disabled="editSaving" />
+          </label>
+        </div>
+        <p class="dim tiny">用户名 / 口令留空表示不修改（为安全起见不回显当前值）。</p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="editTarget = null" :disabled="editSaving">取消</button>
+            <button class="btn-primary" :disabled="editSaving || !editForm.name.trim()" @click="saveEdit">
+              {{ editSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除连接确认（仅删面板登记，不动真实库/文件） -->
+    <ConfirmDialog v-if="delTarget" :open="!!delTarget" danger title="删除数据库连接"
+      :detail="`将删除连接「${delTarget.name}」的面板登记。不会删除真实的数据库或文件，已创建的备份不受影响。`"
+      @confirm="doDel" @cancel="delTarget = null" />
   </div>
 </template>
 
@@ -386,11 +490,11 @@ col.w-dbeng { width: 8%; }
 col.w-dbhost { width: 14%; }
 col.w-dbdb { width: auto; }
 col.w-dbcli { width: 11%; }
-col.w-dbacts { width: 270px; }
+col.w-dbacts { width: 390px; }
 /* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落
    在 td 上；浏览/SQL/备份/恢复 4 按钮需 270px，窄屏随「备注」列隐藏一并收敛。
    注意 .nowrap 已在单元格 class 上提供不换行，这里只补下限宽度。 */
-.acts { white-space: nowrap; min-width: 270px; }
+.acts { white-space: nowrap; min-width: 390px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
 td.remark-cell { padding: 4px 10px; }
 </style>

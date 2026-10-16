@@ -172,6 +172,7 @@ export const API = {
 
   db: {
     connections: () => '/api/v1/db/connections',
+    conn: (id: number) => `/api/v1/db/connections/${id}`,
     databases: (conn: number) => `/api/v1/db/${conn}/databases`,
     tables: (conn: number, db: string) => `/api/v1/db/${conn}/${enc(db)}/tables`,
     rows: (conn: number, db: string, table: string) =>
