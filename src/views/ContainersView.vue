@@ -29,6 +29,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
+import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -39,6 +40,12 @@ interface Container {
 }
 interface Image {
   id: string; repository: string; tag: string; size: string; created: string
+}
+/** 创建容器载荷（与 CreateContainerDialog emit 结构一致；未填可选项省略）。 */
+interface CreateContainerPayload {
+  name: string; image: string; confirm_token: string
+  cmd?: string[]; ports?: string[]; env?: string[]; volumes?: string[]
+  restart?: string; cpu_quota?: number; mem_limit?: string
 }
 
 const auth = useAuthStore()
@@ -66,6 +73,22 @@ const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
 /** 强制删除开关（确认框内默认不勾选的显式 opt-in）：勾选→后端 docker rm -f */
 const delForce = ref(false)
+
+// 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
+// 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
+const createOpen = ref(false)
+const createBusy = ref(false)
+async function onCreated(p: CreateContainerPayload) {
+  createBusy.value = true
+  try {
+    const r = await api.post<{ id: string; name: string; state: string }>(API.containers.create(), p)
+    toast(`已创建容器 ${r.name}（状态 ${r.state}，请在列表启动）`)
+    createOpen.value = false
+    if (tab.value !== 'containers') tab.value = 'containers'
+    await load()
+  } catch (e) { toast(errorText(e), 'err') }
+  finally { createBusy.value = false }
+}
 
 // 安装 Docker：诊断分支下的交互状态
 const installOpen = ref(false)
@@ -324,8 +347,8 @@ async function saveRemark(c: Container, v: string) {
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
-      <RiskBanner level="info" title="只读 + 生命周期操作"
-        text="容器为只读列举，支持启停 / 重启 / 删除；不提供创建容器（docker run 等价宿主级任意代码执行，需独立的镜像白名单与特权 / 挂载禁用设计）。" />
+      <RiskBanner level="info" title="只读列举 + 创建 / 生命周期操作"
+        text="容器为只读列举，支持创建（docker create，默认不启动）/ 启停 / 重启 / 删除。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
@@ -345,6 +368,10 @@ async function saveRemark(c: Container, v: string) {
             <button type="button" :class="{ on: stateFilter === 'running' }" @click="stateFilter = 'running'">运行</button>
             <button type="button" :class="{ on: stateFilter === 'exited' }" @click="stateFilter = 'exited'">已停止</button>
           </div>
+          <button class="btn-primary btn-sm" :disabled="!canManage"
+            :title="canManage ? '创建容器（docker create）' : '需要 container.manage 权限'" @click="createOpen = true">
+            <Icon name="plus" :size="14" /> 新建容器
+          </button>
         </div>
         <div class="t-scroll" v-if="filtered.length">
         <table class="fixed" v-table-nav>
@@ -435,8 +462,9 @@ async function saveRemark(c: Container, v: string) {
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
       <p>容器为<b>只读列举 + 生命周期操作</b>（启停 / 重启 / 删除）。</p>
-      <h4>刻意不提供的操作</h4>
-      <p><b>创建容器 / 删除镜像 / 拉取镜像</b>：创建容器等价于在宿主机执行任意代码（镜像内容 + 挂载宿主目录 + 特权模式 + 端口暴露），必须配套镜像白名单、禁止特权与宿主挂载、资源配额等设计后才能开放。</p>
+      <h4>能力边界</h4>
+      <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
+      <p><b>仍不提供</b>：删除镜像 / 拉取镜像（写入与网络拉取风险，且镜像拉取需可达的 registry）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
     </HelpDrawer>
@@ -460,6 +488,9 @@ async function saveRemark(c: Container, v: string) {
     <ConfirmDialog :open="restartOpen" danger title="重启面板"
       :detail="'将重启面板服务，使新加入的 docker 组生效。重启期间面板会短暂不可用，稍后需重新登录。'"
       confirm-word="重启面板" @confirm="restartPanel" @cancel="restartOpen = false" />
+
+    <CreateContainerDialog :open="createOpen" :busy="createBusy"
+      @confirm="onCreated" @cancel="createOpen = false" />
   </div>
 </template>
 
