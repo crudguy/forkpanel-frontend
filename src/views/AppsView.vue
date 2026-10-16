@@ -343,13 +343,13 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       <div class="card-toolbar">
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
+        <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
         <RefreshBtn :disabled="loading || busyId !== null" @click="load" />
         <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
           <Icon name="plus" :size="14" /> 新建应用
         </button>
-        <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
       </div>
       <!-- 顶栏固定：零应用也常驻（参考网站页）；其下按状态显示骨架 / 表格 / 空态 -->
       <div v-if="loading && !apps.length" class="skeleton box" />
