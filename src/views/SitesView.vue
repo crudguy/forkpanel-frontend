@@ -1532,9 +1532,10 @@ async function batchDelete() {
       <!-- 页级筛选与动作收进卡顶栏：它们过滤 / 操作的就是这张表；原先单独占一条
            页面级横条时，横条本身比「搜索框」这个内容还重。 -->
       <div class="card-toolbar">
-        <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低 -->
-        <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
         <span class="count">共 {{ sites.length }} 个站点</span>
+        <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低；
+             count 领队、搜索框紧邻其后（"过滤这 N 个"语义自然），操作簇统一靠右 -->
+        <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
         <span class="spacer" />
         <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
              偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
