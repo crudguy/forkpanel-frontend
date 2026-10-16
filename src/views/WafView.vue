@@ -1,15 +1,20 @@
 <script setup lang="ts">
 /**
- * WAF 总览（统一管理入口）。
+ * WAF 控制台（统一管理入口）。
  *
- * 站点 WAF 本来就是 nginx 配置的一部分——与站点配置**同一次 apply** 下发，
- * 真正的配置项入口在「网站 → 编辑站点」弹窗里。本页只是把各站的 WAF
- * 状态收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。
+ * 站点 WAF 本来就是 nginx/caddy 配置的一部分——与站点配置**同一次 apply** 下发，
+ * 真正的配置项入口也在「网站 → 编辑站点」弹窗里。本页把各站的 WAF 状态与
+ * **IP 访问控制**收到一屏：顶部总览 + 逐站就地编辑 + 应用，省去逐个打开编辑弹窗。
  *
- * 与后端严格对齐的两条语义（与 SitesView 一致，勿改）：
+ * 与后端严格对齐的语义（与 SitesView 一致，勿改）：
  * - `waf` 缺省 = 保留库中现值（不是关闭）→ 本页**总是显式下发** `waf` 段；
  * - `rate_per_sec: 0` = 不限速；`burst` 仅在限速时才有意义（不限速却带 burst
- *   会被后端 400 —— 那属于"配了但没生效"的静默失败，后端刻意拒绝）。
+ *   会被后端 400 —— 那属于"配了但没生效"的静默失败，后端刻意拒绝）；
+ * - `ip_allow` / `ip_deny`：逗号/空格分隔的 IPv4 或 CIDR；**白名单非空即白名单
+ *   模式**（只放行名单内、其余拒绝），此时黑名单被忽略——UI 对二者互斥置灰；
+ * - **caddy 后端不支持限速**（标准 caddy 无 rate_limit 指令，渲染时刻意忽略）：
+ *   `auth.webBackend === 'caddy'` 时限速/突发输入置灰并说明，避免"配了没生效"。
+ *   （IP 访问控制在 nginx 与 caddy 双端均已实装，不受此后端限制。）
  *
  * ⚠️ 已知副作用（如实写在界面上，不藏着）：后端 apply 的 upsert 会把站点
  *    `enabled` 置 1，所以**已停用的站点**在本页禁用「应用」，
@@ -21,6 +26,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, wafProfileLabel, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import MetricCard from '@/components/MetricCard.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
@@ -29,7 +35,10 @@ import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 
 /** 每站点一份草稿：就地编辑，点「应用」才下发 */
-interface Draft { on: boolean; profile: string; rate: number; burst: number }
+interface Draft {
+  on: boolean; profile: string; rate: number; burst: number
+  ipAllow: string; ipDeny: string
+}
 
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
@@ -41,8 +50,15 @@ const helpOpen = ref(false)
 
 const canManage = computed(() => auth.can('site.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
-// 下发 WAF 就是下发 nginx 配置 → 与 SitesView 的 canApply 同款门禁
+// 下发 WAF 就是下发 Web 服务器配置 → 与 SitesView 的 canApply 同款门控
 const canApply = computed(() => webSupported.value && canManage.value)
+/** caddy 后端：IP 名单双端都实装，但**限速被有意忽略**（标准 caddy 无 rate_limit） */
+const isCaddy = computed(() => auth.webBackend === 'caddy')
+
+/** IP 名单归一：逗号/空格分隔 → 逗号拼接（与 SitesView applyBody 同口径，后端一致） */
+function normIp(v: string): string {
+  return v.split(/[,\s]+/).filter(Boolean).join(',')
+}
 
 function toDraft(s: Site): Draft {
   return {
@@ -50,6 +66,8 @@ function toDraft(s: Site): Draft {
     profile: s.waf_profile ?? 'basic',
     rate: s.waf_rate_per_sec ?? 0,
     burst: s.waf_burst ?? 0,
+    ipAllow: (s.ip_allow ?? []).join(', '),
+    ipDeny: (s.ip_deny ?? []).join(', '),
   }
 }
 
@@ -61,14 +79,42 @@ async function load() {
   })
 }
 
-/** 是否有未应用的改动 */
+/** 是否有未应用的改动（含 IP 访问控制） */
 function dirty(s: Site): boolean {
   const d = drafts.value[s.id]; if (!d) return false
   if (d.on !== s.waf_enabled) return true
+  if (normIp(d.ipAllow) !== (s.ip_allow ?? []).join(',')) return true
+  if (normIp(d.ipDeny) !== (s.ip_deny ?? []).join(',')) return true
   return d.on && (d.profile !== (s.waf_profile ?? 'basic')
     || d.rate !== (s.waf_rate_per_sec ?? 0)
     || d.burst !== (s.waf_burst ?? 0))
 }
+
+/**
+ * 顶部总览指标（与 SecurityView 的 summaryCards 同范式：computed 出卡片 props 数组）。
+ * 数字全部由 sites 现值算出，不额外请求——WAF/IP 状态本就在站点列表里。
+ */
+const summaryCards = computed(() => {
+  const total = sites.value.length
+  const on = sites.value.filter(s => s.waf_enabled)
+  const strict = on.filter(s => s.waf_profile === 'strict').length
+  const basic = on.length - strict
+  const rated = on.filter(s => (s.waf_rate_per_sec ?? 0) > 0).length
+  const acl = sites.value.filter(s => (s.ip_allow ?? []).length || (s.ip_deny ?? []).length).length
+  return [
+    { label: 'WAF 开启', value: String(on.length), unit: `/ ${total} 站`,
+      sub: total - on.length ? `${total - on.length} 站未开启` : '全部站点已开启',
+      icon: 'shield', tone: 'ok' as const,
+      progress: total ? (on.length / total) * 100 : 0 },
+    { label: '严格档', value: String(strict), unit: '站',
+      sub: `基础 ${basic} · 严格 ${strict}`, icon: 'firewall', tone: 'warn' as const },
+    { label: 'CC 限速', value: String(rated), unit: '站限速',
+      sub: isCaddy.value ? 'caddy 后端暂不支持限速' : `开启 WAF 的 ${on.length} 站中`,
+      icon: 'gauge', tone: isCaddy.value ? ('warn' as const) : ('cyan' as const) },
+    { label: '访问控制', value: String(acl), unit: '站设 IP 名单',
+      sub: 'IP 白 / 黑名单（IPv4 / CIDR）', icon: 'lock', tone: 'primary' as const },
+  ]
+})
 
 /**
  * 下发体构造——**单站点「应用」与「应用全部」共用**。
@@ -78,7 +124,9 @@ function dirty(s: Site): boolean {
  * - 其余字段原样回传：apply 是「期望状态」覆盖，漏传 upstreams/fpm 会把
  *   反代 / PHP 站的后端地址清空（migration 009 已落库，列表里拿得到真实值）；
  * - `burst` 只在限速且有值时下发，缺省让后端按 rate×2 计算（不限速却带 burst
- *   会被后端 400 —— 那属于「配了但没生效」的静默失败，后端刻意拒绝）。
+ *   会被后端 400 —— 那属于「配了但没生效」的静默失败，后端刻意拒绝）；
+ * - `ip_allow` / `ip_deny` 归一成逗号拼接后**显式下发**（与 waf 同"总是显式"），
+ *   空串 = 清除、二者互斥由后端按"白名单优先"裁决。
  */
 function applyBody(s: Site, d: Draft) {
   const waf = !d.on
@@ -100,6 +148,8 @@ function applyBody(s: Site, d: Draft) {
     upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
     fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
     waf,
+    ip_allow: normIp(d.ipAllow),
+    ip_deny: normIp(d.ipDeny),
   }
 }
 
@@ -176,97 +226,125 @@ onMounted(load)
          且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
     <div v-if="loading && !sites.length" class="skeleton box" />
     <EmptyState v-else-if="!sites.length && !error" title="暂无站点"
-      hint="先在「网站」建站，再回来统一配置 WAF">
+      hint="先在「网站」建站，再回来统一配置 WAF 与访问控制">
       <template #cta>
         <RouterLink class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
       </template>
     </EmptyState>
 
-    <div v-else-if="sites.length" class="card flush toolbar-card">
-      <div class="card-toolbar">
-        <span class="count">共 {{ sites.length }} 个站点</span>
-        <span class="spacer" />
-        <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />
-        <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
-        <span v-if="blockedPending" class="dim tiny"
-          :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
-          · {{ blockedPending }} 项不可下发
-        </span>
-        <RefreshBtn :disabled="batchBusy" sm @click="load" />
-        <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
-        <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
-          :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
-          <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
-        </button>
+    <template v-else-if="sites.length">
+      <!-- 总览指标：WAF 覆盖 / 档位 / 限速 / 访问控制，一屏看清全站防护态势 -->
+      <div class="grid cols-4">
+        <MetricCard v-for="c in summaryCards" :key="c.label" v-bind="c" />
       </div>
-      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
-      <div class="t-scroll">
-      <table class="fixed" aria-label="站点 WAF 配置" v-table-nav>
-        <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发桶列按控件实测宽（输入框 92px + 内边距）。 -->
-        <colgroup>
-          <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfacts" />
-        </colgroup>
-        <thead>
-          <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
-          <tr>
-            <th scope="col">站点</th><th scope="col">域名</th><th scope="col" class="col-opt">类型</th><th scope="col">WAF</th>
-            <th scope="col">档位</th><th scope="col">CC 限速</th><th scope="col" class="col-opt">突发桶</th><th scope="col">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in sites" :key="s.id">
-            <td class="ellipsis" :title="s.name">{{ s.name }}</td>
-            <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
-            <td class="col-opt">{{ kindLabel(s.kind) }}</td>
-            <td>
-              <!-- aria-label 给出「哪个站点的什么开关」：读屏只念 checkbox 无法定位 -->
-              <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
-                :disabled="!canApply || !s.enabled" :title="blockedReason(s)" />
-            </td>
-            <td>
-              <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile" :aria-label="`${s.name} 防护档位`"
-                :disabled="!canApply || !s.enabled">
-                <option value="basic">基础</option>
-                <option value="strict">严格</option>
-              </select>
-              <span v-else class="dim">—</span>
-            </td>
-            <td>
-              <input v-if="drafts[s.id].on" v-model.number="drafts[s.id].rate"
-                type="number" min="0" max="1000" class="num" :aria-label="`${s.name} CC 限速（每秒请求数）`"
-                :disabled="!canApply || !s.enabled" />
-              <span v-else class="dim">—</span>
-            </td>
-            <td class="col-opt">
-              <input v-if="drafts[s.id].on" v-model.number="drafts[s.id].burst"
-                type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 突发桶`"
-                :disabled="!canApply || !s.enabled || !drafts[s.id].rate"
-                :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
-              <span v-else class="dim">—</span>
-            </td>
-            <td class="acts">
-              <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id || batchBusy"
-                :title="blockedReason(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
-                {{ busyId === s.id ? '应用中…' : '应用' }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+
+      <div class="card flush toolbar-card">
+        <div class="card-toolbar">
+          <span class="count">共 {{ sites.length }} 个站点</span>
+          <span class="spacer" />
+          <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />
+          <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
+          <span v-if="blockedPending" class="dim tiny"
+            :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
+            · {{ blockedPending }} 项不可下发
+          </span>
+          <RefreshBtn :disabled="batchBusy" sm @click="load" />
+          <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
+          <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
+            :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
+            <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
+          </button>
+        </div>
+        <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
+        <div class="t-scroll">
+        <table class="fixed" aria-label="站点 WAF 与访问控制配置" v-table-nav>
+          <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发/IP 列按控件实测宽定宽。 -->
+          <colgroup>
+            <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfip" /><col class="w-wfacts" />
+          </colgroup>
+          <thead>
+            <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
+            <tr>
+              <th scope="col">站点</th><th scope="col">域名</th><th scope="col" class="col-opt">类型</th><th scope="col">WAF</th>
+              <th scope="col">档位</th><th scope="col">CC 限速</th><th scope="col" class="col-opt">突发桶</th>
+              <th scope="col" class="col-opt">访问控制</th><th scope="col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in sites" :key="s.id">
+              <td class="ellipsis" :title="s.name">{{ s.name }}</td>
+              <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
+              <td class="col-opt">{{ kindLabel(s.kind) }}</td>
+              <td>
+                <!-- aria-label 给出「哪个站点的什么开关」：读屏只念 checkbox 无法定位 -->
+                <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
+                  :disabled="!canApply || !s.enabled" :title="blockedReason(s)" />
+              </td>
+              <td>
+                <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile" :aria-label="`${s.name} 防护档位`"
+                  :disabled="!canApply || !s.enabled">
+                  <option value="basic">基础</option>
+                  <option value="strict">严格</option>
+                </select>
+                <span v-else class="dim">—</span>
+              </td>
+              <td>
+                <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].rate"
+                  type="number" min="0" max="1000" class="num" :aria-label="`${s.name} CC 限速（每秒请求数）`"
+                  :disabled="!canApply || !s.enabled" />
+                <span v-else-if="drafts[s.id].on && isCaddy" class="dim tiny" title="标准 caddy 无 rate_limit 指令，限速在 caddy 后端被忽略">不支持</span>
+                <span v-else class="dim">—</span>
+              </td>
+              <td class="col-opt">
+                <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].burst"
+                  type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 突发桶`"
+                  :disabled="!canApply || !s.enabled || !drafts[s.id].rate"
+                  :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
+                <span v-else-if="drafts[s.id].on && isCaddy" class="dim">—</span>
+                <span v-else class="dim">—</span>
+              </td>
+              <!-- 访问控制：IP 白/黑名单，就地编辑；二者互斥（白名单非空即只放行名单内，
+                   黑名单被忽略）→ 与 SitesView 一致对两个输入互斥置灰。 -->
+              <td class="col-opt ip-cell">
+                <input class="ip" v-model="drafts[s.id].ipAllow" placeholder="白名单" spellcheck="false"
+                  :aria-label="`${s.name} IP 白名单`"
+                  :title="'IP 白名单（单 IP 或 CIDR，逗号/空格分隔）。非空即只放行名单内、其余拒绝'"
+                  :disabled="!canApply || !s.enabled || !!drafts[s.id].ipDeny.trim()" />
+                <input class="ip" v-model="drafts[s.id].ipDeny" placeholder="黑名单" spellcheck="false"
+                  :class="{ dim: !!drafts[s.id].ipAllow.trim() }"
+                  :aria-label="`${s.name} IP 黑名单`"
+                  :title="drafts[s.id].ipAllow.trim() ? '白名单优先：已启用白名单，黑名单被忽略' : 'IP 黑名单（单 IP 或 CIDR，逗号/空格分隔）'"
+                  :disabled="!canApply || !s.enabled || !!drafts[s.id].ipAllow.trim()" />
+              </td>
+              <td class="acts">
+                <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id || batchBusy"
+                  :title="blockedReason(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
+                  {{ busyId === s.id ? '应用中…' : '应用' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- 完整说明收进帮助抽屉（A6）：底部不再重复长文；「?」在列表卡顶栏。
          浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
-      <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 状态收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。</p>
+      <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 与访问控制收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。</p>
       <h4>档位</h4>
       <ul>
         <li><b>基础档</b>：拦 SQL 注入 / XSS / 路径穿越 / 敏感文件探测 / 恶意 UA。</li>
         <li><b>严格档</b>：基础档之上追加空 UA 与非白名单方法拦截，<b>误杀率更高</b>，不建议作默认。</li>
       </ul>
       <h4>CC 限速</h4>
-      <p><code>rate_per_sec</code> 为 0 表示不限速；设置限速时 <code>burst</code> 才有意义（不限速却带 burst 会被后端拒绝）。超限请求返回 <code>429</code>；<code>/.well-known</code> 路径始终放行——否则会把 ACME 证书续期打死。</p>
+      <p><code>rate_per_sec</code> 为 0 表示不限速；设置限速时 <code>burst</code> 才有意义（不限速却带 burst 会被后端拒绝）。超限请求返回 <code>429</code>；<code>/.well-known</code> 路径始终放行——否则会把 ACME 证书续期打死。<b>caddy 后端暂不支持限速</b>（标准 caddy 无 <code>rate_limit</code> 指令），此类站点限速项置灰。</p>
+      <h4>访问控制（IP 白 / 黑名单）</h4>
+      <ul>
+        <li>单 IP 或 CIDR（仅 IPv4），逗号 / 空格分隔；nginx 与 caddy 双端均已实装。</li>
+        <li><b>白名单优先</b>：白名单非空即进入白名单模式——只放行名单内、其余全部拒绝，此时黑名单被忽略（界面对二者互斥置灰）。</li>
+      </ul>
       <h4>已知副作用</h4>
       <p>后端 apply 的 upsert 会把站点 <code>enabled</code> 置 1，因此<b>已停用的站点</b>在本页禁用「应用」，避免用户只想改 WAF 却被静默启用站点。</p>
     </HelpDrawer>
@@ -278,8 +356,13 @@ onMounted(load)
 /* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类，
    不再私有重定义（审计 V1：WAF 页自造按钮样式曾与全局漂移）。 */
 .num { width: 92px; }
+/* 访问控制列：两个 IP 输入并排；按控件实测宽定宽（输入框 92px×2 + 间距 6 + 单元格内边距）。 */
+.ip { width: 92px; }
+.ip-cell { display: flex; gap: 6px; align-items: center; }
+.ip-cell .ip:disabled { opacity: .55; }
+.ip-cell .ip.dim { opacity: .55; }
 /* 配置表列宽（站点表范式）：域名为唯一弹性列；控件列按实测控件宽定宽
-   （CC/突发桶输入框自身 92px + 单元格内边距 26px）。 */
+   （CC/突发/IP 输入框自身 92px + 单元格内边距 26px）。 */
 col.w-wfname { width: 10%; }
 col.w-wfdom { width: auto; }
 col.w-wfkind { width: 7%; }
@@ -287,6 +370,7 @@ col.w-wfon { width: 64px; }
 col.w-wfprof { width: 104px; }
 col.w-wfrate { width: 120px; }
 col.w-wfburst { width: 120px; }
+col.w-wfip { width: 216px; }
 col.w-wfacts { width: 130px; }
 /* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落
    在 td 上；单「应用」按钮在窄列里也需保住完整宽，避免「应用中…」被裁。 */
