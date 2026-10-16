@@ -20,6 +20,8 @@ import { CAP, fmtDateTime, fmtSize } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import { useModal } from '@/composables/useModal'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
@@ -58,6 +60,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 /** 软删除的反馈（"已移入回收站"），与 error 分开：它不是错误 */
 const showTrash = ref(false)
+const helpOpen = ref(false)
 
 // 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
 // 此前只判权限，能力位在文件页从未生效（侧边栏门禁用的是 FILE_READ）。
@@ -373,6 +376,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
         </template>
       </nav>
       <span class="spacer" />
+      <HelpBtn title="文件管理说明" aria-label="文件管理说明" :expanded="helpOpen" @click="helpOpen = true" />
       <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
       <RefreshBtn :disabled="loading" @click="load" />
@@ -510,6 +514,37 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
     </div>
 
     <TrashPanel v-if="showTrash" @close="showTrash = false" @changed="load()" />
+
+    <HelpDrawer :open="helpOpen" title="文件管理说明" @close="helpOpen = false">
+      <p>文件管理用于在面板允许的根目录内浏览、上传、编辑与整理文件。所有路径都<strong>由后端返回并校验</strong>——前端不拼接 <code>..</code>，真正的越权防护在后端沙箱。</p>
+
+      <h4>导航与排序</h4>
+      <ul>
+        <li>顶部面包屑的每一段都可点击直达；层级过深时中段会折叠成一个可点的「…」。</li>
+        <li>点表头「名称 / 大小 / 修改时间」切换排序；<strong>目录永远排在文件前面</strong>，排序只在目录群内生效，当前生效列显示为主色。</li>
+      </ul>
+
+      <h4>上传与下载</h4>
+      <ul>
+        <li>超过 8 MB 自动走分片上传、中断后可续传；小文件单请求直传。</li>
+        <li>下载走同源直链，由浏览器原生保存。</li>
+      </ul>
+
+      <h4>批量与回收站</h4>
+      <ul>
+        <li>勾选多项后可<strong>复制到 / 移动到 / 移入回收站</strong>，每项结果逐条回报成功或失败。</li>
+        <li>「回收站」列出被软删除的文件，可在这里恢复；面板不提供「一键 <code>rm -rf</code>」。</li>
+        <li>删除目录必须输入确认词，防止误删整棵目录树。</li>
+      </ul>
+
+      <h4>权限与敏感文件</h4>
+      <ul>
+        <li>点「权限」可改文件 mode；写操作需要 <code>file.write</code> 权限且宿主具备文件写能力位。</li>
+        <li>标红「受保护」的敏感文件（如 <code>/etc/shadow</code>）前端禁止打开与删除，后端同样会拒绝。</li>
+      </ul>
+
+      <p>单次列目录最多返回 1000 项，超过会提示「结果已被截断」，可进入子目录查看其余内容。</p>
+    </HelpDrawer>
   </PageLayout>
 </template>
 
