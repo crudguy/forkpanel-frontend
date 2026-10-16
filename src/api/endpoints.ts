@@ -124,6 +124,7 @@ export const API = {
   },
   // WAF 策略模板（026）：与站点解耦的 WAF+访问控制预设；套用由前端经 sites.apply 编排
   waf: {
+    alert: { get: () => '/api/v1/waf/alert', put: () => '/api/v1/waf/alert' },
     events: { list: () => '/api/v1/waf/events' },
     templates: {
       list: () => '/api/v1/waf/templates',

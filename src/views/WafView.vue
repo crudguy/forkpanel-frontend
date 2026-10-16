@@ -365,7 +365,35 @@ async function loadEvents(append = false) {
   } finally { evtLoading.value = false }
 }
 
-onMounted(() => { void load(); void loadEvents() })
+// ─────────────────────────── 拦截告警配置（028） ───────────────────────────
+interface AlertCfg { enabled: boolean; threshold: number; window_min: number }
+const alertCfg = ref<AlertCfg>({ enabled: true, threshold: 50, window_min: 5 })
+const alertLoading = ref(false)
+const alertSaving = ref(false)
+const alertError = ref('')
+
+async function loadAlert() {
+  alertLoading.value = true; alertError.value = ''
+  try {
+    alertCfg.value = await api.get<AlertCfg>(API.waf.alert.get())
+  } catch (e) { alertError.value = errorText(e) }
+  finally { alertLoading.value = false }
+}
+
+async function saveAlert() {
+  alertSaving.value = true; alertError.value = ''
+  try {
+    await api.put(API.waf.alert.put(), {
+      enabled: alertCfg.value.enabled,
+      threshold: alertCfg.value.threshold,
+      window_min: alertCfg.value.window_min,
+    })
+    toast('告警配置已保存')
+  } catch (e) { alertError.value = errorText(e) }
+  finally { alertSaving.value = false }
+}
+
+onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 </script>
 
 <template>
@@ -583,6 +611,26 @@ onMounted(() => { void load(); void loadEvents() })
       </div>
     </div>
 
+    <!-- 拦截告警配置（028）：命中达阈值推站内通知 -->
+    <div class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <Icon name="bell" :size="15" class="sec-ico" />
+        <span class="sec-title">拦截告警</span>
+        <span class="spacer" />
+        <RefreshBtn :disabled="alertLoading" sm @click="loadAlert" />
+      </div>
+      <div class="alert-cfg">
+        <p v-if="alertError" class="err" role="alert">{{ alertError }}</p>
+        <label class="al-row"><input type="checkbox" v-model="alertCfg.enabled" :disabled="alertSaving" /> <span>启用拦截告警</span></label>
+        <div class="al-fields">
+          <label class="blk">阈值（近窗内拦截次数）<input v-model.number="alertCfg.threshold" type="number" min="1" max="100000" :disabled="alertSaving || !alertCfg.enabled" /></label>
+          <label class="blk">时间窗（分钟）<input v-model.number="alertCfg.window_min" type="number" min="1" max="1440" :disabled="alertSaving || !alertCfg.enabled" /></label>
+          <button class="btn-primary btn-sm" :disabled="alertSaving" @click="saveAlert">{{ alertSaving ? '保存中…' : '保存' }}</button>
+        </div>
+        <p class="evt-note">近「时间窗」内单站拦截数超过「阈值」即推送一条站内通知（在顶栏铃铛 / 通知中心查看）；同站每窗至多一条，不刷屏。仅采集开了独立 access log 的站点。</p>
+      </div>
+    </div>
+
     <!-- 完整说明收进帮助抽屉（A6）；「?」在站点列表卡顶栏。浮层放链尾。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
       <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 与访问控制收到一屏，可就地调整并应用；也可把常用配置存成<b>策略模板</b>批量套用。</p>
@@ -738,6 +786,13 @@ col.w-tipd { width: 150px; }
 col.w-tacts { width: 170px; }
 /* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落在 td 上 */
 .acts { white-space: nowrap; min-width: 130px; }
+/* 拦截告警配置卡 */
+.alert-cfg { padding: 0 14px 14px; }
+.alert-cfg .err { margin: 4px 0 10px; }
+.al-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); margin-bottom: 10px; }
+.al-fields { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.al-fields .blk { margin: 0; }
+.al-fields input[type=number] { width: 130px; }
 /* 威胁日志：筛选条 + 说明 + 事件表列宽 */
 .evt-filters { display: flex; gap: 8px; align-items: center; padding: 0 14px 10px; flex-wrap: wrap; }
 .evt-note { margin: 0; padding: 0 14px 10px; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
