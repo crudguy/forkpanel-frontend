@@ -25,6 +25,7 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { toast } from '@/composables/useToast'
@@ -312,9 +313,7 @@ function fmtTime(t: number | null) {
         <div class="sec-head">
           <Icon name="disk" :size="16" /> 新建备份计划
           <span class="spacer" />
-          <button class="btn-icon ghost" type="button" title="备份说明" aria-label="备份说明" @click="helpOpen = true">
-            <Icon name="help" :size="16" />
-          </button>
+          <HelpBtn title="备份说明" aria-label="备份说明" :expanded="helpOpen" @click="helpOpen = true" />
         </div>
         <div class="row">
           <label>类型

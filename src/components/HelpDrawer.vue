@@ -14,8 +14,8 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="emit('close')">
-    <aside class="hd" role="dialog" aria-label="说明">
+  <div v-if="open" class="mask" @click.self="emit('close')" @keydown.esc.window="emit('close')">
+    <aside class="hd" role="dialog" aria-modal="true" aria-label="说明">
       <div class="hd-head">
         <Icon name="help" :size="18" />
         <span class="hd-title">{{ title ?? '说明' }}</span>

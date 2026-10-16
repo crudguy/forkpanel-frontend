@@ -18,6 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, type AppInfo, type AppRuntimeInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
@@ -340,9 +341,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       <Icon name="info" :size="14" class="ic" />
       <span>每个应用 = 面板托管的 systemd 进程 + 自动维护的反代站点。<b>构建与依赖安装需你自己完成</b>，
         面板只负责把进程拉起来（完整说明见右侧「?」）。</span>
-      <button class="btn-icon ghost hint-help" type="button" title="应用说明" aria-label="应用说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
+      <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
     </p>
 
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>

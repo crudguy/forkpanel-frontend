@@ -23,6 +23,7 @@ import { CAP, wafProfileLabel, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
@@ -185,9 +186,7 @@ onMounted(load)
       <div class="card-toolbar">
         <span class="count">共 {{ sites.length }} 个站点</span>
         <span class="spacer" />
-        <button class="btn-icon ghost" type="button" title="WAF 说明" aria-label="WAF 说明" @click="helpOpen = true">
-          <Icon name="help" :size="16" />
-        </button>
+        <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />
         <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
         <span v-if="blockedPending" class="dim tiny"
           :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">

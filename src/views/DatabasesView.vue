@@ -23,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
@@ -186,9 +187,7 @@ function closeBrowse() { browse.value = null }
         <div class="sec-head">
           <Icon name="database" :size="16" /> 新增连接
           <span class="spacer" />
-          <button class="btn-icon ghost" type="button" title="数据库说明" aria-label="数据库说明" @click="helpOpen = true">
-            <Icon name="help" :size="16" />
-          </button>
+          <HelpBtn title="数据库说明" aria-label="数据库说明" :expanded="helpOpen" @click="helpOpen = true" />
         </div>
         <div class="row">
           <label>名称<input v-model="form.name" placeholder="myapp" /></label>

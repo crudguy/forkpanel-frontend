@@ -24,6 +24,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
@@ -228,9 +229,7 @@ async function saveRemark(c: Container, v: string) {
     <div class="tools-row">
       <span class="spacer" />
       <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
-      <button class="btn-icon ghost" type="button" title="容器说明" @click="helpOpen = true">
-        <Icon name="help" :size="16" />
-      </button>
+      <HelpBtn title="容器说明" aria-label="容器说明" :expanded="helpOpen" @click="helpOpen = true" />
       <RefreshBtn :disabled="busy || !supported" @click="load()" />
     </div>
 

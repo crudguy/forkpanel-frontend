@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
@@ -171,9 +172,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
       <div class="card-toolbar">
         <span class="count">共 {{ certs.length }} 张证书</span>
         <span class="spacer" />
-        <button class="btn-icon ghost" type="button" title="证书说明" aria-label="证书说明" @click="helpOpen = true">
-          <Icon name="help" :size="16" />
-        </button>
+        <HelpBtn title="证书说明" aria-label="证书说明" :expanded="helpOpen" @click="helpOpen = true" />
         <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
         <button class="btn-ghost btn-sm" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
           <Icon name="shield" :size="15" /> 信任根证书
