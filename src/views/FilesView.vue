@@ -118,6 +118,9 @@ function openTab() {
   const t = makeTab(activeTab.value.path)
   tabs.value.push(t)
   activeId.value = t.id
+  // 必须走默认参数 load()（= activeTab.value，即响应式代理）——若传原始对象 t，
+  // 对其 entries/loading 的赋值不会触发响应式，新标签会停在「空目录」空态直到手动刷新。
+  load()
 }
 function switchTab(id: string) {
   if (id === activeId.value) return
