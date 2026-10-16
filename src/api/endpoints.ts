@@ -200,6 +200,8 @@ export const API = {
     /** 创建容器（`docker create`，默认不启动）；POST 上述同一路径，body 见 openapi */
     create: () => '/api/v1/containers',
     images: () => '/api/v1/containers/images',
+    /** 拉取 / 更新镜像（等价 `docker pull`；写操作，需 container.manage + 镜像引用安全校验）。 */
+    pull: () => '/api/v1/containers/images/pull',
     install: () => '/api/v1/containers/install',
     // 把面板运行用户加入 docker 组（修复 daemon_unreachable 的高危操作）
     joinDockerGroup: () => '/api/v1/containers/join-docker-group',

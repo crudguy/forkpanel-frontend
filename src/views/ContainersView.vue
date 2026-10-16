@@ -30,6 +30,7 @@ import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
+import PullImageDialog from '@/components/PullImageDialog.vue'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -88,6 +89,21 @@ async function onCreated(p: CreateContainerPayload) {
     await load()
   } catch (e) { toast(errorText(e), 'err') }
   finally { createBusy.value = false }
+}
+
+// 拉取 / 更新镜像（docker pull，写操作）：弹窗 + POST，受 container.manage 门控。
+const pullOpen = ref(false)
+const pullBusy = ref(false)
+async function onPull(image: string) {
+  pullBusy.value = true
+  try {
+    const r = await api.post<{ repository: string; tag: string }>(API.containers.pull(), { image })
+    toast(`已拉取镜像 ${r.repository}:${r.tag}（可在「镜像」页查看）`)
+    pullOpen.value = false
+    if (tab.value !== 'images') tab.value = 'images'
+    await load()
+  } catch (e) { toast(errorText(e), 'err') }
+  finally { pullBusy.value = false }
 }
 
 // 安装 Docker：诊断分支下的交互状态
@@ -348,7 +364,7 @@ async function saveRemark(c: Container, v: string) {
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
       <RiskBanner level="info" title="只读列举 + 创建 / 生命周期操作"
-        text="容器为只读列举，支持创建（docker create，默认不启动）/ 启停 / 重启 / 删除。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
+        text="容器为只读列举，支持创建（docker create，默认不启动）/ 启停 / 重启 / 删除；镜像支持从 registry 拉取 / 更新（docker pull，写操作，需 container.manage）。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
@@ -431,7 +447,10 @@ async function saveRemark(c: Container, v: string) {
         <div class="card-toolbar">
           <span class="count">共 {{ images.length }} 个镜像</span>
           <span class="spacer" />
-          <span class="dim">镜像为只读列举（删除 / 拉取未开放）</span>
+          <button class="btn-primary btn-sm" :disabled="!canManage"
+            :title="canManage ? '从 registry 拉取 / 更新镜像（docker pull）' : '需要 container.manage 权限'" @click="pullOpen = true">
+            <Icon name="download" :size="14" /> 拉取 / 更新镜像
+          </button>
         </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>
@@ -464,7 +483,7 @@ async function saveRemark(c: Container, v: string) {
       <p>容器为<b>只读列举 + 生命周期操作</b>（启停 / 重启 / 删除）。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
-      <p><b>仍不提供</b>：删除镜像 / 拉取镜像（写入与网络拉取风险，且镜像拉取需可达的 registry）。</p>
+      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
     </HelpDrawer>
@@ -491,6 +510,9 @@ async function saveRemark(c: Container, v: string) {
 
     <CreateContainerDialog :open="createOpen" :busy="createBusy"
       @confirm="onCreated" @cancel="createOpen = false" />
+
+    <PullImageDialog :open="pullOpen" :busy="pullBusy"
+      @confirm="onPull" @cancel="pullOpen = false" />
   </div>
 </template>
 
