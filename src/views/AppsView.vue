@@ -19,6 +19,7 @@ import { CAP, fmtDateTime, type AppInfo, type AppRuntimeInfo } from '@/api/types
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
+import RefreshBtn from '@/components/RefreshBtn.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
@@ -342,6 +343,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       <div class="card-toolbar">
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
+        <RefreshBtn :disabled="loading || busyId !== null" @click="load" />
         <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
