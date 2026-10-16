@@ -101,6 +101,20 @@ export interface WafTemplate {
   updated_at: number
 }
 
+/** 拦截事件（027，威胁日志）。⚠ 无规则归因：WAF/敏感文件/IP 黑名单都返回同色 403，只记状态码；
+ *  且仅采集「开了独立 access log」的站点。 */
+export interface BlockEvent {
+  id: number
+  site: string
+  ts: number
+  remote_addr: string
+  method: string
+  uri: string
+  status: number
+  referer: string
+  user_agent: string
+}
+
 export interface Site {
   id: number
   name: string

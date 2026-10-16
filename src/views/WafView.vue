@@ -29,7 +29,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, wafProfileLabel, type Site, type WafTemplate } from '@/api/types'
+import { CAP, fmtDateTime, wafProfileLabel, type Site, type WafTemplate, type BlockEvent } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -331,7 +331,41 @@ async function doApplyTpl() {
   } finally { applyBusy.value = false }
 }
 
-onMounted(load)
+// ─────────────────────────── 威胁日志 / 拦截事件（027） ───────────────────────────
+const events = ref<BlockEvent[]>([])
+const evtFilters = ref<{ site: string; status: string }>({ site: '', status: '' })
+const evtLoading = ref(false)
+const evtError = ref('')
+const evtHasMore = ref(false)
+const EVT_PAGE = 200
+/** 未开独立 access log 的站点数——采集不到，如实提示 */
+const sitesWithoutLog = computed(() => sites.value.filter(s => !s.log_access).length)
+
+function evtStatusLabel(st: number): string {
+  if (st === 403) return '拦截'
+  if (st === 405) return '方法拒绝'
+  if (st === 429) return '限速'
+  return String(st)
+}
+
+/** 加载拦截事件（append=true 时翻页续接）。筛选：站点 / 状态码。 */
+async function loadEvents(append = false) {
+  evtLoading.value = true; evtError.value = ''
+  try {
+    const p = new URLSearchParams()
+    if (evtFilters.value.site) p.set('site', evtFilters.value.site)
+    if (evtFilters.value.status) p.set('status', evtFilters.value.status)
+    p.set('limit', String(EVT_PAGE))
+    p.set('offset', append ? String(events.value.length) : '0')
+    const list = await api.get<BlockEvent[]>(`${API.waf.events.list()}?${p.toString()}`)
+    events.value = append ? events.value.concat(list) : list
+    evtHasMore.value = list.length >= EVT_PAGE
+  } catch (e) {
+    evtError.value = errorText(e)
+  } finally { evtLoading.value = false }
+}
+
+onMounted(() => { void load(); void loadEvents() })
 </script>
 
 <template>
@@ -492,6 +526,63 @@ onMounted(load)
       </EmptyState>
     </div>
 
+    <!-- 威胁日志 / 拦截事件（027）：后台每分钟采集开日志站点的 403/405/429 -->
+    <div class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <Icon name="shield" :size="15" class="sec-ico" />
+        <span class="sec-title">威胁日志</span>
+        <span class="count">共 {{ events.length }} 条</span>
+        <span class="spacer" />
+        <RefreshBtn :disabled="evtLoading" sm @click="loadEvents()" />
+      </div>
+      <div class="evt-filters">
+        <select v-model="evtFilters.site" :disabled="evtLoading" aria-label="按站点筛选">
+          <option value="">全部站点</option>
+          <option v-for="s in sites" :key="s.id" :value="s.name">{{ s.name }}</option>
+        </select>
+        <select v-model="evtFilters.status" :disabled="evtLoading" aria-label="按状态码筛选">
+          <option value="">全部状态</option>
+          <option value="403">403 拦截</option>
+          <option value="405">405 方法拒绝</option>
+          <option value="429">429 限速</option>
+        </select>
+        <button class="btn-ghost btn-sm" :disabled="evtLoading" @click="loadEvents()">筛选</button>
+      </div>
+      <p class="evt-note">
+        仅采集<b>开了独立 access log</b>的站点{{ sitesWithoutLog ? `（当前 ${sitesWithoutLog} 个站点未开，不会出现在此）` : '' }}；
+        且<b>无法区分是哪条规则</b>——WAF / 敏感文件 / IP 黑名单都返回 403。要开启某站日志，到「网站 → 编辑站点」打开独立日志。
+      </p>
+      <p v-if="evtError" class="err" role="alert">{{ evtError }}</p>
+      <div v-if="events.length" class="t-scroll">
+        <table class="fixed" aria-label="拦截事件" v-table-nav>
+          <colgroup>
+            <col class="w-ets" /><col class="w-etsite" /><col class="w-etip" /><col class="w-etm" /><col class="w-eturi" /><col class="w-etst" /><col class="w-etua" />
+          </colgroup>
+          <thead><tr>
+            <th scope="col">时间</th><th scope="col">站点</th><th scope="col">来源 IP</th>
+            <th scope="col" class="col-opt">方法</th><th scope="col">路径</th><th scope="col">状态</th><th scope="col" class="col-opt">UA</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="e in events" :key="e.id">
+              <td class="mono dim nowrap">{{ fmtDateTime(e.ts) }}</td>
+              <td class="ellipsis" :title="e.site">{{ e.site }}</td>
+              <td class="mono">{{ e.remote_addr }}</td>
+              <td class="col-opt mono">{{ e.method }}</td>
+              <td class="mono ellipsis" :title="e.uri">{{ e.uri }}</td>
+              <td><span class="badge" :class="e.status === 429 ? 'badge-warn' : 'badge-danger'">{{ e.status }} {{ evtStatusLabel(e.status) }}</span></td>
+              <td class="mono dim ellipsis col-opt" :title="e.user_agent">{{ e.user_agent }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <EmptyState v-else-if="!evtLoading && !evtError" title="暂无拦截事件"
+        hint="开启站点的独立 access log 后，被拦截的请求（403/405/429）会在这里出现" />
+      <div v-if="evtLoading" class="skeleton box" />
+      <div v-if="evtHasMore" class="evt-more">
+        <button class="btn-ghost btn-sm" :disabled="evtLoading" @click="loadEvents(true)">加载更多</button>
+      </div>
+    </div>
+
     <!-- 完整说明收进帮助抽屉（A6）；「?」在站点列表卡顶栏。浮层放链尾。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
       <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 与访问控制收到一屏，可就地调整并应用；也可把常用配置存成<b>策略模板</b>批量套用。</p>
@@ -647,4 +738,15 @@ col.w-tipd { width: 150px; }
 col.w-tacts { width: 170px; }
 /* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落在 td 上 */
 .acts { white-space: nowrap; min-width: 130px; }
+/* 威胁日志：筛选条 + 说明 + 事件表列宽 */
+.evt-filters { display: flex; gap: 8px; align-items: center; padding: 0 14px 10px; flex-wrap: wrap; }
+.evt-note { margin: 0; padding: 0 14px 10px; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
+.evt-more { padding: 4px 14px 12px; }
+col.w-ets { width: 150px; }
+col.w-etsite { width: 90px; }
+col.w-etip { width: 120px; }
+col.w-etm { width: 60px; }
+col.w-eturi { width: auto; }
+col.w-etst { width: 116px; }
+col.w-etua { width: 150px; }
 </style>
