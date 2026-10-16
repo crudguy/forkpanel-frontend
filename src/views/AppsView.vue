@@ -546,15 +546,15 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           </div>
         </div>
       </div>
-
-      <DirectoryPickerDialog :open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath"
-        @select="onPick" @cancel="pickerOpen = false" />
-
-      <ConfirmDialog :open="!!pendingRemove" danger title="删除应用"
-        :detail="`将同时：撤下反向代理站点、停止并删除 systemd 单元 ${pendingRemove?.unit ?? ''}、删除面板登记。（不会删除你的项目代码与构建产物）`"
-        :confirm-word="pendingRemove ? pendingRemove.name : ''"
-        @confirm="doRemove" @cancel="pendingRemove = null" />
     </div>
+
+    <DirectoryPickerDialog :open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath"
+      @select="onPick" @cancel="pickerOpen = false" />
+
+    <ConfirmDialog :open="!!pendingRemove" danger title="删除应用"
+      :detail="`将同时：撤下反向代理站点、停止并删除 systemd 单元 ${pendingRemove?.unit ?? ''}、删除面板登记。（不会删除你的项目代码与构建产物）`"
+      :confirm-word="pendingRemove ? pendingRemove.name : ''"
+      @confirm="doRemove" @cancel="pendingRemove = null" />
 
     <!-- 完整说明收进帮助抽屉（A6）：头部「?」打开。
          浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
