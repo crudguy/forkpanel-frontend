@@ -338,18 +338,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
   <div class="wrap">
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
-    <div v-if="loading && !apps.length" class="skeleton box" />
-    <EmptyState v-else-if="!apps.length && !error" title="暂无托管应用"
-      hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点">
-      <template #cta>
-        <button class="btn-primary btn-sm" :disabled="!canManage || !webSupported"
-          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'" @click="openCreate">
-          <Icon name="plus" :size="14" /> 新建第一个应用
-        </button>
-      </template>
-    </EmptyState>
-
-    <div v-else-if="apps.length" class="card flush toolbar-card">
+    <div class="card flush toolbar-card">
       <div class="card-toolbar">
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
@@ -360,8 +349,9 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         </button>
         <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
       </div>
-      <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
-      <div class="t-scroll">
+      <!-- 顶栏固定：零应用也常驻（参考网站页）；其下按状态显示骨架 / 表格 / 空态 -->
+      <div v-if="loading && !apps.length" class="skeleton box" />
+      <div v-else-if="apps.length" class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 应用表列宽独立一套（不与站点/证书表共用 class，避免改一处漂一片） -->
         <colgroup>
@@ -411,6 +401,8 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         </tbody>
       </table>
       </div>
+      <EmptyState v-else title="暂无托管应用"
+        hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点" />
     </div>
 
     <!-- 新建 / 编辑弹窗 -->
