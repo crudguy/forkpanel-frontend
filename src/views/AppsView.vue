@@ -70,8 +70,9 @@ const pkgDetectable = ref(false)
 const { loading, error, run } = useAsync(true)
 const onError = (e: unknown) => { error.value = errorText(e) }
 const formError = ref('')
-/** 帮助抽屉（A6）：hint-note 行右侧的「?」打开，承载「应用 = systemd + 反代站点」的完整说明。
- *  按钮挂在常驻的 hint-note 而非列表卡顶栏：零应用时列表卡不渲染，说明不能跟着消失。 */
+/** 帮助抽屉（A6）：列表卡顶栏右侧的「?」打开，承载「应用 = systemd + 反代站点」的完整说明。
+ *  按钮与「新建应用」并列在卡片顶栏最右（参考网站页）；零应用时列表卡不渲染、? 一并隐藏，
+ *  但 EmptyState 已给上手引导，更深的说明在抽屉里。 */
 const helpOpen = ref(false)
 
 // 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
@@ -335,15 +336,6 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 
 <template>
   <div class="wrap">
-    <!-- 页面级 page-head 横条已去掉：主操作收进它操作的卡片顶栏（紧贴表格）。
-         说明按钮挂进下方常驻的 hint-note——空列表时卡片根本不渲染，说明不能跟着消失。 -->
-    <p class="hint-note">
-      <Icon name="info" :size="14" class="ic" />
-      <span>每个应用 = 面板托管的 systemd 进程 + 自动维护的反代站点。<b>构建与依赖安装需你自己完成</b>，
-        面板只负责把进程拉起来（完整说明见右侧「?」）。</span>
-      <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
-    </p>
-
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <div v-if="loading && !apps.length" class="skeleton box" />
@@ -366,6 +358,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           @click="openCreate">
           <Icon name="plus" :size="14" /> 新建应用
         </button>
+        <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
       </div>
       <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
       <div class="t-scroll">
@@ -605,8 +598,6 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 /* 5 个操作按钮必须**单行**：flex-wrap 换行会让行高突然变高、表格错位 */
 .app-acts-cell { display: flex; gap: 4px; flex-wrap: nowrap; }
 .app-acts-cell .btn-sm { flex: none; padding: 4px 7px; }
-/* 说明按钮挂进 hint-note（该行是 flex）：margin-left:auto 推到最右，flex:none 防变形 */
-.hint-note .hint-help { flex: none; margin-left: auto; }
 .modal > label.has-err input,
 .modal > label.has-err select { border-color: var(--c-danger); }
 
