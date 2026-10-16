@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 文件管理。
+ * 文件管理（多页签）。
  *
  * 三条 UI 纪律（对应后端三道防线）：
  * 1. 路径永远由后端返回的规范路径驱动，前端不拼接 `..`
@@ -11,8 +11,14 @@
  * 上传/下载（#45 后续闭环）：上传走 putRaw（octet-stream 原始字节，≤100MB）；
  * 下载用同源 <a href> 直链（GET 带 Cookie，浏览器原生保存）；批量操作走
  * /files/action 逐项报告。
+ *
+ * 多页签（2026-10-16）：每个标签是一个独立目录视图，各自持有 path / entries /
+ * 选中 / 排序 / 是否显示隐藏，互不干扰、切回不重新拉取。所有顶层 ref（path /
+ * entries / selected / sortBy / showHidden / loading / error / truncated）改为
+ * 对「当前激活标签」的 computed 代理，既最小化改动面，又让既有逻辑（enter /
+ * goto / up / load / 批量……）原样工作。列表接口本就按 path 拉取，故后端零改动。
  */
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -37,62 +43,99 @@ interface ListResp { path: string; entries: Entry[]; truncated: boolean }
 interface ActionItem { path: string; ok: boolean; error?: string | null }
 interface ActionResp { op: string; results: ActionItem[]; ok_count: number; fail_count: number }
 
-const auth = useAuthStore()
-const path = ref('/')
-const entries = ref<Entry[]>([])
-const truncated = ref(false)
-const loading = ref(false)
-const error = ref('')
-const showHidden = ref(false)
-/** 排序：直接走后端 list 的 sort 参数（已支持 name/size/modified，dirs_first 恒真）。
- *  前端不再本地排序——服务端才是权威，本地排会让「截断 1000 项」的显示与真实顺序脱节。 */
-const sortBy = ref<'name' | 'size' | 'modified'>('name')
-
-const editing = ref<{ name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
-const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
-
-/** 批量选择：存条目名（当前目录内唯一） */
-const selected = ref<Set<string>>(new Set())
-const uploading = ref(false)
-const batchBusy = ref(false)
-const batchErr = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-
-/** 软删除的反馈（"已移入回收站"），与 error 分开：它不是错误 */
-const showTrash = ref(false)
-const helpOpen = ref(false)
-
-// 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
-// 此前只判权限，能力位在文件页从未生效（侧边栏门禁用的是 FILE_READ）。
-const canWrite = computed(() => auth.can('file.write') && auth.supported(CAP.FILE_WRITE))
-
-function full(p: string) {
-  return path.value.replace(/\/+$/, '') + '/' + p
+/** 单个文件标签：一份独立的目录视图状态。 */
+interface FileTab {
+  id: string
+  path: string
+  entries: Entry[]
+  loading: boolean
+  error: string
+  truncated: boolean
+  selected: Set<string>
+  sortBy: 'name' | 'size' | 'modified'
+  showHidden: boolean
+  /** 该标签独立的请求序号：切标签 / 连点刷新时先到的结果不会覆盖后发的 */
+  seq: number
 }
 
-// 请求序号：连续切目录/连点刷新时，先发的请求可能**后到**，
+function makeTab(path: string, id?: string): FileTab {
+  return {
+    id: id ?? `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    path, entries: [], loading: false, error: '', truncated: false,
+    selected: new Set(), sortBy: 'name', showHidden: false, seq: 0,
+  }
+}
+
+const auth = useAuthStore()
+const tabs = ref<FileTab[]>([makeTab('/')])
+const activeId = ref(tabs.value[0].id)
+const activeTab = computed<FileTab>(() => tabs.value.find((t) => t.id === activeId.value) ?? tabs.value[0])
+
+/** 顶层 ref 全部代理到当前激活标签，既让既有逻辑零改动，又保证每标签状态独立。 */
+const path = computed({ get: () => activeTab.value.path, set: (v) => { activeTab.value.path = v } })
+const entries = computed({ get: () => activeTab.value.entries, set: (v) => { activeTab.value.entries = v } })
+const truncated = computed({ get: () => activeTab.value.truncated, set: (v) => { activeTab.value.truncated = v } })
+const loading = computed({ get: () => activeTab.value.loading, set: (v) => { activeTab.value.loading = v } })
+const error = computed({ get: () => activeTab.value.error, set: (v) => { activeTab.value.error = v } })
+const selected = computed({ get: () => activeTab.value.selected, set: (v) => { activeTab.value.selected = v } })
+const sortBy = computed({ get: () => activeTab.value.sortBy, set: (v) => { activeTab.value.sortBy = v } })
+const showHidden = computed({ get: () => activeTab.value.showHidden, set: (v) => { activeTab.value.showHidden = v } })
+
+/** 排序：直接走后端 list 的 sort 参数（已支持 name/size/modified，dirs_first 恒真）。
+ *  前端不再本地排序——服务端才是权威，本地排会让「截断 1000 项」的显示与真实顺序脱节。 */
+function setSortBy(v: 'name' | 'size' | 'modified') { activeTab.value.sortBy = v; load() }
+function setShowHidden(v: boolean) { activeTab.value.showHidden = v; load() }
+
+// 请求序号按标签隔离：连续切目录/连点刷新时，先发的请求可能**后到**，
 // 若不加甄别就会用旧目录的结果覆盖新目录（且把 loading 提前清掉 → 表格闪一下）。
-let loadSeq = 0
-async function load() {
-  const seq = ++loadSeq
-  loading.value = true; error.value = ''
+async function load(tab: FileTab = activeTab.value) {
+  const seq = ++tab.seq
+  tab.loading = true; tab.error = ''
   try {
     const r = await api.get<ListResp>(API.files.list(), {
-      params: { path: path.value, hidden: showHidden.value, sort: sortBy.value },
+      params: { path: tab.path, hidden: tab.showHidden, sort: tab.sortBy },
     })
-    if (seq !== loadSeq) return   // 已有更新的请求在途，丢弃本次结果
-    entries.value = r.entries ?? []; truncated.value = r.truncated
-    path.value = r.path
-    selected.value = new Set() // 换目录即清空选择
+    if (seq !== tab.seq) return   // 已有更新的请求在途，丢弃本次结果
+    tab.entries = r.entries ?? []; tab.truncated = r.truncated
+    tab.path = r.path
+    tab.selected = new Set() // 换目录即清空选择
   } catch (e) {
-    if (seq !== loadSeq) return
-    error.value = errorText(e); entries.value = []
-  } finally { if (seq === loadSeq) loading.value = false }
+    if (seq !== tab.seq) return
+    tab.error = errorText(e); tab.entries = []
+  } finally { if (seq === tab.seq) tab.loading = false }
 }
 
 onMounted(load)
-watch(showHidden, load)
-watch(sortBy, load)
+
+// ── 标签栏（多页签）──
+function tabLabel(p: string): string {
+  if (p === '/') return '根目录'
+  const seg = p.replace(/\/+$/, '').split('/').pop()
+  return seg || '根目录'
+}
+/** 新建标签：以当前激活标签所在目录为起点开一个分支（沿用用户选定的交互模型）。 */
+function openTab() {
+  const t = makeTab(activeTab.value.path)
+  tabs.value.push(t)
+  activeId.value = t.id
+}
+function switchTab(id: string) {
+  if (id === activeId.value) return
+  activeId.value = id
+  // 切标签时收起可能指向旧目录的浮层，避免保存/删除落到错目录
+  editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
+}
+function closeTab(id: string) {
+  if (tabs.value.length <= 1) return // 至少保留一个标签
+  const idx = tabs.value.findIndex((t) => t.id === id)
+  if (idx < 0) return
+  const wasActive = id === activeId.value
+  tabs.value.splice(idx, 1)
+  if (wasActive) {
+    activeId.value = tabs.value[Math.max(0, idx - 1)].id
+    editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
+  }
+}
 
 // ── 面包屑（A7）：路径分段可点，直达任意上级 ──
 // 后端返回的 path 是规范路径（resolve 后的 SafePath 显示值），分段即可逆：
@@ -360,11 +403,48 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
   finally { batchBusy.value = false }
 }
 
+const editing = ref<{ name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
+const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
+
+/** 批量选择：存条目名（当前目录内唯一） */
+const selectedSet = selected // 别名，便于阅读（selected 已是代理）
+const uploading = ref(false)
+const batchBusy = ref(false)
+const batchErr = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
+
+/** 软删除的反馈（"已移入回收站"），与 error 分开：它不是错误 */
+const showTrash = ref(false)
+const helpOpen = ref(false)
+
+// 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
+// 此前只判权限，能力位在文件页从未生效（侧边栏门禁用的是 FILE_READ）。
+const canWrite = computed(() => auth.can('file.write') && auth.supported(CAP.FILE_WRITE))
+
+function full(p: string) {
+  return path.value.replace(/\/+$/, '') + '/' + p
+}
+
 // fmtSize 已统一到 types.ts（此前此处与 TrashPanel 各写一份，BackupsView 是第三份且更差）
 </script>
 
 <template>
   <PageLayout>
+    <!-- 多页签：每个标签是一个独立目录视图；「+ 新标签」以当前目录为起点开分支 -->
+    <div class="tabbar" role="tablist" aria-label="文件标签">
+      <div v-for="t in tabs" :key="t.id" class="tab" :class="{ on: t.id === activeId }"
+        role="tab" :aria-selected="t.id === activeId" tabindex="0"
+        @click="switchTab(t.id)" @keydown.enter.prevent="switchTab(t.id)">
+        <Icon name="folder" :size="14" />
+        <span class="tab-label" :title="t.path">{{ tabLabel(t.path) }}</span>
+        <button v-if="tabs.length > 1" class="tab-x" type="button" aria-label="关闭标签"
+          @click.stop="closeTab(t.id)"><Icon name="close" :size="12" /></button>
+      </div>
+      <button class="tab add" type="button" aria-label="新建标签" @click="openTab">
+        <Icon name="plus" :size="14" /> 新标签
+      </button>
+    </div>
+
     <div class="tools-row">
       <!-- A7 面包屑：路径分段可点直达；原先是整行 <code> 全路径 + 只有「上级」，
            深目录要连点多级。当前目录（末段）为纯文本，其余为按钮。 -->
@@ -377,9 +457,9 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       </nav>
       <span class="spacer" />
       <HelpBtn title="文件管理说明" aria-label="文件管理说明" :expanded="helpOpen" @click="helpOpen = true" />
-      <label class="hid"><input v-model="showHidden" type="checkbox" /> 显示隐藏</label>
+      <label class="hid"><input type="checkbox" :checked="showHidden" @change="setShowHidden(($event.target as HTMLInputElement).checked)" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
-      <RefreshBtn :disabled="loading" @click="load" />
+      <RefreshBtn :disabled="loading" @click="() => load()" />
       <button v-if="canWrite" class="btn-ghost" :disabled="loading" @click="askMkdir"><Icon name="plus" :size="15" /> 新建文件夹</button>
       <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
         <Icon name="trash" :size="15" /> 回收站
@@ -395,20 +475,20 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
       title="当前环境不支持文件管理"
       :reason="auth.capabilities[CAP.FILE_READ]?.reason ?? undefined" />
 
-    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="() => load()">重试</button></p>
     <!-- batchErr 是批量操作失败，与 error 同类 → 同用红色错误通道（审计 U14）；
          truncated / hasMore 是提示性警告，保留黄色 -->
     <p v-if="batchErr" class="err" role="alert">{{ batchErr }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
 
     <!-- 批量操作条 -->
-    <div v-if="selected.size > 0 && canWrite" class="card batch">
-      <strong>已选 {{ selected.size }} 项</strong>
+    <div v-if="selectedSet.size > 0 && canWrite" class="card batch">
+      <strong>已选 {{ selectedSet.size }} 项</strong>
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('copy')">复制到…</button>
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('move')">移动到…</button>
       <button class="btn-ghost btn-sm danger" :disabled="batchBusy" @click="confirmBatchDel = true">移入回收站</button>
-      <button class="btn-ghost btn-sm" @click="selected = new Set()">取消选择</button>
+      <button class="btn-ghost btn-sm" @click="selectedSet = new Set()">取消选择</button>
     </div>
 
     <div v-if="entries.length" class="card flush">
@@ -425,18 +505,18 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
           <!-- A7 排序：走后端 sort 参数（dirs_first 恒真）。点击已在生效的列头则
                在 升/降 间不切换——后端只返回一种顺序，前端再反序会让「截断 1000 项」
                与实际顺序脱节；改排序即重新拉取，selected 由 load 清空。 -->
-          <th class="sortable" :class="{ on: sortBy === 'name' }" @click="sortBy = 'name'">名称</th>
-          <th class="sortable num" :class="{ on: sortBy === 'size' }" @click="sortBy = 'size'">大小</th>
+          <th class="sortable" :class="{ on: sortBy === 'name' }" @click="setSortBy('name')">名称</th>
+          <th class="sortable num" :class="{ on: sortBy === 'size' }" @click="setSortBy('size')">大小</th>
           <th>权限</th>
           <th class="col-opt">属主</th>
-          <th class="sortable num" :class="{ on: sortBy === 'modified' }" @click="sortBy = 'modified'">修改时间</th>
+          <th class="sortable num" :class="{ on: sortBy === 'modified' }" @click="setSortBy('modified')">修改时间</th>
           <th />
         </tr></thead>
         <tbody>
           <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
             <td v-if="canWrite" class="chk">
               <input v-if="!e.sensitive" type="checkbox" :aria-label="`选择 ${e.name}`"
-                :checked="selected.has(e.name)" @change="toggle(e)" />
+                :checked="selectedSet.has(e.name)" @change="toggle(e)" />
             </td>
             <td class="ellipsis" :title="e.name">
               <a href="#" class="fname" @click.prevent="enter(e)">
@@ -489,7 +569,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
     <ConfirmDialog
       :open="confirmBatchDel"
       title="批量移入回收站"
-      :detail="`即将把已选的 ${selected.size} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
+      :detail="`即将把已选的 ${selectedSet.size} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
       @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
 
     <!-- 通用输入弹窗（新建文件夹 / 重命名 / 权限 / 批量目标） -->
@@ -517,6 +597,12 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 
     <HelpDrawer :open="helpOpen" title="文件管理说明" @close="helpOpen = false">
       <p>文件管理用于在面板允许的根目录内浏览、上传、编辑与整理文件。所有路径都<strong>由后端返回并校验</strong>——前端不拼接 <code>..</code>，真正的越权防护在后端沙箱。</p>
+
+      <h4>多页签</h4>
+      <ul>
+        <li>顶部标签栏可同时打开多个目录：点「<strong>新标签</strong>」以当前所在目录为起点开一个分支标签，点文件夹在当前标签内进入。</li>
+        <li>每个标签独立保留列表、选中项、排序与「显示隐藏」；切回标签不重新拉取（除非手动刷新）。点标签上的「×」关闭（至少保留一个）。</li>
+      </ul>
 
       <h4>导航与排序</h4>
       <ul>
@@ -549,6 +635,22 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
 </template>
 
 <style scoped>
+/* 多页签标签栏（2026-10-16）：与容器页「容器/镜像」TabBar 风格错位但同源——同用
+   玻璃底 + 激活主色。标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，
+   不抢走 tools-row 里唯一的 btn-primary（上传）。 */
+.tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 6px 10px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-glass);
+  color: var(--c-text-dim); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
+.tab:hover { background: var(--c-hover); color: var(--c-text); }
+.tab.on { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
+.tab-x:hover { background: rgba(127, 127, 127, 0.28); }
+.tab.on .tab-x:hover { background: rgba(255, 255, 255, 0.28); }
+.tab.add { color: var(--c-text-dim); }
+.tab.add:hover { color: var(--c-primary); }
 /* A7 面包屑：替换原整行 cwd 全路径。分段按钮 + 分隔符，当前级加粗纯文本。
    走 page-head 既有字号（--fs-12-5 与旧 .cwd 一致），不新增视觉变量。 */
 .crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; font-size: var(--fs-12-5); }
@@ -565,7 +667,7 @@ th.sortable.on { color: var(--c-primary); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
 .batch { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 14px; }
-.chk { width: 34px; text-align: center; }
+.chk { width: 48px; text-align: center; }
 .editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
 .editor textarea { min-height: 320px; font-family: var(--mono); font-size: var(--fs-13); }
