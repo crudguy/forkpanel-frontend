@@ -87,6 +87,20 @@ export const siteKindLabel = enumLabel({ static: '静态站点', proxy: '反向�
 /** 站点 WAF 档位（落库值 basic / strict，对应 migrations/008_site_waf.sql）。 */
 export const wafProfileLabel = enumLabel({ basic: '基础', strict: '严格' })
 
+/** WAF 策略模板（026）：一套 WAF + 访问控制预设，可套用到站点（套用 = 把该站 waf/ip 列设成模板值）。
+ *  rate_per_sec=0 表示不限速、burst=0 表示由 rate×2 计算；ip_allow/ip_deny 空数组表示不设。 */
+export interface WafTemplate {
+  id: number
+  name: string
+  waf_profile: string
+  rate_per_sec: number
+  burst: number
+  ip_allow: string[]
+  ip_deny: string[]
+  created_at: number
+  updated_at: number
+}
+
 export interface Site {
   id: number
   name: string

@@ -122,6 +122,16 @@ export const API = {
     logClear: (id: number) => `/api/v1/sites/${id}/log/clear`,
     sslApply: (id: number) => `/api/v1/sites/${id}/ssl/apply`,
   },
+  // WAF 策略模板（026）：与站点解耦的 WAF+访问控制预设；套用由前端经 sites.apply 编排
+  waf: {
+    templates: {
+      list: () => '/api/v1/waf/templates',
+      create: () => '/api/v1/waf/templates',
+      get: (id: number) => `/api/v1/waf/templates/${id}`,
+      update: (id: number) => `/api/v1/waf/templates/${id}`,
+      remove: (id: number) => `/api/v1/waf/templates/${id}`,
+    },
+  },
 
   certs: {
     list: () => '/api/v1/certs',

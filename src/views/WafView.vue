@@ -4,7 +4,8 @@
  *
  * 站点 WAF 本来就是 nginx/caddy 配置的一部分——与站点配置**同一次 apply** 下发，
  * 真正的配置项入口也在「网站 → 编辑站点」弹窗里。本页把各站的 WAF 状态与
- * **IP 访问控制**收到一屏：顶部总览 + 逐站就地编辑 + 应用，省去逐个打开编辑弹窗。
+ * **IP 访问控制**收到一屏：顶部总览 + 逐站就地编辑 + 应用；下方再有**策略模板**区，
+ * 把一套 WAF + 访问控制预设存成可复用单元，批量套用到站点。
  *
  * 与后端严格对齐的语义（与 SitesView 一致，勿改）：
  * - `waf` 缺省 = 保留库中现值（不是关闭）→ 本页**总是显式下发** `waf` 段；
@@ -16,17 +17,22 @@
  *   `auth.webBackend === 'caddy'` 时限速/突发输入置灰并说明，避免"配了没生效"。
  *   （IP 访问控制在 nginx 与 caddy 双端均已实装，不受此后端限制。）
  *
+ * 策略模板（026）：模板 CRUD 走后端 `/api/v1/waf/templates`；**套用不做成后端端点**，
+ * 由本页读取模板后经既有 `POST /sites/apply` 逐站编排（不在前端重复站点部署管线）。
+ * ⚠ TplReq 的 PATCH 是**全量替换**（缺省=默认、非保留），故模板表单每次都送全字段。
+ *
  * ⚠️ 已知副作用（如实写在界面上，不藏着）：后端 apply 的 upsert 会把站点
- *    `enabled` 置 1，所以**已停用的站点**在本页禁用「应用」，
- *    避免用户只想改 WAF 却被静默启用站点。
+ *    `enabled` 置 1，所以**已停用的站点**在逐站表里禁用「应用」、套用弹窗里标注
+ *    "会一并启用"，避免用户只想改 WAF 却被静默启用站点。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, wafProfileLabel, type Site } from '@/api/types'
+import { CAP, wafProfileLabel, type Site, type WafTemplate } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
@@ -43,6 +49,7 @@ interface Draft {
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
 const drafts = ref<Record<number, Draft>>({})
+const templates = ref<WafTemplate[]>([])
 const { error, loading, run } = useAsync()
 const busyId = ref<number | null>(null)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载 WAF 完整约束说明 */
@@ -73,9 +80,15 @@ function toDraft(s: Site): Draft {
 
 async function load() {
   await run(async () => {
-    sites.value = await api.get<Site[]>(API.sites.list())
+    // 站点与模板一并加载：模板 CRUD/套用都在本页，统一 error/loading 通道
+    const [s, t] = await Promise.all([
+      api.get<Site[]>(API.sites.list()),
+      api.get<WafTemplate[]>(API.waf.templates.list()),
+    ])
+    sites.value = s
+    templates.value = t
     // 每次加载都重置草稿：下拉/输入是"当前生效值"的镜像，不留上次未应用的脏值
-    drafts.value = Object.fromEntries(sites.value.map(s => [s.id, toDraft(s)]))
+    drafts.value = Object.fromEntries(s.map(x => [x.id, toDraft(x)]))
   })
 }
 
@@ -117,17 +130,25 @@ const summaryCards = computed(() => {
 })
 
 /**
- * 下发体构造——**单站点「应用」与「应用全部」共用**。
+ * apply 体的公共字段——**逐站应用与模板套用共用**。
  *
- * ⚠️ 抽成函数而不是各写一份：同一约束走两条路径必漏配（项目高频 bug）。
- * 两处都要满足的约束（漏一个就出事故）：
- * - 其余字段原样回传：apply 是「期望状态」覆盖，漏传 upstreams/fpm 会把
- *   反代 / PHP 站的后端地址清空（migration 009 已落库，列表里拿得到真实值）；
- * - `burst` 只在限速且有值时下发，缺省让后端按 rate×2 计算（不限速却带 burst
- *   会被后端 400 —— 那属于「配了但没生效」的静默失败，后端刻意拒绝）；
- * - `ip_allow` / `ip_deny` 归一成逗号拼接后**显式下发**（与 waf 同"总是显式"），
- *   空串 = 清除、二者互斥由后端按"白名单优先"裁决。
+ * ⚠️ 抽成函数而不是各写一份：apply 是「期望状态」覆盖，漏传 upstreams/fpm 会把
+ *    反代 / PHP 站的后端地址清空。两条路径共用同一出处才不会漏配（项目高频 bug）。
+ *    `root` 是后端必填 String（非 Option），恒有值；不兜底成站点名（那会静默改根目录）。
  */
+function siteBase(s: Site) {
+  return {
+    name: s.name,
+    domains: s.domains,
+    root: s.root,
+    force_https: true,
+    kind: s.kind,
+    upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
+    fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
+  }
+}
+
+/** 逐站「应用」体：站点自身草稿的 waf + ip。 */
 function applyBody(s: Site, d: Draft) {
   const waf = !d.on
     ? { enabled: false }
@@ -137,19 +158,22 @@ function applyBody(s: Site, d: Draft) {
         rate_per_sec: d.rate,           // 0 = 不限速（后端语义）
         ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
       }
+  return { ...siteBase(s), waf, ip_allow: normIp(d.ipAllow), ip_deny: normIp(d.ipDeny) }
+}
+
+/** 模板「套用」体：强制开 WAF 并套用模板的 waf + ip（套用即把该站设成模板值）。 */
+function applyTemplateBody(s: Site, t: WafTemplate) {
+  const rate = t.rate_per_sec || 0
+  const waf = {
+    enabled: true,
+    profile: t.waf_profile,
+    rate_per_sec: rate,
+    ...(rate > 0 && t.burst > 0 ? { burst: t.burst } : {}),
+  }
   return {
-    name: s.name,
-    domains: s.domains,
-    // 后端 root 是必填 String（非 Option），恒有值；此前 `|| s.name` 的兜底
-    // 与 SitesView 的 `root: s.root` 不一致，且会静默把空 root 变成站点名
-    root: s.root,
-    force_https: true,
-    kind: s.kind,
-    upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
-    fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
-    waf,
-    ip_allow: normIp(d.ipAllow),
-    ip_deny: normIp(d.ipDeny),
+    ...siteBase(s), waf,
+    ip_allow: (t.ip_allow ?? []).join(','),
+    ip_deny: (t.ip_deny ?? []).join(','),
   }
 }
 
@@ -214,6 +238,99 @@ function blockedReason(s: Site): string {
   return ''
 }
 
+// ─────────────────────────── 策略模板（026） ───────────────────────────
+interface TplForm { name: string; profile: string; rate: number; burst: number; ipAllow: string; ipDeny: string }
+
+const tplModalOpen = ref(false)
+const editingTplId = ref<number | null>(null)
+const tplForm = ref<TplForm>({ name: '', profile: 'basic', rate: 0, burst: 0, ipAllow: '', ipDeny: '' })
+const tplSaving = ref(false)
+const tplError = ref('')
+
+function openCreateTpl() {
+  editingTplId.value = null
+  tplForm.value = { name: '', profile: 'basic', rate: 0, burst: 0, ipAllow: '', ipDeny: '' }
+  tplError.value = ''
+  tplModalOpen.value = true
+}
+function openEditTpl(t: WafTemplate) {
+  editingTplId.value = t.id
+  tplForm.value = {
+    name: t.name, profile: t.waf_profile, rate: t.rate_per_sec, burst: t.burst,
+    ipAllow: (t.ip_allow ?? []).join(', '), ipDeny: (t.ip_deny ?? []).join(', '),
+  }
+  tplError.value = ''
+  tplModalOpen.value = true
+}
+
+/** 保存模板。PATCH 是**全量替换**语义，故每次都送全字段（缺省会被后端清成默认）。 */
+async function saveTpl() {
+  if (!tplForm.value.name.trim()) { tplError.value = '模板名不能为空'; return }
+  const body = {
+    name: tplForm.value.name.trim(),
+    profile: tplForm.value.profile,
+    rate_per_sec: tplForm.value.rate || 0,
+    burst: tplForm.value.burst || 0,
+    ip_allow: tplForm.value.ipAllow,
+    ip_deny: tplForm.value.ipDeny,
+  }
+  tplSaving.value = true; tplError.value = ''
+  try {
+    if (editingTplId.value == null) await api.post(API.waf.templates.create(), body)
+    else await api.patch(API.waf.templates.update(editingTplId.value), body)
+    tplModalOpen.value = false
+    await load()
+    toast(editingTplId.value == null ? '已新建模板' : '已保存模板')
+  } catch (e) {
+    tplError.value = errorText(e)
+  } finally { tplSaving.value = false }
+}
+
+const delTpl = ref<WafTemplate | null>(null)
+async function doDelTpl() {
+  const t = delTpl.value
+  delTpl.value = null
+  if (!t) return
+  try {
+    await api.del(API.waf.templates.remove(t.id))
+    await load()
+    toast(`已删除模板 ${t.name}`)
+  } catch (e) { error.value = errorText(e) }
+}
+
+// 套用模板到站点
+const applyTpl = ref<WafTemplate | null>(null)
+const applyPicks = ref<Set<number>>(new Set())
+const applyBusy = ref(false)
+/** 勾选中含已停用站点 → 套用会一并启用它（后端 upsert 副作用），如实提示 */
+const applyHasDisabled = computed(() =>
+  sites.value.some(s => applyPicks.value.has(s.id) && !s.enabled))
+
+function openApplyTpl(t: WafTemplate) {
+  applyTpl.value = t
+  // 默认勾选全部「启用中」的站点——停用站点不默认勾（套用会顺带启用它）
+  applyPicks.value = new Set(sites.value.filter(s => s.enabled).map(s => s.id))
+}
+function togglePick(id: number) {
+  const next = new Set(applyPicks.value)
+  if (next.has(id)) next.delete(id); else next.add(id)
+  applyPicks.value = next
+}
+async function doApplyTpl() {
+  const t = applyTpl.value; if (!t) return
+  const targets = sites.value.filter(s => applyPicks.value.has(s.id))
+  applyBusy.value = true
+  let ok = 0; let failMsg = ''
+  try {
+    for (const s of targets) {
+      try { await api.post(API.sites.apply(), applyTemplateBody(s, t)); ok++ }
+      catch (e) { failMsg = `${s.name}：${errorText(e)}`; break }  // 一个失败即停
+    }
+    if (ok) { toast(`已将「${t.name}」套用到 ${ok} 个站点`); applyTpl.value = null; await load() }
+    if (failMsg) error.value = `套用失败于 ${failMsg}`
+  } finally { applyBusy.value = false }
+}
+
 onMounted(load)
 </script>
 
@@ -221,9 +338,7 @@ onMounted(load)
   <div class="view">
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
-    <!-- 首屏必须先给骨架：此前本页 `useAsync()` 只解构了 `{ error, run }`，
-         请求还在飞就渲染了「暂无…」空态（带 CTA），数据到达后整块跳变；
-         且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
+    <!-- 首屏必须先给骨架：请求还在飞就渲染「暂无…」会让"没有"和"没加载出来"长得一样 -->
     <div v-if="loading && !sites.length" class="skeleton box" />
     <EmptyState v-else-if="!sites.length && !error" title="暂无站点"
       hint="先在「网站」建站，再回来统一配置 WAF 与访问控制">
@@ -258,12 +373,10 @@ onMounted(load)
         <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
         <div class="t-scroll">
         <table class="fixed" aria-label="站点 WAF 与访问控制配置" v-table-nav>
-          <!-- 列宽（站点表范式）：域名为唯一弹性列；CC/突发/IP 列按控件实测宽定宽。 -->
           <colgroup>
             <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfip" /><col class="w-wfacts" />
           </colgroup>
           <thead>
-            <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
             <tr>
               <th scope="col">站点</th><th scope="col">域名</th><th scope="col" class="col-opt">类型</th><th scope="col">WAF</th>
               <th scope="col">档位</th><th scope="col">CC 限速</th><th scope="col" class="col-opt">突发桶</th>
@@ -276,7 +389,6 @@ onMounted(load)
               <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
               <td class="col-opt">{{ kindLabel(s.kind) }}</td>
               <td>
-                <!-- aria-label 给出「哪个站点的什么开关」：读屏只念 checkbox 无法定位 -->
                 <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
                   :disabled="!canApply || !s.enabled" :title="blockedReason(s)" />
               </td>
@@ -303,8 +415,6 @@ onMounted(load)
                 <span v-else-if="drafts[s.id].on && isCaddy" class="dim">—</span>
                 <span v-else class="dim">—</span>
               </td>
-              <!-- 访问控制：IP 白/黑名单，就地编辑；二者互斥（白名单非空即只放行名单内，
-                   黑名单被忽略）→ 与 SitesView 一致对两个输入互斥置灰。 -->
               <td class="col-opt ip-cell">
                 <input class="ip" v-model="drafts[s.id].ipAllow" placeholder="白名单" spellcheck="false"
                   :aria-label="`${s.name} IP 白名单`"
@@ -329,10 +439,62 @@ onMounted(load)
       </div>
     </template>
 
-    <!-- 完整说明收进帮助抽屉（A6）：底部不再重复长文；「?」在列表卡顶栏。
-         浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
+    <!-- 策略模板（026）：与站点解耦的 WAF+访问控制预设，可套用到站点。常驻（有站无站都能建模板）。 -->
+    <div class="card flush toolbar-card">
+      <div class="card-toolbar">
+        <Icon name="list" :size="15" class="sec-ico" />
+        <span class="sec-title">策略模板</span>
+        <span class="count">共 {{ templates.length }} 个</span>
+        <span class="spacer" />
+        <RefreshBtn :disabled="loading" sm @click="load" />
+        <button v-if="canManage" class="btn-primary btn-sm" @click="openCreateTpl">
+          <Icon name="plus" :size="14" /> 新建模板
+        </button>
+      </div>
+      <div v-if="templates.length" class="t-scroll">
+        <table class="fixed" aria-label="WAF 策略模板" v-table-nav>
+          <colgroup>
+            <col class="w-tname" /><col class="w-tprof" /><col class="w-trate" /><col class="w-tburst" /><col class="w-tipa" /><col class="w-tipd" /><col class="w-tacts" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">名称</th><th scope="col">档位</th><th scope="col">CC 限速</th>
+              <th scope="col" class="col-opt">突发桶</th><th scope="col" class="col-opt">IP 白</th>
+              <th scope="col" class="col-opt">IP 黑</th><th scope="col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in templates" :key="t.id">
+              <td class="ellipsis" :title="t.name">{{ t.name }}</td>
+              <td>{{ wafProfileLabel(t.waf_profile) }}</td>
+              <td class="num">{{ t.rate_per_sec || '不限速' }}</td>
+              <td class="num col-opt">{{ t.rate_per_sec ? (t.burst || 'rate×2') : '—' }}</td>
+              <td class="mono dim ellipsis col-opt" :title="(t.ip_allow ?? []).join(', ')">
+                {{ (t.ip_allow ?? []).length ? (t.ip_allow ?? []).join(', ') : '—' }}
+              </td>
+              <td class="mono dim ellipsis col-opt" :title="(t.ip_deny ?? []).join(', ')">
+                {{ (t.ip_deny ?? []).length ? (t.ip_deny ?? []).join(', ') : '—' }}
+              </td>
+              <td class="acts">
+                <button class="btn-ghost btn-sm" :disabled="!sites.length" title="套用到站点" @click="openApplyTpl(t)">套用</button>
+                <button v-if="canManage" class="btn-ghost btn-sm" @click="openEditTpl(t)">编辑</button>
+                <button v-if="canManage" class="btn-ghost btn-sm danger" @click="delTpl = t">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <EmptyState v-else title="暂无策略模板"
+        hint="把一套 WAF + 访问控制设成模板，便于批量套用到多个站点">
+        <template v-if="canManage" #cta>
+          <button class="btn-primary btn-sm" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
+        </template>
+      </EmptyState>
+    </div>
+
+    <!-- 完整说明收进帮助抽屉（A6）；「?」在站点列表卡顶栏。浮层放链尾。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">
-      <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 与访问控制收到一屏，可就地调整并应用，省去逐个打开编辑弹窗。</p>
+      <p>WAF 是站点配置的一部分，与站点配置<b>同一次 apply</b> 下发。本页把各站的 WAF 与访问控制收到一屏，可就地调整并应用；也可把常用配置存成<b>策略模板</b>批量套用。</p>
       <h4>档位</h4>
       <ul>
         <li><b>基础档</b>：拦 SQL 注入 / XSS / 路径穿越 / 敏感文件探测 / 恶意 UA。</li>
@@ -345,24 +507,127 @@ onMounted(load)
         <li>单 IP 或 CIDR（仅 IPv4），逗号 / 空格分隔；nginx 与 caddy 双端均已实装。</li>
         <li><b>白名单优先</b>：白名单非空即进入白名单模式——只放行名单内、其余全部拒绝，此时黑名单被忽略（界面对二者互斥置灰）。</li>
       </ul>
+      <h4>策略模板</h4>
+      <p>模板 = 一套 WAF + 访问控制预设（档位 / 限速 / 突发 / IP 名单）。「套用」会把所选站点的这些值设成模板的值（WAF 随之开启）。模板可新建 / 编辑 / 删除；删除模板不影响已套用的站点。</p>
       <h4>已知副作用</h4>
-      <p>后端 apply 的 upsert 会把站点 <code>enabled</code> 置 1，因此<b>已停用的站点</b>在本页禁用「应用」，避免用户只想改 WAF 却被静默启用站点。</p>
+      <p>后端 apply 的 upsert 会把站点 <code>enabled</code> 置 1，因此<b>已停用的站点</b>在逐站表里禁用「应用」、套用弹窗标注"会一并启用"，避免用户只想改 WAF 却被静默启用站点。</p>
     </HelpDrawer>
+
+    <!-- ── 以下浮层一律放链尾：不得插在 v-if / v-else 链中间，也不得嵌进别的浮层 v-if 块内 ── -->
+
+    <!-- 模板 新建 / 编辑 -->
+    <div v-if="tplModalOpen" class="mask" @click.self="tplModalOpen = false">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">{{ editingTplId == null ? '新建策略模板' : `编辑模板 ${tplForm.name}` }}</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="tplModalOpen = false">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p v-if="tplError" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ tplError }}</span>
+        </p>
+        <label class="blk">名称
+          <input v-model="tplForm.name" placeholder="如：博客基础防护" :disabled="tplSaving" />
+        </label>
+        <label class="blk">防护档位
+          <select v-model="tplForm.profile" :disabled="tplSaving">
+            <option value="basic">基础（SQLi / XSS / 路径穿越 / 恶意 UA）</option>
+            <option value="strict">严格（+ 空 UA、非白名单方法，误杀率更高）</option>
+          </select>
+        </label>
+        <label class="blk">CC 限速（次/秒，0 = 不限速）
+          <input v-model.number="tplForm.rate" type="number" min="0" max="1000" :disabled="tplSaving" />
+        </label>
+        <label class="blk">突发桶（0 = 由 rate×2 计算）
+          <input v-model.number="tplForm.burst" type="number" min="0" max="10000"
+            :disabled="tplSaving || !tplForm.rate" :title="tplForm.rate ? '' : '需先设限速'" />
+        </label>
+        <label class="blk">IP 白名单
+          <input v-model="tplForm.ipAllow" class="mono" placeholder="192.168.1.10, 10.0.0.0/24" spellcheck="false"
+            :disabled="tplSaving || !!tplForm.ipDeny.trim()"
+            title="单 IP 或 CIDR（IPv4），逗号/空格分隔。非空即只放行名单内、其余拒绝" />
+        </label>
+        <label class="blk" :class="{ 'is-dim': !!tplForm.ipAllow.trim() }">IP 黑名单
+          <input v-model="tplForm.ipDeny" class="mono" placeholder="1.2.3.4, 5.6.7.0/24" spellcheck="false"
+            :disabled="tplSaving || !!tplForm.ipAllow.trim()"
+            :title="tplForm.ipAllow.trim() ? '白名单优先：黑名单被忽略' : '单 IP 或 CIDR（IPv4），逗号/空格分隔'" />
+        </label>
+        <p v-if="tplForm.ipAllow.trim()" class="hint-note">
+          <Icon name="info" :size="14" class="ic" />
+          <span>已设白名单：黑名单将被忽略（只放行名单内，其余拒绝）。</span>
+        </p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="tplModalOpen = false" :disabled="tplSaving">取消</button>
+            <button class="btn-primary" :disabled="tplSaving || !tplForm.name.trim()" @click="saveTpl">
+              {{ tplSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模板套用到站点 -->
+    <div v-if="applyTpl" class="mask" @click.self="applyTpl = null">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">套用模板「{{ applyTpl.name }}」</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="applyTpl = null">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="modal-lead">
+          将把所选站点的 WAF 与访问控制设为该模板的值：档位 <b>{{ wafProfileLabel(applyTpl.waf_profile) }}</b>、
+          限速 <b>{{ applyTpl.rate_per_sec || '不限速' }}</b>、IP 白 <b>{{ (applyTpl.ip_allow ?? []).length }}</b> 项 /
+          黑 <b>{{ (applyTpl.ip_deny ?? []).length }}</b> 项。
+        </p>
+        <p v-if="isCaddy && applyTpl.rate_per_sec" class="warn">当前为 caddy 后端，暂不支持限速——该模板的限速设置不会生效。</p>
+        <p class="dim tiny">勾选要套用的站点（默认已选全部启用中的站点）：</p>
+        <div class="pick-list">
+          <label v-for="s in sites" :key="s.id" class="pick">
+            <input type="checkbox" :checked="applyPicks.has(s.id)" @change="togglePick(s.id)" :disabled="applyBusy" />
+            <span class="ellipsis">{{ s.name }}</span>
+            <span v-if="!s.enabled" class="dim tiny" title="套用会一并启用该站点">（已停用）</span>
+          </label>
+        </div>
+        <p v-if="applyHasDisabled" class="warn">勾选中含已停用站点：套用会将其一并启用。</p>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="applyTpl = null" :disabled="applyBusy">取消</button>
+            <button class="btn-primary" :disabled="applyBusy || !applyPicks.size" @click="doApplyTpl">
+              {{ applyBusy ? '套用中…' : `套用到 ${applyPicks.size} 个站点` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除模板确认（低危：仅移除预设，不影响已套用站点） -->
+    <ConfirmDialog v-if="delTpl" :open="!!delTpl" danger title="删除策略模板"
+      :detail="`将删除模板「${delTpl.name}」。已套用该模板的站点不受影响（其 WAF / 访问控制设置保留）。`"
+      @confirm="doDelTpl" @cancel="delTpl = null" />
   </div>
 </template>
 
 <style scoped>
 .view { display: flex; flex-direction: column; gap: 14px; }
-/* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类，
-   不再私有重定义（审计 V1：WAF 页自造按钮样式曾与全局漂移）。 */
+/* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类 */
 .num { width: 92px; }
-/* 访问控制列：两个 IP 输入并排；按控件实测宽定宽（输入框 92px×2 + 间距 6 + 单元格内边距）。 */
+/* 模板卡小节标题 */
+.sec-ico { color: var(--c-text-dim); }
+.sec-title { font-weight: 600; font-size: var(--fs-13-5); }
+/* 站点表：访问控制列两个 IP 输入并排；按控件实测宽定宽 */
 .ip { width: 92px; }
 .ip-cell { display: flex; gap: 6px; align-items: center; }
 .ip-cell .ip:disabled { opacity: .55; }
 .ip-cell .ip.dim { opacity: .55; }
-/* 配置表列宽（站点表范式）：域名为唯一弹性列；控件列按实测控件宽定宽
-   （CC/突发/IP 输入框自身 92px + 单元格内边距 26px）。 */
+/* 套用弹窗的站点勾选列表 */
+.pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; margin: 4px 0 8px; }
+.pick { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); }
+.pick .ellipsis { min-width: 0; }
+.is-dim { opacity: .55; }
+/* 站点表列宽（站点表范式）：域名为唯一弹性列；控件列按实测控件宽定宽 */
 col.w-wfname { width: 10%; }
 col.w-wfdom { width: auto; }
 col.w-wfkind { width: 7%; }
@@ -372,7 +637,14 @@ col.w-wfrate { width: 120px; }
 col.w-wfburst { width: 120px; }
 col.w-wfip { width: 216px; }
 col.w-wfacts { width: 130px; }
-/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落
-   在 td 上；单「应用」按钮在窄列里也需保住完整宽，避免「应用中…」被裁。 */
+/* 模板表列宽：名称为弹性列；IP 列等宽；操作列容 3 个文字按钮 */
+col.w-tname { width: auto; }
+col.w-tprof { width: 80px; }
+col.w-trate { width: 96px; }
+col.w-tburst { width: 96px; }
+col.w-tipa { width: 150px; }
+col.w-tipd { width: 150px; }
+col.w-tacts { width: 170px; }
+/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落在 td 上 */
 .acts { white-space: nowrap; min-width: 130px; }
 </style>
