@@ -371,7 +371,7 @@ async function saveRemark(c: Container, v: string) {
       </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton box" />
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -547,10 +547,8 @@ col.w-acts { width: 320px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
 td.remark-cell { padding: 4px 10px; }
 
-/* 首次加载骨架（scoped，观感与服务/进程页统一；keyframes 独立命名避免全局冲突） */
-.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: ct-sk 1.4s ease infinite; border-radius: var(--radius); }
+/* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 260px; }
-@keyframes ct-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 /* 删除确认框内的强制删除开关（嵌在 ConfirmDialog 的 .modal-extra 插槽里） */
 .force-row { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
 .force-row input { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--c-primary); }

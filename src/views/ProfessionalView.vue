@@ -264,6 +264,9 @@ onUnmounted(() => {
 
 <style scoped>
 .card.flush { padding: 0; overflow: hidden; }
+/* 本页骨架刻意用**透明度脉冲**而非公共的 shimmer（.skeleton.shimmer）：
+   .card skeleton 是 280px 的大块占位，shimmer 在这么大面积、低对比的区域
+   反而不易读出「正在加载」，脉冲更明确。 */
 .skeleton { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 

@@ -416,6 +416,16 @@ table.fixed tbody td:last-child { white-space: nowrap; }
   background-size: 400% 100%; animation: sk 1.3s ease infinite; border-radius: var(--radius-xs);
 }
 @keyframes sk { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+/* 表格 / 大块占位的骨架修饰类：与上面 .skeleton 的差别在中间色（--c-glass）、
+   节奏（1.4s）与扫过终点（-100%）。此前 SitesView / ContainersView / ServicesView
+   各私抄一份本规则、仅 keyframes 名不同——抽到这里后三处删除私有副本。
+   用法：class="skeleton shimmer box"。声明值与私有版逐字节一致，故视觉零变化
+   （只是选择器由 scoped 的 (0,1,1) 变为 (0,2,0)，仍然压过裸 .skeleton）。 */
+.skeleton.shimmer {
+  background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%);
+  background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite; border-radius: var(--radius);
+}
+@keyframes sk-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
 /* ── 进度条 ── */
 .progress { height: 6px; background: var(--c-hover); border-radius: 999px; overflow: hidden; }

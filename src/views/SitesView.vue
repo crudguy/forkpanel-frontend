@@ -1527,7 +1527,7 @@ async function batchDelete() {
          （与 ProcessesView 把工具条收进卡片顶栏同范式）。此前二者悬在页面级 page-head，
          与真正作用的列表隔了一层，页面顶部还为它们白占一行。
          刷新是通用工具动作，用 ghost；橙色实心只留给本页唯一主操作「新建站点」。 -->
-    <div v-if="loading && !sites.length" class="skeleton box" />
+    <div v-if="loading && !sites.length" class="skeleton shimmer box" />
     <div v-else-if="sites.length" class="card flush toolbar-card">
       <!-- 页级筛选与动作收进卡顶栏：它们过滤 / 操作的就是这张表；原先单独占一条
            页面级横条时，横条本身比「搜索框」这个内容还重。 -->
@@ -2899,10 +2899,9 @@ col.w-exp { width: 12%; }
 col.w-left { width: 9%; }
 col.w-auto { width: 12%; }
 col.w-cst { width: 8%; }
-/* 骨架（观感与列表页统一；keyframes 独立命名避免全局冲突） */
-.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: site-sk 1.4s ease infinite; border-radius: var(--radius); }
+/* 站点表首屏占位高度：10 列表格，300px ≈ 表头 + 8 行骨架的观感
+   （骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 300px; }
-@keyframes site-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
 /* ══ UX 审计整改（2026-10-11）新增样式 ══ */
 /* 页头检索框：与工具按钮同高，窄屏下不跟标题抢空间 */

@@ -608,7 +608,7 @@ async function doConfirmed() {
         :reason="auth.capabilities[CAP.SERVICE_MANAGE]?.reason ?? undefined" />
       <div v-else class="card flush svc-card">
         <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
-        <div v-if="loading" class="skeleton box" />
+        <div v-if="loading" class="skeleton shimmer box" />
         <template v-else>
           <div class="t-scroll">
           <table v-table-nav>
@@ -644,7 +644,7 @@ async function doConfirmed() {
         title="当前环境不支持软件包管理"
         :reason="auth.capabilities[CAP.PACKAGE_INSTALL]?.reason ?? undefined" />
       <template v-else>
-        <div v-if="pkgs === null" class="card"><div class="skeleton box" /></div>
+        <div v-if="pkgs === null" class="card"><div class="skeleton shimmer box" /></div>
         <template v-else>
           <p v-if="pkgNote" class="tip dim">{{ pkgNote }}</p>
           <!-- 已安装软件：按类别分组 -->
@@ -842,10 +842,8 @@ col.w-acts { width: 96px; }
 .svc-card td.svc-name,
 .svc-card td.svc-desc { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 首次加载骨架（scoped，与列表页统一观感） */
-.skeleton { background: linear-gradient(90deg, var(--c-hover) 25%, var(--c-glass) 37%, var(--c-hover) 63%); background-size: 400% 100%; animation: svc-sk 1.4s ease infinite; border-radius: var(--radius); }
+/* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 320px; }
-@keyframes svc-sk { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
 /* 任务进度条（多任务并行：一张卡片里纵向排列多条，逐条用分隔线隔开） */
 .taskstrip { padding: 12px 16px; margin-bottom: 14px; border-color: var(--c-primary-soft); }
