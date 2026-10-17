@@ -28,7 +28,7 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type ConfVersion, type ConfVersionDetail, type PackageInfo, type Site, type SiteRoute } from '@/api/types'
+import { CAP, certRenewStateLabel, certSourceLabel, fmtDate, fmtDateTime, wafProfileLabel, type Cert, type ConfVersion, type ConfVersionDetail, type Site } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -37,71 +37,13 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import NginxEditor from '@/components/NginxEditor.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
-import { useNarrow, useTableCols } from '@/composables/useTablePrefs'
+import { SITE_COLS, useSiteColumns } from '@/composables/useSiteColumns'
+import { APP_TEMPLATES, BACKEND_FIELD, DOMAIN_RE, SITE_NAME_RE, applyBody, confSpecNow, emptyForm, fieldMsg, newRoute, useSiteForm, type RouteRow } from '@/composables/useSiteForm'
 
-// ── A3 列治理：10 列挤在内容区 → 主表 6 列 + 行展开 ──
-// 默认收起 4 个次要列（根目录 / 类型 / 特性 / 上次下发），主表只剩
-// 「站点 / 域名 / WAF / 状态 / TLS / 操作」（外加选择列）。想要的列可在「列」里
-// 勾回来（记在本机，下次仍有效）。
-// ⭐收起的列**不会丢信息**：根目录此前被截成 `/home/…` 正是报告点名的痛点，
-//   收起后它的完整取值在**行展开**里以等宽文本呈现并可一键复制——比
-//   "在窄列里截断 + 靠 title 悬停"可靠得多。
-const SITE_COLS: { id: string; label: string; w: number; locked?: boolean; align?: 'left' | 'right' | 'center' }[] = [
-  // 名称是这张表的**身份列**：没有它，"站点列表"就只剩一堆域名和按钮。
-  // 且它同时是弹性列的兜底（见 elasticId）——允许隐藏会让整表既无身份列、
-  // 又无弹性列（余量被平摊成空转留白），故标记为不可隐藏。
-  { id: 'name', label: '名称', w: 200, locked: true },
-  { id: 'dom', label: '域名', w: 180 },
-  { id: 'root', label: '根目录', w: 220 }, // 弹性列：这个值只是它的**下限**
-  { id: 'kind', label: '类型', w: 64 },
-  { id: 'feat', label: '特性', w: 84 },
-  { id: 'waf', label: 'WAF', w: 116 },
-  { id: 'state', label: '状态', w: 120 },
-  { id: 'applied', label: '上次下发', w: 108, align: 'right' }, // 日期右对齐，便于纵向比对（B9 列类型/对齐规范：数字/日期/字节列 right，文本与徽标 left）
-  { id: 'tls', label: 'TLS', w: 84 },
-]
-// 解构成顶层 ref：模板里 `cols.hidden` 拿到的是 Ref 对象（只有 setup 顶层的 ref
-// 才会自动解包），故必须拆出来用
-const { hidden: hiddenCols, shown: rawShown, toggle: toggleCol, reset: resetCols } =
-  useTableCols('sites.main', ['root', 'kind', 'feat', 'applied'])
-
-/** 锁定列（名称）不受偏好影响：本机 localStorage 里若存着脏值（手改 / 旧版本写坏），
- *  仅靠选择器把勾选框置灰挡不住——必须在这里兜住，否则渲染层会真的把它藏掉。 */
-const LOCKED_IDS = SITE_COLS.filter((c) => c.locked).map((c) => c.id)
-
-/** 窄屏隐藏的次要列：与 main.css 里 `.col-opt` 的标记一致。
- *  ⚠️ 由 JS 判而不是只交给 CSS：colgroup 列数 / 行展开的 colspan 都得跟着少这 4 列，
- *  只靠 CSS 隐藏时 JS 仍按 11 列算——实测（480px + 全列开启）表格凭空多出 4 个空列、
- *  操作列被压到 58px、展开行错位。 */
-const NARROW_HIDDEN = ['root', 'kind', 'feat', 'applied']
-
-const narrow = useNarrow()
-
-/** 「这一列现在渲染吗」的唯一出口：锁定列恒真，其余看偏好，窄屏再砍掉次要列。 */
-const shown = (id: string) =>
-  LOCKED_IDS.includes(id) || (!(narrow.value && NARROW_HIDDEN.includes(id)) && rawShown(id))
-
-/** 唯一弹性列：`table-layout:fixed` 下若所有列都有固定宽度，多出来的宽度会被**平摊
- *  到每一列**变成空转留白（此前踩过）。根目录是首选弹性列；它被隐藏时让域名吃余量，
- *  再退到名称（名称恒可见，故兜底一定成立）。
- *  ⚠️ 弹性列**不能靠 min-width 兜底**：实测 `col` 与 `th` 上的 min-width 在
- *  `table-layout:fixed` 下都被忽略（三态量出来都是 9px）。真正管用的是给 `<table>`
- *  一个下限宽度（见 tableMinW）——它小于内容时表格横向滚动，弹性列就不会被压成 0。 */
-const elasticId = computed(() => ['root', 'dom', 'name'].find((id) => shown(id)) ?? null)
-
-/** 表格下限宽度 = 勾选列宽之和 + 选择列 + 操作列。
- *  低于它就让表格横向滚动（容器 .card.flush 自带 overflow-x:auto）——
- *  11 列在 1160px 表宽里本来就不可能都可读，硬挤的结果是某列被压到 0。 */
-const SEL_W = 40
-/** 与 main.css `@media (max-width:1799px) { col.w-sacts }` 一致；≥1800 时容器够宽，
- *  下限根本用不上，故这里恒取窄档值即可，不必把断点也复制到 JS。 */
-const ACTS_W = 168
-const tableMinW = computed(
-  () => SEL_W + ACTS_W + SITE_COLS.filter((c) => shown(c.id)).reduce((s, c) => s + c.w, 0),
-)
-/** 行展开 / 空态行的 colspan：必须等于**实际渲染的列数**（含选择列与操作列），
- *  写死 11 会在用户收起列之后错位。 */
-const colCount = computed(() => 2 + SITE_COLS.filter((c) => shown(c.id)).length)
+// 列治理抽到 @/composables/useSiteColumns：列定义、显隐的唯一出口、弹性列推导、
+// 表格下限宽度与 colspan 是同一件事的五个面——判据分散过（colgroup 按 11 列算、
+// CSS 只渲染 7 列 ⇒ 凭空多出 4 个空列、操作列被压到 58px）。这里只消费。
+const { narrow, hiddenCols, toggleCol, resetCols, shown, elasticId, tableMinW, colCount } = useSiteColumns()
 
 // 行展开：完整取值（等宽、不截断）
 const expanded = ref<number[]>([])
@@ -161,52 +103,15 @@ const loading = ref(false)
 /** 站点托管根目录（后端只读下发）。目录选择器的初始定位——不可硬编码，config 可覆盖。 */
 const siteRoot = ref('')
 
-// ── 应用模板（仅反向代理） ──
-//
-// Node / Java / Python / .NET 在 nginx 这一层**接入方式完全相同**——都是
-// `proxy_pass` 到本机端口，渲染出的配置逐字节一致（见 panel-os 的 render_nginx）。
-// 它们的差异只在「装什么运行时、用什么命令把进程拉起来」，所以做成**预填模板**，
-// 而不是新的 `SiteKind` 变体：加 4 个类型 = 4 份产出同一份配置的 match 分支。
-// 真正够格独立成类型的只有**协议不同**者（PHP 走 fastcgi_pass、将来的 gRPC 走 grpc_pass）。
-interface AppTemplate {
-  key: string
-  label: string
-  /** 应用默认监听端口（仅作预填，用户可改） */
-  port: number
-  /** 面板包白名单里的运行时包名，用于「已装/未装」检测；null = 面板不托管该运行时 */
-  runtimePkg: string | null
-  /** 启动命令示例。**纯提示文案**，不进 nginx 配置——进程本身由 systemd / Docker 托管 */
-  startCmd: string
-  /** 典型框架，帮用户确认自己没选错 */
-  typical: string
-}
-const APP_TEMPLATES: AppTemplate[] = [
-  { key: 'node', label: 'Node.js', port: 3000, runtimePkg: 'nodejs',
-    startCmd: 'node server.js', typical: 'Express / NestJS / Next.js' },
-  { key: 'java', label: 'Java', port: 8080, runtimePkg: 'default-jdk',
-    startCmd: 'java -jar app.jar', typical: 'Spring Boot（内置 Tomcat）' },
-  { key: 'python', label: 'Python', port: 8000, runtimePkg: null,
-    startCmd: 'gunicorn app:app -b 127.0.0.1:8000', typical: 'Django / Flask / FastAPI' },
-  { key: 'dotnet', label: '.NET', port: 5000, runtimePkg: null,
-    startCmd: 'dotnet App.dll --urls http://127.0.0.1:5000', typical: 'ASP.NET Core（Kestrel）' },
-]
-
-/** 当前选中的应用模板 key；空串 = 未用模板（自定义后端） */
-const appTpl = ref('')
-/** 上一次由模板写进 `upstreams` 的值——用于判断用户是否手改过（手改过就不再覆盖） */
-const tplFilled = ref('')
-/** 已安装的运行时包名集合（仅在 runtimeDetectable 为真时有意义） */
-const runtimeInstalled = ref<Set<string>>(new Set())
-/** 运行时检测是否可用：需 package.install 能力位 + package.manage 权限点，缺一即失败 */
-const runtimeDetectable = ref(false)
-/** 是否已尝试探测过（避免每次打开弹窗都发一次请求） */
-const runtimeProbed = ref(false)
-const curTpl = computed(() => APP_TEMPLATES.find(t => t.key === appTpl.value) ?? null)
-/** 选中的模板其运行时**未安装**——用于把该 chip 与提示标成警示色 */
-const tplRuntimeMissing = computed(() => {
-  const t = curTpl.value
-  return !!(t && t.runtimePkg && runtimeDetectable.value && !runtimeInstalled.value.has(t.runtimePkg))
-})
+/**
+ * 表单状态（含多路由行、应用模板）抽到 @/composables/useSiteForm。
+ * 传 `onFieldChanged` 是为了让模板预填后视图能撤掉该字段的红字——表单模块刻意不
+ * 认识「错误」这个概念，错误归视图管。
+ */
+const {
+  form, appTpl, curTpl, tplRuntimeMissing, runtimeDetectable,
+  probeRuntime, resetTemplate, useTemplate, detectTemplateFromUpstreams, addRoute, removeRoute,
+} = useSiteForm({ onFieldChanged: clearFieldErr })
 
 // 数据模型 CRUD 仅看 RBAC 权限点（角色维度，与平台能力无关，owner/admin 恒有）
 const canManage = computed(() => auth.can('site.manage'))
@@ -414,77 +319,6 @@ watch(modalOpen, (v) => {
 // 统一关闭出口（离场动画 + 焦点返还）：X / 点遮罩 / 取消按钮 / Esc 都走它
 const { close: modalClose } = useModal(() => modalOpen.value, modalBox, closeModal)
 const editing = ref<Site | null>(null)
-/** 空表单。`wafRate: 0` / `wafBurst: 0` 与后端的"不限速 / 自动"语义一一对应。 */
-function emptyForm() {
-  return {
-    name: '', domains: '', root: '', enabled: true,
-    kind: 'static', upstreams: '', fpm: '',
-    spa: false, redirectTarget: '', redirectCode: 301,
-    // 多路由表。**新建时给一条 `/` 静态兜底**——不是默认值，是必要条件：
-    // 缺兜底的路由表会被后端拒（漏掉的路径会落到别的站点去，用户无从预期）。
-    routes: [newRoute('/', 'static')] as RouteRow[],
-    wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
-    // 自定义配置片段（019）：插在主 server 块尾部（所有 location 之后），随保存并应用
-    // 重新渲染下发；仅 owner 可改（后端 403 + 64KiB 双护栏）。空串 = 不使用。
-    customConf: '',
-    // 高级配置（020）：www 跳转 / TLS 强化 / 伪静态。默认值与后端 020 迁移一致
-    wwwRedirect: 'off', tlsProfile: 'modern', tlsMin: 'TLSv1.2',
-    hsts: false, hstsMaxAge: 300, hstsSub: false, hstsPreload: false,
-    rewritePreset: 'none', rewriteCustom: '',
-    // 访问控制 / 反代增强 / 站点日志（021）：默认值与后端 021 迁移一致
-    ipAllow: '', ipDeny: '', authBasic: false, authUser: '', authPass: '',
-    lbPolicy: 'least_conn', proxyConnectTimeout: 60, proxySendTimeout: 60, proxyReadTimeout: 60,
-    logAccess: false, logError: false, logErrorLevel: 'error',
-    // 对象说明（备注，022）：便签式内联编辑，独立于大表单保存
-    remark: '',
-  }
-}
-
-/** 表单里的一条路由（`upstreams` 存成逗号分隔的字符串，便于 v-model 绑定）。 */
-interface RouteRow {
-  prefix: string
-  kind: 'proxy' | 'static' | 'php'
-  upstreams: string
-  spa: boolean
-  fpm: string
-  frontController: string
-  /** kind=static：该路由自己的根目录（可选，覆盖站点级 root）；留空继承站点根 */
-  root: string
-}
-
-function newRoute(prefix: string, kind: RouteRow['kind']): RouteRow {
-  return { prefix, kind, upstreams: '', spa: false, fpm: '', frontController: '', root: '' }
-}
-
-/**
- * 新增一条路由。前缀给一个**不与现有重复**的默认值（`/api`、`/api2`…），
- * 免得用户点一下就撞上「前缀重复」报错还要自己想名字。
- */
-function addRoute() {
-  const used = new Set(form.value.routes.map((r) => r.prefix.trim()))
-  let p = '/api'
-  for (let i = 2; used.has(p) && i < 50; i++) p = `/api${i}`
-  form.value.routes.push(newRoute(p, 'proxy'))
-}
-
-/** 删除一条路由。**至少保留一条**——空表无法保存，且用户多半只是想改不是想删光。 */
-function removeRoute(i: number) {
-  if (form.value.routes.length <= 1) return
-  form.value.routes.splice(i, 1)
-}
-
-/** `RouteRow` → API 口径（只填该 kind 需要的字段，其余留空由后端忽略）。 */
-function rowToRoute(r: RouteRow): SiteRoute {
-  if (r.kind === 'proxy') {
-    return { prefix: r.prefix.trim(), kind: 'proxy', upstreams: r.upstreams.split(/[,\s]+/).filter(Boolean) }
-  }
-  if (r.kind === 'php') {
-    return { prefix: r.prefix.trim(), kind: 'php', fpm: r.fpm.trim(), front_controller: r.frontController.trim() }
-  }
-  return { prefix: r.prefix.trim(), kind: 'static', spa: !!r.spa, root: r.root.trim() || undefined }
-}
-const form = ref(emptyForm())
-
 function openCreate() {
   editing.value = null
   form.value = emptyForm()
@@ -566,7 +400,7 @@ function openEdit(s: Site) {
   // 站点配置区：清残留 + 拉取当前站点的落盘配置（异步，不阻塞弹窗打开）。
   resetConf()
   // 表单规格基线：保存时据此判断「本次是否改了影响配置的字段」（手动维护站点要弹二选一）。
-  confSpecBase.value = confSpecNow()
+  confSpecBase.value = confSpecNow(form.value)
   void loadConf(s.id)
   // 此前漏了这一行：只回填了表单却不开弹窗，点「编辑」毫无反应
   modalOpen.value = true
@@ -581,69 +415,6 @@ async function saveRemark(v: string) {
   editing.value.remark = v
 }
 
-/**
- * 复位应用模板选中态。每次打开弹窗都要做——否则上次的选择会残留在下一次新建里。
- */
-function resetTemplate() {
-  appTpl.value = ''
-  tplFilled.value = ''
-}
-
-/**
- * 套用应用模板：把反代目标预填为 `http://127.0.0.1:<port>`。
- *
- * **刻意不覆盖用户手输的内容**——只在「后端」为空、或仍等于上次由模板写入的值时才填。
- * 否则用户先手填了 `http://10.0.0.5:9000` 再点一下模板，输入就被静默吞掉（很难发现）。
- * 再点一次同一个 chip 表示取消选择。
- */
-function useTemplate(t: AppTemplate) {
-  if (appTpl.value === t.key) { resetTemplate(); return }
-  const cur = form.value.upstreams.trim()
-  if (cur === '' || cur === tplFilled.value) {
-    const v = `http://127.0.0.1:${t.port}`
-    form.value.upstreams = v
-    tplFilled.value = v
-  }
-  appTpl.value = t.key
-  clearFieldErr('upstreams')
-}
-
-/**
- * 拉运行时安装状态，只为在模板提示里显示「已装 / 未装」。
- *
- * 双重门控：能力位 `package.install`（决定枚举端点是否可用）+ 权限点 `package.manage`
- * （后端 packages_list 正是按它签发的）——两者分属**两套命名空间**，写错不会报错、
- * 只会静默 disable（守卫 ci/check-permissions.sh）。
- * 失败**静默降级**：这只是锦上添花的提示，不该影响站点编辑主流程。
- *
- * ⚠ **口径是「包管理器里的系统包」**（apt 的 `nodejs` / `default-jdk`），**不等于**
- * 「这台机器上有没有 Node」——用 nvm / 官方安装包装好的运行时不在这里出现
- * （实测本机 `PATH` 有 node 22 而 apt 未装 nodejs）。故文案一律写「系统包 xxx 未装」，
- * 不做「你没有 Node」这种断言；`runtimePkg: null` 的语言干脆不显示状态。
- */
-async function probeRuntime() {
-  if (runtimeProbed.value) return
-  runtimeProbed.value = true
-  if (!auth.enabled(CAP.PACKAGE_INSTALL, 'package.manage')) return
-  try {
-    const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
-    runtimeInstalled.value = new Set((r.packages ?? []).map(x => x.name))
-    runtimeDetectable.value = true
-  } catch { runtimeDetectable.value = false }
-}
-
-/**
- * 编辑已有站点时，若其后端**恰好**是某个模板的默认端口，就把该模板点亮——
- * 让用户一眼看出"这是个 Node 应用"，不必回想当初选了什么。
- * 只在「单一后端且完全匹配」时命中，多后端（负载均衡）不强猜。
- */
-function detectTemplateFromUpstreams() {
-  const list = form.value.upstreams.split(/[,\s]+/).filter(Boolean)
-  if (list.length !== 1) return
-  const hit = APP_TEMPLATES.find(t => list[0] === `http://127.0.0.1:${t.port}`)
-  if (hit) appTpl.value = hit.key
-}
-
 /** 站点类型的中文名（列表与提示共用一份）。 */
 function kindLabel(k: string) {
   if (k === 'proxy') return '反向代理'
@@ -653,51 +424,12 @@ function kindLabel(k: string) {
   return '静态'
 }
 
-/** 组装 apply 的 waf 段。 */
-function wafPayload() {
-  if (!form.value.wafOn) return { enabled: false }
-  const p: Record<string, unknown> = {
-    enabled: true,
-    profile: form.value.wafProfile,
-    rate_per_sec: form.value.wafRate,   // 0 = 不限速（后端语义）
-  }
-  // burst 只在限速且有值时下发：不限速却带 burst 会被后端 400（"配了但没生效"
-  // 属于静默失败，后端刻意拒绝）；缺省时让后端按 rate×2 计算。
-  if (form.value.wafRate > 0 && form.value.wafBurst > 0) p.burst = form.value.wafBurst
-  return p
-}
 function closeModal() {
   modalOpen.value = false; editing.value = null
   // 关闭即清理：下次打开弹窗一定是干净的，不会"什么都还没提交就顶着上次的红条"。
   formError.value = ''; fieldErrs.value = {}
 }
 
-// ── 错误定位：把报错落到**出问题的那个输入框旁边** ──
-/** 与后端 is_valid_domain 的语法段同口径（TLD 真实性只由后端校验，前端不内嵌列表）。 */
-const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
-/** 与后端 is_valid_site_name 同口径：字母数字开头，后可接字母数字与 . _ -，长度 1~63。 */
-const SITE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/
-/**
- * 后端 400 的字段名 → 表单字段 key + 中文兜底文案（见 panel-api `ApiError::bad_request`）。
- * 后端 reason 已是中文时优先用它（更具体），否则回退到这里的兜底（避免把英文甩给用户）。
- */
-const BACKEND_FIELD: Record<string, { key: string; msg: string }> = {
-  name: { key: 'name', msg: '站点名称格式不正确' },
-  domains: { key: 'domains', msg: '域名格式不正确' },
-  root: { key: 'root', msg: '根目录不合法' },
-  upstreams: { key: 'upstreams', msg: '后端地址不合法' },
-  fpm: { key: 'fpm', msg: 'php-fpm 目标不合法' },
-  redirect_target: { key: 'redirectTarget', msg: '重定向目标 URL 不合法' },
-  redirect_code: { key: 'redirectCode', msg: '重定向状态码不合法' },
-  'waf.profile': { key: 'wafProfile', msg: 'WAF 档位不合法' },
-  'waf.rate_per_sec': { key: 'wafRate', msg: '限速取值不合法' },
-  'waf.burst': { key: 'wafBurst', msg: '突发桶取值不合法' },
-  custom_conf: { key: 'customConf', msg: '自定义片段不合法' },
-}
-/** 后端 reason 是否已是给人看的中文——是则原样透出（更具体），否则用前端中文兜底。 */
-function fieldMsg(fallback: string, reason: string) {
-  return /[\u4e00-\u9fff]/.test(reason) ? reason : fallback
-}
 /** 用户一改动该字段就撤掉它的红字提示：问题正在被修，不该继续吓人。 */
 function clearFieldErr(key: string) {
   if (fieldErrs.value[key]) delete fieldErrs.value[key]
@@ -904,17 +636,6 @@ async function resumeSave(regenerate: boolean) {
   } finally { busy.value = false }
 }
 
-/** 站点类型 → apply 载荷里的目标值（proxy / php / redirect 的目标会直接进 nginx 配置文本）。 */
-function kindTargets() {
-  const kind = form.value.kind
-  if (kind === 'proxy') return { upstreams: form.value.upstreams.split(/[,\s]+/).filter(Boolean) }
-  if (kind === 'php') return { fpm: form.value.fpm.trim() }
-  if (kind === 'redirect') return { redirect_target: form.value.redirectTarget.trim(), redirect_code: form.value.redirectCode }
-  // 多路由：整表下发。省略 ≠ 清空（后端 `routes` 缺省 = 保留库中现有表）。
-  if (kind === 'routed') return { routes: form.value.routes.map(rowToRoute) }
-  return {}
-}
-
 /**
  * 渲染并下发站点配置（「保存站点」的第二步；受 webserver 能力门禁）。
  *
@@ -925,46 +646,10 @@ async function deploy(name: string, domains: string[], regenerate = false) {
   // 响应字段供 commitSave 如实提示：
   // - manual（本站点处于「手动维护」，本次**未**重渲染/下发）
   // - regenerated/backup（本次选了「按表单重新生成」：已覆盖手写配置 + 备份路径，可 null）
-  return api.post<{ deployed?: boolean; manual?: boolean; regenerated?: boolean; backup?: string | null }>(API.sites.apply(), {
-    name,
-    domains,
-    root: form.value.root.trim() || name,
-    force_https: true,
-    kind: form.value.kind,
-    // SPA 回退仅对 static 类型有意义：其余类型强制 false，避免误带入反代/重定向。
-    spa: form.value.kind === 'static' ? !!form.value.spa : false,
-    ...kindTargets(),
-    // 仅「手动维护 + 用户选了重新生成」才带：后端据此按本次表单覆盖手写配置
-    ...(regenerate ? { regen_conf: true } : {}),
-    // 自定义片段（019，仅 owner）：空串 = 清空、非空 = 覆盖；非 owner **不传**——
-    // 后端语义是「缺省 = 保留库中现值」（与 waf 同款），不传绝不误清 owner 的片段。
-    ...(isOwner.value ? { custom_conf: form.value.customConf } : {}),
-    // 高级配置（020）：显式传即覆盖（校验在后端走白名单/区间）
-    www_redirect: form.value.wwwRedirect,
-    tls_profile: form.value.tlsProfile,
-    tls_min: form.value.tlsMin,
-    hsts: form.value.hsts,
-    hsts_max_age: form.value.hstsMaxAge,
-    hsts_sub: form.value.hstsSub,
-    hsts_preload: form.value.hstsPreload,
-    rewrite_preset: form.value.rewritePreset,
-    rewrite_custom: form.value.rewriteCustom,
-    // 访问控制 / 反代增强 / 站点日志（021）：IP 名单以逗号分隔字符串提交（后端解析/校验）
-    ip_allow: form.value.ipAllow.split(/[,\s]+/).filter(Boolean).join(','),
-    ip_deny: form.value.ipDeny.split(/[,\s]+/).filter(Boolean).join(','),
-    auth_basic: form.value.authBasic,
-    auth_user: form.value.authUser.trim() || null,
-    // 口令只写不读：仅在本次填写了才提交（否则保留现有 htpasswd 文件，不误清）
-    ...(form.value.authPass ? { auth_pass: form.value.authPass } : {}),
-    lb_policy: form.value.lbPolicy,
-    proxy_connect_timeout: form.value.proxyConnectTimeout,
-    proxy_send_timeout: form.value.proxySendTimeout,
-    proxy_read_timeout: form.value.proxyReadTimeout,
-    log_access: form.value.logAccess,
-    log_error: form.value.logError,
-    log_error_level: form.value.logErrorLevel,
-    waf: wafPayload(),
-  })
+  return api.post<{ deployed?: boolean; manual?: boolean; regenerated?: boolean; backup?: string | null }>(
+    API.sites.apply(),
+    applyBody(form.value, { name, domains, regenerate, includeCustomConf: isOwner.value }),
+  )
 }
 
 // ── 站点日志（021）：查看 / 清空 ──
@@ -1220,48 +905,9 @@ const saveAskLead = computed(() => {
     + '「仅保存」只把表单值入库、配置文件保持不变（站点会标记「未同步」）。'
 })
 
-/**
- * 表单规格的本地指纹：仅用于 save() 判断「本次编辑是否改了影响配置的字段」，
- * 决定手动维护站点保存前是否弹二选一。
- *
- * ⚠ 字段清单与后端 `deploy_fingerprint`（panel-api/routes/sites.rs）保持一致——
- *   两边新增「影响 render 输出」的字段时必须同步加，否则该字段改动不触发保存时
- *   弹窗（兜底：后端 conf_stale 仍会把它标成「未同步」，属事后提醒而非漏报）。
- */
-function confSpecNow(): string {
-  return JSON.stringify([
-    form.value.name.trim(),
-    form.value.domains.trim(),
-    form.value.root.trim(),
-    form.value.kind,
-    !!form.value.spa,
-    form.value.upstreams.split(/[,\s]+/).filter(Boolean),
-    form.value.fpm.trim(),
-    form.value.redirectTarget.trim(),
-    form.value.redirectCode,
-    form.value.wafOn,
-    form.value.wafProfile,
-    form.value.wafRate,
-    form.value.wafBurst,
-    form.value.routes.map(rowToRoute),
-    // 019：片段也是渲染输出的一部分（插在 server 块尾）——不进指纹的话，手动站点
-    // 只改片段后保存不会弹二选一、磁盘文件静默不动（后端 018 起指纹同款含它）。
-    form.value.customConf,
-    // 高级配置（020）：同样改变渲染输出，漏了就不会弹「未同步」二选一
-    form.value.wwwRedirect,
-    form.value.tlsProfile,
-    form.value.tlsMin,
-    form.value.hsts,
-    form.value.hstsMaxAge,
-    form.value.hstsSub,
-    form.value.hstsPreload,
-    form.value.rewritePreset,
-    form.value.rewriteCustom,
-  ])
-}
 /** 本次编辑是否改了影响配置的字段（基线在 openEdit 快照；新建站点恒 false）。 */
 function confSpecChanged(): boolean {
-  return confSpecBase.value !== '' && confSpecNow() !== confSpecBase.value
+  return confSpecBase.value !== '' && confSpecNow(form.value) !== confSpecBase.value
 }
 
 // 保存二选一弹窗的通用弹窗行为（Esc / 焦点陷阱 / 离场动画）——与全站弹窗同规。
