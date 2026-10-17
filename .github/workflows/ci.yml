@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一文件的并发推送只保留最新一次，取消旧的（省 runner 分钟）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 类型检查 + 单测 + 构建 + UI 守卫
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # 与 pnpm-lock.yaml（lockfileVersion 9.0）兼容；若将来锁文件格式升级，同步改这里
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖（锁文件不一致即失败）
+        run: pnpm install --frozen-lockfile
+
+      # 与本地 `make check` 完全一致——门禁只有一份定义，不会出现
+      # 「本地绿、CI 红」或「CI 跑的是另一套」
+      - name: 门禁（make check）
+        run: make check
