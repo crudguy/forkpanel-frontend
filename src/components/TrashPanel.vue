@@ -75,9 +75,6 @@ async function purgeAll() {
   finally { busy.value = '' }
 }
 
-function fmtTime(ts: number) {
-  return fmtDateTime(ts)
-}
 
 // Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本面板三者皆无）。
 // X / 点遮罩 / Esc 统一走 modalClose。
@@ -114,7 +111,7 @@ onMounted(load)
             <span class="tp-name" :title="t.name">{{ t.name }}</span>
             <span class="tp-kind">{{ t.kind === 'dir' ? '目录' : fmtSize(t.size_bytes) }}</span>
             <span class="tp-path" :title="t.original_path">{{ t.original_path }}</span>
-            <span class="tp-time">{{ fmtTime(t.deleted_at) }}</span>
+            <span class="tp-time">{{ fmtDateTime(t.deleted_at) }}</span>
           </div>
           <div class="tp-acts">
             <button class="btn-ghost btn-sm" :disabled="busy === t.id" @click="restore(t)">恢复</button>

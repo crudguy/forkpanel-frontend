@@ -77,7 +77,6 @@ async function cancel(t: Task) {
 // 且把英文 state 直接甩给用户；服务页判的却是 'done'——同一任务两处颜色不同
 function stateClass(s: string) { return taskStateBadge(s) }
 const stateText = taskStateLabel
-function fmtTime(t?: number | null) { return fmtDateTime(t) }
 onUnmounted(stopPoll)
 </script>
 
@@ -118,7 +117,7 @@ onUnmounted(stopPoll)
                   <span>{{ t.progress ?? 0 }}%</span>
                 </div>
               </td>
-              <td class="muted nowrap">{{ fmtTime(t.started_at) }}</td>
+              <td class="muted nowrap">{{ fmtDateTime(t.started_at) }}</td>
               <td class="nowrap">
                 <button class="btn-sm" @click.stop="open(t)"><Icon name="terminal" :size="14" /> 输出</button>
                 <button v-if="isLive(t)" class="btn-ghost btn-sm danger" @click.stop="cancel(t)">取消</button>
@@ -138,8 +137,8 @@ onUnmounted(stopPoll)
         </div>
         <p class="meta">
           类型 <span class="mono">{{ sel.kind }}</span>
-          · 开始 {{ fmtTime(sel.started_at) }}
-          · 结束 {{ fmtTime(sel.finished_at) }}
+          · 开始 {{ fmtDateTime(sel.started_at) }}
+          · 结束 {{ fmtDateTime(sel.finished_at) }}
           · 耗时 <span class="mono">{{ sel.duration_secs != null ? sel.duration_secs + 's' : '—' }}</span>
           <template v-if="sel.exit_code != null"> · 退出码 <span class="mono">{{ sel.exit_code }}</span></template>
         </p>

@@ -91,9 +91,6 @@ async function revoke(s: SessionInfo) {
   catch (e) { error.value = errorText(e) }
 }
 
-function fmtTime(unix: number): string {
-  return fmtDateTime(unix)
-}
 
 /** 会话列表用相对时间更直观（"3 分钟前"比时间戳更容易判断是否该踢）。 */
 function fmtAgoTime(unix: number): string {
@@ -253,7 +250,7 @@ async function doDisable() {
                     <span v-if="s.current" class="cur-badge">当前</span>
                   </td>
                   <td class="muted">{{ roleLabel(s.role) }}</td>
-                  <td class="muted" :title="fmtTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
+                  <td class="muted" :title="fmtDateTime(s.created_at)">{{ fmtAgoTime(s.created_at) }}</td>
                   <td class="muted mono">{{ s.idle_secs < 60 ? `${s.idle_secs}s` : `${Math.floor(s.idle_secs / 60)}m` }}</td>
                   <td class="nowrap">
                     <button class="btn-ghost btn-sm danger" @click="askRevoke(s)"><Icon name="logout" :size="14" /> 吊销</button>

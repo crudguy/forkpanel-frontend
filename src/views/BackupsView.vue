@@ -292,10 +292,6 @@ async function showArtifacts(p: Plan) {
 /** 选中的产物名（恢复目标）。产物按名称倒序，默认取最新一份。 */
 const selName = ref('')
 
-// 统一走 types.ts 的 fmtSize（此前此处只有 2 档，100GB 显示成 "102400.0 MB"）
-function fmtTime(t: number | null) {
-  return fmtDateTime(t)
-}
 </script>
 
 <template>
@@ -382,7 +378,7 @@ function fmtTime(t: number | null) {
                 <div v-if="p.remote_url" class="tiny mono">{{ p.remote_url }}</div>
               </td>
               <td class="dim">
-                {{ fmtTime(p.last_run_at) }}
+                {{ fmtDateTime(p.last_run_at) }}
                 <span class="badge" :class="resultClass(p.last_result)" v-if="p.last_result">
                   {{ backupResultLabel(p.last_result) }}
                 </span>
@@ -487,7 +483,7 @@ function fmtTime(t: number | null) {
             <tr v-for="a in curArtifacts.items" :key="a.name">
               <td class="mono ellipsis" :title="a.name">{{ a.name }}</td>
               <td>{{ fmtSize(a.size) }}</td>
-              <td class="dim">{{ fmtTime(a.mtime) }}</td>
+              <td class="dim">{{ fmtDateTime(a.mtime) }}</td>
             </tr>
           </tbody>
         </table>
