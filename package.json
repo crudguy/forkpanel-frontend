@@ -9,6 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "size": "node scripts/size-report.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check:ui": "node scripts/check-sidenav.mjs && node scripts/check-page-head.mjs && node scripts/check-modal.mjs && node scripts/check-icon-names.mjs && node scripts/check-overlay-teleport.mjs && node scripts/check-subtitles.mjs"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
+    "vitest": "^5.0.5",
     "vue-tsc": "^2.2.0"
   }
 }

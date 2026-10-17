@@ -774,8 +774,13 @@ export function setTimeMode(m: TimeMode) {
   try { localStorage.setItem(K_TIME_MODE, m) } catch { /* 隐私/配额：本次会话仍生效 */ }
   document.documentElement.dataset.time = m
 }
-// 初始化时同步一次 data-time（刷新后保持）
-document.documentElement.dataset.time = timeMode.value
+// 初始化时同步一次 data-time（刷新后保持）。
+// ⚠ 加 typeof 守卫：本模块同时被单测（node 环境，无 document）导入——一个
+// 「格式化工具」模块不该因导入即碰 DOM 而无法在非浏览器环境加载。浏览器里
+// document 恒存在，行为与原来逐字一致。
+if (typeof document !== 'undefined') {
+  document.documentElement.dataset.time = timeMode.value
+}
 
 /** 取年/月/日/时/分，按 timeMode 选本地或 UTC 取值器。 */
 function ymdhmi(d: Date): { y: number; mo: number; da: number; h: number; mi: number } {
