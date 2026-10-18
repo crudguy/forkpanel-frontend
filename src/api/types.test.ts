@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fmtSize, fmtDateTime, fmtDate, fmtTime, fmtAgo } from './types'
+import {
+  fmtSize, fmtDateTime, fmtDate, fmtTime, fmtAgo, certLevel,
+} from './types'
 
 afterEach(() => { vi.useRealTimers() })
 
@@ -62,5 +64,27 @@ describe('fmtAgo', () => {
     expect(fmtAgo(now - 86400 * 2)).toBe('2 天前')
     // 未来时间（定时任务）给绝对值，而不是难懂的「-1 小时前」
     expect(fmtAgo(now + 3600)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+  })
+})
+
+/**
+ * `certLevel`：证书剩余天数 → 文本着色类。CertsView 与站点编辑弹窗共用同一份，
+ * 这里把档位边界钉死——否则「改了一处阈值」会表现成两个页面颜色不一致。
+ */
+describe('certLevel', () => {
+  it('未知剩余天数（null）走中性 dim，不染绿也不染红', () => {
+    expect(certLevel(null)).toBe('dim')
+  })
+
+  it('档位边界：>30 为 ok，30 起转 warn，7 起仍是 warn，<7 为 bad', () => {
+    expect(certLevel(31)).toBe('ok')
+    expect(certLevel(90)).toBe('ok')
+    // ⚠️ 边界本身：刚好 30 天不算 ok（留一天余量给续期窗口）
+    expect(certLevel(30)).toBe('warn')
+    expect(certLevel(7)).toBe('warn')
+    expect(certLevel(6)).toBe('bad')
+    expect(certLevel(0)).toBe('bad')
+    // 已过期（后端可能给负值）同样按最紧急处理，而不是落进某个中间档
+    expect(certLevel(-1)).toBe('bad')
   })
 })

@@ -14,7 +14,10 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, certSourceLabel, fmtDate, type Cert, type Site } from '@/api/types'
+import {
+  CAP, certLevel, certSourceLabel, fmtDate,
+  type Cert, type RenewSweep, type Site,
+} from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
@@ -23,8 +26,6 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
-
-interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 
 const auth = useAuthStore()
 const certs = ref<Cert[]>([])
@@ -62,12 +63,6 @@ async function load() {
 }
 onMounted(load)
 
-function certLevel(d: number | null) {
-  if (d === null) return 'dim'
-  if (d > 30) return 'ok'
-  if (d >= 7) return 'warn'
-  return 'bad'
-}
 /** 反查域名所属站点名（一个域名一行，多域名站点会重复出现）。 */
 function siteOf(domain: string): string {
   const s = sites.value.find(s => s.domains.includes(domain))

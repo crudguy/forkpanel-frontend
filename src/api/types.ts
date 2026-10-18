@@ -717,6 +717,34 @@ export const certRenewStateLabel = enumLabel({
   idle: '空闲', pending: '续期中', ok: '成功', failed: '失败',
 })
 
+/** 自动续期扫描状态（`GET /certs/renew-sweep`）。CertsView 与 SitesView 都要拉
+ *  （SitesView 还要往下传给站点编辑弹窗展示「上次/下次扫描」），此前两处各声明一份
+ *  同名字段完全相同的 interface——改字段就要改两处，故提到这里与 `Cert` 同处。 */
+export interface RenewSweep {
+  /** 上次扫描时刻（Unix 秒）；0 = 从未运行过。 */
+  last_at: number
+  /** 上次扫描实际入队的证书张数。 */
+  last_queued: number
+  /** 下次预计扫描时刻（Unix 秒）。 */
+  next_at: number
+}
+
+/** 剩余天数 → 文本着色类（公共工具类 `.dim/.ok/.warn/.bad`，定义在 main.css）。
+ *
+ *  过去 CertsView 与 SiteFormDialog **逐字节各存一份**，属于「同一条刻度两个副本」：
+ *  改阈值只改一处就会表现为「列表里 30 天是琥珀、弹窗里却是绿的」。现在两处 import
+ *  同一份，刻度钉死在下面的单测里。
+ *
+ *  档位口径：`null` 未知 → dim（中性）；> 30 天 → ok；7~30 天 → warn；< 7 天 → bad。
+ *  注意是**严格大于 30** 才算 ok——刚好 30 天进 warn（留一天余量给续期窗口）。
+ */
+export function certLevel(d: number | null): 'dim' | 'ok' | 'warn' | 'bad' {
+  if (d === null) return 'dim'
+  if (d > 30) return 'ok'
+  if (d >= 7) return 'warn'
+  return 'bad'
+}
+
 /** 备份计划类型。 */
 export const backupKindLabel = enumLabel({ panel: '面板数据', site: '站点文件' })
 

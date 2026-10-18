@@ -26,7 +26,10 @@ import { ref, onMounted, computed } from 'vue'
 import { toast } from '@/composables/useToast'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { fmtDateTime, wafProfileLabel, type Cert, type Site } from '@/api/types'
+import {
+  fmtDateTime, wafProfileLabel,
+  type Cert, type RenewSweep, type Site,
+} from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -73,7 +76,6 @@ function featText(s: Site): string {
 
 const sites = ref<Site[]>([])
 const certs = ref<Cert[]>([])
-interface RenewSweep { last_at: number; last_queued: number; next_at: number }
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 
 /**

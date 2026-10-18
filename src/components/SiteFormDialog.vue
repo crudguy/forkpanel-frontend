@@ -24,7 +24,10 @@ import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { certSourceLabel, fmtDate, fmtDateTime, type Cert, type Site } from '@/api/types'
+import {
+  certLevel, certSourceLabel, fmtDate, fmtDateTime,
+  type Cert, type RenewSweep, type Site,
+} from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
@@ -44,7 +47,7 @@ const props = defineProps<{
   /** 全量证书（本组件按当前站点域名自行过滤） */
   certs: Cert[]
   /** 自动续期扫描状态（证书区展示「上次/下次扫描」） */
-  sweep: { last_at: number; last_queued: number; next_at: number }
+  sweep: RenewSweep
   /** 站点托管根目录（后端只读下发）：目录选择器的初始定位与边界说明 */
   siteRoot: string
 }>()
@@ -175,13 +178,6 @@ function initForm(s: Site | null) {
 }
 
 watch(() => props.open, (v) => { if (v) initForm(props.site) })
-
-function certLevel(d: number | null) {
-  if (d === null) return 'dim'
-  if (d > 30) return 'ok'
-  if (d >= 7) return 'warn'
-  return 'bad'
-}
 
 // 自动续期扫描状态摘要：供编辑弹窗内 SSL 区展示"上次/下次扫描"
 function sweepSummary(): string {
