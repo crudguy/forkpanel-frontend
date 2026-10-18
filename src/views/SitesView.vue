@@ -38,6 +38,7 @@ import ColumnPicker from '@/components/ColumnPicker.vue'
 import SiteFormDialog from '@/components/SiteFormDialog.vue'
 import { SITE_COLS, useSiteColumns } from '@/composables/useSiteColumns'
 import { useSiteCaps } from '@/composables/useSiteCaps'
+import { fmtApplied, siteState, tlsState } from '@/composables/siteState'
 
 // 列治理抽到 @/composables/useSiteColumns：列定义、显隐的唯一出口、弹性列推导、
 // 表格下限宽度与 colspan 是同一件事的五个面——判据分散过（colgroup 按 11 列算、
@@ -99,47 +100,6 @@ const siteRoot = ref('')
 // （能不能建站 / 能不能下发 / 能不能签证书 / 重载要不要灰）。两份副本迟早漂移——
 // 漂移的表现是「列表里能点、弹窗里却是灰的」，最难查。这里只消费。
 const { canManage, webSupported, sslReady, sslHint, canReload, canCreate, createHint } = useSiteCaps()
-/**
- * 站点状态三态。判据是 `deployed`（配置是否真下发）而不是 `enabled`（期望状态）：
- * 后者在新建后即为 true，但此刻 Web 服务器里根本没有这个站点。
- */
-function siteState(s: Site): { label: string; cls: string; title: string } {
-  if (!s.enabled) {
-    return { label: '已停用', cls: '', title: '已从 Web 服务器摘除配置（或从未启用）' }
-  }
-  if (!s.deployed) {
-    return { label: '未下发', cls: 'badge-warn', title: '已登记，但配置尚未下发到 Web 服务器；点「应用」后才会对外服务' }
-  }
-  return { label: '运行中', cls: 'badge-ok', title: '配置已下发到 Web 服务器并已 reload' }
-}
-
-/**
- * TLS 徽章三态。判据是"证书存在 **且** 配置已下发"——只看 `ssl_certs` 有无记录，
- * 会把"签了但没生效"显示成"已配置"，与同行的站点状态自相矛盾。
- */
-function tlsState(s: Site): { label: string; cls: string; title: string } {
-  if (!s.tls) {
-    return { label: '无', cls: '', title: '尚未为该站点签发证书（在「编辑站点」里点「申请证书」）' }
-  }
-  if (!s.deployed) {
-    return { label: '已签发·未生效', cls: 'badge-warn', title: '证书已生成并落盘，但站点配置尚未下发到 Web 服务器，HTTPS 还没生效' }
-  }
-  return { label: '已启用', cls: 'badge-ok', title: '证书已随站点配置在 Web 服务器生效' }
-}
-
-/**
- * 上次下发时间（023）列用紧凑格式：`MM-DD HH:mm`（无年份——同面板内「去年的
- * 下发」极少，完整时间走 title）。null/非法一律 `—`：0 是合法时间戳（1970），
- * 与「从未下发」语义相反，绝不能把 NULL 显示成 1970。
- */
-function fmtApplied(ts: number | null): string {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
-  if (Number.isNaN(d.getTime())) return '—'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
 /**
  * 列表**非静默加载失败**（区别于「真的一个站点都没有」）。
  * 不加这个标志时 `sites` 保持空数组 → 走 EmptyState「暂无站点 · 点新建站点」，
