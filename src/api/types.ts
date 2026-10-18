@@ -15,6 +15,11 @@ export interface Capability {
 
 export type CapabilityMap = Record<string, Capability>
 
+/** 高危操作的并发上限（/system/capabilities 的 limits）。 */
+export interface Limits {
+  terminal_max_sessions: number
+}
+
 export interface PlatformInfo {
   os: string
   arch: string

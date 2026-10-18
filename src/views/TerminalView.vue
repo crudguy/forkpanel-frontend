@@ -15,9 +15,11 @@
  * 多页签（2026-10-17）：每个标签是一个**独立会话**——各自一条 WebSocket、各自一个
  * PTY（后端每条升级独立 spawn_pty），各自持有滚动缓冲区；切换标签不重连、不丢回显。
  *
- * ⚠ 并发上限必须前端同步：后端 `TERMINAL_SEM` 是**全局**固定容量（见 routes/terminal.rs
- * 第 6 条卫士），超出返回 503。因此这里 MAX_TABS 与后端保持一致，并在触顶时禁用
- * 「+ 新标签」+ 说明原因，而不是让用户点出一个连不上的空会话。
+ * ⚠ 并发上限由后端下发：`TERMINAL_SEM` 是**全局**固定容量（见 routes/terminal.rs），
+ * 超出返回 503。前端用 `auth.terminalMax`（读 /system/capabilities 的
+ * limits.terminal_max_sessions）而不是自己写死一个数——两端各写一个 4，改一端忘
+ * 另一端就是「面板说能开、一点就 503」。触顶时禁用「+ 新标签」+ 说明原因，
+ * 而不是让用户点出一个连不上的空会话。
  *
  * ⚠ xterm Terminal / WebSocket 实例**绝不能放进响应式数组**：ref([]) 会深度代理，
  * 代理会包住这两类复杂实例，读写其内部结构时极易踩坑（且会拖慢渲染）。故重量级
@@ -35,9 +37,6 @@ import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
-
-/** 与后端 TERMINAL_SEM 容量一致：全局最多 4 个并发终端会话。 */
-const MAX_TABS = 4
 
 const auth = useAuthStore()
 const enabled = computed(() => auth.enabled(CAP.TERMINAL_MANAGE, 'system.manage'))
@@ -205,7 +204,7 @@ function clearScreen(id: string = activeId.value) {
 
 // ── 标签栏 ──
 async function openTab() {
-  if (tabs.value.length >= MAX_TABS) return
+  if (tabs.value.length >= auth.terminalMax) return
   const t = makeTab()
   tabs.value.push(t)
   activeId.value = t.id
@@ -283,8 +282,8 @@ onUnmounted(() => {
           @click.stop="closeTab(t.id)"><Icon name="close" :size="12" /></button>
       </div>
       <button class="tab add" type="button" aria-label="新建终端标签"
-        :disabled="tabs.length >= MAX_TABS"
-        :title="tabs.length >= MAX_TABS ? `已达上限：后端最多同时 ${MAX_TABS} 个终端会话` : '新建一个终端会话'"
+        :disabled="tabs.length >= auth.terminalMax"
+        :title="tabs.length >= auth.terminalMax ? `已达上限：后端最多同时 ${auth.terminalMax} 个终端会话` : '新建一个终端会话'"
         @click="openTab">
         <Icon name="plus" :size="14" /> 新标签
       </button>

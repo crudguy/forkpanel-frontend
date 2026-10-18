@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, type CapabilityMap, type PlatformInfo } from '@/api/types'
+import { CAP, type CapabilityMap, type Limits, type PlatformInfo } from '@/api/types'
 
 export interface Me {
   user: string
@@ -23,6 +23,8 @@ export interface Me {
 export const useAuthStore = defineStore('auth', () => {
   const me = ref<Me | null>(null)
   const capabilities = ref<CapabilityMap>({})
+  /** 高危并发上限（P2-5）。后端未下发时回落 4——那是当前唯一实现值，见 docs/env.md。 */
+  const limits = ref<Limits | null>(null)
   const platform = ref<PlatformInfo | null>(null)
   const loading = ref(false)
 
@@ -66,10 +68,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function loadCapabilities() {
-    const r = await api.get<{ platform: PlatformInfo; features: CapabilityMap }>(
+    const r = await api.get<{ platform: PlatformInfo; features: CapabilityMap; limits?: Limits }>(
       API.system.capabilities())
     platform.value = r.platform
     capabilities.value = r.features
+    limits.value = r.limits ?? null
   }
 
   async function login(username: string, password: string, totp?: string) {
@@ -84,12 +87,14 @@ export const useAuthStore = defineStore('auth', () => {
     await api.post(API.auth.logout())
     me.value = null
     capabilities.value = {}
+    limits.value = null
   }
 
   /** 仅清前端会话状态（不请求后端）：会话已失效（如收到 401）时用，避免对已失效会话再发请求 */
   function clearSession() {
     me.value = null
     capabilities.value = {}
+    limits.value = null
     platform.value = null
   }
 
@@ -99,9 +104,11 @@ export const useAuthStore = defineStore('auth', () => {
   const metricsAvailable = computed(() => supported(CAP.METRICS_READ))
   /** 当前 Web 服务器后端（nginx / caddy；未接入为 null）——站点表单按它收窄可填项 */
   const webBackend = computed(() => backend(CAP.WEBSERVER_MANAGE))
+  /** Web 终端并发上限。**不要**在视图里再写死一个 4——后端改上限时前端必须跟着变。 */
+  const terminalMax = computed(() => limits.value?.terminal_max_sessions ?? 4)
 
   return {
-    me, capabilities, platform, loading, loggedIn, pollingMode, metricsAvailable, webBackend,
+    me, capabilities, platform, limits, terminalMax, loading, loggedIn, pollingMode, metricsAvailable, webBackend,
     supported, backend, can, enabled, whyDisabled, loadMe, loadCapabilities, login, logout, clearSession,
   }
 })
