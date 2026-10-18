@@ -533,13 +533,6 @@ async function batchDelete() {
 </template>
 
 <style scoped>
-/* 「站点」是页面首个（也是唯一）区块头：`.sec-head.block` 的 26px 上间距是给
-   后续区块与上方表格分界用的，页面首块再叠这 26px 就与 .content 的 24px 上内边距
-   重复留白。首个 div 是它时归零；若上方出现错误/提示条（同为 div），它便退回
-   26px 正常分界。SSL 证书管理已并入编辑弹窗，页面下方不再有独立「证书」区块。 */
-.sec-head.block:first-of-type { margin-top: 0; }
-
-.tiny { font-size: var(--fs-12); }
 /* 「横幅」语言（与 WafView / LoginView 的 .notice / .warn 同一套）：
    内边距 + 圆角 + 描边，颜色一律走主题变量。
    此前 .notice 硬编码绿色、.tip.warn 硬编码暗琥珀，亮色主题下不随 --c-ok / --c-warn
@@ -580,7 +573,6 @@ async function batchDelete() {
    两表宽度完全独立（各自一套 class），改一张绝不会波及另一张。 */
 table.fixed { table-layout: fixed; width: 100%; }
 table.fixed th, table.fixed td { overflow: hidden; }
-.ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 站点表：短内容列给「够用即止」的宽度，剩余宽度全部让给唯一弹性列「根目录」。
    若按百分比均摊，宽屏下多出的空间会平摊到每一列白占——正是「该宽的没宽、该窄的没窄」。
    下列百分比按**最长取值 + 单元格内边距 26px** 用 canvas 按真实字体实测反推
@@ -636,16 +628,6 @@ col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 �
   .actions .btn-label { display: none; }
   .actions .btn-sm { padding: 4px 7px; }
 }
-/* 证书表（编辑弹窗内「SSL 证书」区块复用同款列宽思路，此处保留历史列宽定义，
-   若后续在弹窗内恢复完整证书表格可直接复用；当前弹窗内改用紧凑卡片列表。 */
-col.w-dom { width: 24%; }
-col.w-acts { width: 12%; }
-col.w-iss { width: 14%; }
-col.w-src { width: 10%; }
-col.w-exp { width: 12%; }
-col.w-left { width: 9%; }
-col.w-auto { width: 12%; }
-col.w-cst { width: 8%; }
 /* 站点表首屏占位高度：10 列表格，300px ≈ 表头 + 8 行骨架的观感
    （骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 300px; }
@@ -662,8 +644,6 @@ col.w-cst { width: 8%; }
 /* 只读原因条：紧贴编辑器上方，收掉 .hint-note 默认下边距避免与编辑器拉开距离 */
 /* 页面级错误条也走公共 .err-bar：此前是裸红字无图标，与弹窗内的 .err-bar 两种长相 */
 .page-err { margin: 0 0 12px; }
-/* 配置字节数：紧跟路径右侧，超限转警示色 */
-.is-warn-text { color: var(--c-warn); }
 /* ── 列表批量操作（G3）── */
 col.w-sel { width: 40px; }
 .col-sel { text-align: center; width: 40px; padding-left: 0; padding-right: 0; }

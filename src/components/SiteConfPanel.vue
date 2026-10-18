@@ -330,7 +330,7 @@ watch(() => props.site?.id ?? null, (id) => {
                 {{ confStale ? '未同步' : '手动维护' }}</span>
             </span>
             <span v-if="confLoading" class="dim tiny">读取中…</span>
-            <span v-else class="mono dim tiny ellipsis conf-path"
+            <span v-else class="mono dim tiny conf-path"
               :title="confPath || '尚未下发：保存「并应用」后生成'">{{ confPath || '尚未下发' }}</span>
             <!-- 字节数：超长配置此前完全没有量级感知（后端 64 KiB 上限只在提交后才报错） -->
             <span v-if="!confLoading && confText" class="dim tiny conf-size"
@@ -449,7 +449,13 @@ watch(() => props.site?.id ?? null, (id) => {
 
 .conf-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); flex: none; }
 
-.conf-path { margin-left: auto; max-width: 56%; text-align: right; }
+/* 配置路径：右对齐 + 最多占 56% 宽，超出省略号（完整路径走 title）。
+   ⚠️ 三件套必须写在这里、**不能**靠模板上的 `ellipsis` 类：main.css 的公共
+   `.ellipsis` 带 `max-width:0`，而本元素在 flex 行里（.conf-head），max-width:0
+   会把它压成 **0 宽**——路径整段看不见，只剩 title 悬停能看（改前实测 rect
+   [0,19]，是既有问题）。自包含之后，「宽度」与「截断方式」在同一处定义。 */
+.conf-path { margin-left: auto; max-width: 56%; text-align: right;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .conf-msg { margin: 0; white-space: pre-wrap; }
 
@@ -501,11 +507,4 @@ watch(() => props.site?.id ?? null, (id) => {
 
 .conf-size { flex: none; margin-left: 8px; }
 
-/* ⚠ 这两个工具类**不是** main.css 的公共类，原先只定义在 SitesView 的 scoped 样式里。
-   组件化后它们够不到本组件的元素——实测 .conf-path 字号从 12px 掉到 14px、且 .ellipsis
-   的 max-width:0 失效（路径不再省略号截断）。故按同一声明在此重新给一份。
-   ⚠ 顺序不能前移：.ellipsis 与 .conf-path 的 max-width 同特异性，靠**后者胜出**得到
-   max-width:0；把它放到 .conf-path 之前会让路径不再省略号截断。 */
-.tiny { font-size: var(--fs-12); }
-.ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

@@ -375,7 +375,6 @@ col.w-fwacts { width: 100px; }
 .ip-x:hover:not(:disabled) { background: var(--c-danger-soft); color: var(--c-danger); }
 .ip-x:disabled { opacity: .5; cursor: not-allowed; }
 .badge-dim { background: var(--c-surface-2); color: var(--c-text-dim); border: 1px solid var(--c-border); }
-.tiny { font-size: var(--fs-12); }
 /* 开关（与 CronView / SitesView 自动续期同一套外观：实心主色底 + 白滑块 42×24） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }

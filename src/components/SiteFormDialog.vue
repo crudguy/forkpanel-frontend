@@ -1606,10 +1606,4 @@ sudo update-ca-certificates</pre>
 /* 卡片列表行补 hover：表行有 tbody tr:hover，证书行 / 版本行此前完全没反馈 */
 .ssl-row:hover { background: var(--c-active); }
 
-/* ⚠️ .tiny **不是** main.css 的公共类，原先只定义在 SitesView 的 scoped 样式里。
-   组件化后它够不到本组件的元素（实测 .cert-sweep 字号会从 12px 掉到 13px）。
-   故按同一声明在此给一份——与 SiteConfPanel 同款处理。
-   （父级列表也要用，所以父级那份保留：三份副本是明确的坏味道，收口见 AUDIT P1-4 第 3 步。） */
-.tiny { font-size: var(--fs-12); }
-
 </style>

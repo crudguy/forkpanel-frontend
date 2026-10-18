@@ -436,6 +436,13 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 
 /* ── 状态色 / 文字工具类（全局复用） ── */
 .dim { color: var(--c-text-dim); }
+/* 次要文字小一档。原先它是**各视图私有的**：SitesView / FirewallView / SiteConfPanel /
+   SiteFormDialog 各持一份同值副本（BackupsView 那份还多带 margin-top + word-break），
+   而 WafView / DatabasesView / DirectoryPickerDialog 里写了 class 却从没定义过——
+   静默失效，字号退回归承。五处定义意味着「调一档字号要改五个地方」。
+   ⚠ 需要局部变体请另起修饰类（如 .tiny.wrap），**不要在这里加属性**：那会回到
+   「谁后加载谁赢」的特异性博弈，正是本类此前散落五处的原因。 */
+.tiny { font-size: var(--fs-12); }
 .ok { color: var(--c-ok); }
 .warn { color: var(--c-warn); }
 .bad, .danger { color: var(--c-danger); }
@@ -535,7 +542,10 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 .modal-close:disabled { opacity: .5; cursor: not-allowed; }
 
 /* 正文：弹窗内的说明段统一字号与次色，别再各自写 .detail / .muted / .ca-lede */
-.modal > p, .modal-lead { font-size: var(--fs-13); line-height: 1.65; color: var(--c-text-dim); margin: 0 0 12px; }
+/* ⚠️ `:not(.tiny)`：公共 `.tiny` 只有 (0,1,0)，压不过本条的 (0,1,1)——弹窗里写
+   `<p class="dim tiny">` 会被这条按 13px 渲染（DatabasesView 编辑弹窗实测），
+   「想小一档」的意图静默失效。排除掉带 .tiny 的段落后，字号归 .tiny 自己管。 */
+.modal > p:not(.tiny), .modal-lead { font-size: var(--fs-13); line-height: 1.65; color: var(--c-text-dim); margin: 0 0 12px; }
 .modal .blk { display: block; margin: 12px 0; font-size: var(--fs-13); color: var(--c-text-dim); }
 .modal .blk select, .modal .blk input {
   width: 100%; margin-top: 6px; padding: 8px 10px;
