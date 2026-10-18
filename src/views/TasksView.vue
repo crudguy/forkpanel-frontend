@@ -150,7 +150,6 @@ onUnmounted(stopPoll)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 .meta { margin: 0 0 10px; font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .box { height: 320px; border-radius: var(--radius); }
 .mini { display: flex; align-items: center; gap: 8px; min-width: 120px; }

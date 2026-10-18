@@ -348,7 +348,6 @@ async function doDisable() {
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 .box { height: 220px; border-radius: var(--radius); }
 /* 汇总卡与分区之间留足竖向间距（原 grid.cols-2 整页混排 → 三块分区清晰分层） */
 .summary { margin-bottom: 16px; }

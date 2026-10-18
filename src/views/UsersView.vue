@@ -255,7 +255,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 /* 弹窗外观统一取 main.css 的公共 .mask / .modal（原 .box 是本页独有的一套，已废弃） */
 .tip p { font-size: var(--fs-13-5); color: var(--c-text-dim); line-height: 1.7; margin: 6px 0; }
 .cmd { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm);

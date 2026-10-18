@@ -246,7 +246,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 .box { height: 300px; border-radius: var(--radius); }
 .muted { color: var(--c-text-dim); }
 .nowrap { white-space: nowrap; }

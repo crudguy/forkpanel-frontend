@@ -356,5 +356,4 @@ onUnmounted(() => {
   padding: 10px;
 }
 .term-pane:not(.active) { display: none; }
-.err { color: var(--c-danger); font-size: var(--fs-13); }
 </style>
