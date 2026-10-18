@@ -11,7 +11,8 @@
 # 提交前 / CI 跑这个。
 # 注意 build 自身已含 vue-tsc --noEmit，故不另跑 typecheck（省一次全量类型检查）；
 # typecheck 保留为独立目标，供改动中快速单跑。
-check: test build ui
+# size 放在最后：它校验的是 build 的产物，必须等构建出来才有意义（审计 P2-2）。
+check: test build ui size
 
 typecheck:
 	./node_modules/.bin/vue-tsc --noEmit
@@ -30,6 +31,7 @@ ui:
 	node scripts/check-overlay-teleport.mjs && \
 	node scripts/check-subtitles.mjs
 
-# 产物体积报告（不进 check：目前无阈值断言，仅观测用）
+# 产物体积门禁（审计 P2-2）：对照 ci/budgets.json 判首屏 / 全量 / 单 chunk 三项，
+# 任一项超预算即 exit 1。此前这条目标只有报告、没有门禁，体积只能靠人眼看。
 size:
 	node scripts/size-report.mjs

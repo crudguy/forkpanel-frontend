@@ -26,6 +26,12 @@ for (const f of files) {
   rows.push({ file: f, raw, gzip: gz })
 }
 
+// 单 chunk 上限：单个文件过大意味着懒加载没切开（TerminalView 因 xterm 天然偏大，
+// 预算按「现状 297KB + 余量」取 350KB；真要继续瘦身应评估 xterm 的 WebGL addon
+// 或把终端视图本身改成按需 import）
+const maxChunkRawKb = budgets.frontend_max_chunk_raw_kb
+const overChunks = rows.filter(r => r.raw / 1024 > maxChunkRawKb)
+
 rows.sort((a, b) => b.gzip - a.gzip)
 console.log('file'.padEnd(46), 'raw'.padStart(10), 'gzip'.padStart(10))
 for (const r of rows) {
@@ -34,7 +40,13 @@ for (const r of rows) {
 console.log('---')
 console.log(`首屏 JS+CSS (gzip): ${(firstScreenGzip / 1024).toFixed(1)} KB  预算 ${budgets.frontend_first_screen_gzip_kb} KB`)
 console.log(`全量 (gzip):        ${(totalGzip / 1024).toFixed(1)} KB  预算 ${budgets.frontend_total_gzip_kb} KB`)
+console.log(`最大单 chunk (raw): ${(Math.max(...rows.map(r => r.raw)) / 1024).toFixed(1)} KB  预算 ${maxChunkRawKb} KB`)
+
+for (const r of overChunks) {
+  console.error(`超预算：${r.file} raw ${(r.raw / 1024).toFixed(1)} KB > ${maxChunkRawKb} KB`)
+}
 
 const fail = firstScreenGzip / 1024 > budgets.frontend_first_screen_gzip_kb
   || totalGzip / 1024 > budgets.frontend_total_gzip_kb
+  || overChunks.length > 0
 process.exit(fail ? 1 : 0)

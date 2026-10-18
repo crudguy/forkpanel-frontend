@@ -1,5 +1,6 @@
 {
   "comment": "前端体积预算（gzip）。首屏=入口 JS+全部 CSS；全量=dist 所有产物。CI/本地用 scripts/size-report.mjs 校验。",
   "frontend_first_screen_gzip_kb": 150,
-  "frontend_total_gzip_kb": 400
+  "frontend_total_gzip_kb": 400,
+  "frontend_max_chunk_raw_kb": 350
 }
