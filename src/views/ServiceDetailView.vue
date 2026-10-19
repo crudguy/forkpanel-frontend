@@ -14,7 +14,7 @@
  * - 未托管服务的停止需二次确认。
  * - 配置写入默认单元文件本体，但**推荐 drop-in**：发行版单元文件会在包升级时被覆盖。
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
@@ -130,6 +130,22 @@ const tab = ref<'log' | 'config'>('log')
 const journal = ref<string[]>([])
 const jLoading = ref(false)
 const jError = ref('')
+const logEl = ref<HTMLElement | null>(null)
+
+/**
+ * 日志容器自动滚底（trailing 节流，与 LogsView 同款）。
+ * journalctl 按时间**从旧到新**输出，最新一条在底部；面板若不滚底，用户第一屏
+ * 看到的是最旧的日志，会误以为「排序乱了」。100ms 内多次新行只滚一次，
+ * 避免每条 SSE 事件都读 scrollHeight 造成强制重排。
+ */
+let logScrollTimer: number | undefined
+function scrollLogBottom() {
+  if (logScrollTimer) return
+  logScrollTimer = window.setTimeout(() => {
+    logScrollTimer = undefined
+    nextTick(() => { if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight })
+  }, 100)
+}
 
 // 日志请求比列表慢得多，换 unit 时最容易后到并覆盖新服务的日志
 // （表现：切到 B 服务，日志区显示的仍是 A 的日志，还停留在"加载中"之后）。
@@ -142,6 +158,7 @@ async function loadJournal() {
     const r = await api.get<ServiceJournal>(API.services.journal(svc.value.name), { params: { lines: 200 } })
     if (seq !== jSeq) return
     journal.value = r.lines ?? []
+    scrollLogBottom()
   } catch (e) {
     if (seq !== jSeq) return
     if (isUnsupported(e)) jError.value = '日志查看功能即将推出'
@@ -171,6 +188,7 @@ function openFollow() {
       const d = JSON.parse(ev.data) as { line: string }
       journal.value.push(d.line)
       if (journal.value.length > MAX_KEEP) journal.value.splice(0, journal.value.length - MAX_KEEP)
+      scrollLogBottom()
     } catch { /* 忽略坏帧 */ }
   })
   // EventSource 断线会自动重连，但要给失败反馈与重连上限（审计 P7）
@@ -260,7 +278,7 @@ watch(() => route.params.unit, async () => {
   if (svc.value) void loadJournal()
 })
 
-onUnmounted(closeFollow)
+onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTimer) })
 </script>
 
 <template>
@@ -352,7 +370,7 @@ onUnmounted(closeFollow)
             </div>
             <p v-if="jError" class="err">{{ jError }}</p>
             <pre v-if="jLoading" class="skeleton" style="height:220px" />
-            <pre v-else-if="journal.length" class="out">{{ journal.join('\n') }}</pre>
+            <pre v-else-if="journal.length" ref="logEl" class="out">{{ journal.join('\n') }}</pre>
             <p v-else class="tip dim" style="margin:0">暂无日志输出</p>
           </div>
 
