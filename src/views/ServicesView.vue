@@ -22,6 +22,8 @@ import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import InstallPackageDialog from '@/components/InstallPackageDialog.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import PkgIcon from '@/components/PkgIcon.vue'
@@ -40,6 +42,7 @@ const loading = ref(true)        // 服务列表首次加载骨架
 const pkgs = ref<PackageInfo[] | null>(null)
 const error = ref('')
 const pkgNote = ref('')
+const helpOpen = ref(false)   // 「软件与服务说明」抽屉
 // svcError 随服务弹窗移除（服务操作的错误提示现由详情页承载）
 // 注：此前有个 busy ref 名曰「软件安装/卸载提交中」，但全文件从未给它赋过值——
 // 于是 :disabled="!!busy" 恒为 false，刷新按钮的禁用保护从来没生效过（假保护）。
@@ -570,6 +573,7 @@ async function doConfirmed() {
     <div class="tools-row">
       <TabBar :tabs="TABS" />
       <span class="spacer" />
+      <HelpBtn title="软件与服务说明" aria-label="软件与服务说明" :expanded="helpOpen" @click="helpOpen = true" />
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
       <RefreshBtn :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()" />
     </div>
@@ -797,11 +801,168 @@ async function doConfirmed() {
                           :loading="dlgLoading"
                           :external="needsExternalSource(dlgPkg)"
                           @confirm="doInstall" @cancel="closeInstallDlg" />
+
+    <!-- 完整说明收进帮助抽屉（A6）：头部「?」打开。浮层放链尾，不得插在
+         v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
+    <HelpDrawer :open="helpOpen" title="软件与服务说明" @close="helpOpen = false">
+      <p>本页分两个页签：<b>软件</b>管安装 / 升级 / 卸载系统软件包；<b>服务</b>管 systemd 单元的启停、开机自启、日志与配置。软件装好后通常自带一个 systemd 服务，会出现在「服务」页。</p>
+
+      <h4>三步上手</h4>
+      <ol>
+        <li>「软件」页选中组件 → 安装（可选版本）。标「需配源」的包需先在目标机配置第三方软件源，否则安装会失败。</li>
+        <li>到「服务」页确认对应服务已运行；未运行时点「启动」。</li>
+        <li>要看日志 / 改配置：点服务名进「服务详情」；日志支持实时跟随，配置支持单元文件或 drop-in。</li>
+      </ol>
+
+      <h4>「软件」页怎么用</h4>
+      <ul>
+        <li>安装 / 卸载 / 升级 / 切换版本；跨主版本升级会二次确认（可能需数据迁移）。</li>
+        <li>「钉住」= 不参与自动 / 批量升级；要升级先取消钉住。</li>
+        <li>安装、卸载、升级都是后台任务，进度在本页实时显示。</li>
+        <li>软件行右侧齿轮 = 直达该软件对应服务的详情（状态 / 启停 / 日志 / 配置）。</li>
+      </ul>
+
+      <h4>Web 服务器</h4>
+      <p class="sw"><b>Nginx</b> <code>nginx</code><br>
+        <b>用途</b>：高性能 HTTP 服务器与反向代理。<br>
+        <b>功能</b>：静态站点、反向代理 / 负载均衡、TLS、伪静态、WAF、访问日志。<br>
+        <b>场景</b>：建站、把 Node / PHP 应用挂到 80 / 443、多站点托管。<br>
+        <b>入口</b>：「网站」页建站 / 改站点；「证书」页签 TLS；「WAF」页配规则；「服务」页看状态与日志。</p>
+      <p class="sw"><b>Caddy</b> <code>caddy</code><br>
+        <b>用途</b>：自带自动 HTTPS 的现代 Web 服务器。<br>
+        <b>功能</b>：静态 / 反向代理 / PHP / 多路由、自动或手动 TLS、HSTS、IP 名单、WAF（规则集）。<br>
+        <b>场景</b>：想省证书配置、轻量站点；nginx 专有能力（Basic Auth、伪静态、tls_profile、WAF 限速等）在 Caddy 下会置灰。<br>
+        <b>入口</b>：「网站」页（探测到 Caddy 时按 Caddyfile 渲染）；「证书」页；「服务」页。</p>
+      <p class="sw"><b>Apache</b> <code>apache2</code><br>
+        <b>用途</b>：传统 Web 服务器（虚拟主机 / .htaccess）。<br>
+        <b>功能</b>：静态站、PHP、虚拟主机。<br>
+        <b>场景</b>：兼容既有 Apache 项目。<br>
+        <b>入口</b>：面板的站点托管目前只渲染 nginx / caddy；Apache 装好后需自行维护配置，「服务」页可启停 / 看日志 / 改单元配置。</p>
+
+      <h4>数据库与缓存</h4>
+      <p class="sw"><b>MariaDB</b> <code>mariadb-server</code><br>
+        <b>用途</b>：MySQL 兼容的关系型数据库。<br>
+        <b>功能</b>：建库 / 账号、SQL 查询、备份 / 还原。<br>
+        <b>场景</b>：WordPress、传统 PHP 应用。<br>
+        <b>入口</b>：「数据库」页新建连接（需本机 mysql 客户端）→ 备份 / 还原 / 浏览；「服务」页看状态。</p>
+      <p class="sw"><b>PostgreSQL</b> <code>postgresql</code><br>
+        <b>用途</b>：功能完整的关系型数据库。<br>
+        <b>功能</b>：关系表、JSON、扩展、备份 / 还原。<br>
+        <b>场景</b>：新项目、复杂查询 / 事务。<br>
+        <b>入口</b>：「数据库」页新建连接（需本机 psql 客户端，账号必填）；「服务」页看状态。</p>
+      <p class="sw"><b>Redis</b> <code>redis</code><br>
+        <b>用途</b>：内存键值库 / 缓存。<br>
+        <b>功能</b>：缓存、会话、队列、分布式锁。<br>
+        <b>场景</b>：加速应用、跨进程共享状态。<br>
+        <b>入口</b>：无独立页面；应用连 127.0.0.1:6379；「服务」页看状态 / 日志 / 配置。</p>
+      <p class="sw"><b>Valkey</b> <code>valkey-server</code><br>
+        <b>用途</b>：Redis 的开源分支（协议兼容）。<br>
+        <b>功能</b>：同 Redis。<br>
+        <b>场景</b>：Redis 许可变更后的替代。<br>
+        <b>入口</b>：同 Redis；服务名是 valkey-server。</p>
+      <p class="sw"><b>Memcached</b> <code>memcached</code><br>
+        <b>用途</b>：纯内存 KV 缓存（无持久化）。<br>
+        <b>功能</b>：对象缓存。<br>
+        <b>场景</b>：减轻数据库压力。<br>
+        <b>入口</b>：无独立页面；应用连 127.0.0.1:11211；「服务」页看状态 / 日志。</p>
+
+      <h4>运行时</h4>
+      <p class="sw"><b>PHP-FPM</b> <code>php-fpm</code><br>
+        <b>用途</b>：PHP FastCGI 进程管理器。<br>
+        <b>功能</b>：执行 PHP 站点。<br>
+        <b>场景</b>：PHP 建站（WordPress 等）。<br>
+        <b>入口</b>：「网站」页新建站点时选 PHP 运行方式；「服务」页看 php-fpm 状态 / 日志。</p>
+      <p class="sw"><b>Node.js</b> <code>nodejs</code><br>
+        <b>用途</b>：JavaScript 运行时。<br>
+        <b>功能</b>：跑 Node 服务、构建前端。<br>
+        <b>场景</b>：Node 应用、前端工程。<br>
+        <b>入口</b>：「应用」页选 Node.js 运行时（systemd 托管 + 自动反代）；未装时应用页会提示到「软件」页安装。</p>
+      <p class="sw"><b>OpenJDK</b> <code>default-jdk</code><br>
+        <b>用途</b>：Java 运行时 / JDK。<br>
+        <b>功能</b>：运行 / 编译 Java 程序。<br>
+        <b>场景</b>：Spring Boot、Jar 部署。<br>
+        <b>入口</b>：「应用」页选 Java 运行时；或「终端 / 文件」自行部署。</p>
+      <p class="sw"><b>Go</b> <code>golang-go</code><br>
+        <b>用途</b>：Go 工具链。<br>
+        <b>功能</b>：编译 / 运行 Go 程序。<br>
+        <b>场景</b>：单文件二进制部署。<br>
+        <b>入口</b>：「应用」页选 Go 运行时；或「终端 / 文件」。</p>
+      <p class="sw"><b>Rust</b> <code>cargo</code><br>
+        <b>用途</b>：Rust 工具链。<br>
+        <b>功能</b>：cargo build / run。<br>
+        <b>场景</b>：编译 Rust 服务。<br>
+        <b>入口</b>：「应用」页选 Rust 运行时；或「终端 / 文件」。</p>
+
+      <h4>证书与安全</h4>
+      <p class="sw"><b>Certbot</b> <code>certbot</code><br>
+        <b>用途</b>：Let's Encrypt ACME 客户端。<br>
+        <b>功能</b>：签发 / 续期免费证书。<br>
+        <b>场景</b>：公网站点启用 HTTPS。<br>
+        <b>入口</b>：「证书」页签发 / 续期（需 ssl.acme 能力位）；「网站」页给站点绑定证书。</p>
+      <p class="sw"><b>Fail2ban</b> <code>fail2ban</code><br>
+        <b>用途</b>：日志驱动的防暴力破解。<br>
+        <b>功能</b>：监控 SSH / 服务日志、自动封禁 IP。<br>
+        <b>场景</b>：公网 SSH 或面板登录防护。<br>
+        <b>入口</b>：「安全 → 防火墙规则」页的 fail2ban 区（nftables 后端下恒不支持）；「服务」页看状态。</p>
+      <p class="sw"><b>UFW</b> <code>ufw</code><br>
+        <b>用途</b>：简易防火墙前端。<br>
+        <b>功能</b>：放行 / 拒绝端口、限流。<br>
+        <b>场景</b>：基础主机防护。<br>
+        <b>入口</b>：「安全 → 防火墙规则」（后端按 nft / iptables / ufw / firewalld 实际探测适配）；「服务」页看状态。</p>
+      <p class="sw"><b>WireGuard</b> <code>wireguard-tools</code><br>
+        <b>用途</b>：现代 VPN。<br>
+        <b>功能</b>：点对点 / 站点互联。<br>
+        <b>场景</b>：远程接入、内网互通。<br>
+        <b>入口</b>：无独立页面；「文件 / 终端」改 /etc/wireguard/*.conf；「服务」页看 wg-quick@ 状态。</p>
+
+      <h4>可观测性</h4>
+      <p class="sw"><b>Prometheus</b> <code>prometheus</code><br>
+        <b>用途</b>：指标采集与时序库。<br>
+        <b>功能</b>：抓取 / 查询 / 告警规则。<br>
+        <b>场景</b>：自建监控体系。<br>
+        <b>入口</b>：它自己的 Web UI（默认 :9090）；面板「主机监控」是内置采集，不依赖它。</p>
+      <p class="sw"><b>Grafana</b> <code>grafana</code><br>
+        <b>用途</b>：可视化仪表盘。<br>
+        <b>功能</b>：仪表盘 / 告警。<br>
+        <b>场景</b>：接 Prometheus 做展示。<br>
+        <b>入口</b>：它自己的 Web UI（默认 :3000）。</p>
+      <p class="sw"><b>Netdata</b> <code>netdata</code><br>
+        <b>用途</b>：实时主机监控。<br>
+        <b>功能</b>：秒级指标 / 告警。<br>
+        <b>场景</b>：单机快速排障。<br>
+        <b>入口</b>：它自己的 Web UI（默认 :19999）；面板「主机监控」为内置实现。</p>
+
+      <h4>对象存储 / 负载均衡</h4>
+      <p class="sw"><b>MinIO</b> <code>minio</code><br>
+        <b>用途</b>：S3 兼容对象存储。<br>
+        <b>功能</b>：桶 / 对象、S3 API。<br>
+        <b>场景</b>：应用存图片 / 附件 / 备份。<br>
+        <b>入口</b>：自带 Console（默认 :9001，S3 API :9000）；「服务」页看状态。</p>
+      <p class="sw"><b>HAProxy</b> <code>haproxy</code><br>
+        <b>用途</b>：TCP / HTTP 负载均衡。<br>
+        <b>功能</b>：四 / 七层反代、健康检查。<br>
+        <b>场景</b>：多后端分流。<br>
+        <b>入口</b>：无独立页面；「服务」页改配置 / 看日志；或「终端」。</p>
+
+      <h4>「服务」页说明</h4>
+      <ul>
+        <li>列表来自 systemd 的<b>实际单元</b>（不是面板预设清单）；「说明」列取自 systemd 的 Description。</li>
+        <li>行内操作：启动 / 停止 / 重启；「开机自启」开关对应 systemctl enable / disable。</li>
+        <li>sshd 禁止停止（防失联）；「未托管」= 非面板创建，不代表故障，停止需二次确认。</li>
+        <li>点服务名 → 服务详情：状态、启停、开机自启、日志（带时间、可实时跟随）、配置（单元文件 / drop-in；推荐 drop-in，包升级不覆盖）。</li>
+        <li>能力位 service.manage 不支持时整页置灰并给出原因。</li>
+      </ul>
+
+      <h4>注意</h4>
+      <p>面板不替你改这些软件的监听地址 / 防火墙；装完请按需在「文件」或「终端」改配置。上文端口均为各软件默认值，实际以你的配置为准。</p>
+    </HelpDrawer>
   </PageLayout>
 </template>
 
 <style scoped>
 .dim { color: var(--c-text-dim); }
+/* 帮助抽屉里的软件条目：每条一段、顶部细线分隔，长文更好扫读。 */
+.sw { margin: 0 0 10px; padding-top: 8px; border-top: 1px solid var(--c-border); }
 .pkgs { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 可安装软件：每行就是一个安装按钮（版本选择在弹窗里做）。 */
 .pkg-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
