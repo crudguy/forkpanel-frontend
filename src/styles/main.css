@@ -245,12 +245,26 @@ tbody tr:focus-visible { background: var(--c-hover); }
    padding 不占布局空间，只剩「渐变底 + 白字」孤零零一片。链接当按钮用是本项目
    既有写法（证书 / WAF 空态的「去建站」），故在此补齐，让 <a> 与 <button> 同款。
    只给 border 的 style/width，颜色留给下面的 .btn-* 决定——否则 (0,1,1) 的
-   border-color 会盖掉 .btn-primary 的 transparent 边框。 */
+   border-color 会盖掉 .btn-primary 的 transparent 边框。
+   ⚠ 漏掉的几项（实测「服务详情 → 去软件页点 ?」那条链接像裸文字）：`button` 里的
+   font / padding / border-radius / color / transition 全部**没有**对应到 <a>——
+   <a> 自带的是浏览器默认（字体随祖先、无 padding、无圆角、蓝色、无过渡）。这些
+   属性没有任何 `.btn-*` 变体负责（`.btn-sm` 只给到小内边距档位），必须在这里补齐；
+   且 <a> 没有 `:disabled` 语义，hover/active 也要单独写，否则链接按钮点下去毫无反馈。 */
 a[class*="btn-"] {
+  font: inherit;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 14px;
   border-style: solid; border-width: 1px; border-color: var(--c-border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  cursor: pointer;
+  transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
   text-decoration: none;
 }
+a[class*="btn-"]:hover { background: var(--c-hover); transform: translateY(-1px); }
+a[class*="btn-"]:active { transform: translateY(0); }
 /* 与 `a[class*="btn-"]` 同为 (0,1,1)，靠「后出现」取胜，把颜色还给各自的变体 */
 a.btn-primary { border-color: transparent; }
 a.btn-danger { border-color: var(--c-danger); }

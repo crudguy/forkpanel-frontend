@@ -22,6 +22,7 @@ import {
   CAP, ServiceConfig, ServiceInfo, ServiceJournal, serviceStateLabel,
 } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
+import { serviceAbout, looksLikeAppUnit } from '@/composables/serviceAbout'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -47,6 +48,20 @@ const error = ref('')
 const actError = ref('')
 const busy = ref('')            // `${name}:${action}`
 const notFound = ref(false)
+
+/**
+ * 「说明」区的展示模型（判定规则在 composables/serviceAbout.ts，有单测）。
+ *
+ * 为什么不能直接渲染 `svc.description`：
+ *  - 本机大多数服务不是面板装的，Description 常常是空串或 "LSB: ..." 占位
+ *    → 直接渲染会得到一行空白或一行看不懂的英文；
+ *  - 它是 systemd 单元自带的元数据，不是"面板对这块功能的解释"。
+ * 所以这里区分"有真描述 / 没有"，没有时**明确说没有**而不是留空。
+ */
+const about = computed(() =>
+  serviceAbout(svc.value?.description, svc.value?.name ?? unit.value))
+/** 该单元看起来像个软件（而非 systemd-dbus 之类发行版内部组件）时，才给"去软件页看用途"的去路。 */
+const canSeePkgHelp = computed(() => looksLikeAppUnit(svc.value?.name ?? unit.value))
 
 // 优先用单服务端点（GET /services/{unit}）：它用 `systemctl show` 按需加载单元，
 // 绕开 list 的 `list-units --all` 全量枚举——后者只含已加载进运行时的单元，
@@ -312,7 +327,25 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
             <span v-if="!svc.managed" class="badge"
               title="该服务非面板创建（不代表故障）：启停操作仍可用，停止前需二次确认">未托管</span>
           </div>
-          <p class="desc">{{ svc.description ?? '无描述' }}</p>
+          <!-- 说明：点开一个服务，先看它是做什么的。
+               分两层——systemd 单元自带的 Description（软件自己写的元数据，可能是空/英文），
+               以及面板侧的用途说明（本机多数服务非面板安装，没有这一层）。
+               缺失时**明说缺失**并给出"该看什么"，绝不渲染成空白行。 -->
+          <div class="about">
+            <div class="about-label">
+              说明
+              <span v-if="about.fromSystemd" class="about-src">取自 systemd 单元描述</span>
+            </div>
+            <p class="about-text" :class="{ dim: !about.fromSystemd }">{{ about.text }}</p>
+            <p v-if="about.hint" class="about-hint">{{ about.hint }}</p>
+            <!-- 去软件页看该软件的用途/场景/入口：只在单元看着像软件时给，避免系统组件
+                 点了落到一个查不到说明的页面（"点了没结果"的入口比没有入口更伤）。 -->
+            <p v-if="canSeePkgHelp" class="about-link">
+              <RouterLink class="btn-ghost btn-sm" to="/services/software">
+                该软件做什么用、怎么访问 › 去「软件」页点 ?
+              </RouterLink>
+            </p>
+          </div>
 
           <p v-if="actError" class="err">{{ actError }}</p>
 
@@ -428,7 +461,28 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
   width: 30px; height: 30px; padding: 0; }
 .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .title-row h2 { margin: 0; font-size: var(--fs-17); }
-.desc { margin: 6px 0 0; font-size: var(--fs-13); color: var(--c-text-dim); }
+/* 说明区：浅底分成一块，与操作按钮群之间有一条视觉分界。
+   用左竖线而非整块边框——它属于头部卡片的一部分，不该再套一层盒子。 */
+.about {
+  margin-top: 10px; padding: 10px 0 10px 12px;
+  border-left: 2px solid var(--c-border-strong);
+}
+.about-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-12); color: var(--c-text-dim); margin-bottom: 4px;
+}
+.about-src {
+  padding: 1px 7px; border-radius: 999px; line-height: 1.4;
+  background: var(--c-hover); color: var(--c-text-dim);
+}
+.about-text { margin: 0; font-size: var(--fs-13-5); line-height: 1.65; }
+.about-hint {
+  margin: 6px 0 0; font-size: var(--fs-12-5); line-height: 1.6;
+  color: var(--c-text-dim);
+}
+.about-link { margin: 8px 0 0; }
+/* RouterLink 渲染成 <a>，button 元素选择器管不到它，故显式声明可点样式 */
+.about-link a { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
 .m-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .mono { font-family: var(--mono); }
 .warn-tip { color: var(--c-warn); }

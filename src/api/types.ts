@@ -402,6 +402,28 @@ export interface PackageInfo {
    *  为 null 表示该软件没有可管理的服务（如 certbot/ufw），UI 据此不渲染「服务管理」入口。 */
   unit?: ServiceRef | null
 }
+
+/** 白名单条目（GET /api/v1/packages 的 `catalog[]`）。
+ *
+ *  name/label/external 是包的身份；后四项是**面向用户的说明**，由后端随包一起下发。
+ *  这些文案刻意不在前端硬编码：包集合的唯一事实源是后端 `ALLOWED_PACKAGES`，
+ *  说明若另写一份，后端加包或改能力（某软件的入口页被下线）时前端不会有任何编译
+ *  错误，只会静默说谎——而「说明写着有入口、界面里找不到」正是最伤人的一类。
+ *  所以软件卡片上的「说明」直接渲染这四个字段。 */
+export interface PackageCatalogEntry {
+  name: string
+  label: string
+  /** 官方仓库通常不含此包，需先在目标机配置第三方软件源才能安装 */
+  external?: boolean
+  /** 用途：一句话说明这个软件是什么 */
+  summary: string
+  /** 主要功能：用户会实际用到的能力 */
+  features: string
+  /** 适用场景：什么情况下该装它 */
+  scenes: string
+  /** 使用方式 / 访问入口：面板内入口 + 面板外的真实访问方式（面板没有的会如实写明） */
+  entry: string
+}
 /** 可升级条目（GET /api/v1/packages/upgradable 的 items[]）。
     name 是**逻辑包名**（与 PackageInfo.name 同域），UI 按它匹配已安装卡片；
     已在后端过滤到白名单，故不会返回面板管不到的系统库。 */
@@ -422,6 +444,9 @@ export interface ServiceInfo {
   name: string
   state: string
   enabled: boolean
+  /** systemd 单元自带的 Description（多半是英文的一句话，如 "A high performance web server"）。
+   *  它是**软件自己写的**元数据，不是面板文案：可能缺失、可能是纯英文、也可能只是
+   *  "LSB: ..." 这种没信息量的占位。UI 不得把它当成"说明"全部——它只是佐证。 */
   description: string | null
   /** 是否受面板托管（未托管服务的停止需二次确认） */
   managed: boolean
