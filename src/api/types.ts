@@ -427,6 +427,12 @@ export interface PackageCatalogEntry {
   scenes: string
   /** 使用方式 / 访问入口：面板内入口 + 面板外的真实访问方式（面板没有的会如实写明） */
   entry: string
+  /**
+   * 怎么配：到了 `entry` 所指页面之后具体填什么（必填项 / 典型值 / 常见错法）。
+   * 与 `entry` 分开展示——「去哪」和「填什么」是用户卡住的两个不同位置。
+   * 面板内无需填写的包写「无需填…」，不会是空串（后端有守卫测试钉住）。
+   */
+  howto: string
 }
 /** 可升级条目（GET /api/v1/packages/upgradable 的 items[]）。
     name 是**逻辑包名**（与 PackageInfo.name 同域），UI 按它匹配已安装卡片；

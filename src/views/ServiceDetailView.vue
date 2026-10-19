@@ -342,7 +342,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
                  点了落到一个查不到说明的页面（"点了没结果"的入口比没有入口更伤）。 -->
             <p v-if="canSeePkgHelp" class="about-link">
               <RouterLink class="btn-ghost btn-sm" to="/services/software">
-                该软件做什么用、怎么访问 › 去「软件」页点 ?
+                该软件做什么用、去哪配、那页填什么 › 去「软件」页点 ?
               </RouterLink>
             </p>
           </div>

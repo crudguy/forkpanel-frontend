@@ -28,13 +28,17 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
-/** 四行说明的展示顺序与标签。顺序固定：先「是什么」再「能做什么」再「什么时候用」，
- *  最后「去哪操作」——与用户的心智顺序一致。 */
+/** 说明的展示顺序与标签。顺序固定：先「是什么」再「能做什么」再「什么时候用」，
+ *  然后「去哪操作」，最后「在那页填什么」——与用户的心智顺序一致。
+ *
+ * 「使用方式」与「怎么配」拆成两行是刻意的：前者答「去哪」，后者答「填什么」。
+ * 合成一段后用户在弹窗里读到的是四五句连续文本，找不到自己卡住的那一步。 */
 const ROWS = [
   { key: 'summary', label: '用途' },
   { key: 'features', label: '主要功能' },
   { key: 'scenes', label: '适用场景' },
   { key: 'entry', label: '使用方式' },
+  { key: 'howto', label: '怎么配' },
 ] as const
 
 const rows = computed(() => {

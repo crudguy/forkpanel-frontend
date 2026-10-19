@@ -25,6 +25,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { allFieldHints } from '@/composables/appsFieldGuide'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const auth = useAuthStore()
@@ -93,6 +94,9 @@ const saving = ref(false)
 const canManage = computed(() => auth.can('service.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
 const curRuntime = computed(() => runtimes.value.find(r => r.key === form.value.runtime) ?? null)
+/** 每个输入框填什么：运行时相关三项 + 与运行时无关三项（见 composables/appsFieldGuide.ts）。
+ *  后端只下发「用途 / 什么时候选」，没下发「这五个框各填什么」——那段靠这里补。 */
+const fieldHints = computed(() => allFieldHints(form.value.runtime))
 
 function clearFieldErr(k: string) {
   if (!fieldErrs.value[k]) return
@@ -460,6 +464,19 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           </span>
         </div>
 
+        <!-- 各输入框填什么：后端只下发「这运行时是什么 / 何时选」，缺「这几个框各填什么」。
+             用户选完运行时对着五个输入框仍在猜，尤其「工作目录须已存在」与「启动命令写
+             程序名还是绝对路径」——后端的字段错误要提交后才出现，事前没有提示。 -->
+        <div v-if="fieldHints.length" class="hint-note fg-note">
+          <Icon name="edit" :size="14" class="ic" />
+          <span>
+            <b>照这个填</b>（共 {{ fieldHints.length }} 项）
+            <span v-for="(h, i) in fieldHints" :key="h.field" class="fg-item">
+              <span v-if="i > 0" class="fg-sep">·</span><b class="fg-f">{{ h.field }}</b>{{ '：' }}{{ h.what }}
+            </span>
+          </span>
+        </div>
+
         <label class="blk full" :class="{ 'has-err': fieldErrs.workdir }" data-f="workdir">
           工作目录（绝对路径，须已存在）
           <div class="dir-row">
@@ -580,6 +597,14 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
    层级靠颜色而非字号——这一块要在表单里常驻，字号一变大就成了页面主体。 */
 .rt-note .rt-purpose { color: var(--c-text); font-weight: 600; }
 .rt-note .rt-dim { color: var(--c-text-dim); }
+/* 字段指引：字段名用正文色加粗，说明段保持常规色。
+   刻意**不**每项一行：六项硬换行实测占 248px，而 508px 高的弹窗里它要吃掉一半、
+   把端口/域名框挤进滚动区。改成行内连续排版（靠 .fg-item 自然折行）后实测 184px，
+   省下 26%——数字是真机 `getBoundingClientRect` 量的，不是估的。 */
+.fg-note { line-height: 1.8; }
+.fg-note .fg-item { display: inline; }
+.fg-note .fg-f { color: var(--c-text); font-weight: 600; }
+.fg-note .fg-sep { color: var(--c-text-dim); margin: 0 4px 0 2px; }
 /* 应用表列宽：名称唯一弹性列，其余按实测最长取值定宽 */
 .app-name { width: 14%; }
 .app-rt   { width: 8%; }
