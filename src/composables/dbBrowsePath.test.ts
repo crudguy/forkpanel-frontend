@@ -107,6 +107,11 @@ describe('dbLevel：四种层级的判定', () => {
   it('选了 public、表为空 → objects（不是 schemaBlocked，不能连带冤枉 public）', () => {
     expect(dbLevel(base({ db: 'app', schemas: PG_SCHEMAS, schema: 'public' }))).toBe('objects')
   })
+
+  it('只有视图 → objects（视图不能充数成表，否则提示会说"共 1 张表"）', () => {
+    expect(dbLevel(base({ db: 'app', tables: [{ name: 'v', rows: 4, kind: 'view' }] })))
+      .toBe('objects')
+  })
 })
 
 describe('dbHint：每层各说各的话', () => {
@@ -143,13 +148,32 @@ describe('dbHint：每层各说各的话', () => {
     expect(h?.text).toContain('public')
   })
 
-  it('只有视图 → views-only，不能被判成 layer-empty', () => {
+  it('只有视图 → objects 层的 views-only（不能被算成"有表"）', () => {
     const i = base({ db: 'app', tables: [{ name: 'v_active', rows: 4, kind: 'view' }] })
-    const h = dbHint('tables', i, 'sqlite')
-    expect(h?.key).toBe('pick-table')
+    // ⚠ 层级必须**由 dbLevel 判出来**，不能直调 dbHint 硬塞一个 level。
+    // 旧写法直接 dbHint('objects', …) 造出了真实 UI 走不到的组合，
+    // 于是把一条死代码"证明"成了活的（假绿）：dbLevel 从来不会返回 objects。
+    expect(dbLevel(i)).toBe('objects')
+    const h = dbHint(dbLevel(i), i, 'sqlite')
+    expect(h?.key).toBe('views-only')
     expect(h?.text).toContain('1 个视图')
-    // 反向：同一份数据判成 objects 时会掉进 layer-empty，这是错的
-    expect(dbHint('objects', i, 'sqlite')?.key).toBe('views-only')
+    // 反面：只有视图时不该再说"共 N 张表"（那 N 其实是视图，信息是错的）
+    expect(h?.text).not.toMatch(/共 \d+ 张表/)
+  })
+
+  it('表与视图并存 → tables 层，两个数量分开说', () => {
+    const i = base({
+      db: 'app',
+      tables: [
+        { name: 'users', rows: 3 },
+        { name: 'v_active', rows: 4, kind: 'view' },
+      ],
+    })
+    expect(dbLevel(i)).toBe('tables')
+    const h = dbHint(dbLevel(i), i, 'sqlite')
+    expect(h?.key).toBe('pick-table')
+    expect(h?.text).toContain('共 1 张表')
+    expect(h?.text).toContain('1 个视图')
   })
 
   it('tablesLoading → loading，不与"共 N 张表"并存', () => {
@@ -190,6 +214,7 @@ describe('tableOptionLabel：行数取不到时不能说成 -1 行', () => {
     expect(tableOptionLabel({ name: 'v', rows: 2, kind: 'view' })).toBe('v（视图）（2 行）')
     expect(tableOptionLabel({ name: 't', rows: 2, kind: 'table' })).toBe('t（2 行）')
   })
+
 })
 
 describe('dbCrumbs：只出真实存在的层', () => {

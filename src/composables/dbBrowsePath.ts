@@ -110,7 +110,12 @@ export function defaultSchema(schemas: DbSchemaNode[]): string {
 export function dbLevel(i: DbLevelInput): DbLevel {
   if (!i.db) return 'state'
   if (isSchemaBlocked(i.schemas, i.schema)) return 'schemaBlocked'
-  if (i.tables.length > 0) return 'tables'
+  // 「表」与「视图」必须分开数：只有视图的库**不算**有表。
+  // 此前按 tables.length 判，视图被算进"表"的份里 → 恒进 'tables' 层，
+  // 于是 dbHint 里"有 N 个视图、没有表"那条永远走不到（死代码）。
+  // 后果：库里全是视图时用户看到"共 1 张表"——那 1 个其实是视图，信息是错的。
+  const views = i.tables.filter((t) => t.kind === 'view').length
+  if (i.tables.length - views > 0) return 'tables'
   // 清单在途 / 还没查 → 仍算「表这一层」，只是还没拿到东西（由 dbHint 说"正在读"）
   if (i.tablesLoading) return 'tables'
   return 'objects'
