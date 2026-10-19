@@ -442,18 +442,23 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           <span v-if="fieldErrs.runtime" class="field-err">{{ fieldErrs.runtime }}</span>
         </label>
 
-        <!-- 运行时说明：启动命令 + 构建步骤 + 典型框架 + 系统包状态 -->
-        <p v-if="curRuntime" class="hint-note">
+        <!-- 运行时说明：先讲「它是干什么的 / 什么时候该选它」（用户选运行时真正
+             需要的决策信息），再讲「启动命令 / 构建步骤 / 系统包状态」这些操作细节。
+             顺序刻意如此：原先这些内容挤在一行里，用户要先跳过一堆命令才能读到
+             「典型框架」，等于把最有用的信息埋了。 -->
+        <div v-if="curRuntime" class="hint-note rt-note">
           <Icon name="info" :size="14" class="ic" />
           <span>
-            典型框架 {{ curRuntime.typical }}；启动命令 <b>{{ curRuntime.default_exec || '（需自行填写）' }}</b>。
+            <b class="rt-purpose">{{ curRuntime.purpose }}</b>
+            <br />什么时候选它：{{ curRuntime.choose_when }}
+            <br /><span class="rt-dim">典型框架 {{ curRuntime.typical }}；</span>启动命令 <b>{{ curRuntime.default_exec || '（需自行填写）' }}</b>。
             <template v-if="curRuntime.runtime_pkg && pkgDetectable">系统包
               <b :class="{ 'is-warn': !installedPkgs.has(curRuntime.runtime_pkg) }">
                 {{ curRuntime.runtime_pkg }}{{ installedPkgs.has(curRuntime.runtime_pkg) ? ' 已装' : ' 未装，可到「软件」页装' }}
               </b>。</template>
-            <br />构建步骤：{{ curRuntime.build_hint }}
+            <br /><span class="rt-dim">构建步骤：{{ curRuntime.build_hint }}</span>
           </span>
-        </p>
+        </div>
 
         <label class="blk full" :class="{ 'has-err': fieldErrs.workdir }" data-f="workdir">
           工作目录（绝对路径，须已存在）
@@ -571,6 +576,10 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 </template>
 
 <style scoped>
+/* 运行时说明块：首行（用途 / 什么时候选它）用正文色强调，命令与构建步骤降为次级色。
+   层级靠颜色而非字号——这一块要在表单里常驻，字号一变大就成了页面主体。 */
+.rt-note .rt-purpose { color: var(--c-text); font-weight: 600; }
+.rt-note .rt-dim { color: var(--c-text-dim); }
 /* 应用表列宽：名称唯一弹性列，其余按实测最长取值定宽 */
 .app-name { width: 14%; }
 .app-rt   { width: 8%; }

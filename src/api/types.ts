@@ -377,6 +377,10 @@ export interface AppRuntimeInfo {
   runtime_pkg: string | null
   default_exec: string
   typical: string
+  /** 用途：这个运行时是跑什么的（回答「Node 和 Python 我该选哪个」） */
+  purpose: string
+  /** 什么情况下该选它。刻意只给判断依据、不做性能排名 */
+  choose_when: string
   /** 构建步骤提示（纯文案，面板不执行构建） */
   build_hint: string
 }
