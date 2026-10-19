@@ -568,13 +568,14 @@ async function doConfirmed() {
 
 <template>
   <PageLayout>
-    <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue），
-         本页专属信息（init 系统）与刷新按钮归拢到右侧，不再是三处各自孤立。 -->
+    <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue）。
+         init 徽标只在**非 systemd** 时出现——systemd 是绝大多数部署的常态，
+         常挂一个 `init: systemd` 纯属噪音；非 systemd 时才解释服务命令为何不同。 -->
     <div class="tools-row">
       <TabBar :tabs="TABS" />
       <span class="spacer" />
-      <span v-if="init" class="badge badge-primary"
-            title="面板探测到的 init 系统，决定服务命令走 systemd 还是其它">init: {{ init }}</span>
+      <span v-if="init && init !== 'systemd'" class="badge badge-primary"
+            title="面板探测到的 init 系统（非 systemd）：服务命令按该系统适配，部分能力可能受限">init: {{ init }}</span>
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
       <RefreshBtn :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()" />
     </div>

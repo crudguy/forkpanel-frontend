@@ -291,7 +291,9 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
               @click="goBack">
         <Icon name="chevron-left" :size="14" />
       </button>
-      <span v-if="init" class="badge badge-primary">init: {{ init }}</span>
+      <!-- 同软件页：systemd 是常态，不挂噪音徽标；非 systemd 才提示差异 -->
+      <span v-if="init && init !== 'systemd'" class="badge badge-primary"
+            title="面板探测到的 init 系统（非 systemd）：服务命令按该系统适配，部分能力可能受限">init: {{ init }}</span>
       <span class="spacer" />
       <RefreshBtn :disabled="loading || !!busy" @click="loadSvc" />
     </div>
