@@ -11,7 +11,7 @@
     "size": "node scripts/size-report.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:ui": "node scripts/check-sidenav.mjs && node scripts/check-page-head.mjs && node scripts/check-modal.mjs && node scripts/check-icon-names.mjs && node scripts/check-overlay-teleport.mjs && node scripts/check-subtitles.mjs"
+    "check:ui": "node scripts/check-sidenav.mjs && node scripts/check-page-head.mjs && node scripts/check-modal.mjs && node scripts/check-icon-names.mjs && node scripts/check-overlay-teleport.mjs && node scripts/check-subtitles.mjs && node scripts/check-hint-note.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

@@ -158,8 +158,9 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
         <label>
           <span>卷挂载<small>（每行一条 src:dst[:ro]）</small></span>
           <textarea v-model="volumesText" rows="2" placeholder="/srv/data:/var/lib/data:ro" spellcheck="false" />
+          <!-- 整段包进 <span>：.hint-note 是 flex，裸文本 + <code> 会被拆成多个 item 并各被压窄。 -->
           <p class="hint-note is-warn">
-            敏感宿主挂载（如 <code>/</code>、<code>/var/run/docker.sock</code>）会被后端拒绝；挂载宿主目录请确认用途。
+            <span>敏感宿主挂载（如 <code>/</code>、<code>/var/run/docker.sock</code>）会被后端拒绝；挂载宿主目录请确认用途。</span>
           </p>
         </label>
 

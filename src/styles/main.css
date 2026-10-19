@@ -675,6 +675,17 @@ table.fixed tbody td:last-child { white-space: nowrap; }
   font-size: var(--fs-13); line-height: 1.6; color: var(--c-text-dim);
   background: var(--c-hover); border: 1px solid var(--c-border);
 }
+/* ⭐⭐ 文字必须自成**一个** flex item —— 这是 `.hint-note` 的隐形硬约束。
+   flex 容器的直接子节点（含裸文本节点）各自成为 item，item 之间被 gap 拉开、
+   又各自被压窄到剩余宽度。于是「文字 + <b> + 文字」不包 span 时会炸成三列并排，
+   每列还被逐字折行——整段读不成句，但编译、类型、截图小图都看不出来。
+   实测过一例：三个 item、中间夹 8px gap、那个 <b> 只剩 31px 宽、整段 84px 高。
+   修法两条同时做，**不能互相替代**：
+     ① 组件里把整段话包进一个 <span>（图标 `.ic` 保持独立、居左不参与折行）；
+     ② 这里给 span 补 `flex: 1; min-width: 0`（min-width:0 是必须的，否则长串
+        不换行的内容会把 item 撑破容器）。
+   注意②只对 span 生效——裸文本节点**无法**被 CSS 选中，只靠②仍会被 gap 拆开。 */
+.hint-note > span { flex: 1; min-width: 0; }
 .hint-note .ic { flex: none; color: var(--c-primary); margin-top: 2px; }
 .hint-note.is-warn { border-left: 3px solid var(--c-warn); }
 .hint-note.is-warn .ic { color: var(--c-warn); }

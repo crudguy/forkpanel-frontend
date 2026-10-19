@@ -62,10 +62,6 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
               <Icon name="close" :size="16" />
             </button>
           </div>
-          <p class="hint-note">
-            勾选控制列是否显示；不常看的列收起来后，可在行末展开图标里看到<b>完整不截断</b>的取值。
-            选择会记在本机，下次打开仍然有效。
-          </p>
           <div class="cp-list">
             <label v-for="c in cols" :key="c.id" class="cp-row" :class="{ locked: c.locked }">
               <input type="checkbox" :checked="c.locked || !hidden.includes(c.id)" :disabled="c.locked"
@@ -74,6 +70,17 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
               <span v-if="c.locked" class="cp-why">必需</span>
             </label>
           </div>
+          <!-- 脚注而不是顶部说明块：
+               ① 这份弹窗**只需一件事**（勾选），勾选框旁边的文字已经说完；
+               ② 原本顶部那块 .hint-note 里 90% 是「可在行末展开图标里看到完整取值」
+                  ——那是行展开功能自己的事，该由展开图标自己提示，写在列选择器里
+                  既不解决问题（用户在这页看不到它）又稀释了真正的信息；
+               ③ 唯一有留存价值的是「记在本机」。它属于**动作完成后的确认**，
+                  放底部紧贴按钮，阅读顺序是「勾 → 完成 → 原来会记住」。
+               配色走 .cp-foot（极简灰字，无底无边框）：这里没有风险也没有错误，
+               用带底色的 .hint-note 会让一个小弹窗出现"标题 + 提示块 + 列表 + 按钮"
+               四层视觉重量，看着就乱。 -->
+          <p class="cp-foot">选择会记在本机，下次打开仍然有效。「必需」列不可隐藏。</p>
           <div class="modal-actions">
             <button class="btn-ghost" @click="emit('reset')">恢复默认</button>
             <button class="btn-ghost" @click="close">完成</button>
@@ -95,5 +102,13 @@ const shownCount = () => props.cols.filter((c) => c.locked || !props.hidden.incl
 .cp-row.locked { cursor: default; opacity: .75; }
 /* 全局 input{width:100%} 会把勾选框拉满整行，必须复位 */
 .cp-row input { width: auto; }
+/* 脚注：无底无边框的灰字。
+   刻意不用公共 .hint-note —— 它不是"提示"，是**动作完成后的确认**
+   （这次选择会被记住），不需要被强调，也不该带警示性的左边框或浅底。
+   与 .modal-actions 留 12px：比列表行间距（2px）明显、又不至于把按钮推远。 */
+.cp-foot {
+  margin: 10px 2px -2px; font-size: var(--fs-12);
+  line-height: 1.6; color: var(--c-text-mute);
+}
 .cp-why { margin-left: auto; font-size: var(--fs-12); color: var(--c-text-mute); }
 </style>

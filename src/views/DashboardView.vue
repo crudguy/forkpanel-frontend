@@ -505,7 +505,8 @@ onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
             <Icon name="close" :size="16" />
           </button>
         </div>
-        <p class="hint-note">勾选控制显示；在概览页直接<b>拖拽卡片</b>可调整顺序。至少保留一张。</p>
+        <!-- 整段包进 <span>：.hint-note 是 flex，裸文本 + <b> 会被拆成三个 item 并各被压窄。 -->
+        <p class="hint-note"><span>勾选控制显示；在概览页直接<b>拖拽卡片</b>可调整顺序。至少保留一张。</span></p>
         <div class="lay-list">
           <label v-for="c in ensureLayout()" :key="c.id" class="lay-row">
             <input type="checkbox" :checked="c.visible" @change="toggleCard(c.id)" />
