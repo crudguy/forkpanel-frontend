@@ -21,7 +21,8 @@ test:
 	./node_modules/.bin/vitest run
 
 build:
-	./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build
+	./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build && \
+		node scripts/check-no-comments.mjs
 
 ui:
 	node scripts/check-sidenav.mjs && \

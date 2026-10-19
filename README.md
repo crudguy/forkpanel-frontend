@@ -43,6 +43,7 @@ src/
   views/             ~27 个页面（路由总览见下方「页面 / 路由」）
   styles/            原生 CSS + 设计 token（CSS 变量）
 scripts/size-report.mjs   构建体积预算报告
+scripts/check-no-comments.mjs  产物无注释守卫（build 末尾自动跑）
 ci/check-contract.sh      前端调用路径 ⊆ openapi.yaml 校验
 ```
 
@@ -51,7 +52,7 @@ ci/check-contract.sh      前端调用路径 ⊆ openapi.yaml 校验
 ```bash
 pnpm i          # 或 npm i
 pnpm dev        # Vite dev server，/api 代理到后端 127.0.0.1:2083
-pnpm build      # vue-tsc 类型检查 + vite build → dist/
+pnpm build      # vue-tsc + vite build + 产物无注释守卫 → dist/
 pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 ```
 
@@ -99,5 +100,6 @@ pnpm size       # 体积预算报告（首屏 JS+CSS ≤150KB gzip）
 
 ## 已知约束
 
-- 构建验证：本环境已具备 Node ≥ 22 + pnpm，`pnpm i && pnpm build`（vue-tsc 类型检查 + vite build）可正常通过；提交前务必跑通。
+- 构建验证：本环境已具备 Node ≥ 22 + pnpm，`pnpm i && pnpm build`（vue-tsc + vite build + 产物无注释守卫）可正常通过；提交前务必跑通。
+- **构建产物只保留代码**：`vite.config.ts` 设 `esbuild.legalComments:'none'`，`scripts/check-no-comments.mjs` 在 build 末尾复核——dist 的 js/css 里出现任何注释即失败（含 `/*! */` / `@license` 法务注释）。面板的 dist 会被内嵌进后端二进制，注释是纯体积。
 - `pnpm dev` 依赖后端 `panel serve --bind 127.0.0.1:2083`（或 mock 实例 2085）提供 `/api/v1`；纯前端改动走 Vite HMR，无需重启后端。

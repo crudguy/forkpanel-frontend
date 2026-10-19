@@ -9,6 +9,10 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig({
   plugins: [vue()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  // 构建产物只保留代码：连 esbuild 默认保留的 `/*! */` / `@license` 法务注释也去掉。
+  // 面板的 dist 会被 rust-embed 内嵌进二进制，产物里的注释纯属无谓体积；
+  // 由 scripts/check-no-comments.mjs 在 build 末尾复核，防配置被改回。
+  esbuild: { legalComments: 'none' },
   build: {
     target: 'es2020',
     outDir: 'dist',
