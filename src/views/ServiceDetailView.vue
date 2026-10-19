@@ -19,10 +19,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import {
-  CAP, ServiceConfig, ServiceInfo, ServiceJournal, serviceStateLabel,
+  CAP, PackageCatalogEntry, ServiceConfig, ServiceInfo, ServiceJournal, serviceStateLabel,
 } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
-import { serviceAbout, looksLikeAppUnit } from '@/composables/serviceAbout'
+import { serviceAbout } from '@/composables/serviceAbout'
+import { findPkgByUnit, pkgAboutRows } from '@/composables/pkgUnitLookup'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -60,8 +61,38 @@ const notFound = ref(false)
  */
 const about = computed(() =>
   serviceAbout(svc.value?.description, svc.value?.name ?? unit.value))
-/** 该单元看起来像个软件（而非 systemd-dbus 之类发行版内部组件）时，才给"去软件页看用途"的去路。 */
-const canSeePkgHelp = computed(() => looksLikeAppUnit(svc.value?.name ?? unit.value))
+
+/**
+ * 当前单元对应的白名单软件条目（查不到 = `null`，表示这个服务不是面板能说明的软件）。
+ *
+ * 为什么要有它：详情页原本给一个「去『软件』页点 ?」的跳转——等于把用户踢到另一个
+ * 页面，还要他自己在 22 张卡片里重新找到同一个软件。说明本来就在 `catalog` 里
+ * （随 `/packages` 下发过），没有理由不在本页直接展开。
+ *
+ * 反查键是**单元名**，而包名与单元名不是同一个字符串（mariadb-server→mariadb.service、
+ * grafana→grafana-server.service、php-fpm→php8.4-fpm.service），所以映射由后端 `units`
+ * 下发、这里只做精确查找——细节与单测见 composables/pkgUnitLookup.ts。
+ */
+const pkgCatalog = ref<PackageCatalogEntry[]>([])
+const pkgEntry = computed(() =>
+  findPkgByUnit(pkgCatalog.value, svc.value?.name ?? unit.value))
+/** 说明行（用途 / 功能 / 场景 / 去哪配 / 怎么配），顺序固定，空行已过滤。 */
+const pkgRows = computed(() => (pkgEntry.value ? pkgAboutRows(pkgEntry.value) : []))
+
+/**
+ * 拉 catalog 用于本页展开说明。
+ *
+ * 能力门控在请求前（与软件页同一条纪律：无包管理能力时 `/packages` 会 501）。
+ * **失败静默**：catalog 只用于「锦上添花地展示说明」，它挂了不该让服务详情页报错
+ * 或显示重试——服务本身的启停/日志/配置才是这页的主体，必须照常可用。
+ */
+async function loadPkgCatalog() {
+  if (!auth.supported(CAP.PACKAGE_INSTALL)) { pkgCatalog.value = []; return }
+  try {
+    const r = await api.get<{ catalog: PackageCatalogEntry[] }>(API.packages.list())
+    pkgCatalog.value = r.catalog ?? []
+  } catch { pkgCatalog.value = [] }
+}
 
 // 优先用单服务端点（GET /services/{unit}）：它用 `systemctl show` 按需加载单元，
 // 绕开 list 的 `list-units --all` 全量枚举——后者只含已加载进运行时的单元，
@@ -275,6 +306,7 @@ async function saveConfig() {
 }
 
 onMounted(async () => {
+  void loadPkgCatalog()          // 与详情并行：catalog 慢不该拖住服务本身的渲染
   await loadSvc()
   if (svc.value) void loadJournal()
 })
@@ -329,7 +361,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
           </div>
           <!-- 说明：点开一个服务，先看它是做什么的。
                分两层——systemd 单元自带的 Description（软件自己写的元数据，可能是空/英文），
-               以及面板侧的用途说明（本机多数服务非面板安装，没有这一层）。
+               以及面板侧的用途说明（来自后端 catalog，按单元名反查）。
                缺失时**明说缺失**并给出"该看什么"，绝不渲染成空白行。 -->
           <div class="about">
             <div class="about-label">
@@ -338,13 +370,17 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
             </div>
             <p class="about-text" :class="{ dim: !about.fromSystemd }">{{ about.text }}</p>
             <p v-if="about.hint" class="about-hint">{{ about.hint }}</p>
-            <!-- 去软件页看该软件的用途/场景/入口：只在单元看着像软件时给，避免系统组件
-                 点了落到一个查不到说明的页面（"点了没结果"的入口比没有入口更伤）。 -->
-            <p v-if="canSeePkgHelp" class="about-link">
-              <RouterLink class="btn-ghost btn-sm" to="/services/software">
-                该软件做什么用、去哪配、那页填什么 › 去「软件」页点 ?
-              </RouterLink>
-            </p>
+
+            <!-- 面板侧说明：**在本页直接展开**，不再把用户送去「软件」页点 ?
+                 （送去等于让他在 22 张卡片里重新找一遍同一个软件）。
+                 只在反查到条目时渲染；系统组件（accounts-daemon 之类）没有对应软件，
+                 连区块都不出现——比给一个点了没结果的入口更诚实。 -->
+            <dl v-if="pkgRows.length" class="pkg-about">
+              <template v-for="r in pkgRows" :key="r.key">
+                <dt>{{ r.label }}</dt>
+                <dd>{{ r.text }}</dd>
+              </template>
+            </dl>
           </div>
 
           <p v-if="actError" class="err">{{ actError }}</p>
@@ -480,9 +516,35 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
   margin: 6px 0 0; font-size: var(--fs-12-5); line-height: 1.6;
   color: var(--c-text-dim);
 }
-.about-link { margin: 8px 0 0; }
-/* RouterLink 渲染成 <a>，button 元素选择器管不到它，故显式声明可点样式 */
-.about-link a { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+/* 面板侧说明：左侧标签列固定宽度，右侧正文自动换行。
+   用 dl/dt/dd 而不是 div+p —— 这是「标签: 内容」的语义结构，屏幕阅读器会念成
+   定义列表；纯视觉排版用 div 也能做到，但没有语义。
+   标签列 64px 是量过的：最长标签是「主要功能」4 个中文字（12.5px 字号 ≈ 50px），
+   留出 14px 余量，四字标签不会折行。 */
+.pkg-about {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-border);
+  font-size: var(--fs-13);
+  line-height: 1.65;
+}
+.pkg-about dt {
+  color: var(--c-text-dim);
+  white-space: nowrap;
+}
+.pkg-about dd { margin: 0; }
+/* 窄屏（≤720，与表格转 table-layout:auto 同一断点）改成单列堆叠：
+   420px 视口下 64px 标签列会把正文压到 240px，五行说明折成 150px+ 高的一坨，
+   而左侧标签此时只是"每段开头的四个字"——退化成标题更省空间也更好读。
+   判据是真机量测：单列前正文列 240px、最长那行高 150px；单列后正文独占 314px。 */
+@media (max-width: 720px) {
+  .pkg-about { grid-template-columns: 1fr; gap: 2px; }
+  .pkg-about dt { margin-top: 6px; }
+  .pkg-about dt:first-child { margin-top: 0; }
+}
 .m-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .mono { font-family: var(--mono); }
 .warn-tip { color: var(--c-warn); }

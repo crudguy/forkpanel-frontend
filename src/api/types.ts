@@ -433,6 +433,17 @@ export interface PackageCatalogEntry {
    * 面板内无需填写的包写「无需填…」，不会是空串（后端有守卫测试钉住）。
    */
   howto: string
+  /**
+   * 该包在 systemd 上对应的服务单元名（`nginx.service` / `grafana-server.service`…）。
+   *
+   * 服务详情页拿**当前单元名**在这里反查，在本页直接展开软件说明，而不是把用户送去
+   * 「软件」页再点一次 `?`。必须由后端下发：包名与单元名不是同一个字符串
+   * （`mariadb-server`→`mariadb.service`、`grafana`→`grafana-server.service`、
+   * `php-fpm`→`php8.4-fpm.service`），前端按包名拼会**全部落空且无任何报错**。
+   *
+   * 空数组（或字段缺失）= 该包没有常驻服务单元（运行时 / 工具链 / 元包）。
+   */
+  units?: string[]
 }
 /** 可升级条目（GET /api/v1/packages/upgradable 的 items[]）。
     name 是**逻辑包名**（与 PackageInfo.name 同域），UI 按它匹配已安装卡片；
