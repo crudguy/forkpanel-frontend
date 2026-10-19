@@ -30,6 +30,10 @@ import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import {
+  dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, tableOptionLabel,
+  type DbLevelInput, type DbSchemaNode,
+} from '@/composables/dbBrowsePath'
 
 interface Conn {
   id: number; name: string; engine: string; host: string | null
@@ -37,7 +41,13 @@ interface Conn {
   /** 对象说明（备注，022）：≤500 字，随连接列表返回，空串 = 无 */
   remark: string
 }
-interface DbTableInfo { name: string; rows: number; engine: string | null }
+/**
+ * 表对象。`kind` 区分表与视图（后端 `DbTable.kind` 下发）——
+ * 视图也是可预览对象，所以「有 1 个视图、0 张表」不该被判成空库；
+ * 而 `rows` 取不到时后端**如实**给 -1，绝非"负数行"，渲染前必须转换
+ * （见 composables/dbBrowsePath.ts 的 `tableOptionLabel`）。
+ */
+interface DbTableInfo { name: string; rows: number; engine: string | null; kind?: 'table' | 'view' }
 interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
 
 const PAGE_SIZE = 50
@@ -195,23 +205,82 @@ async function doRestore() {
   finally { busy.value = false }
 }
 
-// ── 只读浏览：连接 → 库 → 表 → 行预览 ──
+// ── 只读浏览：连接 → 库 →（schema）→ 表 → 行预览 ──
+//
+// 「库」的下一级在三个引擎里不是同一种东西（MySQL 库下直接是表；PG 库下是 schema；
+// SQLite 的「库」其实是文件里的 catalog），所以 `schemas` 是**后端如实回答的结果**，
+// 空数组 = 该引擎没有这一层，而不是「这一层是空的」。层级判定与文案见
+// composables/dbBrowsePath.ts（那边有测试钉住"每层说每层的话"）。
+//
+// `tablesLoading` 单独存在的原因：`tables` 为空既可能是「真没有」也可能是「还没查回来」
+// 这两种情况该说的话完全不同，共用一个判据就会出现"刚点进去闪一下空库再变成有表"。
 const browse = ref<{
-  conn: Conn; dbs: string[]; db: string; tables: DbTableInfo[]; table: string; data: RowsData | null
+  conn: Conn
+  dbs: string[]
+  db: string
+  schemas: DbSchemaNode[]
+  schema: string
+  tables: DbTableInfo[]
+  tablesLoading: boolean
+  table: string
+  data: RowsData | null
 } | null>(null)
+
+// 层级判定输入集中一处：模板里不再写 `browse.db && browse.tables.length === 0` 这类
+// 复合表达式——那正是「点哪一层都说无表」的来源。
+const browseInput = computed<DbLevelInput>(() => {
+  const b = browse.value
+  if (!b) return { db: '', schemas: [], schema: '', tables: [], tablesLoading: false }
+  return {
+    db: b.db, schemas: b.schemas, schema: b.schema,
+    tables: b.tables, tablesLoading: b.tablesLoading,
+  }
+})
+const bLevel = computed(() => dbLevel(browseInput.value))
+const bHint = computed(() =>
+  browse.value ? dbHint(bLevel.value, browseInput.value, browse.value.conn.engine) : null)
+const bCrumbs = computed(() => dbCrumbs(browseInput.value))
 
 async function openBrowse(c: Conn) {
   error.value = ''
-  browse.value = { conn: c, dbs: [], db: '', tables: [], table: '', data: null }
+  browse.value = {
+    conn: c, dbs: [], db: '', schemas: [], schema: '',
+    tables: [], tablesLoading: false, table: '', data: null,
+  }
   try { browse.value.dbs = await api.get<string[]>(API.db.databases(c.id)) }
   catch (e) { error.value = errorText(e) }
 }
 
+/** 选库：清空所有下游状态，再按该库**重新**查下一级与表清单 */
 async function pickDb(db: string) {
   const b = browse.value; if (!b) return
-  b.db = db; b.table = ''; b.data = null; b.tables = []
-  try { b.tables = await api.get<DbTableInfo[]>(API.db.tables(b.conn.id, db)) }
-  catch (e) { error.value = errorText(e) }
+  b.db = db
+  b.schemas = []; b.schema = ''
+  b.tables = []; b.table = ''; b.data = null
+  b.tablesLoading = true
+  try {
+    b.schemas = await api.get<DbSchemaNode[]>(API.db.schemas(b.conn.id, db))
+    // 有 schema 层时**自动选中可预览的第一个**（PG 恒为 public）。原因见 defaultSchema 注释：
+    // tables() 本来就只读 public，界面停在"未选"与事实不符。
+    b.schema = defaultSchema(b.schemas)
+  } catch (e) { error.value = errorText(e) }
+  await loadTables()
+}
+
+/** 选 schema（仅 PG 有这一层）：换 schema 必须重查表，否则表清单还是上一个 schema 的 */
+async function pickSchema(schema: string) {
+  const b = browse.value; if (!b) return
+  b.schema = schema
+  b.table = ''; b.data = null
+  await loadTables()
+}
+
+async function loadTables() {
+  const b = browse.value; if (!b || !b.db) return
+  b.tablesLoading = true
+  try { b.tables = await api.get<DbTableInfo[]>(API.db.tables(b.conn.id, b.db)) }
+  catch (e) { error.value = errorText(e); b.tables = [] }
+  finally { b.tablesLoading = false }
 }
 
 async function pickTable(table: string, page = 1) {
@@ -342,26 +411,90 @@ function closeBrowse() { browse.value = null }
       <section class="card" v-if="browse">
         <div class="sec-head">
           <Icon name="database" :size="16" /> 浏览：{{ browse.conn.name }}
+          <span class="badge">{{ browse.conn.engine }}</span>
           <span class="spacer" />
           <button class="btn-ghost btn-sm" @click="closeBrowse">关闭</button>
         </div>
 
-        <div class="crumbs" v-if="browse.dbs.length">
-          <span class="crumb">库</span>
-          <template v-for="d in browse.dbs" :key="d">
-            <span class="sep">/</span>
-            <span class="crumb" :class="{ active: browse.db === d }" @click="pickDb(d)">{{ d }}</span>
+        <!-- 面包屑：只出真实存在的层（没有 schema 层就不补一段空路径）。
+             每段可点回退到该层，末段是当前位置。 -->
+        <nav v-if="bCrumbs.length" class="crumbs" aria-label="浏览路径">
+          <template v-for="(c, i) in bCrumbs" :key="c.text">
+            <span v-if="i" class="sep">/</span>
+            <button
+              v-if="!c.current && i === 0"
+              type="button" class="crumb is-link" @click="pickDb(c.text)"
+            >{{ c.text }}</button>
+            <span v-else-if="!c.current" class="crumb is-link" @click="pickSchema(c.text)">{{ c.text }}</span>
+            <span v-else class="crumb active" aria-current="page">{{ c.text }}</span>
           </template>
+        </nav>
+
+        <!-- 三层路径合并成**一行**（窄屏自动换行）。
+             ⚠ 曾经把三层各写成一个 .path-row 直接挂在 .card 下：每个 .path-row 自己
+             确实是 flex 横排，但它们彼此是三个**块级兄弟**，于是仍然各占一行、
+             竖向堆成 44px × 3。横排必须在同一个容器里才成立。 -->
+        <div class="path-bar">
+          <!-- ① 库这一层：所有库平铺成下拉。
+               用专属 .path-row 而不是公共 .row——公共 `.row > label` 是**表单**口径
+               （label 在上、控件占满一行），三层路径堆起来会占三行；
+               这里是导航，标签与控件同行更紧凑。 -->
+          <div class="path-row" v-if="browse.dbs.length">
+            <label>库
+              <select
+                :value="browse.db"
+                @change="pickDb(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">选择库…</option>
+                <option v-for="d in browse.dbs" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- ② schema 这一层：只有后端真的返回了下一级才渲染。
+               不可预览的 schema 明确标注原因，而不是让人点进去看一句"无表"。 -->
+          <div class="path-row" v-if="browse.db && hasSchemaLayer(browse.schemas)">
+            <label>schema
+              <select
+                :value="browse.schema"
+                @change="pickSchema(($event.target as HTMLSelectElement).value)"
+              >
+                <!-- 不要放「public（默认）」的空选项：清单里本来就有真实的 public，
+                     两个都叫 public 会让人以为选哪个不一样（而且留空与选 public
+                     在实现上是同一条路径）。空值 = 还没选，由提示语说明"本版只读 public"。 -->
+                <option value="">选择 schema…</option>
+                <option v-for="s in browse.schemas" :key="s.name" :value="s.name">
+                  {{ s.name }}{{ s.previewable === false ? '（本版不可预览）' : '' }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <!-- ③ 表 / 视图这一层 -->
+          <div class="path-row" v-if="browse.db && (bLevel === 'tables' || bLevel === 'objects')">
+            <label>表
+              <select
+                :value="browse.table"
+                :disabled="!browse.tables.length"
+                @change="pickTable(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">{{ browse.tables.length ? '选择表…' : '（无可选对象）' }}</option>
+                <option v-for="t in browse.tables" :key="t.name" :value="t.name">
+                  {{ tableOptionLabel(t) }}
+                </option>
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div class="row" v-if="browse.db">
-          <label>表
-            <select :value="browse.table" @change="pickTable(($event.target as HTMLSelectElement).value)">
-              <option value="">选择表…</option>
-              <option v-for="t in browse.tables" :key="t.name" :value="t.name">{{ t.name }}（{{ t.rows }} 行）</option>
-            </select>
-          </label>
-        </div>
+        <!-- 层级提示：文案由 dbHint 按「当前层 + 实际事实」生成，不再是
+             一个 tables.length === 0 就把所有情况都说成「该库无表」。
+             外观直接复用公共 .hint-note（含已验证的 flex item 修法与 is-warn 配色），
+             不在本视图另造一套——两套必然会漂移。`data-hint` 是稳定标识，供测试定位。 -->
+        <p v-if="bHint" class="hint-note" :class="{ 'is-warn': bHint.tone === 'warn' }" :data-hint="bHint.key">
+          <Icon :name="bHint.tone === 'warn' ? 'alert' : 'info'" :size="14" class="ic" />
+          <span>{{ bHint.text }}</span>
+        </p>
 
         <div class="card flush" v-if="browse.data">
           <table v-table-nav>
@@ -380,8 +513,8 @@ function closeBrowse() { browse.value = null }
               @click="pickTable(browse.table, browse.data.page + 1)">下一页</button>
           </div>
         </div>
-        <p v-else-if="browse.db && browse.tables.length === 0" class="dim">该库无表</p>
-        <p v-else-if="browse.db" class="dim">请选择要预览的表</p>
+        <!-- 选了表但没取到行：单独说，不占用"这一层没有对象"那句话 -->
+        <p v-else-if="browse.table" class="dim">正在读取「{{ browse.table }}」的数据…</p>
       </section>
     </template>
 
@@ -475,10 +608,29 @@ function closeBrowse() { browse.value = null }
 
 <style scoped>
 .crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
-.crumb { padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--c-text-dim); }
-.crumb:hover { color: var(--c-text); }
+/* 面包屑段：第一段是 <button>（回退到库层），第二段是 <span>（回退到 schema 层），
+   末段是 <span>（当前位置）。三者必须**看起来一致**，否则「同一排里有的能点有的不能点」
+   会让人误判。统一 padding / 字号 / 行高，并把 button 的原生外观清掉。 */
+.crumb {
+  padding: 2px 8px; border-radius: 6px; font-size: inherit; font-family: inherit;
+  line-height: 1.5; background: none; border: 0; color: var(--c-text-dim);
+}
+.crumb.is-link { cursor: pointer; }
+.crumb.is-link:hover { color: var(--c-text); background: var(--c-hover); }
 .crumb.active { background: var(--c-primary-soft); color: var(--c-primary); }
 .sep { color: var(--c-text-dim); }
+/* 浏览路径的三层选择：整个 path-bar 是一行弹性容器（窄屏换行）。
+   每一段里标签与控件**同行**（导航语义，不是表单）。
+   公共 `.row > label` 是竖排表单口径，三层叠起来白占三行高度。 */
+.path-bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+.path-row { display: flex; align-items: center; }
+.path-row > label {
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: var(--fs-12); color: var(--c-text-dim);
+}
+.path-row > label select { min-width: 150px; max-width: 300px; }
+/* 「表」是最长、最常看的一层，给它更宽的余量 */
+.path-row:last-child > label select { min-width: 220px; max-width: 380px; }
 .pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 字段 / 操作条 / 后果预警一律取 main.css 的公共式样。
    此前这里私有复刻了 .restore-warn（硬编码 #FF5A36）、.modal-actions、.danger-btn（#C73E1F）。 */

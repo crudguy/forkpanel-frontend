@@ -174,6 +174,8 @@ export const API = {
     connections: () => '/api/v1/db/connections',
     conn: (id: number) => `/api/v1/db/connections/${id}`,
     databases: (conn: number) => `/api/v1/db/${conn}/databases`,
+    /** 「库」的下一级（PG → schema；MySQL/SQLite → 空数组）。与 tables 是两个不同问题 */
+    schemas: (conn: number, db: string) => `/api/v1/db/${conn}/${enc(db)}/schemas`,
     tables: (conn: number, db: string) => `/api/v1/db/${conn}/${enc(db)}/tables`,
     rows: (conn: number, db: string, table: string) =>
       `/api/v1/db/${conn}/${enc(db)}/${enc(table)}/rows`,
