@@ -3,14 +3,17 @@
  * 数据库管理。
  *
  * 能力边界：连接管理 + 备份任务 + **只读浏览**（库→表→行预览，分页）
- * + **只读 SQL 控制台**（仅 SQLite）。
+ * + **只读 SQL 控制台**（SQLite 与 PostgreSQL）。
  *
  * 关于 SQL 控制台：此前刻意不提供 Web SQL 终端（怕它变成任意写库的入口）。
- * 现在提供的是**只读**版本，且只对 SQLite 开放——它的连接以只读模式打开，
- * 写语句物理上就会失败；mysql/pg 没有这个保证，后端诚实 501，
- * 前端如实展示原因，而不是假装没有这个功能。
+ * 现在提供的是**只读**版本，且"只读"不靠前端判断——后端有服务端物理护栏：
+ * SQLite 以只读模式打开连接，PG 把会话设成 `default_transaction_read_only=on`，
+ * 写语句在数据库侧就失败。能不能开控制台由后端 `readonly_sql` 能力位下发，
+ * 前端**不得**用 `engine === 'sqlite'` 自己猜：后端加了护栏而前端没跟上，
+ * 用户就白白用不上已能用的功能（置灰是前端单方面的承诺，后端没有任何东西
+ * 阻止它失效）。MySQL 没有等价护栏，后端诚实 501。
  *
- * 引擎差异：SQLite 为面板内建引擎（已实装浏览与查询）；MySQL/PostgreSQL 需外部客户端，
+ * 引擎差异：SQLite 为面板内建引擎（浏览/控制台均已实装）；MySQL/PostgreSQL 需外部客户端，
  * 缺少外部客户端的连接由后端标记 `client_ready=false`，此处置灰。
  * 注意它**不代表连接可达**——只表示本机有没有 psql/mysqldump 这类工具。
  */
@@ -38,6 +41,12 @@ import {
 interface Conn {
   id: number; name: string; engine: string; host: string | null
   port: number | null; default_db: string | null; client_ready: boolean; has_password: boolean
+  /**
+   * 只读 SQL 控制台是否开放（**后端下发的能力位**，前端唯一依据）。
+   * 与 client_ready 不是同一个问题：它回答"有没有服务端物理只读护栏"，
+   * 前者回答"外部客户端在不在"。MySQL 两者答案不同——客户端可能有、护栏没有。
+   */
+  readonly_sql: boolean
   /** 对象说明（备注，022）：≤500 字，随连接列表返回，空串 = 无 */
   remark: string
 }
@@ -335,7 +344,9 @@ function closeBrowse() { browse.value = null }
 
       <!-- 完整说明收进帮助抽屉（A6）：能力边界不再铺在页面上；「?」在「新增连接」卡头 -->
       <HelpDrawer :open="helpOpen" title="数据库说明" @close="helpOpen = false">
-        <p>SQLite 为内建引擎，可<b>只读浏览与查询</b>（SQL 控制台仅接受只读语句）；MySQL / PostgreSQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
+        <p>SQLite 为内建引擎，可<b>只读浏览与自写 SQL</b>；PostgreSQL 在本机装有 psql 时同样开放（浏览 + 只读 SQL 控制台）；MySQL 需本机装有对应客户端，仅提供<b>备份与恢复</b>。出于安全与资源隔离，不提供写库入口。</p>
+        <h4>只读不是前端的一句承诺</h4>
+        <p>SQL 控制台接受只读语句（SELECT / WITH / EXPLAIN / PRAGMA / VALUES），写语句由<b>数据库本身</b>拒绝：SQLite 的连接以只读模式打开，PostgreSQL 的会话设成只读。能否打开控制台由后端按引擎能力下发，不由前端猜测。个别配置类函数（如 pg_reload_conf）不受只读会话约束，控制台内会如实标注。</p>
         <h4>客户端就绪 ≠ 连接可达</h4>
         <p>「客户端」列只表示本机有没有 psql / mysqldump 这类工具，<b>不代表目标库连得上</b>；连接可用性以实际执行结果为准。</p>
       </HelpDrawer>
@@ -385,8 +396,8 @@ function closeBrowse() { browse.value = null }
           :title="c.client_ready ? '' : '该引擎缺少客户端工具，无法浏览'" @click="openBrowse(c)"><Icon name="search" :size="13" /> 浏览</button>
                 <button
                   class="btn-ghost btn-sm"
-                  :disabled="busy"
-                  :title="c.engine === 'sqlite' ? '执行只读查询' : '仅 SQLite 支持只读查询（其它引擎的连接不是只读的）'"
+                  :disabled="busy || !c.readonly_sql"
+                  :title="c.readonly_sql ? '执行只读查询' : '该引擎没有服务端只读护栏，不开放自写 SQL（MySQL 暂不支持）'"
                   @click="sqlConn = c"
                 ><Icon name="terminal" :size="13" /> SQL</button>
                 <button class="btn-ghost btn-sm" :disabled="!c.client_ready || !canManage || busy"

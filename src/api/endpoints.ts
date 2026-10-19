@@ -182,6 +182,14 @@ export const API = {
     backup: (conn: number) => `/api/v1/db/${conn}/backup`,
     restore: (conn: number) => `/api/v1/db/${conn}/restore`,
     query: (conn: number) => `/api/v1/db/${conn}/query`,
+    /**
+     * SQL 控制台元数据（能力位 + 引擎相关的默认语句与示例）。
+     *
+     * 与 query 分开成两个路径：这个回答「该不该开控制台、从哪句开始」，
+     * query 回答「执行这一条」。示例 SQL 是引擎知识，由后端单点下发——
+     * 前端**不存**任何引擎判断，避免与后端口径漂移。
+     */
+    sqlMeta: (conn: number) => `/api/v1/db/${conn}/sql-meta`,
     /** 数据库连接说明（备注，022）。PATCH 内联保存（db.manage）；conn 为 id 或 name */
     remark: (conn: string | number) => `/api/v1/db/${enc(conn)}/remark`,
   },

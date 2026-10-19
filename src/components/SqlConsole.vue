@@ -4,12 +4,17 @@
  *
  * 定位：给人一个"看一眼库里到底有什么"的窗口，**不是**数据库客户端。因此：
  * 1. 只有只读语句能进来——后端两层校验（首关键词白名单 + 写关键词黑名单），
- *    并且 SQLite 的连接是以只读模式打开的（物理兜底）。前端这里只做
- *    "提示怎么写"，不做安全判断：安全判断在前端做等于没有。
- * 2. 默认只对 SQLite 开放。mysql/pg 的连接不是只读的，后端会诚实 501，
- *    前端如实展示原因，而不是把按钮藏起来假装没这个功能。
+ *    并且物理兜底在 provider 层：SQLite 是只读连接，PostgreSQL 是
+ *    `default_transaction_read_only=on` 只读会话。前端这里只做"提示怎么写"，
+ *    不做安全判断：安全判断在前端做等于没有。
+ * 2. **默认语句与示例全部来自后端 `sql-meta`**，前端不存任何引擎知识。
+ *    从前这里硬编码五条 SQLite 专用句子，扩到 PG 后若不同步改，用户点开
+ *    PG 连接第一眼就是 `SELECT name FROM sqlite_master …`，一执行报
+ *    「relation sqlite_master does not exist」——按钮亮着、功能是废的。
+ * 3. 能不能开控制台由后端 `readonly_sql` 能力位决定（见 DatabasesView 的按钮门控）。
+ *    MySQL 没有服务端只读护栏，后端诚实 501，前端如实展示原因。
  */
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
@@ -24,21 +29,34 @@ interface QueryResp {
   truncated: boolean
   limit: number
 }
+/** 后端 sql-meta 下发的能力位 + 引擎相关文案（单一事实源在后端） */
+interface SqlMeta {
+  engine: string
+  readonly_sql: boolean
+  default_sql: string
+  samples: { label: string; sql: string }[]
+  /** 只读护栏的诚实边界（按引擎由后端给出），原样展示 */
+  note: string
+}
 
-const sql = ref("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+const meta = ref<SqlMeta | null>(null)
+const sql = ref('')
 const limit = ref(200)
 const result = ref<QueryResp | null>(null)
 const error = ref('')
 const busy = ref(false)
 const elapsed = ref(0)
 
-const SAMPLES: { label: string; sql: string }[] = [
-  { label: '表清单', sql: "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" },
-  { label: '表结构', sql: "SELECT sql FROM sqlite_master WHERE type = 'table' ORDER BY name" },
-  { label: '索引', sql: "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' ORDER BY tbl_name" },
-  { label: '库信息', sql: 'PRAGMA database_list' },
-  { label: '完整性', sql: 'PRAGMA integrity_check' },
-]
+onMounted(async () => {
+  try {
+    meta.value = await api.get<SqlMeta>(API.db.sqlMeta(props.conn.id))
+    // 默认语句由后端按引擎给出；meta 没回来时保持空串，让用户自己写
+    // （不填一句写死的兜底：那句必然只对某一种引擎是对的）
+    sql.value = meta.value.default_sql
+  } catch (e) {
+    error.value = errorText(e)
+  }
+})
 
 async function run() {
   if (!sql.value.trim() || busy.value) return
@@ -85,7 +103,8 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
       </div>
 
       <div class="sp-samples">
-        <button v-for="s in SAMPLES" :key="s.label" class="btn-ghost btn-sm" @click="useSample(s.sql)">{{ s.label }}</button>
+        <button v-for="s in meta?.samples ?? []" :key="s.label" class="btn-ghost btn-sm" @click="useSample(s.sql)">{{ s.label }}</button>
+        <span v-if="!meta" class="muted">示例加载中…</span>
         <span class="spacer" />
         <label class="lim">上限
           <input v-model.number="limit" type="number" min="1" max="2000" class="lim-input" />
@@ -114,6 +133,14 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
       <!-- 错误 / 截断提示统一用公共 .err-bar / .hint-note.is-warn
            （此前 .err 纯红字、.warn 无图标，与弹窗里的提示条两套长相） -->
       <p v-if="error" class="err-bar" role="alert">{{ error }}</p>
+
+      <!-- 只读护栏的诚实边界，文案由后端按引擎下发（`meta.note`）——
+           前端**不判断引擎**，否则后端改口径时这里会静默过期。
+           PG 那条尤其不能省：只读会话拦不住 pg_reload_conf 这类配置函数。 -->
+      <p v-if="meta?.note" class="hint-note">
+        <Icon name="alert" :size="14" class="ic" />
+        <span>{{ meta.note }}</span>
+      </p>
 
       <template v-if="result">
         <p v-if="result.truncated" class="hint-note is-warn">
