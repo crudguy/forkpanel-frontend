@@ -38,7 +38,6 @@ const auth = useAuthStore()
 const svcs = ref<Svc[]>([])
 const loading = ref(true)        // 服务列表首次加载骨架
 const pkgs = ref<PackageInfo[] | null>(null)
-const init = ref('')
 const error = ref('')
 const pkgNote = ref('')
 // svcError 随服务弹窗移除（服务操作的错误提示现由详情页承载）
@@ -177,8 +176,7 @@ async function load(silent = false) {
   // 请求级门控：init 系统未知时后端返 501（service.manage=no）
   if (!auth.supported(CAP.SERVICE_MANAGE)) { if (!silent) loading.value = false; return }
   try {
-    const r = await api.get<{ init_system: string; services: Svc[] }>(API.services.list())
-    init.value = r.init_system
+    const r = await api.get<{ services: Svc[] }>(API.services.list())
     // 兜底：services 缺失时保持空数组，后续 computed（filter/sort）不会崩
     svcs.value = r.services ?? []
   } catch (e) {
@@ -298,8 +296,8 @@ function onVisibility() {
 }
 
 onMounted(() => {
-  // 两个子数据都预加载：软件区是默认 Tab；服务列表虽非默认，但顶部 init 徽标
-  // 取自 /services —— 不预拉的话，进软件 Tab 时那枚徽标会一直空着。
+  // 两个子数据都预加载：软件区是默认 Tab；服务列表虽非默认，预拉一次让切到
+  // 服务 Tab 时直接有数据、不用等骨架。
   // 轮询仍由 start() 按当前 tab 决定（默认 software → 不起轮询）。
   load()
   loadPackages()
@@ -568,14 +566,10 @@ async function doConfirmed() {
 
 <template>
   <PageLayout>
-    <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue）。
-         init 徽标只在**非 systemd** 时出现——systemd 是绝大多数部署的常态，
-         常挂一个 `init: systemd` 纯属噪音；非 systemd 时才解释服务命令为何不同。 -->
+    <!-- 头部单行：Tab 用全站统一的分段控件（components/TabBar.vue）。 -->
     <div class="tools-row">
       <TabBar :tabs="TABS" />
       <span class="spacer" />
-      <span v-if="init && init !== 'systemd'" class="badge badge-primary"
-            title="面板探测到的 init 系统（非 systemd）：服务命令按该系统适配，部分能力可能受限">init: {{ init }}</span>
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
       <RefreshBtn :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()" />
     </div>

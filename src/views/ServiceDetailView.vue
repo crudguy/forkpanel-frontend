@@ -42,7 +42,6 @@ function goBack() {
 }
 
 const svc = ref<ServiceInfo | null>(null)
-const init = ref('')
 const loading = ref(true)
 const error = ref('')
 const actError = ref('')
@@ -60,11 +59,10 @@ async function loadSvc() {
   const seq = ++svcSeq
   loading.value = true; error.value = ''
   try {
-    const r = await api.get<{ init_system: string; service: ServiceInfo }>(
+    const r = await api.get<{ service: ServiceInfo }>(
       API.services.show(unit.value),
     )
     if (seq !== svcSeq) return
-    init.value = r.init_system
     svc.value = r.service
     notFound.value = false
   } catch (e) {
@@ -72,9 +70,8 @@ async function loadSvc() {
     // 保证 active 服务的老路径仍可用，且 notFound 语义不变。
     if (seq !== svcSeq) return
     try {
-      const r2 = await api.get<{ init_system: string; services: ServiceInfo[] }>(API.services.list())
+      const r2 = await api.get<{ services: ServiceInfo[] }>(API.services.list())
       if (seq !== svcSeq) return
-      init.value = r2.init_system
       const found = (r2.services ?? []).find(s => s.name === unit.value) ?? null
       svc.value = found
       notFound.value = !found
@@ -291,9 +288,6 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
               @click="goBack">
         <Icon name="chevron-left" :size="14" />
       </button>
-      <!-- 同软件页：systemd 是常态，不挂噪音徽标；非 systemd 才提示差异 -->
-      <span v-if="init && init !== 'systemd'" class="badge badge-primary"
-            title="面板探测到的 init 系统（非 systemd）：服务命令按该系统适配，部分能力可能受限">init: {{ init }}</span>
       <span class="spacer" />
       <RefreshBtn :disabled="loading || !!busy" @click="loadSvc" />
     </div>
