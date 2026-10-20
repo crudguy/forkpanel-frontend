@@ -236,6 +236,8 @@ export const API = {
     /** 全部容器的资源用量快照（`docker stats --no-stream --all`，非流式）。GET 读，
      *  需 container.view；无参数（一次返回所有容器），故无注入面。 */
     stats: () => `/api/v1/containers/stats`,
+    /** 网络列举（只读）：docker network ls --no-trunc，需 container.view */
+    networks: () => '/api/v1/containers/networks',
   },
 
   server: {

@@ -13,8 +13,9 @@
  * 已开放：创建容器（`docker create`，默认不启动；禁特权/`/`/etc`/proc/sys/var/run/docker.sock
  * 挂载 + 二次确认词「创建容器」）、拉取镜像。刻意不开放：镜像删除（磁盘回收风险）。
  * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）、资源用量快照
- * （`docker stats --no-stream --all`，「资源」Tab，需 container.view；实时感由 3s 轮询近似）。
- * 暂未实现（非安全刻意排除）：`docker exec`、网络/卷/compose。
+ * （`docker stats --no-stream --all`，「资源」Tab，需 container.view；实时感由 3s 轮询近似）、
+ * 网络列举（`docker network ls --no-trunc`，「网络」Tab，需 container.view；只读、不自动轮询）。
+ * 暂未实现（非安全刻意排除）：`docker exec`、网络的创建/删除与容器接入/断开、卷/compose。
  */
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -53,13 +54,14 @@ interface CreateContainerPayload {
 }
 
 const auth = useAuthStore()
-const tab = ref<'containers' | 'images' | 'stats'>('containers')
-// 顶部 Tab（容器/镜像/资源）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
+const tab = ref<'containers' | 'images' | 'stats' | 'networks'>('containers')
+// 顶部 Tab（容器/镜像/资源/网络）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
 // 与主机监控等页面外观统一；图标位可选，激活态白底上随 currentColor 变白。
 const tabs = [
   { value: 'containers', label: '容器', icon: 'server' },
   { value: 'images', label: '镜像', icon: 'disk' },
   { value: 'stats', label: '资源', icon: 'gauge' },
+  { value: 'networks', label: '网络', icon: 'network' },
 ]
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
@@ -93,6 +95,15 @@ interface StatLine {
 const stats = ref<StatLine[]>([])
 /** 资源 Tab 的自动刷新开关（默认开：用量数据不刷新就失去意义）。 */
 const statsAuto = ref(true)
+
+/** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
+ *  原始串（bridge / host / overlay / macvlan…；local / swarm / global），与面板其它
+ *  docker 直出字段同口径不翻译——二次映射容易把自定义驱动译错；id 为完整 64 位，
+ *  展示按惯例截 12 位、完整值走 title 悬停（与容器/镜像表一致）。 */
+interface NetworkLine {
+  name: string; driver: string; scope: string; id: string
+}
+const networks = ref<NetworkLine[]>([])
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -215,11 +226,12 @@ async function load(silent = false) {
       if (!supported.value) return
       if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
       else if (tab.value === 'images') images.value = await api.get<Image[]>(API.containers.images())
-      else stats.value = await api.get<StatLine[]>(API.containers.stats())
+      else if (tab.value === 'stats') stats.value = await api.get<StatLine[]>(API.containers.stats())
+      else networks.value = await api.get<NetworkLine[]>(API.containers.networks())
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
-      containers.value = []; images.value = []; stats.value = []
+      containers.value = []; images.value = []; stats.value = []; networks.value = []
       if (!silent) error.value = errorText(e)
     },
     { silent },
@@ -234,6 +246,9 @@ let pageVisible = true
 function pollEnabled() {
   if (!pageVisible || !supported.value) return false
   if (tab.value === 'stats') return statsAuto.value
+  // 网络 Tab 不自动轮询：网络清单变化频率低（创建/删除网络是显式运维动作），
+  // 且没有"不刷新就失去意义"的实时字段；需要时手动点工具栏「刷新」。
+  if (tab.value === 'networks') return false
   return true
 }
 function pollMs() {
@@ -264,7 +279,7 @@ onUnmounted(() => {
 watch(statsAuto, () => { if (supported.value) startPoll() })
 
 async function switchTab(t: string) {
-  tab.value = t as 'containers' | 'images' | 'stats'
+  tab.value = t as 'containers' | 'images' | 'stats' | 'networks'
   await load()
   // 轮询间隔/启用条件依赖当前 Tab（资源 3s、其它 5s），必须重启才生效
   if (supported.value) startPoll()
@@ -408,7 +423,7 @@ async function saveRemark(c: Container, v: string) {
       </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length))" class="skeleton shimmer box" />
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length) || (tab === 'networks' && !networks.length))" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -484,7 +499,9 @@ async function saveRemark(c: Container, v: string) {
         hint="该 Docker 守护进程上没有任何容器（含已停止）。" />
 
       <!-- ── 镜像 ── -->
-      <div class="card flush toolbar-card" v-else-if="images.length">
+      <!-- tab 护栏必须带：访问过「镜像」Tab 后 images 旧数据仍 truthy，缺护栏会把
+           镜像卡渲染在「资源 / 网络」Tab 下，吞掉目标 Tab 的卡片与空态（静默故障）。 -->
+      <div class="card flush toolbar-card" v-else-if="tab === 'images' && images.length">
         <div class="card-toolbar">
           <span class="count">共 {{ images.length }} 个镜像</span>
           <span class="spacer" />
@@ -555,16 +572,50 @@ async function saveRemark(c: Container, v: string) {
       <EmptyState v-else-if="tab === 'stats' && !loading" title="暂无资源数据"
         hint="daemon 尚未返回任何采样行（容器刚启动时会短暂无数据），稍候或点「立即刷新」。" />
 
+      <!-- ── 网络（docker network ls --no-trunc，只读列举） ── -->
+      <div class="card flush toolbar-card" v-else-if="tab === 'networks' && networks.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ networks.length }} 个网络</span>
+          <span class="spacer" />
+          <!-- 网络清单变化频率低，不自动轮询；手动刷新即可（与帮助抽屉说明一致） -->
+          <RefreshBtn sm :disabled="!supported" title="立即刷新一次网络清单" @click="load()" />
+        </div>
+        <div class="t-scroll">
+        <table class="fixed" v-table-nav>
+          <!-- 列宽范式与上方各表一致：名称弹性吸收余量；driver / scope 按 docker 原始串
+               最长形态（overlay / macvlan、swarm / global）取固定值；ID 列短值展示 +
+               title 悬停完整 64 位（与容器/镜像表同口径）。全部 mono 左对齐。 -->
+          <colgroup>
+            <col class="w-nname" /><col class="w-ndrv" /><col class="w-nscope" /><col class="w-nid" />
+          </colgroup>
+          <thead>
+            <tr><th>名称</th><th>驱动</th><th>作用域</th><th>ID</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="n in networks" :key="n.id">
+              <td class="mono ellipsis" :title="n.name">{{ n.name }}</td>
+              <td class="mono dim">{{ n.driver || '—' }}</td>
+              <td class="mono dim">{{ n.scope || '—' }}</td>
+              <td class="mono dim" :title="n.id">{{ shortId(n.id) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <EmptyState v-else-if="tab === 'networks' && !loading" title="暂无网络"
+        hint="daemon 未返回任何网络（异常：连默认的 bridge 网络都不存在），可点「刷新」重试。" />
+
     </template>
 
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
-      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注</b>等管理操作。</p>
+      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注 / 网络列举</b>等操作。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
       <p><b>资源用量快照已开放</b>：「资源」Tab 展示每个容器的 CPU / 内存 / 网络 IO / 磁盘 IO / PIDs（<code>docker stats --no-stream</code> 一次性快照，非流式——流式会把请求挂死），默认 3s 自动刷新、可手动关掉或点「立即刷新」，需 <code>container.view</code>。数字是 docker 的原始格式化串，未做二次解析。</p>
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
+      <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
     </HelpDrawer>
@@ -643,6 +694,13 @@ col.w-smemp { width: 76px; }
 col.w-snet { width: 132px; }
 col.w-sblk { width: 132px; }
 col.w-spid { width: 72px; }
+/* 网络表列宽（docker network ls --no-trunc）：名称弹性吸收余量；driver / scope 按
+   docker 原始串最长形态（overlay / macvlan、swarm / global）取固定值；ID 列与镜像表
+   同口径（短值 + title 悬停完整 64 位）。全部 mono 左对齐（同源直出字符串）。 */
+col.w-nname { width: auto; }
+col.w-ndrv { width: 96px; }
+col.w-nscope { width: 96px; }
+col.w-nid { width: 128px; }
 /* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
 .auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
 .auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }
