@@ -36,6 +36,8 @@ import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
+import StackEditorDialog from '@/components/StackEditorDialog.vue'
+import type { StackServicePayload } from '@/composables/stackForm'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
@@ -159,6 +161,50 @@ const composeDownOpen = ref(false)
 const composeDownTarget = ref<string | null>(null)
 /** down 弹窗里展示的服务数，让用户在停之前看清影响范围 */
 const composeDownCount = computed(() => drillContainers.value.length)
+
+// ── 面板编排（stack 定义，写的是面板自己的文件，不依赖 daemon）──
+/** 面板管理的编排项目（对应 GET /containers/stacks） */
+interface StackRow {
+  project: string
+  dir: string
+  config_file: string
+  services: StackServicePayload[]
+  /** compose.yaml 被外部改过——此时不允许在面板里覆盖保存 */
+  externally_modified: boolean
+}
+const stacks = ref<StackRow[]>([])
+const stackEditOpen = ref(false)
+const stackEditTarget = ref<StackRow | null>(null)
+const stackBusy = ref(false)
+
+async function loadStacks() {
+  if (!supported.value) return
+  try {
+    stacks.value = await api.get<StackRow[]>(API.containers.stacks())
+  } catch {
+    // 编排列表失败不应拖垮整个页面：清空即可，页面上仍有容器/镜像等 Tab
+    stacks.value = []
+  }
+}
+
+function openStackEditor(row?: StackRow) {
+  stackEditTarget.value = row ?? null
+  stackEditOpen.value = true
+}
+
+async function onStackSubmit(project: string, services: StackServicePayload[]) {
+  stackBusy.value = true
+  try {
+    await api.put(API.containers.stack(project), { services })
+    toast(`已保存编排：${project}`)
+    stackEditOpen.value = false
+    await loadStacks()
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    stackBusy.value = false
+  }
+}
 
 async function runComposeAct(action: 'up' | 'stop' | 'restart') {
   const project = drillProject.value
@@ -347,7 +393,12 @@ async function load(silent = false) {
       else if (tab.value === 'stats') stats.value = await api.get<StatLine[]>(API.containers.stats())
       else if (tab.value === 'networks') networks.value = await api.get<NetworkLine[]>(API.containers.networks())
       else if (tab.value === 'volumes') volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
-      else composeProjects.value = await api.get<ComposeProjectLine[]>(API.containers.composeProjects())
+      else {
+        composeProjects.value = await api.get<ComposeProjectLine[]>(API.containers.composeProjects())
+        // 编排定义与"运行中的 compose 项目"是两回事，一起拉：
+        // 用户要能同时看到"我定义了什么"和"实际跑着什么"
+        await loadStacks()
+      }
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
@@ -543,6 +594,50 @@ async function saveRemark(c: Container, v: string) {
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
+      </div>
+
+      <!-- ── 面板编排（stack 定义）：独立于下面那条 v-if 链 ──
+           ⚠ 必须放在链的起点之前。`v-else-if` 要求紧邻上一个兄弟，插在链中间会
+           让 Vue 报「v-else-if has no adjacent v-if」。
+           也刻意**不放进**「Compose 项目」卡片里：那张卡片的条件是
+           `composeProjects.length`，一个项目都没跑起来时整卡不渲染，
+           入口就会跟着消失（空环境里反而建不了第一个）。 -->
+      <div v-if="tab === 'compose'" class="card flush stack-card">
+        <div class="card-toolbar">
+          <span class="count">面板编排 · 已定义 {{ stacks.length }} 个</span>
+          <span class="spacer" />
+          <!-- 空态时由下方 EmptyState 的 #cta 承担入口，这里不重复出现 -->
+          <button v-if="canManage && stacks.length" class="btn-primary btn-sm" type="button"
+            @click="openStackEditor()">新建编排</button>
+        </div>
+        <div v-if="stacks.length" class="t-scroll">
+          <table class="fixed">
+            <colgroup><col class="w-sname" /><col class="w-snum" /><col /><col class="w-sact" /></colgroup>
+            <thead><tr><th>项目</th><th>服务</th><th>目录</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="s in stacks" :key="s.project">
+                <td class="mono ellipsis" :title="s.project">
+                  {{ s.project }}
+                  <!-- 外部改过的文件必须显式标出来：面板不会覆盖它，用户得知道为什么改不动 -->
+                  <span v-if="s.externally_modified" class="ext-mark"
+                    title="compose.yaml 已在面板外被修改；面板不会覆盖它">外部修改</span>
+                </td>
+                <td class="mono dim">{{ s.services.length }}</td>
+                <td class="mono dim ellipsis" :title="s.dir">{{ s.dir }}</td>
+                <td>
+                  <button class="btn-ghost btn-sm" type="button" :disabled="!canManage"
+                    @click="openStackEditor(s)">编辑</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <EmptyState v-else title="还没有编排定义"
+          hint="面板可以在这里定义服务并生成 compose.yaml（不支持特权模式与宿主敏感挂载）。已有项目请用 docker compose CLI 管理。">
+          <template v-if="canManage" #cta>
+            <button class="btn-primary btn-sm" type="button" @click="openStackEditor()">新建编排</button>
+          </template>
+        </EmptyState>
       </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
@@ -900,6 +995,10 @@ async function saveRemark(c: Container, v: string) {
     <PullImageDialog :open="pullOpen" :busy="pullBusy"
       @confirm="onPull" @cancel="pullOpen = false" />
 
+    <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
+      :project="stackEditTarget?.project" :services="stackEditTarget?.services"
+      @submit="onStackSubmit" @cancel="stackEditOpen = false" />
+
     <ContainerLogsDialog :open="logsOpen" :container-id="logsTarget?.id ?? ''" :container-name="logsTarget?.name ?? ''"
       @close="logsOpen = false" />
   </div>
@@ -1015,6 +1114,21 @@ col.w-cpconf { width: 320px; }
 col.w-dname { width: 240px; }
 col.w-dservice { width: 120px; }
 col.w-dstate { width: 96px; }
+
+/* ── 面板编排（stack 定义）── */
+.stack-card { margin-bottom: 14px; }
+col.w-sname { width: 220px; }
+col.w-snum { width: 72px; }
+col.w-sact { width: 88px; }
+/* 外部修改标记：这不是错误（用户有权改），但必须显眼到能解释"为什么保存不了" */
+.ext-mark {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: var(--fs-12);
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+}
 /* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
 .auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
 .auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }

@@ -247,6 +247,11 @@ export const API = {
     // down 需 confirm_token = 项目名；up 需 working_dir。后端永不传 -v（不删卷）。
     composeAct: (project: string) =>
       `/api/v1/containers/compose/${encodeURIComponent(project)}/act`,
+    // 面板编排（stack 定义）：读写 <data_dir>/compose-stacks/ 下的文件。
+    // ⚠ 这组端点不依赖 docker daemon（改编排定义与部署是两件事）。
+    stacks: () => '/api/v1/containers/stacks',
+    stack: (project: string) =>
+      `/api/v1/containers/stacks/${encodeURIComponent(project)}`,
   },
 
   server: {
