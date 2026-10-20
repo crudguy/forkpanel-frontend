@@ -240,6 +240,9 @@ export const API = {
     networks: () => '/api/v1/containers/networks',
     /** 卷列举（只读）：docker volume ls（无 --no-trunc，卷名默认不截断），需 container.view */
     volumes: () => '/api/v1/containers/volumes',
+    /** Compose 项目列举（只读）：docker compose ls --all --format json（compose 的
+     *  --format 只接受 table | json 两个字面量，Go 模板形态会被拒），需 container.view */
+    composeProjects: () => '/api/v1/containers/compose',
   },
 
   server: {

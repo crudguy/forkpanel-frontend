@@ -15,9 +15,11 @@
  * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）、资源用量快照
  * （`docker stats --no-stream --all`，「资源」Tab，需 container.view；实时感由 3s 轮询近似）、
  * 网络列举（`docker network ls --no-trunc`，「网络」Tab，需 container.view；只读、不自动轮询）、
- * 卷列举（`docker volume ls`，「卷」Tab，需 container.view；只读、不自动轮询）。
+ * 卷列举（`docker volume ls`，「卷」Tab，需 container.view；只读、不自动轮询）、
+ * Compose 项目列举（`docker compose ls --all --format json`，「Compose」Tab，需
+ * container.view；只读、不自动轮询）。
  * 暂未实现（非安全刻意排除）：`docker exec`、网络的创建/删除与容器接入/断开、
- * 卷的创建/删除、compose/stack。
+ * 卷的创建/删除、compose 生命周期写操作（up/down/restart/logs）、stack。
  */
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -56,8 +58,8 @@ interface CreateContainerPayload {
 }
 
 const auth = useAuthStore()
-const tab = ref<'containers' | 'images' | 'stats' | 'networks' | 'volumes'>('containers')
-// 顶部 Tab（容器/镜像/资源/网络/卷）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
+const tab = ref<'containers' | 'images' | 'stats' | 'networks' | 'volumes' | 'compose'>('containers')
+// 顶部 Tab（容器/镜像/资源/网络/卷/Compose）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
 // 与主机监控等页面外观统一；图标位可选，激活态白底上随 currentColor 变白。
 const tabs = [
   { value: 'containers', label: '容器', icon: 'server' },
@@ -65,6 +67,7 @@ const tabs = [
   { value: 'stats', label: '资源', icon: 'gauge' },
   { value: 'networks', label: '网络', icon: 'network' },
   { value: 'volumes', label: '卷', icon: 'database' },
+  { value: 'compose', label: 'Compose', icon: 'tasks' },
 ]
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
@@ -116,6 +119,15 @@ interface VolumeLine {
   name: string; driver: string; mountpoint: string
 }
 const volumes = ref<VolumeLine[]>([])
+
+/** Compose 项目行（`docker compose ls --all --format json` 的一行）。status 为
+ *  compose 的组合语义串（running(1) / exited(2)…，括号内为容器数），同口径不翻译；
+ *  config_files 是 compose 配置文件绝对路径（多 `-f` 时为逗号分隔串），长路径
+ *  ellipsis + title 悬停。项目无独立 ID，以名称为键（与 docker compose 一致）。 */
+interface ComposeProjectLine {
+  name: string; status: string; config_files: string
+}
+const composeProjects = ref<ComposeProjectLine[]>([])
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -240,11 +252,12 @@ async function load(silent = false) {
       else if (tab.value === 'images') images.value = await api.get<Image[]>(API.containers.images())
       else if (tab.value === 'stats') stats.value = await api.get<StatLine[]>(API.containers.stats())
       else if (tab.value === 'networks') networks.value = await api.get<NetworkLine[]>(API.containers.networks())
-      else volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
+      else if (tab.value === 'volumes') volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
+      else composeProjects.value = await api.get<ComposeProjectLine[]>(API.containers.composeProjects())
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
-      containers.value = []; images.value = []; stats.value = []; networks.value = []; volumes.value = []
+      containers.value = []; images.value = []; stats.value = []; networks.value = []; volumes.value = []; composeProjects.value = []
       if (!silent) error.value = errorText(e)
     },
     { silent },
@@ -265,6 +278,9 @@ function pollEnabled() {
   // 卷 Tab 同理（且比网络还罕见）：卷随容器创建或手动 docker volume create
   // 产生，没有实时字段；手动「刷新」即可。
   if (tab.value === 'volumes') return false
+  // Compose Tab 同理：项目随 docker compose up/down 显式变化，无"不刷新就失去
+  // 意义"的实时字段；手动「刷新」即可。
+  if (tab.value === 'compose') return false
   return true
 }
 function pollMs() {
@@ -295,7 +311,7 @@ onUnmounted(() => {
 watch(statsAuto, () => { if (supported.value) startPoll() })
 
 async function switchTab(t: string) {
-  tab.value = t as 'containers' | 'images' | 'stats' | 'networks' | 'volumes'
+  tab.value = t as 'containers' | 'images' | 'stats' | 'networks' | 'volumes' | 'compose'
   await load()
   // 轮询间隔/启用条件依赖当前 Tab（资源 3s、其它 5s），必须重启才生效
   if (supported.value) startPoll()
@@ -439,7 +455,7 @@ async function saveRemark(c: Container, v: string) {
       </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length))" class="skeleton shimmer box" />
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length) || (tab === 'compose' && !composeProjects.length))" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -653,11 +669,43 @@ async function saveRemark(c: Container, v: string) {
       <EmptyState v-else-if="tab === 'volumes' && !loading" title="暂无卷"
         hint="daemon 未返回任何卷。卷随容器创建（docker run -v）或手动 docker volume create 产生。" />
 
+      <!-- ── Compose 项目（docker compose ls --all --format json，只读列举） ── -->
+      <div class="card flush toolbar-card" v-else-if="tab === 'compose' && composeProjects.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ composeProjects.length }} 个项目</span>
+          <span class="spacer" />
+          <!-- Compose 项目随 up/down 显式变化，不自动轮询；手动刷新即可（与帮助抽屉说明一致） -->
+          <RefreshBtn sm :disabled="!supported" title="立即刷新一次 Compose 项目清单" @click="load()" />
+        </div>
+        <div class="t-scroll">
+        <table class="fixed" v-table-nav>
+          <!-- 列宽范式与上方各表一致：项目名弹性吸收余量；状态按组合语义串最长
+                形态（running(10) / restarting(1)）取固定值；配置文件路径为宿主机长
+                路径，ellipsis 截断 + title 悬停完整值。全部 mono 左对齐。 -->
+          <colgroup>
+            <col class="w-cpname" /><col class="w-cpstatus" /><col class="w-cpconf" />
+          </colgroup>
+          <thead>
+            <tr><th>项目</th><th>状态</th><th>配置文件</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in composeProjects" :key="p.name">
+              <td class="mono ellipsis" :title="p.name">{{ p.name }}</td>
+              <td class="mono dim">{{ p.status || '—' }}</td>
+              <td class="mono dim ellipsis" :title="p.config_files">{{ p.config_files || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <EmptyState v-else-if="tab === 'compose' && !loading" title="暂无 Compose 项目"
+        hint="daemon 未返回任何 Compose 项目。项目由 docker compose up 创建（默认取 compose 文件所在目录名）；该清单含已停止项目（--all）。" />
+
     </template>
 
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
-      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注 / 网络列举 / 卷列举</b>等操作。</p>
+      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注 / 网络列举 / 卷列举 / Compose 项目列举</b>等操作。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
@@ -665,6 +713,7 @@ async function saveRemark(c: Container, v: string) {
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
       <p><b>卷列举已开放</b>：「卷」Tab 展示全部 Docker 卷（<code>docker volume ls</code>，只读，需 <code>container.view</code>）。宿主机挂载路径是卷数据在磁盘上的实际位置（<code>/var/lib/docker/volumes/&lt;名称&gt;/_data</code>），可用于排查磁盘占用。该 Tab 与「网络」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除卷（删除卷 = 其内数据一并丢失，请直接用 docker CLI）。</p>
+      <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：up / down / restart / logs 等生命周期写操作（影响面大，请直接用 docker compose CLI）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
     </HelpDrawer>
@@ -756,6 +805,9 @@ col.w-nid { width: 128px; }
 col.w-vname { width: auto; }
 col.w-vdrv { width: 96px; }
 col.w-vmp { width: 320px; }
+col.w-cpname { width: auto; }
+col.w-cpstatus { width: 120px; }
+col.w-cpconf { width: 320px; }
 /* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
 .auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
 .auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }
