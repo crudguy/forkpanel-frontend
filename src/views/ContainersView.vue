@@ -12,7 +12,7 @@
  *
  * 已开放：创建容器（`docker create`，默认不启动；禁特权/`/`/etc`/proc/sys/var/run/docker.sock
  * 挂载 + 二次确认词「创建容器」）、拉取镜像。刻意不开放：镜像删除（磁盘回收风险）。
- * 暂未实现（非安全刻意排除）：`docker logs`/`exec`/`stats`、网络/卷/compose。
+ * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）。暂未实现（非安全刻意排除）：`docker exec`/`stats`、网络/卷/compose。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -31,6 +31,7 @@ import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import PullImageDialog from '@/components/PullImageDialog.vue'
+import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -74,6 +75,10 @@ const helpOpen = ref(false)
 const delTarget = ref<Container | null>(null)
 /** 强制删除开关（确认框内默认不勾选的显式 opt-in）：勾选→后端 docker rm -f */
 const delForce = ref(false)
+
+// 日志查看（docker logs，只读快照）：弹窗 + GET，受 container.view 门控。
+const logsTarget = ref<Container | null>(null)
+const logsOpen = ref(false)
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -121,6 +126,8 @@ const restartOpen = ref(false)
 
 const supported = computed(() => auth.supported(CAP.CONTAINER_MANAGE))
 const canManage = computed(() => auth.enabled(CAP.CONTAINER_MANAGE, 'container.manage'))
+/** 日志是读操作：有 container.view 即可查看，不需要 container.manage。 */
+const canViewLogs = computed(() => auth.can('container.view'))
 /** 不可用原因机器码（来自能力位 reason）。菜单常亮，进入后据此分流展示。 */
 const unavailableReason = computed(() => auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined)
 /** 修复动作需要的权限点（启动/重启服务用 system.manage，加组用 container.manage）。 */
@@ -427,6 +434,10 @@ async function saveRemark(c: Container, v: string) {
                   :title="restartable(c) ? '' : '仅运行中可重启'" @click="act(c, 'restart')">
                   <Icon name="restart" :size="13" /> 重启
                 </button>
+                <button class="btn-ghost btn-sm" :disabled="!canViewLogs || isActing(c.id)"
+                  :title="canViewLogs ? '查看容器日志（docker logs，只读最近 N 行）' : '需要 container.view 权限'" @click="logsTarget = c; logsOpen = true">
+                  <Icon name="file" :size="13" /> 日志
+                </button>
                 <button class="btn-ghost btn-sm danger" :disabled="!canManage || isActing(c.id) || !removable(c)"
                   :title="removable(c) ? '' : '正在重启中'" @click="delTarget = c; delForce = false">
                   <Icon name="trash" :size="13" /> 删除
@@ -483,6 +494,7 @@ async function saveRemark(c: Container, v: string) {
       <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注</b>等管理操作。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
+      <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
@@ -513,6 +525,9 @@ async function saveRemark(c: Container, v: string) {
 
     <PullImageDialog :open="pullOpen" :busy="pullBusy"
       @confirm="onPull" @cancel="pullOpen = false" />
+
+    <ContainerLogsDialog :open="logsOpen" :container-id="logsTarget?.id ?? ''" :container-name="logsTarget?.name ?? ''"
+      @close="logsOpen = false" />
   </div>
 </template>
 
@@ -543,7 +558,9 @@ col.w-img { width: auto; }
 col.w-state { width: 13%; }
 col.w-ports { width: 11%; }
 col.w-id { width: 9%; }
-col.w-acts { width: 320px; }
+/* 操作列 392px：现 5 个带文字按钮（启动/停止/重启/日志/删除），按「各 67px + 4×6 间距
+   + 单元格内边距 26px = 385」实测取值；窄屏由 .t-scroll 横向滚动兜底。 */
+col.w-acts { width: 392px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
 td.remark-cell { padding: 4px 10px; }
 

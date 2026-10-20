@@ -230,6 +230,9 @@ export const API = {
     remove: (id: string, force = false) => `/api/v1/containers/${id}${force ? '?force=true' : ''}`,
     /** 容器备注（022）：GET 读 / PATCH 写（container.manage）。容器不入库，存引用表 */
     remark: (id: string) => `/api/v1/containers/${enc(id)}/remark`,
+    /** 容器日志查看（`docker logs`，只读最近 N 行快照，不带 --follow）。GET 读，需 container.view；
+     *  query: tail（默认 200，上限 2000）/ timestamps（带 RFC3339 前缀）。前端用 api.get 的 params 拼。 */
+    logs: (id: string) => `/api/v1/containers/${id}/logs`,
   },
 
   server: {
