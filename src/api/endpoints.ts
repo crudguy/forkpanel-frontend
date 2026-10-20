@@ -238,6 +238,8 @@ export const API = {
     stats: () => `/api/v1/containers/stats`,
     /** 网络列举（只读）：docker network ls --no-trunc，需 container.view */
     networks: () => '/api/v1/containers/networks',
+    /** 卷列举（只读）：docker volume ls（无 --no-trunc，卷名默认不截断），需 container.view */
+    volumes: () => '/api/v1/containers/volumes',
   },
 
   server: {
