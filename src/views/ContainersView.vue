@@ -12,9 +12,11 @@
  *
  * 已开放：创建容器（`docker create`，默认不启动；禁特权/`/`/etc`/proc/sys/var/run/docker.sock
  * 挂载 + 二次确认词「创建容器」）、拉取镜像。刻意不开放：镜像删除（磁盘回收风险）。
- * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）。暂未实现（非安全刻意排除）：`docker exec`/`stats`、网络/卷/compose。
+ * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）、资源用量快照
+ * （`docker stats --no-stream --all`，「资源」Tab，需 container.view；实时感由 3s 轮询近似）。
+ * 暂未实现（非安全刻意排除）：`docker exec`、网络/卷/compose。
  */
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { useAsync } from '@/composables/useAsync'
 import { API } from '@/api/endpoints'
@@ -51,12 +53,13 @@ interface CreateContainerPayload {
 }
 
 const auth = useAuthStore()
-const tab = ref<'containers' | 'images'>('containers')
-// 顶部 Tab（容器/镜像）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
+const tab = ref<'containers' | 'images' | 'stats'>('containers')
+// 顶部 Tab（容器/镜像/资源）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
 // 与主机监控等页面外观统一；图标位可选，激活态白底上随 currentColor 变白。
 const tabs = [
   { value: 'containers', label: '容器', icon: 'server' },
   { value: 'images', label: '镜像', icon: 'disk' },
+  { value: 'stats', label: '资源', icon: 'gauge' },
 ]
 const containers = ref<Container[]>([])
 const images = ref<Image[]>([])
@@ -79,6 +82,17 @@ const delForce = ref(false)
 // 日志查看（docker logs，只读快照）：弹窗 + GET，受 container.view 门控。
 const logsTarget = ref<Container | null>(null)
 const logsOpen = ref(false)
+
+/** 资源用量快照行（docker stats --no-stream --all 的一行）。百分比/用量一律按
+ *  docker 原始格式化串展示（如 "1.52%"、"12.5MiB / 2GiB"）——后端不二次解析，
+ *  避免把 "0B" / "--" 之类边界形态算错；前端等宽渲染即可。 */
+interface StatLine {
+  name: string; cpu_perc: string; mem_usage: string; mem_perc: string
+  net_io: string; block_io: string; pids: string
+}
+const stats = ref<StatLine[]>([])
+/** 资源 Tab 的自动刷新开关（默认开：用量数据不刷新就失去意义）。 */
+const statsAuto = ref(true)
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -200,23 +214,34 @@ async function load(silent = false) {
     async () => {
       if (!supported.value) return
       if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
-      else images.value = await api.get<Image[]>(API.containers.images())
+      else if (tab.value === 'images') images.value = await api.get<Image[]>(API.containers.images())
+      else stats.value = await api.get<StatLine[]>(API.containers.stats())
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
-      containers.value = []; images.value = []
+      containers.value = []; images.value = []; stats.value = []
       if (!silent) error.value = errorText(e)
     },
     { silent },
   )
 }
 
-// 自动轮询：5s 拉一次；隐藏标签页时暂停、可见时补一次；卸载清理。
+// 自动轮询：容器/镜像 5s 一次；资源 Tab 3s 一次（用量变化快，需近实时感）且受
+// 「自动刷新」开关控制。隐藏标签页时暂停、可见时补一次；卸载清理。
+// 间隔与启用条件都随当前 Tab 推导，故切 Tab / 拨开关都要重启轮询使新值生效。
 let timer: ReturnType<typeof setInterval> | undefined
 let pageVisible = true
+function pollEnabled() {
+  if (!pageVisible || !supported.value) return false
+  if (tab.value === 'stats') return statsAuto.value
+  return true
+}
+function pollMs() {
+  return tab.value === 'stats' ? 3000 : 5000
+}
 function startPoll() {
   stopPoll()
-  timer = setInterval(() => { if (pageVisible && supported.value) load(true) }, 5000)
+  timer = setInterval(() => { if (pollEnabled()) load(true) }, pollMs())
 }
 function stopPoll() { if (timer !== undefined) { clearInterval(timer); timer = undefined } }
 function onVisibility() {
@@ -235,9 +260,14 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibility)
 })
 
+// 资源 Tab 的「自动刷新」开关：拨动即重启轮询（关→停，开→起），不必等下一轮周期。
+watch(statsAuto, () => { if (supported.value) startPoll() })
+
 async function switchTab(t: string) {
-  tab.value = t as 'containers' | 'images'
+  tab.value = t as 'containers' | 'images' | 'stats'
   await load()
+  // 轮询间隔/启用条件依赖当前 Tab（资源 3s、其它 5s），必须重启才生效
+  if (supported.value) startPoll()
 }
 
 /** 生命周期动作的三种入口共用同一实现（后端是 204，无响应体）。
@@ -378,7 +408,7 @@ async function saveRemark(c: Container, v: string) {
       </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length))" class="skeleton shimmer box" />
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length))" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -485,7 +515,45 @@ async function saveRemark(c: Container, v: string) {
         </table>
         </div>
       </div>
-      <EmptyState v-else-if="!loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
+      <EmptyState v-else-if="tab === 'images' && !loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
+
+      <!-- ── 资源（docker stats --no-stream --all 快照） ── -->
+      <div class="card flush toolbar-card" v-else-if="tab === 'stats' && stats.length">
+        <div class="card-toolbar">
+          <span class="count">共 {{ stats.length }} 个容器</span>
+          <span class="spacer" />
+          <label class="auto-toggle">
+            <input type="checkbox" v-model="statsAuto" />
+            <span>自动刷新（3s）</span>
+          </label>
+          <RefreshBtn sm :disabled="!supported" title="立即刷新一次资源快照" @click="load()" />
+        </div>
+        <div class="t-scroll">
+        <table class="fixed" v-table-nav>
+          <!-- 列宽范式与上方两表一致；用量列全部等宽右对齐不便读，保持左对齐 + mono。
+               名称列弹性吸收余量，其余按内容取固定值。 -->
+          <colgroup>
+            <col class="w-sname" /><col class="w-scpu" /><col class="w-smem" /><col class="w-smemp" /><col class="w-snet" /><col class="w-sblk" /><col class="w-spid" />
+          </colgroup>
+          <thead>
+            <tr><th>容器</th><th>CPU</th><th>内存（用量 / 上限）</th><th>内存%</th><th>网络 IO</th><th>磁盘 IO</th><th class="num">PIDs</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in stats" :key="s.name">
+              <td class="mono ellipsis" :title="s.name">{{ s.name }}</td>
+              <td class="mono">{{ s.cpu_perc || '—' }}</td>
+              <td class="mono ellipsis" :title="s.mem_usage">{{ s.mem_usage || '—' }}</td>
+              <td class="mono">{{ s.mem_perc || '—' }}</td>
+              <td class="mono ellipsis" :title="s.net_io">{{ s.net_io || '—' }}</td>
+              <td class="mono ellipsis" :title="s.block_io">{{ s.block_io || '—' }}</td>
+              <td class="mono th num">{{ s.pids || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <EmptyState v-else-if="tab === 'stats' && !loading" title="暂无资源数据"
+        hint="daemon 尚未返回任何采样行（容器刚启动时会短暂无数据），稍候或点「立即刷新」。" />
 
     </template>
 
@@ -495,6 +563,7 @@ async function saveRemark(c: Container, v: string) {
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
+      <p><b>资源用量快照已开放</b>：「资源」Tab 展示每个容器的 CPU / 内存 / 网络 IO / 磁盘 IO / PIDs（<code>docker stats --no-stream</code> 一次性快照，非流式——流式会把请求挂死），默认 3s 自动刷新、可手动关掉或点「立即刷新」，需 <code>container.view</code>。数字是 docker 的原始格式化串，未做二次解析。</p>
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
@@ -563,6 +632,20 @@ col.w-id { width: 9%; }
 col.w-acts { width: 392px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
 td.remark-cell { padding: 4px 10px; }
+
+/* 资源表列宽：名称弹性吸收余量，其余按 docker stats 输出的最长形态取固定值
+   （"内存（用量 / 上限）" 列要容得下 "12.5MiB / 2GiB"，取 170px；网络/磁盘 IO 同理）。
+   全部 mono 左对齐——百分比/用量是等人宽字符串，右对齐反而破坏列间对齐参照。 */
+col.w-sname { width: auto; }
+col.w-scpu { width: 76px; }
+col.w-smem { width: 170px; }
+col.w-smemp { width: 76px; }
+col.w-snet { width: 132px; }
+col.w-sblk { width: 132px; }
+col.w-spid { width: 72px; }
+/* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
+.auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
+.auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }
 
 /* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 260px; }

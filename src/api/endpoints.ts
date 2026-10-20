@@ -233,6 +233,9 @@ export const API = {
     /** 容器日志查看（`docker logs`，只读最近 N 行快照，不带 --follow）。GET 读，需 container.view；
      *  query: tail（默认 200，上限 2000）/ timestamps（带 RFC3339 前缀）。前端用 api.get 的 params 拼。 */
     logs: (id: string) => `/api/v1/containers/${id}/logs`,
+    /** 全部容器的资源用量快照（`docker stats --no-stream --all`，非流式）。GET 读，
+     *  需 container.view；无参数（一次返回所有容器），故无注入面。 */
+    stats: () => `/api/v1/containers/stats`,
   },
 
   server: {
