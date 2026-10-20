@@ -38,6 +38,7 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import type { StackServicePayload } from '@/composables/stackForm'
+import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
@@ -190,6 +191,26 @@ async function loadStacks() {
 function openStackEditor(row?: StackRow) {
   stackEditTarget.value = row ?? null
   stackEditOpen.value = true
+}
+
+// ── 常用镜像（内置清单，只列镜像名；tag 在拉取弹窗里确认）──
+const popularQ = ref('')
+/** 传给拉取弹窗的预填值（空串=从"拉取/更新镜像"按钮进入，不预填） */
+const pullPreset = ref('')
+const popularGroups = computed(() => groupByCategory(filterPopular(POPULAR_IMAGES, popularQ.value)))
+/** 已在本地存在的镜像名集合（任一 tag 有即算），用于显示「已拉取」 */
+const pulledRefs = computed(() => {
+  const set = new Set<string>()
+  for (const i of POPULAR_IMAGES) {
+    if (isPulled(i.ref, images.value)) set.add(i.ref)
+  }
+  return set
+})
+
+/** 统一拉取入口：列表按钮带预填，工具栏按钮不带 */
+function openPull(ref = '') {
+  pullPreset.value = ref
+  pullOpen.value = true
 }
 
 async function onStackSubmit(project: string, services: StackServicePayload[]) {
@@ -640,6 +661,45 @@ async function saveRemark(c: Container, v: string) {
         </EmptyState>
       </div>
 
+      <!-- ── 常用镜像（内置清单）：独立于下面那条 v-if 链 ──
+           ⚠ 与「面板编排」同理：必须放在链起点之前，且**不能挂在 `images.length`
+           条件里**——一台刚装好的机器镜像数为 0，恰恰是最需要这份清单的时候。 -->
+      <div v-if="tab === 'images'" class="card flush popular-card">
+        <div class="card-toolbar">
+          <span class="count">常用镜像 · {{ POPULAR_IMAGES.length }} 个</span>
+          <span class="spacer" />
+          <input class="filter" v-model="popularQ" type="search"
+            placeholder="搜索名称 / 用途" aria-label="搜索常用镜像" />
+        </div>
+
+        <div class="popular-body">
+          <div v-for="g in popularGroups" :key="g.key" class="pop-group">
+            <h4 class="pop-cat">{{ g.label }}</h4>
+            <div class="pop-grid">
+              <div v-for="i in g.items" :key="i.ref" class="pop-item">
+                <div class="pop-main">
+                  <div class="pop-title">
+                    <b>{{ i.name }}</b>
+                    <code class="pop-ref">{{ i.ref }}</code>
+                    <span v-if="pulledRefs.has(i.ref)" class="pop-badge">已拉取</span>
+                  </div>
+                  <span class="pop-desc">{{ i.desc }}</span>
+                </div>
+                <button class="btn-ghost btn-sm" type="button" :disabled="!canManage"
+                  :title="canManage ? `拉取 ${i.ref}（tag 在弹窗里确认）` : '需要 container.manage 权限'"
+                  @click="openPull(i.ref)">拉取</button>
+              </div>
+            </div>
+          </div>
+          <p v-if="!popularGroups.length" class="pop-empty">没有匹配的常用镜像</p>
+        </div>
+
+        <p class="hint-note">
+          <b>清单内置在面板里、不联网校验</b>：只给镜像名，不预置版本号（写死的 tag 会过时，
+          点下去拉不到反而像面板坏了）。点「拉取」后在弹窗里确认或改写 tag，默认 <code>latest</code>。
+        </p>
+      </div>
+
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
       <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length) || (tab === 'compose' && !composeProjects.length))" class="skeleton shimmer box" />
 
@@ -724,7 +784,7 @@ async function saveRemark(c: Container, v: string) {
           <span class="count">共 {{ images.length }} 个镜像</span>
           <span class="spacer" />
           <button class="btn-primary btn-sm" :disabled="!canManage"
-            :title="canManage ? '从 registry 拉取 / 更新镜像（docker pull）' : '需要 container.manage 权限'" @click="pullOpen = true">
+            :title="canManage ? '从 registry 拉取 / 更新镜像（docker pull）' : '需要 container.manage 权限'" @click="openPull()">
             <Icon name="download" :size="14" /> 拉取 / 更新镜像
           </button>
         </div>
@@ -947,7 +1007,7 @@ async function saveRemark(c: Container, v: string) {
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
       <p><b>资源用量快照已开放</b>：「资源」Tab 展示每个容器的 CPU / 内存 / 网络 IO / 磁盘 IO / PIDs（<code>docker stats --no-stream</code> 一次性快照，非流式——流式会把请求挂死），默认 3s 自动刷新、可手动关掉或点「立即刷新」，需 <code>container.view</code>。数字是 docker 的原始格式化串，未做二次解析。</p>
-      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
+      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。镜像页顶部还有一份<b>常用镜像清单</b>（内置在面板里、<b>不联网校验</b>，只给镜像名不给版本号——写死的 tag 会过时），点「拉取」会预填名字、tag 请在弹窗里确认。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
       <p><b>卷列举已开放</b>：「卷」Tab 展示全部 Docker 卷（<code>docker volume ls</code>，只读，需 <code>container.view</code>）。宿主机挂载路径是卷数据在磁盘上的实际位置（<code>/var/lib/docker/volumes/&lt;名称&gt;/_data</code>），可用于排查磁盘占用。该 Tab 与「网络」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除卷（删除卷 = 其内数据一并丢失，请直接用 docker CLI）。</p>
       <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：up / down / restart / logs 等生命周期写操作（影响面大，请直接用 docker compose CLI）。</p>
@@ -992,7 +1052,7 @@ async function saveRemark(c: Container, v: string) {
     <CreateContainerDialog :open="createOpen" :busy="createBusy"
       @confirm="onCreated" @cancel="createOpen = false" />
 
-    <PullImageDialog :open="pullOpen" :busy="pullBusy"
+    <PullImageDialog :open="pullOpen" :busy="pullBusy" :preset="pullPreset"
       @confirm="onPull" @cancel="pullOpen = false" />
 
     <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
@@ -1114,6 +1174,46 @@ col.w-cpconf { width: 320px; }
 col.w-dname { width: 240px; }
 col.w-dservice { width: 120px; }
 col.w-dstate { width: 96px; }
+
+/* ── 常用镜像 ── */
+.popular-card { margin-bottom: 14px; }
+.popular-body { padding: 4px 14px 12px; }
+.pop-cat {
+  margin: 12px 0 8px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--c-text-mute);
+  letter-spacing: .02em;
+}
+.pop-grid {
+  display: grid;
+  /* auto-fill + minmax：窄屏自动降列，不必写媒体查询 */
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface-2);
+}
+.pop-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pop-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.pop-title b { font-size: var(--fs-13); color: var(--c-text); }
+.pop-ref { font-family: var(--mono); font-size: var(--fs-12); color: var(--c-text-mute); }
+/* 「已拉取」是状态标记，用中性色而非品牌色（品牌色留给操作） */
+.pop-badge {
+  font-size: var(--fs-12);
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-inset);
+  color: var(--c-text-dim);
+}
+.pop-desc { font-size: var(--fs-12); color: var(--c-text-dim); }
+.pop-empty { margin: 16px 0; text-align: center; color: var(--c-text-mute); font-size: var(--fs-13); }
 
 /* ── 面板编排（stack 定义）── */
 .stack-card { margin-bottom: 14px; }

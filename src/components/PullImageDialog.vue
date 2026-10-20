@@ -20,6 +20,8 @@ import Icon from '@/components/Icon.vue'
 const props = defineProps<{
   open: boolean
   busy?: boolean
+  /** 预填镜像名（来自「常用镜像」的快捷入口）。为空则打开时清空输入。 */
+  preset?: string
 }>()
 const emit = defineEmits<{
   (e: 'confirm', image: string): void
@@ -35,9 +37,10 @@ watch(
   { immediate: true },
 )
 
-// 打开时重置，避免上次输入的镜像名残留。
+// 打开时重置，避免上次输入的镜像名残留；有 preset 时用它预填
+// （预设只是镜像名，不带 tag——tag 由用户在此确认，见 popularImages.ts 的说明）。
 watch(() => props.open, (v) => {
-  if (v) { image.value = ''; canSubmit.value = false }
+  if (v) { image.value = props.preset ?? ''; canSubmit.value = !!image.value.trim() }
 })
 
 function confirm() {
