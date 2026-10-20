@@ -28,6 +28,20 @@ export function normalizeQuery(q: string): string {
 }
 
 /**
+ * 单个名称是否匹配查询串。
+ *
+ * 抽成独立函数是因为「匹配规则」有**第二个消费者**：上传完成后要判断新文件
+ * 是否被当前筛选挡住（否则用户会以为上传失败）。若那里再写一遍 `includes`，
+ * 一旦规则调整（比如将来支持分词），两处就会分叉，表现为「列表筛掉了它、
+ * 提示却说它可见」。`filterEntries` 也复用本函数，确保只有一处规则。
+ */
+export function matchesQuery(name: string, query: string): boolean {
+  const q = normalizeQuery(query)
+  if (!q) return true
+  return name.toLowerCase().includes(q)
+}
+
+/**
  * 按查询串过滤条目。
  *
  * @returns 查询为空时返回**入参数组本身**（引用相等），否则返回新数组。
@@ -35,7 +49,7 @@ export function normalizeQuery(q: string): string {
 export function filterEntries<T extends FilterableEntry>(entries: T[], query: string): T[] {
   const q = normalizeQuery(query)
   if (!q) return entries
-  return entries.filter((e) => e.name.toLowerCase().includes(q))
+  return entries.filter((e) => matchesQuery(e.name, query))
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterEntries, filterHint, normalizeQuery, type FilterableEntry } from './fileFilter'
+import { filterEntries, filterHint, matchesQuery, normalizeQuery, type FilterableEntry } from './fileFilter'
 
 const mk = (name: string, kind = 'file'): FilterableEntry => ({ name, kind, sensitive: false })
 
@@ -75,5 +75,33 @@ describe('filterHint', () => {
 
   it('部分命中给出 显示/总数（用户要知道被筛掉了多少）', () => {
     expect(filterHint(24, 3, ' conf ')).toBe('已按「conf」筛选：显示 3 / 24 项')
+  })
+})
+
+describe('matchesQuery — 单个名称的匹配判定（第二个消费者：上传后判断是否被筛掉）', () => {
+  it('子串命中，大小写不敏感', () => {
+    expect(matchesQuery('README.md', 'read')).toBe(true)
+    expect(matchesQuery('README.md', 'READ')).toBe(true)
+  })
+
+  it('不匹配返回 false', () => {
+    expect(matchesQuery('zzz.txt', 'dev')).toBe(false)
+  })
+
+  it('空查询 / 纯空白视为「全部匹配」', () => {
+    expect(matchesQuery('anything', '')).toBe(true)
+    expect(matchesQuery('anything', '   ')).toBe(true)
+  })
+
+  it('首尾空白会被 trim（从别处粘贴的查询串）', () => {
+    expect(matchesQuery('deploy.sh', '  depl  ')).toBe(true)
+  })
+
+  it('⭐ 与 filterEntries 的判定必须一致（同一规则不允许两份）', () => {
+    for (const e of ENTRIES) {
+      for (const q of ['e', 'D', 'zzz', '', 'read']) {
+        expect(matchesQuery(e.name, q)).toBe(filterEntries([e], q).length === 1)
+      }
+    }
   })
 })

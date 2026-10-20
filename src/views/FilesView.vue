@@ -29,7 +29,8 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { useModal } from '@/composables/useModal'
-import { filterEntries, filterHint } from '@/composables/fileFilter'
+import { filterEntries, filterHint, matchesQuery } from '@/composables/fileFilter'
+import { hasFiles, droppedFiles, createDragDepth, dropHint } from '@/composables/fileDrop'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
 import { toast } from '@/composables/useToast'
@@ -309,10 +310,15 @@ async function uploadMultipart(f: File, onProgress: (done: number, total: number
   return api.post<{ path: string; size: number }>(API.files.multipartComplete(upload_id))
 }
 
-async function onUploadFiles(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  input.value = '' // 允许重复选同一文件
+/**
+ * 上传一批文件（**两个入口共用**：文件选择框 + 拖拽）。
+ *
+ * 刻意从 `onUploadFiles(ev)` 里剥出来：原实现直接从 `ev.target.files` 取文件，
+ * 于是拖拽路径根本无法复用它——只能再写一份，而上传含分片/续传/失败汇总三段
+ * 逻辑，副本一旦分叉（比如只在一边加了分片阈值判断）就会静默不一致。
+ * 现在事件处理只负责「从哪拿到 File[]」，其余全部走这里。
+ */
+async function uploadFiles(files: File[]) {
   if (!files.length || !canWrite.value) return
   uploading.value = true; error.value = ''
   const failed: string[] = []
@@ -334,8 +340,75 @@ async function onUploadFiles(ev: Event) {
     }
     if (failed.length) error.value = `部分上传失败 — ${failed.join('；')}`
     else if (usedMultipart) toast(`已上传 ${files.length} 个文件（大文件走了分片通道）`)
+    else toast(`已上传 ${files.length} 个文件`)
     await load()
+    // 上传成功后如果有筛选词且新文件不匹配，列表里会「看不见刚传上去的文件」——
+    // 用户第一反应是上传失败。这里补一句明确提示并给出清除筛选的出口。
+    // 不自动清空查询：用户正在按条件找东西时，替他清掉搜索框更粗暴。
+    if (!failed.length && filterQuery.value) {
+      // 复用 fileFilter 的 matchesQuery（与列表筛选同一规则），不在这里重写 includes。
+      const names = files.map(f => f.name).filter(n => !matchesQuery(n, filterQuery.value))
+      if (names.length) {
+        toast(names.length === 1
+          ? `已上传，但 ${names[0]} 不匹配当前筛选「${filterQuery.value.trim()}」，列表中不可见`
+          : `已上传，但 ${names.length} 个文件不匹配当前筛选「${filterQuery.value.trim()}」，列表中不可见`)
+      }
+    }
   } finally { uploading.value = false; uploadLabel.value = '' }
+}
+
+function onUploadFiles(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // 允许重复选同一文件
+  void uploadFiles(files)
+}
+
+// ── 拖拽上传 ──
+// 三条隐性规则见 composables/fileDrop.ts 的头部注释（深度计数防闪烁、必须
+// preventDefault 否则浏览器直接打开文件、只认文件不认拖文字/链接）。这里只接线。
+const dragDepth = createDragDepth()
+/** 遮罩可见性：用 ref 而非常规 computed，因为 depth 是普通计数器（非响应式），
+ *  必须显式同步；顺带避免模板依赖一个每次都读普通变量的 getter（不会重渲染）。 */
+const dragActive = ref(false)
+const dragTip = computed(() => dropHint(canWrite.value, 0))
+
+/** 只在拖的是**文件**时介入；否则让浏览器按默认行为处理（拖文字/链接）。 */
+function onDragEnter(e: DragEvent) {
+  if (!hasFiles(e.dataTransfer)) return
+  // 必须阻止默认：不拦的话 drop 时浏览器会直接导航到这个文件。
+  e.preventDefault()
+  dragDepth.inc()
+  dragActive.value = true
+}
+function onDragOver(e: DragEvent) {
+  if (!hasFiles(e.dataTransfer)) return
+  // dragover 也必须 preventDefault，否则 drop 事件根本不会触发（规范如此）。
+  // 同时把 dropEffect 设为 copy，光标才会显示「+」而不是「禁止」。
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+function onDragLeave(e: DragEvent) {
+  if (!hasFiles(e.dataTransfer)) return
+  // 不需要 preventDefault：leave 不参与「是否允许放置」的判定。
+  dragDepth.dec()
+  if (!dragDepth.active()) dragActive.value = false
+}
+function onDrop(e: DragEvent) {
+  if (!hasFiles(e.dataTransfer)) return
+  // 拦掉默认行为，否则浏览器会打开这个文件（整页被替换成文件内容）。
+  e.preventDefault()
+  // ⚠ 必须在**同步**阶段取文件：DataTransfer.files 只在事件派发期间有效，
+  // 放进 await 之后再读，多数浏览器返回空列表（「拖上去没反应」的元凶）。
+  const files = droppedFiles(e.dataTransfer)
+  // drop 之后通常**没有**配对的 dragleave ⇒ 不重置遮罩会永久卡在屏上。
+  dragDepth.reset(); dragActive.value = false
+  // 只读用户拖进来：明确告知不可用，而不是静默吞掉（那看起来像面板没反应）。
+  if (!canWrite.value) {
+    error.value = '当前账号没有文件写入权限，无法上传'
+    return
+  }
+  void uploadFiles(files)
 }
 
 // ── 下载（同源直链：GET 带 Cookie，浏览器原生保存）──
@@ -498,6 +571,11 @@ function full(p: string) {
 
 <template>
   <PageLayout>
+   <!-- 拖拽上传的作用域包住整页内容：用户不会瞄准某个精确的投放区，而是
+        「把文件丢到这块页面上」。用独立 div 而不用 PageLayout 的属性透传，
+        是为了让绑定点显式可见（透传会让人看不出这些事件挂在哪个元素上）。 -->
+   <div class="drop-zone" @dragenter="onDragEnter" @dragover="onDragOver"
+     @dragleave="onDragLeave" @drop="onDrop">
     <!-- 多页签：每个标签是一个独立目录视图；「+ 新标签」以当前目录为起点开分支 -->
     <div class="tabbar" role="tablist" aria-label="文件标签">
       <div v-for="t in tabs" :key="t.id" class="tab" :class="{ on: t.id === activeId }"
@@ -740,6 +818,22 @@ function full(p: string) {
 
       <p>单次列目录最多返回 1000 项，超过会提示「结果已被截断」，可进入子目录查看其余内容。</p>
     </HelpDrawer>
+
+    <!-- 拖拽遮罩：position:fixed 覆盖视口。必须 Teleport 到 body——本页卡片用了
+         backdrop-filter（.card），它会让该元素成为 fixed 的包含块，遮罩若不 Teleport
+         就只在卡片范围内定位（全站浮层纪律见 MEMORY）。
+         只读态用 .deny 换文案与配色：给出「拖不进来」的明确反馈，而不是让用户
+         松手后才发现什么都没发生。 -->
+    <Teleport to="body">
+      <div v-if="dragActive" class="drop-mask" :class="{ deny: !canWrite }" aria-hidden="true">
+        <div class="drop-box">
+          <Icon :name="canWrite ? 'download' : 'lock'" :size="34" />
+          <p class="drop-title">{{ dragTip }}</p>
+          <p v-if="canWrite" class="drop-sub">目标目录：{{ path }}</p>
+        </div>
+      </div>
+    </Teleport>
+   </div>
   </PageLayout>
 </template>
 
@@ -786,6 +880,30 @@ th.sortable.on { color: var(--c-primary); }
 .fsearch-x:hover { background: var(--c-hover); color: var(--c-text); }
 /* 过滤提示条：中性信息，不用 .warn（那是"出了状况"的黄色通道）。 */
 .filter-tip { margin: -4px 0 10px; font-size: var(--fs-12); color: var(--c-text-dim); }
+
+/* 拖拽上传。作用域是整页内容（.drop-zone 本身不画任何东西，纯事件绑定），
+   视觉反馈全在 Teleport 出去的全屏遮罩上——这样表格、页签都不会被重排。 */
+.drop-zone { position: relative; flex: 1; min-height: 0; }
+.drop-mask {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+  /* 遮罩本身不接收指针事件：拖拽期间指针仍属于拖拽上下文，遮罩若吃掉事件会
+     导致 drop 落在遮罩而不是 .drop-zone 上，上传静默失效。 */
+  pointer-events: none;
+}
+.drop-box {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 34px 48px; border: 2px dashed var(--c-primary); border-radius: var(--radius);
+  background: var(--c-surface); color: var(--c-text);
+  box-shadow: var(--shadow-lg);
+}
+.drop-box .icon { color: var(--c-primary); }
+.drop-title { margin: 0; font-size: var(--fs-15); font-weight: 600; }
+.drop-sub { margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); font-family: var(--mono); max-width: 52ch; overflow-wrap: anywhere; }
+/* 只读态：换成中性灰虚线 + 锁图标，避免用主色暗示"可以"。 */
+.drop-mask.deny .drop-box { border-color: var(--c-border-strong); }
+.drop-mask.deny .drop-box .icon { color: var(--c-text-dim); }
 .hid { display: flex; align-items: center; gap: 5px; font-size: var(--fs-12); margin: 0; color: var(--c-text-dim); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
