@@ -29,6 +29,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { useModal } from '@/composables/useModal'
+import { filterEntries, filterHint } from '@/composables/fileFilter'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
 import { toast } from '@/composables/useToast'
@@ -56,13 +57,17 @@ interface FileTab {
   showHidden: boolean
   /** 该标签独立的请求序号：切标签 / 连点刷新时先到的结果不会覆盖后发的 */
   seq: number
+  /** 该标签的目录内筛选词（本地筛，不走后端）。**必须每标签一份**：
+   *  存在全局单 ref 里时，两个标签处在不同目录会互相串——A 标签筛着 "log"，
+   *  切到 B 标签发现 B 也被筛没了（实测过）。其余状态本就每标签一份，它没理由例外。 */
+  filter: string
 }
 
 function makeTab(path: string, id?: string): FileTab {
   return {
     id: id ?? `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     path, entries: [], loading: false, error: '', truncated: false,
-    selected: new Set(), sortBy: 'name', showHidden: false, seq: 0,
+    selected: new Set(), sortBy: 'name', showHidden: false, seq: 0, filter: '',
   }
 }
 
@@ -81,6 +86,18 @@ const selected = computed({ get: () => activeTab.value.selected, set: (v) => { a
 const sortBy = computed({ get: () => activeTab.value.sortBy, set: (v) => { activeTab.value.sortBy = v } })
 const showHidden = computed({ get: () => activeTab.value.showHidden, set: (v) => { activeTab.value.showHidden = v } })
 
+/** 当前标签的过滤串（本地筛选，不走后端——见 composables/fileFilter.ts 的语义说明）。
+ *  按标签存放：切标签时两边各自记住自己的查询词，不会串（见 FileTab.filter 注释）。 */
+const filterQuery = computed({
+  get: () => activeTab.value.filter,
+  set: (v: string) => { activeTab.value.filter = v },
+})
+/** 过滤后的可见条目：查询为空时**就是 entries 本身**（引用相等），模板直接渲染它 */
+const visibleEntries = computed(() => filterEntries(entries.value, filterQuery.value))
+/** 过滤提示（空串表示无需提示，由模板 v-if 控制） */
+const filterTip = computed(() =>
+  filterHint(entries.value.length, visibleEntries.value.length, filterQuery.value))
+
 /** 排序：直接走后端 list 的 sort 参数（已支持 name/size/modified，dirs_first 恒真）。
  *  前端不再本地排序——服务端才是权威，本地排会让「截断 1000 项」的显示与真实顺序脱节。 */
 function setSortBy(v: 'name' | 'size' | 'modified') { activeTab.value.sortBy = v; load() }
@@ -88,20 +105,42 @@ function setShowHidden(v: boolean) { activeTab.value.showHidden = v; load() }
 
 // 请求序号按标签隔离：连续切目录/连点刷新时，先发的请求可能**后到**，
 // 若不加甄别就会用旧目录的结果覆盖新目录（且把 loading 提前清掉 → 表格闪一下）。
-async function load(tab: FileTab = activeTab.value) {
+/**
+ * 拉取目录列表。
+ * @param toPath 目标目录；省略 = 重新拉取当前目录（刷新/上传后/删除后）。
+ *               传了新路径时**由本函数负责赋值**——调用方一律不要自己改 path.value，
+ *               否则 pathChanged 会退化成「新 vs 新」，恒为 false（见 goto 处的注释）。
+ */
+async function load(toPath?: string) {
+  const tab = activeTab.value
+  // 目标路径在**发起请求前**就定下（不能用 tab.path：它可能已被本函数之外改过）
+  const target = toPath ?? tab.path
   const seq = ++tab.seq
   tab.loading = true; tab.error = ''
   try {
     const r = await api.get<ListResp>(API.files.list(), {
-      params: { path: tab.path, hidden: tab.showHidden, sort: tab.sortBy },
+      params: { path: target, hidden: tab.showHidden, sort: tab.sortBy },
     })
     if (seq !== tab.seq) return   // 已有更新的请求在途，丢弃本次结果
+    // 后端返回的是规范路径（可能被归一化），故以 r.path 为准；
+    // 比较用的「旧路径」是本次请求发起时的 tab.path，此刻尚未被覆盖。
+    const pathChanged = tab.path !== r.path
     tab.entries = r.entries ?? []; tab.truncated = r.truncated
     tab.path = r.path
-    tab.selected = new Set() // 换目录即清空选择
+    // 目录变了才清空选择与查询；同一目录刷新（上传后/删除后/手动刷新）**都保留**——
+    // 勾选留着省得重勾，查询留着因为用户正在找的那个东西不该被重置。
+    if (pathChanged) {
+      tab.selected = new Set()
+      // 过滤只对「当前目录的这一次列表」有意义：换目录后旧查询会让人以为文件不见了。
+      // 按 tab 清（不是只清激活标签的）：换目录的可能是后台标签（如回收站恢复回调）。
+      tab.filter = ''
+    }
   } catch (e) {
     if (seq !== tab.seq) return
     tab.error = errorText(e); tab.entries = []
+    // 失败也要把路径落到目标上：否则面包屑还停在旧目录、错误却说的是新目录，
+    // 用户点「重试」会静默去重试旧目录（看起来"重试没用"）。
+    tab.path = target
   } finally { if (seq === tab.seq) tab.loading = false }
 }
 
@@ -118,8 +157,9 @@ function openTab() {
   const t = makeTab(activeTab.value.path)
   tabs.value.push(t)
   activeId.value = t.id
-  // 必须走默认参数 load()（= activeTab.value，即响应式代理）——若传原始对象 t，
+  // 必须走无参 load()（内部取 activeTab.value，即响应式代理）——若传原始对象 t，
   // 对其 entries/loading 的赋值不会触发响应式，新标签会停在「空目录」空态直到手动刷新。
+  // 新标签的 path 与当前标签相同，故不会触发 pathChanged，也就不会清空查询。
   load()
 }
 function switchTab(id: string) {
@@ -160,18 +200,27 @@ const crumbsVisible = computed(() => {
   const tail = c.slice(-3)
   return { items: [...head, { label: '…', to: c[1].to }, ...tail], collapsedFrom: 2 }
 })
-function goto(p: string) { path.value = p; load() }
+// ⚠⚠ 导航（goto/up/enter）**不得自己改 tab.path**：一律把目标路径交给 load()。
+//
+// 曾经的写法是「先 path.value = 新目录，再 load()」，于是 load() 里
+// `pathChanged = tab.path !== r.path` 比较的是**新目录 vs 新目录**，恒为 false —
+// 结果是「换目录清空勾选 / 清空查询」这两条**永远不执行**（真机实测：进入 /dev
+// 后查询词仍是 "dev"，点面包屑回根目录后仍是 "zz"）。这是一个静默故障：
+// 编译、类型、build、UI 守卫全绿，只有真机点一遍才看得见。
+//
+// 现在由 load(toPath?) 独占「改路径」这一动作：它在**赋值之前**拿旧路径与目标
+// 比较，因此 pathChanged 的语义是真的「目录换了没」。所有入口都走同一条路，
+// 不存在第二个地方偷偷改 path 让判据失真。
+function goto(p: string) { load(p) }
 
 function up() {
   const p = path.value.replace(/\/+$/, '')
   const i = p.lastIndexOf('/')
-  path.value = i <= 0 ? '/' : p.slice(0, i)
-  load()
+  load(i <= 0 ? '/' : p.slice(0, i))
 }
 function enter(e: Entry) {
   if (e.kind !== 'dir') return open(e)
-  path.value = (path.value.replace(/\/+$/, '') + '/' + e.name) || '/'
-  load()
+  load((path.value.replace(/\/+$/, '') + '/' + e.name) || '/')
 }
 
 async function open(e: Entry) {
@@ -218,7 +267,13 @@ async function doDelete() {
     toast(`已移入回收站：${name}`)
     confirmDel.value = null
     load()
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) {
+    // 失败也必须关掉确认框：否则弹窗原地不动、用户以为「点了没反应」，
+    // 而真正的失败原因显示在弹窗背后的页面级 .err 上（被遮罩挡住看不见）。
+    // 实测过：失败时 dialogStillOpen=true 且错误文案不可见。
+    confirmDel.value = null
+    error.value = errorText(e)
+  }
 }
 
 // ── 上传（多选，逐文件 PUT 原始字节）──
@@ -352,13 +407,20 @@ function askChmod(e: Entry) {
 }
 
 // ── 批量 ──
+// 全选的语义必须**基于可见项**（visibleEntries），不能基于 entries：过滤生效时若
+// 按 entries 全选，会选中一批用户当前看不见的条目——后面的「移动到…/移入回收站」
+// 于是作用在这些隐形条目上，用户无法从界面上核对哪些会被动到。这是最危险的一类
+// 不一致（列表看不见 ≠ 不会被操作），所以判定与写入都用同一份 visibleEntries。
+// 副作用是「过滤时全选只选匹配项」，这正是用户看着屏幕时的预期。
+const visibleSelectable = computed(() => visibleEntries.value.filter(e => !e.sensitive))
 const allChecked = computed({
-  get: () => entries.value.filter(e => !e.sensitive).length > 0 &&
-    entries.value.filter(e => !e.sensitive).every(e => selected.value.has(e.name)),
+  get: () => visibleSelectable.value.length > 0 &&
+    visibleSelectable.value.every(e => selected.value.has(e.name)),
   set: (v: boolean) => {
-    selected.value = v
-      ? new Set(entries.value.filter(e => !e.sensitive).map(e => e.name))
-      : new Set()
+    if (!v) { selected.value = new Set(); return }
+    // 勾「全选」是**并集**而非替换：过滤时反复变换查询词逐批全选，是常见操作；
+    // 若每次替换，前一批已选的会被悄悄取消。取消全选仍是清空（无法只取消不可见的）。
+    selected.value = new Set([...selected.value, ...visibleSelectable.value.map(e => e.name)])
   },
 })
 function toggle(e: Entry) {
@@ -367,8 +429,11 @@ function toggle(e: Entry) {
   s.has(e.name) ? s.delete(e.name) : s.add(e.name)
   selected.value = s
 }
+// 批量动作的作用范围**只认可见项**：即便 selected 里残留着被过滤掉的旧名字
+// （先全选再改查询词就会这样），也不会把它们带进「移动到…/移入回收站」。
+// 这与上面对 allChecked 的处理是同一条纪律：看得见的才动得着。
 const selectedEntries = computed(() =>
-  entries.value.filter(e => selected.value.has(e.name)))
+  visibleEntries.value.filter(e => selected.value.has(e.name)))
 
 const confirmBatchDel = ref(false)
 function runBatch(op: 'trash' | 'move' | 'copy') {
@@ -459,6 +524,18 @@ function full(p: string) {
         </template>
       </nav>
       <span class="spacer" />
+      <!-- 目录内过滤：只筛**当前目录已拉回的条目**（纯前端，不发请求）。
+           不提供「递归搜索」是刻意的——那需要后端新接口与遍历预算控制，
+           半成品的全文搜索会让用户以为「找不到 = 文件不存在」。
+           type=search 自带 Esc 清空提示；清除按钮另给，兼容不显示原生叉的浏览器。 -->
+      <div class="fsearch">
+        <Icon name="search" :size="14" />
+        <input v-model="filterQuery" class="fsearch-in" type="search"
+          :placeholder="entries.length ? `在 ${entries.length} 项中筛选…` : '筛选当前目录…'"
+          aria-label="筛选当前目录的文件名" autocomplete="off" spellcheck="false" />
+        <button v-if="filterQuery" class="fsearch-x" type="button" aria-label="清除筛选"
+          title="清除筛选" @click="filterQuery = ''"><Icon name="close" :size="12" /></button>
+      </div>
       <HelpBtn title="文件管理说明" aria-label="文件管理说明" :expanded="helpOpen" @click="helpOpen = true" />
       <label class="hid"><input type="checkbox" :checked="showHidden" @change="setShowHidden(($event.target as HTMLInputElement).checked)" /> 显示隐藏</label>
       <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
@@ -483,10 +560,17 @@ function full(p: string) {
          truncated / hasMore 是提示性警告，保留黄色 -->
     <p v-if="batchErr" class="err" role="alert">{{ batchErr }}</p>
     <p v-if="truncated" class="warn">结果已被截断（单次最多 1000 项）</p>
+    <!-- 过滤提示：替代「顶部截断提示」的位置语义——它描述的是**当前列表被缩窄了多少**，
+         必须紧贴表格上方，否则用户看着过滤后的空表不知道自己在看什么。
+         走 .warn 之外的独立中性样式：过滤生效不是异常。 -->
+    <p v-if="filterTip" class="filter-tip">{{ filterTip }}</p>
 
     <!-- 批量操作条 -->
-    <div v-if="selectedSet.size > 0 && canWrite" class="card batch">
-      <strong>已选 {{ selectedSet.size }} 项</strong>
+    <!-- 批量操作条。数量显示用 selectedEntries.length（= 可见的已选项）而不是
+         selectedSet.size：后者含被过滤隐藏的旧选择，会让「已选 N 项」与实际会被
+         操作的条目数不符。取消选择仍是清空全部（含隐藏的）——见下方 @click。 -->
+    <div v-if="selectedEntries.length > 0 && canWrite" class="card batch">
+      <strong>已选 {{ selectedEntries.length }} 项</strong>
       <span class="spacer" />
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('copy')">复制到…</button>
       <button class="btn-ghost btn-sm" :disabled="batchBusy" @click="runBatch('move')">移动到…</button>
@@ -494,7 +578,9 @@ function full(p: string) {
       <button class="btn-ghost btn-sm" @click="selectedSet = new Set()">取消选择</button>
     </div>
 
-    <div v-if="entries.length" class="card flush">
+    <!-- 表格存在条件用 visibleEntries 而非 entries：过滤到零命中时若仍按 entries
+         渲染，会留下一张只有表头的空表，比直接给空态更让人困惑。 -->
+    <div v-if="visibleEntries.length" class="card flush">
       <div class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 勾选列仅在可写时渲染，colgroup 须同步 v-if —— 否则列宽与列数错位。
@@ -516,7 +602,7 @@ function full(p: string) {
           <th />
         </tr></thead>
         <tbody>
-          <tr v-for="e in entries" :key="e.name" :class="{ sens: e.sensitive }">
+          <tr v-for="e in visibleEntries" :key="e.name" :class="{ sens: e.sensitive }">
             <td v-if="canWrite" class="chk">
               <input v-if="!e.sensitive" type="checkbox" :aria-label="`选择 ${e.name}`"
                 :checked="selectedSet.has(e.name)" @change="toggle(e)" />
@@ -545,6 +631,26 @@ function full(p: string) {
       </table>
       </div>
     </div>
+    <!-- 三种「没东西可看」必须分开说，否则用户无法判断下一步该做什么：
+         · 加载中 → 什么都不渲染（避免空态闪一下）
+         · 有文件但被过滤器挡光 → 给出清除筛选的动作（不是「空目录」！）
+         · 真的空目录 → 可写时给上传/新建的入口，不可写就是纯空
+         ⚠ EmptyState 的按钮插槽是**具名** `#cta`：写成默认插槽不会渲染（静默）。
+         ⚠ reason 会渲染成「原因：xxx」（用于能力不支持），过滤不到并非故障 → 用 hint。 -->
+    <EmptyState v-else-if="!loading && entries.length"
+      :title="`没有匹配「${filterQuery.trim()}」的条目`"
+      hint="筛选只作用于当前目录已列出的条目，清除筛选即可看到全部。">
+      <template #cta>
+        <button class="btn-ghost" type="button" @click="filterQuery = ''">清除筛选</button>
+      </template>
+    </EmptyState>
+    <EmptyState v-else-if="!loading && canWrite" title="空目录"
+      hint="可以上传文件或新建文件夹开始使用。">
+      <template #cta>
+        <button class="btn-ghost" type="button" @click="pickUpload">上传文件</button>
+        <button class="btn-ghost" type="button" @click="askMkdir">新建文件夹</button>
+      </template>
+    </EmptyState>
     <EmptyState v-else-if="!loading" title="空目录" />
 
     <div v-if="editing" class="card editor">
@@ -572,7 +678,7 @@ function full(p: string) {
     <ConfirmDialog
       :open="confirmBatchDel"
       title="批量移入回收站"
-      :detail="`即将把已选的 ${selectedSet.size} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
+      :detail="`即将把已选的 ${selectedEntries.length} 项移入回收站（含目录全部内容，可在回收站恢复）。`"
       @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
 
     <!-- 通用输入弹窗（新建文件夹 / 重命名 / 权限 / 批量目标） -->
@@ -666,6 +772,20 @@ function full(p: string) {
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--c-text); }
 th.sortable.on { color: var(--c-primary); }
+/* 目录内筛选框。刻意**不**复制 ContainersView 的 `.filter` 全量声明（那会变成
+   第三份边框/高度/背景的副本）——这里只做布局与尺寸，外观全部继承 main.css 的
+   `input` 基础规则（含 :focus-visible 的主色环与 placeholder 色）。
+   搜索图标绝对定位在框内左侧，输入框给 padding-left 让位。 */
+.fsearch { position: relative; display: flex; align-items: center; flex: 0 1 260px; min-width: 140px; }
+.fsearch > .icon { position: absolute; left: 9px; color: var(--c-text-dim); pointer-events: none; }
+.fsearch-in { padding: 7px 26px 7px 29px; font-size: var(--fs-13); }
+/* 清除按钮：有内容才出现（v-if），压住原生 type=search 的取消叉（宽度给它留出）。 */
+.fsearch-x { position: absolute; right: 5px; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+  background: transparent; color: var(--c-text-dim); }
+.fsearch-x:hover { background: var(--c-hover); color: var(--c-text); }
+/* 过滤提示条：中性信息，不用 .warn（那是"出了状况"的黄色通道）。 */
+.filter-tip { margin: -4px 0 10px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .hid { display: flex; align-items: center; gap: 5px; font-size: var(--fs-12); margin: 0; color: var(--c-text-dim); }
 .fname { display: inline-flex; align-items: center; gap: 7px; }
 tr.sens { background: var(--c-warn-bg); }
