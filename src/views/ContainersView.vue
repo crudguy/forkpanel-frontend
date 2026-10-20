@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 容器（Docker）——只读列举 + 生命周期。
+ * 容器（Docker）——列举 / 镜像 / 创建 / 生命周期 / 安装 / 加组 / 备注。
  *
  * 能力边界的处理是本页的重点：
  * `container.manage` 由后端按 **Docker 守护进程 socket 可达性** 判定，而不是
@@ -10,9 +10,9 @@
  * `daemon_unreachable` 下直接给三个按钮（启动 Docker 服务 / 把面板用户加入 docker 组 /
  * 重启面板），后端按面板进程真实身份执行，用户无需手敲任何命令。
  *
- * 刻意不提供的操作：**创建容器**（`docker run` 等价宿主机任意代码执行，
- * 需独立的镜像白名单与特权/挂载禁用设计）、镜像删除与拉取。页面里明确写出，
- * 避免用户以为是漏做的功能。
+ * 已开放：创建容器（`docker create`，默认不启动；禁特权/`/`/etc`/proc/sys/var/run/docker.sock
+ * 挂载 + 二次确认词「创建容器」）、拉取镜像。刻意不开放：镜像删除（磁盘回收风险）。
+ * 暂未实现（非安全刻意排除）：`docker logs`/`exec`/`stats`、网络/卷/compose。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -363,8 +363,8 @@ async function saveRemark(c: Container, v: string) {
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
-      <RiskBanner level="info" title="只读列举 + 创建 / 生命周期操作"
-        text="容器为只读列举，支持创建（docker create，默认不启动）/ 启停 / 重启 / 删除；镜像支持从 registry 拉取 / 更新（docker pull，写操作，需 container.manage）。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
+      <RiskBanner level="info" title="列举 / 创建 / 生命周期操作"
+        text="容器支持列举、创建（docker create，默认不启动）、启停 / 重启 / 删除；镜像支持拉取 / 更新（docker pull，写操作，需 container.manage）。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
@@ -480,7 +480,7 @@ async function saveRemark(c: Container, v: string) {
 
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
-      <p>容器为<b>只读列举 + 生命周期操作</b>（启停 / 重启 / 删除）。</p>
+      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注</b>等管理操作。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
