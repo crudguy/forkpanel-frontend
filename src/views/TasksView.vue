@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { fmtDateTime, taskStateBadge, taskStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import { usePolling } from '@/composables/usePolling'
 
 /** 与后端 task_runs 实态对齐（契约 Task schema） */
 interface Task {
@@ -20,7 +21,6 @@ const loading = ref(true)
 const sel = ref<Task | null>(null)
 const output = ref('')
 const outLoading = ref(false)
-let poll: number | undefined
 
 async function load() {
   error.value = ''; loading.value = true
@@ -34,24 +34,25 @@ onMounted(load)
 
 function isLive(t: Task | null) { return !!t && (t.state === 'running' || t.state === 'queued') }
 
-function stopPoll() { if (poll) { clearInterval(poll); poll = undefined } }
-
-/** 运行中任务每 2s 轮询单体详情刷新进度，结束态自动停止并刷新列表 */
-function startPoll() {
-  stopPoll()
-  if (!isLive(sel.value)) return
-  poll = window.setInterval(async () => {
-    if (!sel.value) { stopPoll(); return }
+/** 运行中任务每 2s 轮询单体详情刷新进度。
+ *
+ *  「是否在轮」由 enabled 表达（sel 是运行中任务），任务结束时 enabled 变假、
+ * 链空转——不再需要手写 stopPoll 清理句柄；只有"用户主动关闭详情"才永久停。
+ *  换看另一个任务时 restart() 解除永久停（上一个任务跑完时停过）。 */
+const taskPoll = usePolling({
+  ms: 2000,
+  enabled: () => isLive(sel.value),
+  fn: async () => {
+    if (!sel.value) return
     try {
       const d = await api.get<Task>(API.tasks.get(sel.value.id))
       sel.value = d
-      if (!isLive(d)) { stopPoll(); load() }
+      if (!isLive(d)) { taskPoll.stop(); load() }
     } catch { /* 瞬时错误忽略，下一轮重试 */ }
-  }, 2000)
-}
+  },
+})
 
 async function open(t: Task) {
-  stopPoll()
   sel.value = { ...t }; outLoading.value = true; output.value = ''
   // 详情（拿派生字段 duration_secs 等）；失败则退回列表行数据
   try { sel.value = await api.get<Task>(API.tasks.get(t.id)) }
@@ -62,7 +63,7 @@ async function open(t: Task) {
     output.value = r.lines?.length ? r.lines.join('\n') : '(无输出)'
   } catch (e) { output.value = errorText(e) }
   finally { outLoading.value = false }
-  startPoll()
+  taskPoll.restart()
 }
 
 async function cancel(t: Task) {
@@ -77,7 +78,6 @@ async function cancel(t: Task) {
 // 且把英文 state 直接甩给用户；服务页判的却是 'done'——同一任务两处颜色不同
 function stateClass(s: string) { return taskStateBadge(s) }
 const stateText = taskStateLabel
-onUnmounted(stopPoll)
 </script>
 
 <template>
@@ -133,7 +133,7 @@ onUnmounted(stopPoll)
         <div class="sec-head">
           <Icon name="terminal" :size="16" /><span>任务 #{{ sel.id }} · {{ sel.key || sel.kind }}</span>
           <span class="badge" :class="stateClass(sel.state)">{{ stateText(sel.state) }}</span>
-          <span class="spacer" /><button class="btn-sm" @click="stopPoll(); sel = null">关闭</button>
+          <span class="spacer" /><button class="btn-sm" @click="taskPoll.stop(); sel = null">关闭</button>
         </div>
         <p class="meta">
           类型 <span class="mono">{{ sel.kind }}</span>

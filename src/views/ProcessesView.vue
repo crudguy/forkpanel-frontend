@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,7 @@ import { CAP, ProcessInfo } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import { usePolling } from '@/composables/usePolling'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PageLayout from '@/components/PageLayout.vue'
 
@@ -51,27 +52,10 @@ async function load(silent = false) {
 // 3 秒：本机 438 个进程实测单次 /processes 往返约 40ms、75KB（见
 // 提交说明），3 秒间隔完全无压力，且比 ProfessionalView 的 2 秒更
 // 克制——进程列表不需要那么高的刷新率。
-let timer: number | undefined
-
-function stop() { if (timer) { clearInterval(timer); timer = undefined } }
-function start() { stop(); timer = window.setInterval(() => load(true), 3000) }
-
-/** 页面隐藏时停轮询：后台标签页持续拉 438 进程纯属浪费。 */
-function onVisibility() {
-  if (document.hidden) { stop(); return }
-  load(true)
-  start()
-}
-
-onMounted(() => {
-  load()
-  start()
-  document.addEventListener('visibilitychange', onVisibility)
-})
-onUnmounted(() => {
-  stop()
-  document.removeEventListener('visibilitychange', onVisibility)
-})
+// 3s 一轮（刻意压低的刷新率：进程列表不需要 1s 级实时）；隐藏暂停 / 回可见
+// 补拉 / 卸载清理交给 usePolling，不再手写 start/stop/onVisibility。
+usePolling({ fn: () => load(true), ms: 3000 })
+onMounted(load)
 
 // ── 表头排序（纯前端，数据已全量拉回，点击即时排序，不回源）──
 type SortKey = 'pid' | 'name' | 'user' | 'cpu' | 'mem'

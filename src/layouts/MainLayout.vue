@@ -7,6 +7,7 @@ import ToastHost from '@/components/ToastHost.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePolling } from '@/composables/usePolling'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
@@ -128,7 +129,6 @@ const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
 // 在其余任意页面都完全静默。这里在 topbar 常驻铃铛把信号放出来：轮询 60s
 // （非关键路径，失败静默）+ 路由变化补一次（看完通知回来立刻更新）。
 const unread = ref(0)
-let unreadTimer: number | undefined
 async function loadUnread() {
   try {
     const r = await api.get<{ count: number }>(API.notifications.unreadCount())
@@ -136,11 +136,10 @@ async function loadUnread() {
   } catch { /* 静默重试：未读数取不到不影响任何操作 */ }
 }
 watch(() => route.path, loadUnread)
-onMounted(() => {
-  loadUnread()
-  unreadTimer = window.setInterval(loadUnread, 60_000)
-})
-onUnmounted(() => { if (unreadTimer) clearInterval(unreadTimer) })
+// 60s 一轮；隐藏暂停 / 卸载清理交给 usePolling（原先未读计数不暂停，后台标签
+// 也每分钟打一次——那是漏迁移，不是刻意行为）。首屏仍需立即取一次。
+usePolling({ fn: loadUnread, ms: 60_000 })
+onMounted(loadUnread)
 
 // ── 系统健康徽标（A12）：CPU/内存/磁盘迷你条 + 运行中任务数 ──
 // 数据源 /system/overview（与概览同口径）+ /tasks（运行中计数）；15s 轮询，
@@ -171,28 +170,14 @@ async function loadRunningTasks() {
     runningTasks.value = (list ?? []).filter(t => t.state === 'queued' || t.state === 'running').length
   } catch { /* 静默重试 */ }
 }
-function onHealthTick() { void loadHealth(); void loadRunningTasks() }
-let healthTimer: number | undefined
-function onHealthVisibility() {
-  if (document.hidden) {
-    if (healthTimer) { clearInterval(healthTimer); healthTimer = undefined }
-  } else {
-    onHealthTick()
-    // 恢复前先清旧句柄（同各监控页）：后台标签打开时 onMounted 已建过定时器，
-    // 直接覆盖会让旧句柄丢失、两个定时器同时跑。
-    if (healthTimer) { clearInterval(healthTimer); healthTimer = undefined }
-    healthTimer = window.setInterval(onHealthTick, 15_000)
-  }
+// 每个 tick 按能力位分别取：原先 loadHealth 不看 healthOk，指标不可用时
+// 每 15s 撞一次 501 再静默吞掉（空转打后端）；拆开判断后两个来源互不连坐。
+function onHealthTick() {
+  if (healthOk.value) void loadHealth()
+  if (tasksOk.value) void loadRunningTasks()
 }
-onMounted(() => {
-  onHealthTick()
-  healthTimer = window.setInterval(onHealthTick, 15_000)
-  document.addEventListener('visibilitychange', onHealthVisibility)
-})
-onUnmounted(() => {
-  if (healthTimer) clearInterval(healthTimer)
-  document.removeEventListener('visibilitychange', onHealthVisibility)
-})
+usePolling({ fn: onHealthTick, ms: 15_000 })
+onMounted(onHealthTick)
 
 const hpct = (x: number) => Math.min(100, Math.max(2, x)) + '%'
 const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')

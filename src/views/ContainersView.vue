@@ -38,6 +38,7 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import type { StackServicePayload } from '@/composables/stackForm'
+import { usePolling } from '@/composables/usePolling'
 import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
@@ -430,57 +431,30 @@ async function load(silent = false) {
   )
 }
 
-// 自动轮询：容器/镜像 5s 一次；资源 Tab 3s 一次（用量变化快，需近实时感）且受
-// 「自动刷新」开关控制。隐藏标签页时暂停、可见时补一次；卸载清理。
-// 间隔与启用条件都随当前 Tab 推导，故切 Tab / 拨开关都要重启轮询使新值生效。
-let timer: ReturnType<typeof setInterval> | undefined
-let pageVisible = true
-function pollEnabled() {
-  if (!pageVisible || !supported.value) return false
-  if (tab.value === 'stats') return statsAuto.value
-  // 网络 Tab 不自动轮询：网络清单变化频率低（创建/删除网络是显式运维动作），
-  // 且没有"不刷新就失去意义"的实时字段；需要时手动点工具栏「刷新」。
-  if (tab.value === 'networks') return false
-  // 卷 Tab 同理（且比网络还罕见）：卷随容器创建或手动 docker volume create
-  // 产生，没有实时字段；手动「刷新」即可。
-  if (tab.value === 'volumes') return false
-  // Compose Tab 同理：项目随 docker compose up/down 显式变化，无"不刷新就失去
-  // 意义"的实时字段；手动「刷新」即可。
-  if (tab.value === 'compose') return false
-  return true
-}
-function pollMs() {
-  return tab.value === 'stats' ? 3000 : 5000
-}
-function startPoll() {
-  stopPoll()
-  timer = setInterval(() => { if (pollEnabled()) load(true) }, pollMs())
-}
-function stopPoll() { if (timer !== undefined) { clearInterval(timer); timer = undefined } }
-function onVisibility() {
-  pageVisible = document.visibilityState === 'visible'
-  if (pageVisible && supported.value) load(true)
-}
-onMounted(() => {
-  load()
-  if (supported.value) {
-    startPoll()
-    document.addEventListener('visibilitychange', onVisibility)
-  }
-})
-onUnmounted(() => {
-  stopPoll()
-  document.removeEventListener('visibilitychange', onVisibility)
+// 容器/镜像 5s 一轮；资源 Tab 3s 一轮（用量变化快）且受「自动刷新」开关控制。
+//
+// 间隔与启用条件都随当前 Tab 推导：usePolling 的自调度链在**下一次调度**即用新
+// 间隔，enabled 每 tick 求值——所以切 Tab / 拨开关都不需要手写重启（旧实现要在
+// onMounted、watch(statsAuto)、switchTab 三处各调一次 startPoll，漏一处就变成
+// "切了 Tab 还在用旧间隔"或"关了开关仍在轮询"）。
+//
+// 网络/卷/Compose 三个 Tab 刻意不轮询：它们的清单随显式运维动作变化，没有
+// "不刷新就失去意义"的实时字段，需要时手动点工具栏「刷新」。
+usePolling({
+  fn: () => load(true),
+  ms: () => (tab.value === 'stats' ? 3000 : 5000),
+  enabled: () => {
+    if (!supported.value) return false
+    if (tab.value === 'stats') return statsAuto.value
+    return tab.value !== 'networks' && tab.value !== 'volumes' && tab.value !== 'compose'
+  },
 })
 
-// 资源 Tab 的「自动刷新」开关：拨动即重启轮询（关→停，开→起），不必等下一轮周期。
-watch(statsAuto, () => { if (supported.value) startPoll() })
+onMounted(load)
 
 async function switchTab(t: string) {
   tab.value = t as 'containers' | 'images' | 'stats' | 'networks' | 'volumes' | 'compose'
   await load()
-  // 轮询间隔/启用条件依赖当前 Tab（资源 3s、其它 5s），必须重启才生效
-  if (supported.value) startPoll()
 }
 
 /** 生命周期动作的三种入口共用同一实现（后端是 204，无响应体）。

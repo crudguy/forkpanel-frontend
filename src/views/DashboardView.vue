@@ -7,6 +7,7 @@
  */
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePolling } from '@/composables/usePolling'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { CAP, fmtDateTime, type ServerNote } from '@/api/types'
@@ -95,8 +96,12 @@ interface Overview {
 }
 
 const ov = ref<Overview | null>(null)
-let timer: number | undefined
 let es: EventSource | undefined
+// 轮询档（nano 档没有 SSE）：10s 一轮，隐藏暂停交给 usePolling。
+// ⚠ 原先概览轮询**不暂停**——挂后台的标签每 10s 打一次 /system/overview，
+// 与 SystemView/ContainersView 的既有纪律不一致，属漏迁移而非刻意。
+// pollingMode 为假时链空转（tick 里被 enabled 拦下），与 SSE 分支互斥不双跑。
+usePolling({ fn: poll, ms: 10_000, enabled: () => auth.pollingMode })
 
 // 实时推送是 overview 的字段子集，必须「合并」而非整体替换——
 // 否则 SSE 不含的 disk/net/degraded 等字段会被覆盖成 undefined（进而显示 0）。
@@ -345,7 +350,7 @@ onMounted(async () => {
   await poll()
   await loadStatus()
   if (auth.pollingMode) {
-    timer = window.setInterval(poll, 10000)
+    // 轮询由上面的 usePolling 负责（链在 setup 时已建，此处无需再启动）
   } else {
     es = new EventSource(API.events.metrics())
     es.addEventListener('metrics', (ev) => {
@@ -353,7 +358,7 @@ onMounted(async () => {
     })
   }
 })
-onUnmounted(() => { if (timer) clearInterval(timer); es?.close() })
+onUnmounted(() => { es?.close() })
 </script>
 
 <template>

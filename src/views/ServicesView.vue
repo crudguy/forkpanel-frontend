@@ -27,6 +27,7 @@ import HelpBtn from '@/components/HelpBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import { usePolling } from '@/composables/usePolling'
 import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -288,33 +289,26 @@ async function confirmMajorUpgrade() {
 // 服务的启停 / 开机自启状态会变（在详情页操作、或系统层面变化），手动刷新不及时；
 // 加轮询让列表常驻最新。5s 比进程页 3s 更克制——服务状态变化频率低，无需高刷。
 // 仍配 visibilitychange 暂停 + onUnmounted 清理，避免后台标签页空转拉请求。
-let timer: number | undefined
-function stop() { if (timer) { clearInterval(timer); timer = undefined } }
-// 轮询只服务列表（软件区靠任务流/手动刷新）；且仅 services Tab 激活时才跑。
-function start() {
-  stop()
-  if (tab.value === 'services' && auth.supported(CAP.SERVICE_MANAGE)) {
-    timer = window.setInterval(() => load(true), 5000)
-  }
-}
+// 轮询只服务列表（软件区靠 SSE 任务流/手动刷新）；仅 services Tab 且有能力位时跑。
+// 「当前 Tab / 能力位」用 enabled 表达：切到软件 Tab 时 tick 自动跳过，不需要
+// 手写 start/stop；隐藏暂停 / 回可见补拉 / 卸载清理交给 usePolling。
+usePolling({
+  fn: () => load(true),
+  ms: 5000,
+  enabled: () => tab.value === 'services' && auth.supported(CAP.SERVICE_MANAGE),
+})
 
 /** Tab 切换由**路由变化**驱动（不再是点击 handler）：服务 → 立即拉一次并开轮询；
     软件 → 停轮询并加载软件清单。 */
 watch(tab, (t) => {
-  if (t === 'services') { load(); start() }
+  if (t === 'services') { load() }
   // 软件卡片的「服务状态」取自服务列表，而轮询只在服务 Tab 跑；切过来时补一次
   // silent 刷新，避免停在几分钟前的旧状态上。
-  else { stop(); load(true); loadPackages(); loadUpgradable() }
+  else { load(true); loadPackages(); loadUpgradable() }
 })
 
 /** 刷新当前 Tab：服务列表 reload，软件清单 reload（用户显式点刷新 → 强制，绕过新鲜度）。 */
 function refresh() { if (tab.value === 'services') load() ; else { loadPackages(true); loadUpgradable() } }
-
-/** 页面隐藏时停轮询：后台标签页持续拉服务列表纯属浪费。 */
-function onVisibility() {
-  if (document.hidden) { stop(); return }
-  if (tab.value === 'services') { load(true); start() }
-}
 
 onMounted(() => {
   // 两个子数据都预加载：软件区是默认 Tab；服务列表虽非默认，预拉一次让切到
@@ -323,14 +317,8 @@ onMounted(() => {
   load()
   loadPackages()
   loadUpgradable()   // 首屏就要显示「有新版」徽标，缺了它用户得切Tab 才看到
-  start()
-  document.addEventListener('visibilitychange', onVisibility)
 })
-onUnmounted(() => {
-  stopWatch()
-  stop()
-  document.removeEventListener('visibilitychange', onVisibility)
-})
+onUnmounted(stopWatch)
 
 // ─────────────── 安装/卸载任务进度 ───────────────
 

@@ -12,10 +12,11 @@
  * 复用 CreateContainerDialog 的弹窗骨架（.mask > .modal.stack）与 useModal 可访问性
  * （Esc 关闭 / Tab 焦点陷阱 / 打开聚焦 / 离场动画 + 焦点返还），保持全站弹窗一致。
  */
-import { ref, watch, computed, onUnmounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useModal } from '@/composables/useModal'
+import { usePolling } from '@/composables/usePolling'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 
@@ -49,10 +50,6 @@ const empty = computed(() => !loading.value && !error.value && lines.value.lengt
 const box = ref<HTMLElement | null>(null)
 const { close: modalClose } = useModal(() => props.open, box, () => emit('close'))
 
-let timer: ReturnType<typeof setInterval> | undefined
-function stopPoll() { if (timer) { clearInterval(timer); timer = undefined } }
-function startPoll() { stopPoll(); timer = setInterval(refresh, 3000) }
-
 async function refresh() {
   if (!props.containerId) return
   loading.value = true
@@ -74,17 +71,15 @@ function copyAll() {
   )
 }
 
-// 打开即拉一次；关闭清理轮询。tail / timestamps 变化（且开着）即重新拉取。
+// 打开即拉一次。tail / timestamps 变化（且开着）即重新拉取。
 watch(() => props.open, (v) => {
-  if (v) {
-    lines.value = []; error.value = ''
-    refresh()
-    if (auto.value) startPoll()
-  } else { stopPoll() }
+  if (v) { lines.value = []; error.value = ''; refresh() }
 })
-watch(auto, (v) => { if (v && props.open) startPoll(); else stopPoll() })
 watch([tail, withTs], () => { if (props.open) refresh() })
-onUnmounted(stopPoll)
+
+// 3s 一轮；「自动刷新」开关与弹窗开合用 enabled 表达，无需手写 start/stop。
+// 顺带获得：标签隐藏时暂停（原先弹窗开着切到别的标签仍每 3s 拉一次日志）。
+usePolling({ fn: refresh, ms: 3000, enabled: () => auto.value && props.open })
 </script>
 
 <template>

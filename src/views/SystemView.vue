@@ -8,12 +8,13 @@
  * 其中磁盘与网络为实时采集，后端 history 聚合表仅落盘 CPU / 内存 / 负载，
  * 故历史趋势模块不含磁盘/网络（见页面说明）。
  */
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
+import { usePolling } from '@/composables/usePolling'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -76,43 +77,16 @@ async function loadHistory() {
   catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
 }
 
-let rtTimer: number | undefined
-let histTimer: number | undefined
+// 实时曲线：间隔取后端采样间隔（1~3s 夹取）。间隔是**变量**——自调度链在
+// 下一次调度即用新值，不需要 watch + 手写重建。旧实现这段手写了两次（onMounted
+// 与 onVisibility 各一份），注释里"恢复前先清旧句柄否则两个定时器同时跑"的坑
+// 正是手写的产物；交给 usePolling 后隐藏暂停/回可见补拉/卸载清理都不再出现。
+const rtPollMs = () => Math.min(Math.max(interval.value || 2000, 1000), 3000)
+usePolling({ fn: loadRealtime, ms: rtPollMs })
+// 历史曲线 30s 一轮（变化慢，且 nano 档自身会短路）
+usePolling({ fn: loadHistory, ms: 30_000 })
 
-/** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9）：1-3s 轮询切后台仍打后端，低配机器负担明显 */
-function onVisibility() {
-  if (document.hidden) {
-    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-    if (histTimer) { clearInterval(histTimer); histTimer = undefined }
-  } else {
-    loadRealtime()
-    loadHistory()
-    // 恢复前必须先清旧句柄：页面在后台标签打开时 onMounted 已经建过定时器，
-    // 而 visibilitychange 要等真正切换才触发——此处若直接覆盖，旧句柄丢失、
-    // 两个定时器同时跑（双倍请求），onUnmounted 也只能清掉后建的那一个。
-    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-    if (histTimer) { clearInterval(histTimer); histTimer = undefined }
-    const poll = Math.min(Math.max(interval.value || 2000, 1000), 3000)
-    rtTimer = window.setInterval(loadRealtime, poll)
-    histTimer = window.setInterval(loadHistory, 30000)
-  }
-}
-
-onMounted(() => {
-  loadRealtime()
-  loadHistory()
-  // 自动刷新：轮询间隔取采样间隔，限制在 1s~3s，离开页面即清理
-  const poll = Math.min(Math.max(interval.value || 2000, 1000), 3000)
-  rtTimer = window.setInterval(loadRealtime, poll)
-  histTimer = window.setInterval(loadHistory, 30000)
-  document.addEventListener('visibilitychange', onVisibility)
-})
-
-onUnmounted(() => {
-  if (rtTimer) clearInterval(rtTimer)
-  if (histTimer) clearInterval(histTimer)
-  document.removeEventListener('visibilitychange', onVisibility)
-})
+onMounted(() => { loadRealtime(); loadHistory() })
 
 const last = computed(() => buf.value.at(-1))
 const memPct = computed(() =>

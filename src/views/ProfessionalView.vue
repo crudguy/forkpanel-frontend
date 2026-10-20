@@ -6,13 +6,14 @@
  * 每网卡吞吐、进程数 + Top 进程。数据来自后端已采集的 SystemSnapshot，纯按需拉取，
  * 每 2 秒刷新快照 / 3 秒刷新进程（procfs 读取开销 <0.02ms，轮询极轻）。
  */
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { SystemSnapshot } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
+import { usePolling } from '@/composables/usePolling'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -126,33 +127,15 @@ async function loadSnapshot() {
   }
   finally { loading.value = false }
 }
-let rtTimer: number | undefined
-
 /** 每次轮询：快照明细 + 统一采样序列（头卡），两请求并行发出、互不阻塞 */
 function tick() { void loadSnapshot(); void loadHeader() }
 
-/** 页面隐藏暂停轮询、可见时补一次再恢复（审计 P9） */
-function onVisibility() {
-  if (document.hidden) {
-    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-  } else {
-    tick()
-    // 恢复前必须先清旧句柄（同 SystemView）：后台标签打开时 onMounted 已建过定时器，
-    // 直接覆盖会让旧句柄丢失、两个定时器同时跑。
-    if (rtTimer) { clearInterval(rtTimer); rtTimer = undefined }
-    rtTimer = window.setInterval(tick, 2000)
-  }
-}
+// 2s 一轮；隐藏暂停/回可见补拉交给 usePolling。
+// 旧实现手写了 onVisibility + 两处 setInterval，注释里"恢复前先清旧句柄"
+// 的坑是手写产物。
+usePolling({ fn: tick, ms: 2000 })
 
-onMounted(() => {
-  tick()
-  rtTimer = window.setInterval(tick, 2000)
-  document.addEventListener('visibilitychange', onVisibility)
-})
-onUnmounted(() => {
-  if (rtTimer) clearInterval(rtTimer)
-  document.removeEventListener('visibilitychange', onVisibility)
-})
+onMounted(tick)
 </script>
 
 <template>
