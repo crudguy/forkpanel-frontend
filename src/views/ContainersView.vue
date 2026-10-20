@@ -40,12 +40,17 @@ import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
+import { containersOfProject, drillEmptyHint, projectCountMismatch } from '@/composables/composeDrill'
 
 interface Container {
   id: string; name: string; image: string; state: string
   status: string; ports: string; created: string
   /** 对象说明（备注，022）：容器不入库，备注存 container_remarks 引用表，列表端点联查挂载；无则为空串 */
   remark: string
+  /** 所属 Compose 项目/服务（后端读 com.docker.compose.* 标签）。非 compose 创建的
+   *  容器为 null —— 后端刻意用 null 而非空串，以便区分「没有项目」和「项目名是空」。 */
+  compose_project?: string | null
+  compose_service?: string | null
 }
 interface Image {
   id: string; repository: string; tag: string; size: string; created: string
@@ -128,6 +133,96 @@ interface ComposeProjectLine {
   name: string; status: string; config_files: string
 }
 const composeProjects = ref<ComposeProjectLine[]>([])
+
+/** 当前展开下钻的 Compose 项目名（null = 未展开）。点项目行切换。 */
+const drillProject = ref<string | null>(null)
+/** 下钻面板：该项目下的容器（按容器列表里的 compose_project 标签精确匹配）。 */
+const drillContainers = computed(() =>
+  drillProject.value ? containersOfProject(containers.value, drillProject.value) : [],
+)
+/** 当前展开项目的 compose 行（取 status 用于比对容器数）。 */
+const drillRow = computed(() =>
+  drillProject.value ? composeProjects.value.find((p) => p.name === drillProject.value) ?? null : null,
+)
+/** compose 自报数量 vs 面板实际看到的数量（不一致要如实提示）。 */
+const drillMismatch = computed(() =>
+  projectCountMismatch(drillRow.value?.status ?? '', drillContainers.value.length),
+)
+function toggleDrill(name: string) {
+  drillProject.value = drillProject.value === name ? null : name
+}
+
+// ── Compose 生命周期动作（写，container.manage）──
+// 危险度分级：up/stop/restart 可逆、日常，点了就执行；
+// down 会**整项目停服**，需在确认框里手输项目名——不是随手点 OK 能过。
+const composeBusy = ref(false)
+const composeDownOpen = ref(false)
+const composeDownTarget = ref<string | null>(null)
+/** down 弹窗里展示的服务数，让用户在停之前看清影响范围 */
+const composeDownCount = computed(() => drillContainers.value.length)
+
+async function runComposeAct(action: 'up' | 'stop' | 'restart') {
+  const project = drillProject.value
+  if (!project || composeBusy.value) return
+  composeBusy.value = true
+  try {
+    // up 需要工作目录：compose 靠它找配置文件（后端会强制校验）
+    const body: Record<string, unknown> = { action }
+    if (action === 'up') {
+      const dir = projectWorkingDir(project)
+      if (!dir) {
+        error.value = '无法从配置文件路径推断工作目录，请用 docker compose CLI 手动启动该项目'
+        return
+      }
+      body.working_dir = dir
+    }
+    await api.post(API.containers.composeAct(project), body)
+    toast(`已执行 ${action}：${project}`)
+    await load()
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    composeBusy.value = false
+  }
+}
+
+/** 从项目的 config_files（compose 配置文件绝对路径）推断工作目录。
+ *
+ *  取第一个文件的**所在目录**：compose 默认就在该目录下找 compose.yaml。
+ *  推断不出来返回空串，由调用方提示用户改用 CLI——**不猜一个路径**：
+ *  猜错会让 up 在错误目录执行，可能拉起完全不相干的服务。 */
+function projectWorkingDir(project: string): string {
+  const row = composeProjects.value.find((p) => p.name === project)
+  const first = (row?.config_files ?? '').split(',')[0]?.trim() ?? ''
+  if (!first.startsWith('/')) return ''
+  const idx = first.lastIndexOf('/')
+  return idx > 0 ? first.slice(0, idx) : ''
+}
+
+function askComposeDown() {
+  if (!drillProject.value) return
+  composeDownTarget.value = drillProject.value
+  composeDownOpen.value = true
+}
+
+async function doComposeDown() {
+  const project = composeDownTarget.value
+  if (!project) return
+  composeBusy.value = true
+  try {
+    // confirm_token 由 ConfirmDialog 的 confirm-word 校验（必须是项目名本身）
+    await api.post(API.containers.composeAct(project), { action: 'down', confirm_token: project })
+    toast(`已停止并清理：${project}`)
+    composeDownOpen.value = false
+    drillProject.value = null
+    await load()
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    composeBusy.value = false
+    composeDownTarget.value = null
+  }
+}
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -690,12 +785,63 @@ async function saveRemark(c: Container, v: string) {
           </thead>
           <tbody>
             <tr v-for="p in composeProjects" :key="p.name">
-              <td class="mono ellipsis" :title="p.name">{{ p.name }}</td>
+              <td class="mono ellipsis" :title="p.name">
+                <!-- 项目名可点：展开该项目下的容器（下钻）。
+                     按钮而非整行可点——整行点击与文字选择/复制路径会打架。 -->
+                <button class="drill-toggle" :aria-expanded="drillProject === p.name"
+                  @click="toggleDrill(p.name)">
+                  <span class="caret" :class="{ open: drillProject === p.name }">▸</span>
+                  {{ p.name }}
+                </button>
+              </td>
               <td class="mono dim">{{ p.status || '—' }}</td>
               <td class="mono dim ellipsis" :title="p.config_files">{{ p.config_files || '—' }}</td>
             </tr>
           </tbody>
         </table>
+        </div>
+
+        <!-- 下钻面板：该项目下的容器。只在展开时出现，与上方表格同级（不是浮层）。 -->
+        <div v-if="drillProject" class="drill-panel">
+          <div class="drill-head">
+            <b>{{ drillProject }}</b>
+            <span class="count">· {{ drillContainers.length }} 个容器</span>
+            <span v-if="drillMismatch.differs" class="drill-warn">
+              ⚠ compose 报告 {{ drillMismatch.declared }} 个，实际匹配到 {{ drillMismatch.actual }} 个
+              —— 可能有容器刚被删除，或它们运行在其他 Docker 守护进程上
+            </span>
+            <span class="spacer" />
+            <!-- 动作按危险度分级：up/stop/restart 可逆、日常；down 整项目停服，需手输项目名 -->
+            <template v-if="canManage">
+              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('up')">
+                启动 up
+              </button>
+              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('restart')">
+                重启
+              </button>
+              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('stop')">
+                停止
+              </button>
+              <button class="btn-ghost btn-sm danger" :disabled="composeBusy" @click="askComposeDown">
+                停止并清理
+              </button>
+            </template>
+          </div>
+          <table class="fixed" v-if="drillContainers.length">
+            <colgroup><col class="w-dname" /><col class="w-dservice" /><col class="w-dstate" /><col /></colgroup>
+            <thead><tr><th>容器</th><th>服务</th><th>状态</th><th>镜像</th></tr></thead>
+            <tbody>
+              <tr v-for="c in drillContainers" :key="c.id">
+                <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
+                <td class="mono dim">{{ c.compose_service || '—' }}</td>
+                <td>
+                  <span class="badge" :class="containerStateBadge(c.state)">{{ containerStateLabel(c.state) }}</span>
+                </td>
+                <td class="mono dim ellipsis" :title="c.image">{{ c.image }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="drill-empty">{{ drillEmptyHint(drillMismatch.declared) }}</p>
         </div>
       </div>
       <EmptyState v-else-if="tab === 'compose' && !loading" title="暂无 Compose 项目"
@@ -724,6 +870,20 @@ async function saveRemark(c: Container, v: string) {
         <input type="checkbox" v-model="delForce" />
         <span>强制删除（先强制停止运行中的容器，<b>数据不保留</b>）</span>
       </label>
+    </ConfirmDialog>
+
+    <!-- Compose「停止并清理（down）」：危险度最高的 compose 动作。
+         确认词是**项目名本身**（不是固定的"删除"）——要求用户真的看清在停哪个项目。
+         ⚠ 后端永不传 -v：命名卷会保留，本弹窗文案必须如实说明，不能让用户
+         以为"清理"=删数据。 -->
+    <ConfirmDialog :open="composeDownOpen" danger title="停止并清理 Compose 项目"
+      :detail="`将停止并移除项目「${composeDownTarget ?? ''}」的 ${composeDownCount} 个容器与其专用网络。`"
+      :confirm-word="composeDownTarget ?? ''" @confirm="doComposeDown"
+      @cancel="composeDownOpen = false">
+      <p class="down-note">
+        <b>命名卷不会被删除</b>（面板不传 <code>-v</code>）——容器里的持久化数据仍保留在卷中，
+        重新 up 后会挂回原卷。若确实要连同卷一起删除，请用 <code>docker compose down -v</code> 手动执行。
+      </p>
     </ConfirmDialog>
 
     <ConfirmDialog :open="installOpen" danger title="安装 Docker"
@@ -808,6 +968,57 @@ col.w-vmp { width: 320px; }
 col.w-cpname { width: auto; }
 col.w-cpstatus { width: 120px; }
 col.w-cpconf { width: 320px; }
+
+/* ── Compose 下钻 ── */
+.drill-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.drill-toggle:hover { color: var(--c-primary); }
+.caret { display: inline-block; transition: transform .15s ease; color: var(--c-text-mute); }
+.caret.open { transform: rotate(90deg); }
+.drill-panel {
+  border-top: 1px solid var(--c-border);
+  padding: var(--row-py) 16px;
+  background: var(--c-surface-2);
+}
+.drill-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: var(--fs-13);
+}
+.drill-head .count { color: var(--c-text-mute); }
+/* 数量不一致是高信息量的异常，用警示色而非品牌色（品牌色是"操作"，不是"注意"） */
+.drill-warn { color: var(--c-warn); font-size: var(--fs-12); }
+.drill-empty { color: var(--c-text-mute); font-size: var(--fs-13); margin: 0; }
+/* down 弹窗里的"卷不会删"说明：用中性色而不是警示色——它讲的是"没你想的那么危险" */
+.down-note {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--c-text-dim);
+  line-height: 1.6;
+}
+.down-note code {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-inset);
+}
+col.w-dname { width: 240px; }
+col.w-dservice { width: 120px; }
+col.w-dstate { width: 96px; }
 /* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
 .auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
 .auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }

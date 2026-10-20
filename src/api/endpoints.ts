@@ -243,6 +243,10 @@ export const API = {
     /** Compose 项目列举（只读）：docker compose ls --all --format json（compose 的
      *  --format 只接受 table | json 两个字面量，Go 模板形态会被拒），需 container.view */
     composeProjects: () => '/api/v1/containers/compose',
+    // Compose 生命周期动作（写，container.manage）：up / stop / restart / down。
+    // down 需 confirm_token = 项目名；up 需 working_dir。后端永不传 -v（不删卷）。
+    composeAct: (project: string) =>
+      `/api/v1/containers/compose/${encodeURIComponent(project)}/act`,
   },
 
   server: {

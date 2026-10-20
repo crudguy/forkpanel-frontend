@@ -76,6 +76,10 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
     case 'no_engine': return '未检测到可用的数据库引擎'
     case 'no_log_source': return '未检测到可用的日志源'
     case 'daemon_unreachable': return '守护进程不可达（面板用户需加入 docker 组）'
+    // compose 是 Docker 的 CLI 插件，与 daemon 可达性无关：宿主可能「docker 能用、
+    // compose 没装」（Debian 的 docker.io 包不带插件，需另装 docker-compose-plugin）。
+    // 不映射会让用户看到英文原文，也说不清该装什么。
+    case 'compose_unavailable': return '未安装 Docker Compose 插件（需 docker-compose-plugin）'
     default: return c.reason
   }
 }
