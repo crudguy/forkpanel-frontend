@@ -235,6 +235,9 @@ const browse = ref<{
   data: RowsData | null
 } | null>(null)
 
+/** 导出进行中：置灰按钮，避免连点产生多个 object URL 与重复下载 */
+const exporting = ref(false)
+
 // 层级判定输入集中一处：模板里不再写 `browse.db && browse.tables.length === 0` 这类
 // 复合表达式——那正是「点哪一层都说无表」的来源。
 const browseInput = computed<DbLevelInput>(() => {
@@ -301,6 +304,32 @@ async function pickTable(table: string, page = 1) {
 }
 
 function closeBrowse() { browse.value = null }
+
+/** 导出当前表为 CSV。
+ *
+ * 走 `api.download` 拿 Blob 再用 object URL 触发下载，**不走 `window.open`**：
+ * 后者拿不到 4xx 的响应体，后端超限时那句"请用 SQL 控制台加 WHERE 收窄"
+ * 就白写了——用户只会看到浏览器下载了一个文件或什么也没发生。
+ * 单次请求、错误可见，代价是要自己管 object URL 的释放。 */
+async function exportCsv() {
+  const b = browse.value
+  if (!b || !b.table) return
+  exporting.value = true
+  try {
+    const blob = await api.download(API.db.exportCsv(b.conn.id, b.db, b.table))
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${b.table}.csv`
+    a.click()
+    // 立即回收：留着会钉住整个 Blob 直到页面卸载
+    URL.revokeObjectURL(a.href)
+  } catch (e) {
+    // 表级动作失败回页面级 error（与列表行的错误归位一致，不另起一处）
+    error.value = errorText(e)
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -507,15 +536,25 @@ function closeBrowse() { browse.value = null }
           <span>{{ bHint.text }}</span>
         </p>
 
-        <div class="card flush" v-if="browse.data">
-          <table v-table-nav>
-            <thead><tr><th v-for="col in browse.data.columns" :key="col">{{ col }}</th></tr></thead>
-            <tbody>
-              <tr v-for="(r, i) in browse.data.rows" :key="i">
-                <td v-for="(v, j) in r" :key="j" class="mono">{{ v ?? 'NULL' }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="card flush toolbar-card" v-if="browse.data">
+          <!-- 导出归属这张卡（数据区），按 page-head 纪律落 .card-toolbar；
+               横滚交内层 .t-scroll，否则窄屏横滚会把工具条一起带走。 -->
+          <div class="card-toolbar">
+            <span class="spacer" />
+            <button class="btn-ghost btn-sm" type="button" :disabled="exporting"
+              title="导出全表为 CSV（UTF-8 BOM + CRLF，Excel/WPS 可直接打开）；超过 20000 行会提示收窄条件"
+              @click="exportCsv">{{ exporting ? '导出中…' : '导出 CSV' }}</button>
+          </div>
+          <div class="t-scroll">
+            <table v-table-nav>
+              <thead><tr><th v-for="col in browse.data.columns" :key="col">{{ col }}</th></tr></thead>
+              <tbody>
+                <tr v-for="(r, i) in browse.data.rows" :key="i">
+                  <td v-for="(v, j) in r" :key="j" class="mono">{{ v ?? 'NULL' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <div class="pager">
             <button class="btn-ghost btn-sm" :disabled="browse.data.page <= 1" @click="pickTable(browse.table, browse.data.page - 1)">上一页</button>
             <span class="dim">第 {{ browse.data.page }} 页 · 共 {{ browse.data.total }} 行</span>

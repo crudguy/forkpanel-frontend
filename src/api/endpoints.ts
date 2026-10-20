@@ -179,6 +179,14 @@ export const API = {
     tables: (conn: number, db: string) => `/api/v1/db/${conn}/${enc(db)}/tables`,
     rows: (conn: number, db: string, table: string) =>
       `/api/v1/db/${conn}/${enc(db)}/${enc(table)}/rows`,
+    /**
+     * 全量表导出 CSV。与 rows 分开成路径（而非 `?format=csv`）：
+     * 一个回 JSON 一个回 text/csv，混在一个端点上契约说不清。
+     * 前端走 api.download 而非 window.open：超限拒绝的可执行建议
+     * （「请用 SQL 控制台加 WHERE」）在 4xx 响应体里，window.open 拿不到。
+     */
+    exportCsv: (conn: number, db: string, table: string) =>
+      `/api/v1/db/${conn}/${enc(db)}/${enc(table)}/export`,
     backup: (conn: number) => `/api/v1/db/${conn}/backup`,
     restore: (conn: number) => `/api/v1/db/${conn}/restore`,
     query: (conn: number) => `/api/v1/db/${conn}/query`,

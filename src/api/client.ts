@@ -139,6 +139,75 @@ export const api = {
   patch: <T>(u: string, body?: unknown, o?: Options) =>
     request<T>(u, { ...o, method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
   del: <T>(u: string, o?: Options) => request<T>(u, { ...o, method: 'DELETE' }),
+  /** 下载文本/二进制响应为 Blob（CSV 导出等）。错误处理与 `request` 对齐 */
+  download: (u: string, o?: Options) => download(u, o),
+}
+
+/**
+ * 下载响应为 Blob。**刻意不复用 `request`**：那条路强制
+ * `Accept: application/json` 并把响应体当 JSON 解析，CSV 走进去会被
+ * `JSON.parse` 失败后当成空 body，最终 `body.data as T` 返回 undefined——
+ * 一个"下载成功但文件是空的"静默故障。
+ *
+ * 错误形状与 `request` 保持一致（同一个 ApiError、401 时同样派发
+ * `panel:unauthorized`），调用方的 `errorText(e)` 不必为下载单开一套。
+ * 超限时后端那句"请用 SQL 控制台加 WHERE"必须能到达用户——这正是
+ * 不走 `window.open` 的理由：那个拿不到 4xx 的响应体。
+ */
+async function download(url: string, opts: Options = {}): Promise<Blob> {
+  const headers = new Headers(opts.headers)
+  headers.set('Accept', 'text/csv,*/*')
+  const target = buildUrl(url, opts.params)
+
+  let attempt = 0
+  while (true) {
+    attempt++
+    let res: Response
+    try {
+      const signal = opts.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      res = await fetch(target, {
+        ...opts, method: 'GET', headers, credentials: 'same-origin', signal,
+      })
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError' && opts.signal) {
+        throw new ApiError(0, 0, 'request_cancelled')
+      }
+      // GET 幂等：网络/超时失败可安全重试（与 request 同策略）
+      if (attempt < MAX_ATTEMPTS) { await delay(backoff(attempt)); continue }
+      throw new ApiError(80003, 0, '请求超时或网络不可达，请稍后重试')
+    }
+
+    // 429 限流：服务端尚未处理，重试安全。这里读不到 body（要留着给错误分支），
+    // 按同一套退避表走，不解析响应体。
+    if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+      await delay(backoff(attempt)); continue
+    }
+
+    if (!res.ok) {
+      // 尽力取出后端的 message：超限拒绝的可执行建议全在这句话里。
+      // ⚠️ `detail` 必须一起带出来：`errorText` 对 10001 只读 `detail.reason`
+      // （`ApiError::bad_request` 正是把文案放那儿，而不是 message）。
+      // 漏带 detail 的后果是那句「请用 SQL 控制台加 WHERE」被吞成
+      // 「提交内容有误」——用户知道错了，却不知道该做什么。
+      let message = res.statusText
+      let code = res.status
+      let detail: unknown
+      try {
+        const t = await res.text()
+        if (t) {
+          const b = JSON.parse(t) as { code?: number; message?: string; detail?: unknown }
+          if (b.message) message = b.message
+          if (typeof b.code === 'number') code = b.code
+          detail = b.detail
+        }
+      } catch { /* 非 JSON：退回 statusText */ }
+      if (res.status === 401 && !opts.skipAuthRedirect) {
+        window.dispatchEvent(new CustomEvent('panel:unauthorized'))
+      }
+      throw new ApiError(code, res.status, message, detail)
+    }
+    return res.blob()
+  }
 }
 
 /**

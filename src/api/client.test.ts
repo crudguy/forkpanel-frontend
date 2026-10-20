@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { ApiError, ValidationError, errorText, isUnsupported, errorFieldDetail } from './client'
+import { describe, it, expect, afterEach } from 'vitest'
+import { api, ApiError, ValidationError, errorText, isUnsupported, errorFieldDetail } from './client'
+import { API } from './endpoints'
 
 /**
  * `errorText` 是**所有错误文案流向用户的唯一闸门**——它出错的表现不是崩溃，而是
@@ -85,5 +86,63 @@ describe('errorFieldDetail', () => {
     // reason 非字符串时仍给出 field，reason 置空——不让调用方拿到 undefined
     expect(errorFieldDetail(new ApiError(10001, 400, 'bad', { field: 'name', reason: 42 })))
       .toEqual({ field: 'name', reason: '' })
+  })
+})
+
+
+/**
+ * `api.download` 的存在理由：CSV 导出不能走 `request()`（它强制
+ * `Accept: application/json` 并把响应体当 JSON 解析，CSV 会被解析成
+ * undefined ——「下载成功但文件是空的」静默故障），也不能走
+ * `window.open`（拿不到 4xx 响应体，后端那句可执行建议就白写了）。
+ *
+ * 这两条各自对应下面一条用例；第三条钉的是**最容易写漏的一环**：
+ * 错误必须把 `detail` 一起带出来，否则 `errorText` 对 10001 只读
+ * `detail.reason`，用户看到的是「提交内容有误」而不是「请加 WHERE」。
+ */
+describe('api.download', () => {
+  const realFetch = globalThis.fetch
+  afterEach(() => { globalThis.fetch = realFetch })
+
+  it('200 → 返回 Blob，且 Accept 是 text/csv 而非 application/json', async () => {
+    let seenAccept = '(unset)'
+    globalThis.fetch = (async (_u: string, init?: RequestInit) => {
+      seenAccept = new Headers(init?.headers).get('Accept') ?? '(unset)'
+      return new Response('id,name\r\n1,张三\r\n', {
+        status: 200, headers: { 'content-type': 'text/csv; charset=utf-8' },
+      })
+    }) as typeof fetch
+
+    // 走真实端点构造器而非字面量：源码里不落 /api/v1/ 字面量——那会让
+    // ci/check-api-contract.sh 的 [A] 把测试 URL 当成真实调用路径去后端
+    // 路由里逐字比对（带实参的具体路径当然不在路由表里），恒红。
+    // 测试不是调用点；顺带把「exportCsv 拼路径 + download」这个组合
+    // 也钉住：拼错段数/漏 encode 在这里就红，不等运行期 404。
+    const blob = await api.download(API.db.exportCsv(1, 'woaiyoulin', 'app_user'))
+    expect(await blob.text()).toContain('id,name')
+    expect(seenAccept).toBe('text/csv,*/*')
+  })
+
+  it('4xx → 抛 ApiError，且后端 detail.reason 的中文文案能到达 errorText', async () => {
+    // 复刻后端 ApiError::bad_request 的真实形状：文案在 detail.reason，不在 message
+    const body = JSON.stringify({
+      code: 10001,
+      message: 'invalid input',
+      detail: { field: 'table', reason: '「big」超过 20000 行，已拒绝导出：请用 SQL 控制台加 WHERE 条件收窄后重试' },
+    })
+    globalThis.fetch = (async () => new Response(body, {
+      status: 400, headers: { 'content-type': 'application/json' },
+    })) as typeof fetch
+
+    const e = await api.download('/x').catch((x) => x)
+    expect(e).toBeInstanceOf(ApiError)
+    expect(errorText(e)).toContain('请用 SQL 控制台加 WHERE')
+  })
+
+  it('非 JSON 错误体 → 回落 statusText，不炸', async () => {
+    globalThis.fetch = (async () => new Response('<html>502</html>', { status: 502 })) as typeof fetch
+    const e = await api.download('/x').catch((x) => x)
+    expect(e).toBeInstanceOf(ApiError)
+    expect(errorText(e)).toBe('请求失败，请稍后重试')
   })
 })
