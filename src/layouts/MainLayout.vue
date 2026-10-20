@@ -77,7 +77,9 @@ const SUBTITLES: Record<string, string> = {
   terminal: '内置 Web 终端（宿主级 shell）· 操作后请务必登出',
   assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
   backups: '本地备份计划 · 手动执行 · 产物列表（恢复为高危后续）',
-  containers: 'Docker · 只读列举 + 启停/重启/删除（不提供创建容器）',
+  // ⚠ 曾经写「只读列举 + 启停/重启/删除（不提供创建容器）」——创建容器早已开放，
+  // 且现在还支持 Compose 项目的 up/stop/restart/down，那句是过时的事实错误。
+  containers: 'Docker · 列举 / 创建 / 启停 / 删除 · Compose 项目管理',
   waf: '各站点防护档位与 CC 限速 · 随 nginx 配置一同下发',
   certs: '各站点证书总览 · 申请 · 续期 · 根证书信任',
 }

@@ -28,7 +28,6 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, containerStateLabel, containerStateBadge } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
-import RiskBanner from '@/components/RiskBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
@@ -541,9 +540,6 @@ async function saveRemark(c: Container, v: string) {
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
-
-      <RiskBanner level="info" title="列举 / 创建 / 生命周期操作"
-        text="容器支持列举、创建（docker create，默认不启动）、启停 / 重启 / 删除；镜像支持拉取 / 更新（docker pull，写操作，需 container.manage）。创建不放特权开关、敏感宿主挂载会被后端拒绝（等价宿主级代码执行，已收敛能力边界）。" />
 
       <div class="tabs-wrap">
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
