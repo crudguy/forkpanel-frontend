@@ -180,6 +180,13 @@ async function doKill() {
         <!-- B8：容器自己滚 + 表头吸顶（.t-scroll）。进程常有数百行，滚动时看不见列头
              就只能靠记住列序——这是"信息密度"之外同样致命的可读性问题。 -->
         <div class="procs-scroll t-scroll">
+        <!-- ⚡ 性能：**不做虚拟滚动，也不加 v-memo**（2026-10-21 实测，本机 382 进程）
+             · 整表全量 patch ≈ 14ms（点表头强制换序，microtask flush 计时）；
+             · 纯排序 0.12ms（可忽略）；
+             · v-memo A/B：DOM 变更 1636 vs 1685、patch 15.1 vs 14.0ms
+               —— Vue 的插值 diff 本就跳过未变值，v-memo 只多一层比较，故不加。
+             结论：每 3s 一次的 tick 远低于一帧预算，加虚拟化的收益是负的（复杂度+回归面）。
+             ⚠ 若进程数上到数千，先按上面三条重测再决定——别凭"应该会卡"动手。 -->
         <table v-table-nav>
           <colgroup>
             <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
