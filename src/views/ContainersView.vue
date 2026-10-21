@@ -228,6 +228,20 @@ async function onStackSubmit(project: string, services: StackServicePayload[]) {
   }
 }
 
+/** Compose 生命周期动作——**按钮与帮助文案共用这一份**。
+ *
+ *  ⚠ 为什么要有这个常量：帮助里曾写「仍不提供 up / down / restart」，而按钮
+ *  就在同一屏——文案与实现漂移过一次（用户读到"不提供"就不会去点，功能白做）。
+ *  动作清单收敛成一处后，增删动作时文案跟着变，从结构上消除这种漂移。
+ *  `down` 单独处理：危险色 + 需手输项目名确认，不在这个循环里。 */
+const COMPOSE_ACTIONS = [
+  { key: 'up' as const, label: '启动 up' },
+  { key: 'restart' as const, label: '重启' },
+  { key: 'stop' as const, label: '停止' },
+]
+/** 帮助文案里用的动作枚举（由上面那份派生，不手写第二遍） */
+const COMPOSE_ACTIONS_TEXT = COMPOSE_ACTIONS.map((a) => a.label).join(' / ')
+
 async function runComposeAct(action: 'up' | 'stop' | 'restart') {
   const project = drillProject.value
   if (!project || composeBusy.value) return
@@ -938,14 +952,9 @@ async function saveRemark(c: Container, v: string) {
             <span class="spacer" />
             <!-- 动作按危险度分级：up/stop/restart 可逆、日常；down 整项目停服，需手输项目名 -->
             <template v-if="canManage">
-              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('up')">
-                启动 up
-              </button>
-              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('restart')">
-                重启
-              </button>
-              <button class="btn-ghost btn-sm" :disabled="composeBusy" @click="runComposeAct('stop')">
-                停止
+              <button v-for="a in COMPOSE_ACTIONS" :key="a.key" class="btn-ghost btn-sm"
+                :disabled="composeBusy" @click="runComposeAct(a.key)">
+                {{ a.label }}
               </button>
               <button class="btn-ghost btn-sm danger" :disabled="composeBusy" @click="askComposeDown">
                 停止并清理
@@ -984,7 +993,7 @@ async function saveRemark(c: Container, v: string) {
       <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。镜像页顶部还有一份<b>常用镜像清单</b>（内置在面板里、<b>不联网校验</b>，只给镜像名不给版本号——写死的 tag 会过时），点「拉取」会预填名字、tag 请在弹窗里确认。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
       <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
       <p><b>卷列举已开放</b>：「卷」Tab 展示全部 Docker 卷（<code>docker volume ls</code>，只读，需 <code>container.view</code>）。宿主机挂载路径是卷数据在磁盘上的实际位置（<code>/var/lib/docker/volumes/&lt;名称&gt;/_data</code>），可用于排查磁盘占用。该 Tab 与「网络」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除卷（删除卷 = 其内数据一并丢失，请直接用 docker CLI）。</p>
-      <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：up / down / restart / logs 等生命周期写操作（影响面大，请直接用 docker compose CLI）。</p>
+      <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>生命周期写操作已开放</b>：{{ COMPOSE_ACTIONS_TEXT }} / 停止并清理（down，需手输项目名；<b>永不传 <code>-v</code></b>，否则会删除该项目的命名卷）。<b>仍不提供</b>：项目级日志（<code>docker compose logs</code> 未接，请用 CLI）。</p>
       <h4>删除语义</h4>
       <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
     </HelpDrawer>
