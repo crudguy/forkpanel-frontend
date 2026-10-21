@@ -6,6 +6,7 @@ import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import Icon from '@/components/Icon.vue'
+import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
@@ -338,7 +339,12 @@ function logout() {
       </header>
 
       <div class="content">
-        <div class="wrap"><RouterView /></div>
+        <div class="wrap">
+          <!-- 页面级边界：单个视图崩掉时侧栏/顶栏仍可用，切页即可恢复 -->
+          <ErrorBoundary title="本页渲染出错">
+            <RouterView />
+          </ErrorBoundary>
+        </div>
       </div>
     </main>
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
