@@ -284,8 +284,6 @@ col.w-acts { width: 392px; }
 td.remark-cell { padding: 4px 10px; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-text { margin-left: 8px; font-size: var(--fs-12); }
-.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-input, var(--c-glass)); color: var(--c-text); font-size: var(--fs-13); }
-.filter:focus { outline: none; border-color: var(--c-primary); }
 .seg { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); overflow: hidden; }
 .seg button { border: 0; background: transparent; color: var(--c-text-dim); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--c-border); }

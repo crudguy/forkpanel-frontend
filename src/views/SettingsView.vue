@@ -397,7 +397,6 @@ onMounted(async () => {
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); cursor: pointer; }
 .perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 8px 0 0; }
 .kv { display: flex; flex-direction: column; }
 .kv-row { display: flex; gap: 12px; font-size: var(--fs-13); padding: 7px 0; border-bottom: 1px solid var(--c-border); }
 .kv-row:last-child { border-bottom: none; }

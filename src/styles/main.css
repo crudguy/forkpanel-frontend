@@ -460,6 +460,11 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 .ok { color: var(--c-ok); }
 .warn { color: var(--c-warn); }
 .bad, .danger { color: var(--c-danger); }
+/* 表格工具栏里的搜索框（容器 / 镜像两处共用）。放全局而不是各视图 scoped：
+   拆组件时样式留在父级会静默失效（ImagesTab 就这么裸奔过一轮——输入框没边框没高度）。 */
+.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-input, var(--c-glass)); color: var(--c-text); font-size: var(--fs-13); }
+.filter:focus { outline: none; border-color: var(--c-primary); }
+
 .err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 /* C8：错误态内联「重试」按钮（与 .err 同行，danger 描边）。点击调页面 load()，
    仅用于通用加载失败（网络/5xx）；isUnsupported 确定性错误与表单错误不加。 */

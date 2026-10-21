@@ -132,5 +132,4 @@ li input:disabled { cursor: not-allowed; }
 .d { font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.5; }
 li.done .t { color: var(--c-text-dim); }
 .go { flex: none; display: inline-flex; align-items: center; gap: 3px; }
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 6px 0 0; }
 </style>

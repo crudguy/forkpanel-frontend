@@ -177,7 +177,6 @@ function fmtUp(sec: number): string {
   border-radius: 10px; padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5);
 }
 .inp:focus { outline: none; border-color: var(--c-primary); }
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 8px 0 0; }
 .empty-hint { color: var(--c-text-mute); font-size: var(--fs-13); }
 
 .turn { margin: 14px 0; }

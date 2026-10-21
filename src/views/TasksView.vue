@@ -6,6 +6,7 @@ import { fmtDateTime, taskStateBadge, taskStateLabel } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import { useAsync } from '@/composables/useAsync'
 import { usePolling } from '@/composables/usePolling'
 
 /** 与后端 task_runs 实态对齐（契约 Task schema） */
@@ -16,19 +17,18 @@ interface Task {
 }
 
 const tasks = ref<Task[]>([])
-const error = ref('')
-const loading = ref(true)
+// 列表的 loading/error 生命周期交给 useAsync（与其余 12 个视图同一套）；
+// 本页只保留 `output` 自己的加载态——任务输出是另一路请求，与服务端无关。
+const { loading, error, run } = useAsync(true)
 const sel = ref<Task | null>(null)
 const output = ref('')
 const outLoading = ref(false)
 
-async function load() {
-  error.value = ''; loading.value = true
-  try {
+function load() {
+  return run(async () => {
     const r = await api.get<Task[]>(API.tasks.list())
     tasks.value = Array.isArray(r) ? r : []
-  } catch (e) { error.value = errorText(e) }
-  finally { loading.value = false }
+  })
 }
 onMounted(load)
 

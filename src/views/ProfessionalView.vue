@@ -257,7 +257,6 @@ onMounted(tick)
   font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
 .sec-note { margin: 8px 2px 4px; font-size: var(--fs-12-5); line-height: 1.7; color: var(--c-text-dim); }
 .dim { color: var(--c-text-mute); }
-.err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 2px 8px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* CPU 每核 + 负载 */
