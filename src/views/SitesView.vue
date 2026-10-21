@@ -485,7 +485,7 @@ async function batchDelete() {
       :certs="certs" :sweep="sweep" :site-root="siteRoot"
       @reload="load" @page-error="(m: string) => error = m" />
     <ConfirmDialog :open="!!delTarget" danger title="删除站点"
-      :detail="delTarget ? `将删除站点「${delTarget.name}」及其关联证书，且无法恢复。` : ''"
+      :detail="delTarget ? `将删除站点「${delTarget.name}」及其关联证书，且无法恢复。\n\n站点目录 ${delTarget.root} 的文件不会被删除（如需清理请到「文件」页手动删除）。` : ''"
       confirm-word="删除" @confirm="doDelete" @cancel="delTarget = null" />
 
     <ConfirmDialog :open="batchDelOpen" danger title="批量删除站点"
