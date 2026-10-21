@@ -39,11 +39,11 @@ import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import type { StackServicePayload } from '@/composables/stackForm'
 import { usePolling } from '@/composables/usePolling'
-import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
-import PullImageDialog from '@/components/PullImageDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
 import { containersOfProject, drillEmptyHint, projectCountMismatch } from '@/composables/composeDrill'
+import ImagesTab from '@/components/containers/ImagesTab.vue'
+import StatsTab from '@/components/containers/StatsTab.vue'
 
 interface Container {
   id: string; name: string; image: string; state: string
@@ -54,9 +54,6 @@ interface Container {
    *  容器为 null —— 后端刻意用 null 而非空串，以便区分「没有项目」和「项目名是空」。 */
   compose_project?: string | null
   compose_service?: string | null
-}
-interface Image {
-  id: string; repository: string; tag: string; size: string; created: string
 }
 /** 创建容器载荷（与 CreateContainerDialog emit 结构一致；未填可选项省略）。 */
 interface CreateContainerPayload {
@@ -78,7 +75,6 @@ const tabs = [
   { value: 'compose', label: 'Compose', icon: 'tasks' },
 ]
 const containers = ref<Container[]>([])
-const images = ref<Image[]>([])
 const { loading, error, run } = useAsync()
 /** 按容器 ID 跟踪"正在执行生命周期动作"的行级状态——避免一个动作禁用整页所有按钮
  *  （旧实现用单个 busy，会误伤其它行）。 */
@@ -98,17 +94,6 @@ const delForce = ref(false)
 // 日志查看（docker logs，只读快照）：弹窗 + GET，受 container.view 门控。
 const logsTarget = ref<Container | null>(null)
 const logsOpen = ref(false)
-
-/** 资源用量快照行（docker stats --no-stream --all 的一行）。百分比/用量一律按
- *  docker 原始格式化串展示（如 "1.52%"、"12.5MiB / 2GiB"）——后端不二次解析，
- *  避免把 "0B" / "--" 之类边界形态算错；前端等宽渲染即可。 */
-interface StatLine {
-  name: string; cpu_perc: string; mem_usage: string; mem_perc: string
-  net_io: string; block_io: string; pids: string
-}
-const stats = ref<StatLine[]>([])
-/** 资源 Tab 的自动刷新开关（默认开：用量数据不刷新就失去意义）。 */
-const statsAuto = ref(true)
 
 /** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
  *  原始串（bridge / host / overlay / macvlan…；local / swarm / global），与面板其它
@@ -192,26 +177,6 @@ async function loadStacks() {
 function openStackEditor(row?: StackRow) {
   stackEditTarget.value = row ?? null
   stackEditOpen.value = true
-}
-
-// ── 常用镜像（内置清单，只列镜像名；tag 在拉取弹窗里确认）──
-const popularQ = ref('')
-/** 传给拉取弹窗的预填值（空串=从"拉取/更新镜像"按钮进入，不预填） */
-const pullPreset = ref('')
-const popularGroups = computed(() => groupByCategory(filterPopular(POPULAR_IMAGES, popularQ.value)))
-/** 已在本地存在的镜像名集合（任一 tag 有即算），用于显示「已拉取」 */
-const pulledRefs = computed(() => {
-  const set = new Set<string>()
-  for (const i of POPULAR_IMAGES) {
-    if (isPulled(i.ref, images.value)) set.add(i.ref)
-  }
-  return set
-})
-
-/** 统一拉取入口：列表按钮带预填，工具栏按钮不带 */
-function openPull(ref = '') {
-  pullPreset.value = ref
-  pullOpen.value = true
 }
 
 async function onStackSubmit(project: string, services: StackServicePayload[]) {
@@ -321,21 +286,6 @@ async function onCreated(p: CreateContainerPayload) {
   finally { createBusy.value = false }
 }
 
-// 拉取 / 更新镜像（docker pull，写操作）：弹窗 + POST，受 container.manage 门控。
-const pullOpen = ref(false)
-const pullBusy = ref(false)
-async function onPull(image: string) {
-  pullBusy.value = true
-  try {
-    const r = await api.post<{ repository: string; tag: string }>(API.containers.pull(), { image })
-    toast(`已拉取镜像 ${r.repository}:${r.tag}（可在「镜像」页查看）`)
-    pullOpen.value = false
-    if (tab.value !== 'images') tab.value = 'images'
-    await load()
-  } catch (e) { toast(errorText(e), 'err') }
-  finally { pullBusy.value = false }
-}
-
 // 安装 Docker：诊断分支下的交互状态
 const installOpen = ref(false)
 const installBusy = ref(false)
@@ -424,12 +374,12 @@ async function load(silent = false) {
   await run(
     async () => {
       if (!supported.value) return
+      // ⚠ 镜像 / 资源两 Tab 不在这里加载：它们各自在 ImagesTab / StatsTab 里
+      //   自持数据与轮询。父级只保留其余四个 Tab。
       if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
-      else if (tab.value === 'images') images.value = await api.get<Image[]>(API.containers.images())
-      else if (tab.value === 'stats') stats.value = await api.get<StatLine[]>(API.containers.stats())
       else if (tab.value === 'networks') networks.value = await api.get<NetworkLine[]>(API.containers.networks())
       else if (tab.value === 'volumes') volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
-      else {
+      else if (tab.value === 'compose') {
         composeProjects.value = await api.get<ComposeProjectLine[]>(API.containers.composeProjects())
         // 编排定义与"运行中的 compose 项目"是两回事，一起拉：
         // 用户要能同时看到"我定义了什么"和"实际跑着什么"
@@ -438,30 +388,22 @@ async function load(silent = false) {
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
-      containers.value = []; images.value = []; stats.value = []; networks.value = []; volumes.value = []; composeProjects.value = []
+      containers.value = []; networks.value = []; volumes.value = []; composeProjects.value = []
       if (!silent) error.value = errorText(e)
     },
     { silent },
   )
 }
 
-// 容器/镜像 5s 一轮；资源 Tab 3s 一轮（用量变化快）且受「自动刷新」开关控制。
-//
-// 间隔与启用条件都随当前 Tab 推导：usePolling 的自调度链在**下一次调度**即用新
-// 间隔，enabled 每 tick 求值——所以切 Tab / 拨开关都不需要手写重启（旧实现要在
-// onMounted、watch(statsAuto)、switchTab 三处各调一次 startPoll，漏一处就变成
-// "切了 Tab 还在用旧间隔"或"关了开关仍在轮询"）。
-//
-// 网络/卷/Compose 三个 Tab 刻意不轮询：它们的清单随显式运维动作变化，没有
-// "不刷新就失去意义"的实时字段，需要时手动点工具栏「刷新」。
+// 页面级轮询只剩「容器」Tab（5s）。镜像 / 资源已拆成子组件，各自持轮询
+// （5s / 3s+自动刷新开关）；网络 / 卷 / Compose 没有"不刷新就失去意义"的实时
+// 字段，随显式运维动作变化，需要时手动点工具栏「刷新」。
 usePolling({
   fn: () => load(true),
-  ms: () => (tab.value === 'stats' ? 3000 : 5000),
-  enabled: () => {
-    if (!supported.value) return false
-    if (tab.value === 'stats') return statsAuto.value
-    return tab.value !== 'networks' && tab.value !== 'volumes' && tab.value !== 'compose'
-  },
+  ms: 5000,
+  // 只有「容器」Tab 需要页面级轮询；镜像(5s)/资源(3s) 各自在子组件里轮，
+  // 网络/卷/Compose 无实时字段，一律手动刷新。
+  enabled: () => supported.value && tab.value === 'containers',
 })
 
 onMounted(load)
@@ -649,47 +591,16 @@ async function saveRemark(c: Container, v: string) {
         </EmptyState>
       </div>
 
-      <!-- ── 常用镜像（内置清单）：独立于下面那条 v-if 链 ──
-           ⚠ 与「面板编排」同理：必须放在链起点之前，且**不能挂在 `images.length`
-           条件里**——一台刚装好的机器镜像数为 0，恰恰是最需要这份清单的时候。 -->
-      <div v-if="tab === 'images'" class="card flush popular-card">
-        <div class="card-toolbar">
-          <span class="count">常用镜像 · {{ POPULAR_IMAGES.length }} 个</span>
-          <span class="spacer" />
-          <input class="filter" v-model="popularQ" type="search"
-            placeholder="搜索名称 / 用途" aria-label="搜索常用镜像" />
-        </div>
 
-        <div class="popular-body">
-          <div v-for="g in popularGroups" :key="g.key" class="pop-group">
-            <h4 class="pop-cat">{{ g.label }}</h4>
-            <div class="pop-grid">
-              <div v-for="i in g.items" :key="i.ref" class="pop-item">
-                <div class="pop-main">
-                  <div class="pop-title">
-                    <b>{{ i.name }}</b>
-                    <code class="pop-ref">{{ i.ref }}</code>
-                    <span v-if="pulledRefs.has(i.ref)" class="pop-badge">已拉取</span>
-                  </div>
-                  <span class="pop-desc">{{ i.desc }}</span>
-                </div>
-                <button class="btn-ghost btn-sm" type="button" :disabled="!canManage"
-                  :title="canManage ? `拉取 ${i.ref}（tag 在弹窗里确认）` : '需要 container.manage 权限'"
-                  @click="openPull(i.ref)">拉取</button>
-              </div>
-            </div>
-          </div>
-          <p v-if="!popularGroups.length" class="pop-empty">没有匹配的常用镜像</p>
-        </div>
+      <!-- ── 镜像 / 资源两个 Tab 已拆成子组件（自持数据与轮询）──
+           独立于下面的 v-if 链：它们不以各自的数组长度为条件，0 数据时也要能看到
+           「常用镜像」入口与空态说明。 -->
+      <ImagesTab v-if="tab === 'images'" :active="tab === 'images'" :can-manage="canManage" />
+      <StatsTab v-if="tab === 'stats'" :active="tab === 'stats'" />
 
-        <p class="hint-note">
-          <b>清单内置在面板里、不联网校验</b>：只给镜像名，不预置版本号（写死的 tag 会过时，
-          点下去拉不到反而像面板坏了）。点「拉取」后在弹窗里确认或改写 tag，默认 <code>latest</code>。
-        </p>
-      </div>
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'images' && !images.length) || (tab === 'stats' && !stats.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length) || (tab === 'compose' && !composeProjects.length))" class="skeleton shimmer box" />
+      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length) || (tab === 'compose' && !composeProjects.length))" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -764,79 +675,7 @@ async function saveRemark(c: Container, v: string) {
       <EmptyState v-else-if="tab === 'containers' && !loading" title="没有容器"
         hint="该 Docker 守护进程上没有任何容器（含已停止）。" />
 
-      <!-- ── 镜像 ── -->
-      <!-- tab 护栏必须带：访问过「镜像」Tab 后 images 旧数据仍 truthy，缺护栏会把
-           镜像卡渲染在「资源 / 网络」Tab 下，吞掉目标 Tab 的卡片与空态（静默故障）。 -->
-      <div class="card flush toolbar-card" v-else-if="tab === 'images' && images.length">
-        <div class="card-toolbar">
-          <span class="count">共 {{ images.length }} 个镜像</span>
-          <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="!canManage"
-            :title="canManage ? '从 registry 拉取 / 更新镜像（docker pull）' : '需要 container.manage 权限'" @click="openPull()">
-            <Icon name="download" :size="14" /> 拉取 / 更新镜像
-          </button>
-        </div>
-        <div class="t-scroll">
-        <table class="fixed" v-table-nav>
-          <!-- 列宽与上方容器表同范式；前缀独立（w-i*），不与容器表 w-* 混用。
-               镜像 ID 列次要，窄屏隐藏（.col-opt）。 -->
-          <colgroup>
-            <col class="w-irepo" /><col class="w-itag" /><col class="w-iid" /><col class="w-isize" /><col class="w-itime" />
-          </colgroup>
-          <thead>
-            <tr><th>仓库</th><th>标签</th><th class="col-opt">镜像 ID</th><th>体积</th><th>创建时间</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="i in images" :key="i.id + i.tag">
-              <td class="mono ellipsis" :title="i.repository">{{ i.repository }}</td>
-              <td><span class="badge" :class="i.tag === '<none>' ? 'badge-warn' : 'badge-primary'">{{ i.tag }}</span></td>
-              <td class="mono dim col-opt" :title="i.id">{{ shortId(i.id) }}</td>
-              <td>{{ i.size }}</td>
-              <td class="dim">{{ i.created }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-      <EmptyState v-else-if="tab === 'images' && !loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
 
-      <!-- ── 资源（docker stats --no-stream --all 快照） ── -->
-      <div class="card flush toolbar-card" v-else-if="tab === 'stats' && stats.length">
-        <div class="card-toolbar">
-          <span class="count">共 {{ stats.length }} 个容器</span>
-          <span class="spacer" />
-          <label class="auto-toggle">
-            <input type="checkbox" v-model="statsAuto" />
-            <span>自动刷新（3s）</span>
-          </label>
-          <RefreshBtn sm :disabled="!supported" title="立即刷新一次资源快照" @click="load()" />
-        </div>
-        <div class="t-scroll">
-        <table class="fixed" v-table-nav>
-          <!-- 列宽范式与上方两表一致；用量列全部等宽右对齐不便读，保持左对齐 + mono。
-               名称列弹性吸收余量，其余按内容取固定值。 -->
-          <colgroup>
-            <col class="w-sname" /><col class="w-scpu" /><col class="w-smem" /><col class="w-smemp" /><col class="w-snet" /><col class="w-sblk" /><col class="w-spid" />
-          </colgroup>
-          <thead>
-            <tr><th>容器</th><th>CPU</th><th>内存（用量 / 上限）</th><th>内存%</th><th>网络 IO</th><th>磁盘 IO</th><th class="num">PIDs</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in stats" :key="s.name">
-              <td class="mono ellipsis" :title="s.name">{{ s.name }}</td>
-              <td class="mono">{{ s.cpu_perc || '—' }}</td>
-              <td class="mono ellipsis" :title="s.mem_usage">{{ s.mem_usage || '—' }}</td>
-              <td class="mono">{{ s.mem_perc || '—' }}</td>
-              <td class="mono ellipsis" :title="s.net_io">{{ s.net_io || '—' }}</td>
-              <td class="mono ellipsis" :title="s.block_io">{{ s.block_io || '—' }}</td>
-              <td class="mono th num">{{ s.pids || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-      <EmptyState v-else-if="tab === 'stats' && !loading" title="暂无资源数据"
-        hint="daemon 尚未返回任何采样行（容器刚启动时会短暂无数据），稍候或点「立即刷新」。" />
 
       <!-- ── 网络（docker network ls --no-trunc，只读列举） ── -->
       <div class="card flush toolbar-card" v-else-if="tab === 'networks' && networks.length">
@@ -1035,8 +874,6 @@ async function saveRemark(c: Container, v: string) {
     <CreateContainerDialog :open="createOpen" :busy="createBusy"
       @confirm="onCreated" @cancel="createOpen = false" />
 
-    <PullImageDialog :open="pullOpen" :busy="pullBusy" :preset="pullPreset"
-      @confirm="onPull" @cancel="pullOpen = false" />
 
     <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
       :project="stackEditTarget?.project" :services="stackEditTarget?.services"
@@ -1083,13 +920,6 @@ td.remark-cell { padding: 4px 10px; }
 /* 资源表列宽：名称弹性吸收余量，其余按 docker stats 输出的最长形态取固定值
    （"内存（用量 / 上限）" 列要容得下 "12.5MiB / 2GiB"，取 170px；网络/磁盘 IO 同理）。
    全部 mono 左对齐——百分比/用量是等人宽字符串，右对齐反而破坏列间对齐参照。 */
-col.w-sname { width: auto; }
-col.w-scpu { width: 76px; }
-col.w-smem { width: 170px; }
-col.w-smemp { width: 76px; }
-col.w-snet { width: 132px; }
-col.w-sblk { width: 132px; }
-col.w-spid { width: 72px; }
 /* 网络表列宽（docker network ls --no-trunc）：名称弹性吸收余量；driver / scope 按
    docker 原始串最长形态（overlay / macvlan、swarm / global）取固定值；ID 列与镜像表
    同口径（短值 + title 悬停完整 64 位）。全部 mono 左对齐（同源直出字符串）。 */
@@ -1158,46 +988,6 @@ col.w-dname { width: 240px; }
 col.w-dservice { width: 120px; }
 col.w-dstate { width: 96px; }
 
-/* ── 常用镜像 ── */
-.popular-card { margin-bottom: 14px; }
-.popular-body { padding: 4px 14px 12px; }
-.pop-cat {
-  margin: 12px 0 8px;
-  font-size: var(--fs-12);
-  font-weight: 500;
-  color: var(--c-text-mute);
-  letter-spacing: .02em;
-}
-.pop-grid {
-  display: grid;
-  /* auto-fill + minmax：窄屏自动降列，不必写媒体查询 */
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
-}
-.pop-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  background: var(--c-surface-2);
-}
-.pop-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.pop-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.pop-title b { font-size: var(--fs-13); color: var(--c-text); }
-.pop-ref { font-family: var(--mono); font-size: var(--fs-12); color: var(--c-text-mute); }
-/* 「已拉取」是状态标记，用中性色而非品牌色（品牌色留给操作） */
-.pop-badge {
-  font-size: var(--fs-12);
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--bg-inset);
-  color: var(--c-text-dim);
-}
-.pop-desc { font-size: var(--fs-12); color: var(--c-text-dim); }
-.pop-empty { margin: 16px 0; text-align: center; color: var(--c-text-mute); font-size: var(--fs-13); }
-
 /* ── 面板编排（stack 定义）── */
 .stack-card { margin-bottom: 14px; }
 col.w-sname { width: 220px; }
@@ -1212,9 +1002,6 @@ col.w-sact { width: 88px; }
   background: var(--c-warn-bg);
   color: var(--c-warn);
 }
-/* 「自动刷新」开关（资源 Tab 工具栏）：小字号与工具栏其它控件对齐 */
-.auto-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; }
-.auto-toggle input { width: 15px; height: 15px; accent-color: var(--c-primary); }
 
 /* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 260px; }
@@ -1233,9 +1020,4 @@ col.w-sact { width: 88px; }
 .seg button:not(.on):hover { background: var(--c-hover); }
 
 /* 镜像表列宽（与上方容器表同范式；前缀 w-i* 避免与容器表 w-* 混用）。 */
-col.w-irepo { width: auto; }
-col.w-itag { width: 110px; }
-col.w-iid { width: 120px; }
-col.w-isize { width: 90px; }
-col.w-itime { width: 185px; }
 </style>
