@@ -400,7 +400,8 @@ const selName = ref('')
       </div>
       <EmptyState v-else title="暂无备份计划">
         <template #cta>
-          <button class="btn-primary btn-sm" @click="scrollToCreate">新建计划</button>
+          <button class="btn-primary btn-sm" :disabled="!canManage"
+            :title="canManage ? '' : '无 backup.manage 权限'" @click="scrollToCreate">新建计划</button>
         </template>
       </EmptyState>
 

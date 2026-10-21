@@ -284,7 +284,8 @@ onMounted(() => { load(); loadFail2ban() })
       </div>
       <EmptyState v-else title="暂无规则">
         <template #cta>
-          <button class="btn-primary btn-sm" @click="focusAllow">放行第一个端口</button>
+          <button class="btn-primary btn-sm" :disabled="!canManage"
+            :title="canManage ? '' : '无 firewall.manage 权限'" @click="focusAllow">放行第一个端口</button>
         </template>
       </EmptyState>
 
