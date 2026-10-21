@@ -36,14 +36,16 @@ import TabBar from '@/components/TabBar.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
-import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import type { StackServicePayload } from '@/composables/stackForm'
 import { usePolling } from '@/composables/usePolling'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import { toast } from '@/composables/useToast'
-import { containersOfProject, drillEmptyHint, projectCountMismatch } from '@/composables/composeDrill'
 import ImagesTab from '@/components/containers/ImagesTab.vue'
 import StatsTab from '@/components/containers/StatsTab.vue'
+import NetworksTab from '@/components/containers/NetworksTab.vue'
+import VolumesTab from '@/components/containers/VolumesTab.vue'
+import ComposeTab from '@/components/containers/ComposeTab.vue'
+import { COMPOSE_ACTIONS_TEXT } from '@/composables/composeActions'
 
 interface Container {
   id: string; name: string; image: string; state: string
@@ -94,181 +96,6 @@ const delForce = ref(false)
 // 日志查看（docker logs，只读快照）：弹窗 + GET，受 container.view 门控。
 const logsTarget = ref<Container | null>(null)
 const logsOpen = ref(false)
-
-/** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
- *  原始串（bridge / host / overlay / macvlan…；local / swarm / global），与面板其它
- *  docker 直出字段同口径不翻译——二次映射容易把自定义驱动译错；id 为完整 64 位，
- *  展示按惯例截 12 位、完整值走 title 悬停（与容器/镜像表一致）。 */
-interface NetworkLine {
-  name: string; driver: string; scope: string; id: string
-}
-const networks = ref<NetworkLine[]>([])
-
-/** Docker 卷行（`docker volume ls --format` 的一行）。driver 为 docker 原始串
- *  （local / nfs / cifs…），同口径不翻译；mountpoint 是卷数据在宿主机上的
- *  实际路径（排查磁盘占用用），长路径 ellipsis + title 悬停。卷无独立 ID，
- *  以名称为键（与 docker 一致）。 */
-interface VolumeLine {
-  name: string; driver: string; mountpoint: string
-}
-const volumes = ref<VolumeLine[]>([])
-
-/** Compose 项目行（`docker compose ls --all --format json` 的一行）。status 为
- *  compose 的组合语义串（running(1) / exited(2)…，括号内为容器数），同口径不翻译；
- *  config_files 是 compose 配置文件绝对路径（多 `-f` 时为逗号分隔串），长路径
- *  ellipsis + title 悬停。项目无独立 ID，以名称为键（与 docker compose 一致）。 */
-interface ComposeProjectLine {
-  name: string; status: string; config_files: string
-}
-const composeProjects = ref<ComposeProjectLine[]>([])
-
-/** 当前展开下钻的 Compose 项目名（null = 未展开）。点项目行切换。 */
-const drillProject = ref<string | null>(null)
-/** 下钻面板：该项目下的容器（按容器列表里的 compose_project 标签精确匹配）。 */
-const drillContainers = computed(() =>
-  drillProject.value ? containersOfProject(containers.value, drillProject.value) : [],
-)
-/** 当前展开项目的 compose 行（取 status 用于比对容器数）。 */
-const drillRow = computed(() =>
-  drillProject.value ? composeProjects.value.find((p) => p.name === drillProject.value) ?? null : null,
-)
-/** compose 自报数量 vs 面板实际看到的数量（不一致要如实提示）。 */
-const drillMismatch = computed(() =>
-  projectCountMismatch(drillRow.value?.status ?? '', drillContainers.value.length),
-)
-function toggleDrill(name: string) {
-  drillProject.value = drillProject.value === name ? null : name
-}
-
-// ── Compose 生命周期动作（写，container.manage）──
-// 危险度分级：up/stop/restart 可逆、日常，点了就执行；
-// down 会**整项目停服**，需在确认框里手输项目名——不是随手点 OK 能过。
-const composeBusy = ref(false)
-const composeDownOpen = ref(false)
-const composeDownTarget = ref<string | null>(null)
-/** down 弹窗里展示的服务数，让用户在停之前看清影响范围 */
-const composeDownCount = computed(() => drillContainers.value.length)
-
-// ── 面板编排（stack 定义，写的是面板自己的文件，不依赖 daemon）──
-/** 面板管理的编排项目（对应 GET /containers/stacks） */
-interface StackRow {
-  project: string
-  dir: string
-  config_file: string
-  services: StackServicePayload[]
-  /** compose.yaml 被外部改过——此时不允许在面板里覆盖保存 */
-  externally_modified: boolean
-}
-const stacks = ref<StackRow[]>([])
-const stackEditOpen = ref(false)
-const stackEditTarget = ref<StackRow | null>(null)
-const stackBusy = ref(false)
-
-async function loadStacks() {
-  if (!supported.value) return
-  try {
-    stacks.value = await api.get<StackRow[]>(API.containers.stacks())
-  } catch {
-    // 编排列表失败不应拖垮整个页面：清空即可，页面上仍有容器/镜像等 Tab
-    stacks.value = []
-  }
-}
-
-function openStackEditor(row?: StackRow) {
-  stackEditTarget.value = row ?? null
-  stackEditOpen.value = true
-}
-
-async function onStackSubmit(project: string, services: StackServicePayload[]) {
-  stackBusy.value = true
-  try {
-    await api.put(API.containers.stack(project), { services })
-    toast(`已保存编排：${project}`)
-    stackEditOpen.value = false
-    await loadStacks()
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    stackBusy.value = false
-  }
-}
-
-/** Compose 生命周期动作——**按钮与帮助文案共用这一份**。
- *
- *  ⚠ 为什么要有这个常量：帮助里曾写「仍不提供 up / down / restart」，而按钮
- *  就在同一屏——文案与实现漂移过一次（用户读到"不提供"就不会去点，功能白做）。
- *  动作清单收敛成一处后，增删动作时文案跟着变，从结构上消除这种漂移。
- *  `down` 单独处理：危险色 + 需手输项目名确认，不在这个循环里。 */
-const COMPOSE_ACTIONS = [
-  { key: 'up' as const, label: '启动 up' },
-  { key: 'restart' as const, label: '重启' },
-  { key: 'stop' as const, label: '停止' },
-]
-/** 帮助文案里用的动作枚举（由上面那份派生，不手写第二遍） */
-const COMPOSE_ACTIONS_TEXT = COMPOSE_ACTIONS.map((a) => a.label).join(' / ')
-
-async function runComposeAct(action: 'up' | 'stop' | 'restart') {
-  const project = drillProject.value
-  if (!project || composeBusy.value) return
-  composeBusy.value = true
-  try {
-    // up 需要工作目录：compose 靠它找配置文件（后端会强制校验）
-    const body: Record<string, unknown> = { action }
-    if (action === 'up') {
-      const dir = projectWorkingDir(project)
-      if (!dir) {
-        error.value = '无法从配置文件路径推断工作目录，请用 docker compose CLI 手动启动该项目'
-        return
-      }
-      body.working_dir = dir
-    }
-    await api.post(API.containers.composeAct(project), body)
-    toast(`已执行 ${action}：${project}`)
-    await load()
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    composeBusy.value = false
-  }
-}
-
-/** 从项目的 config_files（compose 配置文件绝对路径）推断工作目录。
- *
- *  取第一个文件的**所在目录**：compose 默认就在该目录下找 compose.yaml。
- *  推断不出来返回空串，由调用方提示用户改用 CLI——**不猜一个路径**：
- *  猜错会让 up 在错误目录执行，可能拉起完全不相干的服务。 */
-function projectWorkingDir(project: string): string {
-  const row = composeProjects.value.find((p) => p.name === project)
-  const first = (row?.config_files ?? '').split(',')[0]?.trim() ?? ''
-  if (!first.startsWith('/')) return ''
-  const idx = first.lastIndexOf('/')
-  return idx > 0 ? first.slice(0, idx) : ''
-}
-
-function askComposeDown() {
-  if (!drillProject.value) return
-  composeDownTarget.value = drillProject.value
-  composeDownOpen.value = true
-}
-
-async function doComposeDown() {
-  const project = composeDownTarget.value
-  if (!project) return
-  composeBusy.value = true
-  try {
-    // confirm_token 由 ConfirmDialog 的 confirm-word 校验（必须是项目名本身）
-    await api.post(API.containers.composeAct(project), { action: 'down', confirm_token: project })
-    toast(`已停止并清理：${project}`)
-    composeDownOpen.value = false
-    drillProject.value = null
-    await load()
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    composeBusy.value = false
-    composeDownTarget.value = null
-  }
-}
 
 // 创建容器（docker create，默认不启动）：弹窗 + POST，受 container.manage 门控。
 // 不放特权开关——后端对 privileged=true 直接拒绝，前端不提供该入口。
@@ -374,21 +201,13 @@ async function load(silent = false) {
   await run(
     async () => {
       if (!supported.value) return
-      // ⚠ 镜像 / 资源两 Tab 不在这里加载：它们各自在 ImagesTab / StatsTab 里
-      //   自持数据与轮询。父级只保留其余四个 Tab。
+      // ⚠ 只剩「容器」Tab 由父级加载。镜像/资源/网络/卷/Compose 都拆成了子组件，
+      //   各自在激活时拉自己的数据（见 components/containers/*Tab.vue）。
       if (tab.value === 'containers') containers.value = await api.get<Container[]>(API.containers.list())
-      else if (tab.value === 'networks') networks.value = await api.get<NetworkLine[]>(API.containers.networks())
-      else if (tab.value === 'volumes') volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
-      else if (tab.value === 'compose') {
-        composeProjects.value = await api.get<ComposeProjectLine[]>(API.containers.composeProjects())
-        // 编排定义与"运行中的 compose 项目"是两回事，一起拉：
-        // 用户要能同时看到"我定义了什么"和"实际跑着什么"
-        await loadStacks()
-      }
       if (silent) error.value = '' // 自愈：轮询成功清旧错
     },
     (e) => {
-      containers.value = []; networks.value = []; volumes.value = []; composeProjects.value = []
+      containers.value = []
       if (!silent) error.value = errorText(e)
     },
     { silent },
@@ -547,49 +366,6 @@ async function saveRemark(c: Container, v: string) {
         <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
       </div>
 
-      <!-- ── 面板编排（stack 定义）：独立于下面那条 v-if 链 ──
-           ⚠ 必须放在链的起点之前。`v-else-if` 要求紧邻上一个兄弟，插在链中间会
-           让 Vue 报「v-else-if has no adjacent v-if」。
-           也刻意**不放进**「Compose 项目」卡片里：那张卡片的条件是
-           `composeProjects.length`，一个项目都没跑起来时整卡不渲染，
-           入口就会跟着消失（空环境里反而建不了第一个）。 -->
-      <div v-if="tab === 'compose'" class="card flush stack-card">
-        <div class="card-toolbar">
-          <span class="count">面板编排 · 已定义 {{ stacks.length }} 个</span>
-          <span class="spacer" />
-          <!-- 空态时由下方 EmptyState 的 #cta 承担入口，这里不重复出现 -->
-          <button v-if="canManage && stacks.length" class="btn-primary btn-sm" type="button"
-            @click="openStackEditor()">新建编排</button>
-        </div>
-        <div v-if="stacks.length" class="t-scroll">
-          <table class="fixed">
-            <colgroup><col class="w-sname" /><col class="w-snum" /><col /><col class="w-sact" /></colgroup>
-            <thead><tr><th>项目</th><th>服务</th><th>目录</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr v-for="s in stacks" :key="s.project">
-                <td class="mono ellipsis" :title="s.project">
-                  {{ s.project }}
-                  <!-- 外部改过的文件必须显式标出来：面板不会覆盖它，用户得知道为什么改不动 -->
-                  <span v-if="s.externally_modified" class="ext-mark"
-                    title="compose.yaml 已在面板外被修改；面板不会覆盖它">外部修改</span>
-                </td>
-                <td class="mono dim">{{ s.services.length }}</td>
-                <td class="mono dim ellipsis" :title="s.dir">{{ s.dir }}</td>
-                <td>
-                  <button class="btn-ghost btn-sm" type="button" :disabled="!canManage"
-                    @click="openStackEditor(s)">编辑</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <EmptyState v-else title="还没有编排定义"
-          hint="面板可以在这里定义服务并生成 compose.yaml（不支持特权模式与宿主敏感挂载）。已有项目请用 docker compose CLI 管理。">
-          <template v-if="canManage" #cta>
-            <button class="btn-primary btn-sm" type="button" @click="openStackEditor()">新建编排</button>
-          </template>
-        </EmptyState>
-      </div>
 
 
       <!-- ── 镜像 / 资源两个 Tab 已拆成子组件（自持数据与轮询）──
@@ -597,10 +373,14 @@ async function saveRemark(c: Container, v: string) {
            「常用镜像」入口与空态说明。 -->
       <ImagesTab v-if="tab === 'images'" :active="tab === 'images'" :can-manage="canManage" />
       <StatsTab v-if="tab === 'stats'" :active="tab === 'stats'" />
+      <NetworksTab v-if="tab === 'networks'" :active="tab === 'networks'" />
+      <VolumesTab v-if="tab === 'volumes'" :active="tab === 'volumes'" />
+      <ComposeTab v-if="tab === 'compose'" :active="tab === 'compose'"
+        :can-manage="canManage" :supported="supported" />
 
 
       <!-- 加载骨架放在 Tab 之后：Tab 是导航，须常驻顶部；否则骨架会把 Tab 挤到下方造成跳位 -->
-      <div v-if="loading && ((tab === 'containers' && !containers.length) || (tab === 'networks' && !networks.length) || (tab === 'volumes' && !volumes.length) || (tab === 'compose' && !composeProjects.length))" class="skeleton shimmer box" />
+      <div v-if="loading && tab === 'containers' && !containers.length" class="skeleton shimmer box" />
 
       <!-- ── 容器 ── -->
       <div class="card flush toolbar-card" v-if="tab === 'containers' && containers.length">
@@ -677,148 +457,8 @@ async function saveRemark(c: Container, v: string) {
 
 
 
-      <!-- ── 网络（docker network ls --no-trunc，只读列举） ── -->
-      <div class="card flush toolbar-card" v-else-if="tab === 'networks' && networks.length">
-        <div class="card-toolbar">
-          <span class="count">共 {{ networks.length }} 个网络</span>
-          <span class="spacer" />
-          <!-- 网络清单变化频率低，不自动轮询；手动刷新即可（与帮助抽屉说明一致） -->
-          <RefreshBtn sm :disabled="!supported" title="立即刷新一次网络清单" @click="load()" />
-        </div>
-        <div class="t-scroll">
-        <table class="fixed" v-table-nav>
-          <!-- 列宽范式与上方各表一致：名称弹性吸收余量；driver / scope 按 docker 原始串
-               最长形态（overlay / macvlan、swarm / global）取固定值；ID 列短值展示 +
-               title 悬停完整 64 位（与容器/镜像表同口径）。全部 mono 左对齐。 -->
-          <colgroup>
-            <col class="w-nname" /><col class="w-ndrv" /><col class="w-nscope" /><col class="w-nid" />
-          </colgroup>
-          <thead>
-            <tr><th>名称</th><th>驱动</th><th>作用域</th><th>ID</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="n in networks" :key="n.id">
-              <td class="mono ellipsis" :title="n.name">{{ n.name }}</td>
-              <td class="mono dim">{{ n.driver || '—' }}</td>
-              <td class="mono dim">{{ n.scope || '—' }}</td>
-              <td class="mono dim" :title="n.id">{{ shortId(n.id) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-      <EmptyState v-else-if="tab === 'networks' && !loading" title="暂无网络"
-        hint="daemon 未返回任何网络（异常：连默认的 bridge 网络都不存在），可点「刷新」重试。" />
 
-      <!-- ── 卷（docker volume ls，只读列举） ── -->
-      <div class="card flush toolbar-card" v-else-if="tab === 'volumes' && volumes.length">
-        <div class="card-toolbar">
-          <span class="count">共 {{ volumes.length }} 个卷</span>
-          <span class="spacer" />
-          <!-- 卷清单变化频率比网络还低，不自动轮询；手动刷新即可（与帮助抽屉说明一致） -->
-          <RefreshBtn sm :disabled="!supported" title="立即刷新一次卷清单" @click="load()" />
-        </div>
-        <div class="t-scroll">
-        <table class="fixed" v-table-nav>
-          <!-- 列宽范式与上方各表一致：名称弹性吸收余量；驱动按 docker 原始串最长
-               形态（local / nfs / cifs）取固定值；挂载路径为宿主机长路径，ellipsis
-               截断 + title 悬停完整值。全部 mono 左对齐。 -->
-          <colgroup>
-            <col class="w-vname" /><col class="w-vdrv" /><col class="w-vmp" />
-          </colgroup>
-          <thead>
-            <tr><th>名称</th><th>驱动</th><th>宿主机挂载路径</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="v in volumes" :key="v.name">
-              <td class="mono ellipsis" :title="v.name">{{ v.name }}</td>
-              <td class="mono dim">{{ v.driver || '—' }}</td>
-              <td class="mono dim ellipsis" :title="v.mountpoint">{{ v.mountpoint || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-      <EmptyState v-else-if="tab === 'volumes' && !loading" title="暂无卷"
-        hint="daemon 未返回任何卷。卷随容器创建（docker run -v）或手动 docker volume create 产生。" />
 
-      <!-- ── Compose 项目（docker compose ls --all --format json，只读列举） ── -->
-      <div class="card flush toolbar-card" v-else-if="tab === 'compose' && composeProjects.length">
-        <div class="card-toolbar">
-          <span class="count">共 {{ composeProjects.length }} 个项目</span>
-          <span class="spacer" />
-          <!-- Compose 项目随 up/down 显式变化，不自动轮询；手动刷新即可（与帮助抽屉说明一致） -->
-          <RefreshBtn sm :disabled="!supported" title="立即刷新一次 Compose 项目清单" @click="load()" />
-        </div>
-        <div class="t-scroll">
-        <table class="fixed" v-table-nav>
-          <!-- 列宽范式与上方各表一致：项目名弹性吸收余量；状态按组合语义串最长
-                形态（running(10) / restarting(1)）取固定值；配置文件路径为宿主机长
-                路径，ellipsis 截断 + title 悬停完整值。全部 mono 左对齐。 -->
-          <colgroup>
-            <col class="w-cpname" /><col class="w-cpstatus" /><col class="w-cpconf" />
-          </colgroup>
-          <thead>
-            <tr><th>项目</th><th>状态</th><th>配置文件</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in composeProjects" :key="p.name">
-              <td class="mono ellipsis" :title="p.name">
-                <!-- 项目名可点：展开该项目下的容器（下钻）。
-                     按钮而非整行可点——整行点击与文字选择/复制路径会打架。 -->
-                <button class="drill-toggle" :aria-expanded="drillProject === p.name"
-                  @click="toggleDrill(p.name)">
-                  <span class="caret" :class="{ open: drillProject === p.name }">▸</span>
-                  {{ p.name }}
-                </button>
-              </td>
-              <td class="mono dim">{{ p.status || '—' }}</td>
-              <td class="mono dim ellipsis" :title="p.config_files">{{ p.config_files || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-
-        <!-- 下钻面板：该项目下的容器。只在展开时出现，与上方表格同级（不是浮层）。 -->
-        <div v-if="drillProject" class="drill-panel">
-          <div class="drill-head">
-            <b>{{ drillProject }}</b>
-            <span class="count">· {{ drillContainers.length }} 个容器</span>
-            <span v-if="drillMismatch.differs" class="drill-warn">
-              ⚠ compose 报告 {{ drillMismatch.declared }} 个，实际匹配到 {{ drillMismatch.actual }} 个
-              —— 可能有容器刚被删除，或它们运行在其他 Docker 守护进程上
-            </span>
-            <span class="spacer" />
-            <!-- 动作按危险度分级：up/stop/restart 可逆、日常；down 整项目停服，需手输项目名 -->
-            <template v-if="canManage">
-              <button v-for="a in COMPOSE_ACTIONS" :key="a.key" class="btn-ghost btn-sm"
-                :disabled="composeBusy" @click="runComposeAct(a.key)">
-                {{ a.label }}
-              </button>
-              <button class="btn-ghost btn-sm danger" :disabled="composeBusy" @click="askComposeDown">
-                停止并清理
-              </button>
-            </template>
-          </div>
-          <table class="fixed" v-if="drillContainers.length">
-            <colgroup><col class="w-dname" /><col class="w-dservice" /><col class="w-dstate" /><col /></colgroup>
-            <thead><tr><th>容器</th><th>服务</th><th>状态</th><th>镜像</th></tr></thead>
-            <tbody>
-              <tr v-for="c in drillContainers" :key="c.id">
-                <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
-                <td class="mono dim">{{ c.compose_service || '—' }}</td>
-                <td>
-                  <span class="badge" :class="containerStateBadge(c.state)">{{ containerStateLabel(c.state) }}</span>
-                </td>
-                <td class="mono dim ellipsis" :title="c.image">{{ c.image }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="drill-empty">{{ drillEmptyHint(drillMismatch.declared) }}</p>
-        </div>
-      </div>
-      <EmptyState v-else-if="tab === 'compose' && !loading" title="暂无 Compose 项目"
-        hint="daemon 未返回任何 Compose 项目。项目由 docker compose up 创建（默认取 compose 文件所在目录名）；该清单含已停止项目（--all）。" />
 
     </template>
 
@@ -849,15 +489,6 @@ async function saveRemark(c: Container, v: string) {
          确认词是**项目名本身**（不是固定的"删除"）——要求用户真的看清在停哪个项目。
          ⚠ 后端永不传 -v：命名卷会保留，本弹窗文案必须如实说明，不能让用户
          以为"清理"=删数据。 -->
-    <ConfirmDialog :open="composeDownOpen" danger title="停止并清理 Compose 项目"
-      :detail="`将停止并移除项目「${composeDownTarget ?? ''}」的 ${composeDownCount} 个容器与其专用网络。`"
-      :confirm-word="composeDownTarget ?? ''" @confirm="doComposeDown"
-      @cancel="composeDownOpen = false">
-      <p class="down-note">
-        <b>命名卷不会被删除</b>（面板不传 <code>-v</code>）——容器里的持久化数据仍保留在卷中，
-        重新 up 后会挂回原卷。若确实要连同卷一起删除，请用 <code>docker compose down -v</code> 手动执行。
-      </p>
-    </ConfirmDialog>
 
     <ConfirmDialog :open="installOpen" danger title="安装 Docker"
       :detail="'将在宿主机上通过包管理器安装 Docker 引擎。这是高危系统变更；安装完成后仍需把面板运行用户加入 docker 组并重启面板，才能在此管理容器。'"
@@ -875,9 +506,6 @@ async function saveRemark(c: Container, v: string) {
       @confirm="onCreated" @cancel="createOpen = false" />
 
 
-    <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
-      :project="stackEditTarget?.project" :services="stackEditTarget?.services"
-      @submit="onStackSubmit" @cancel="stackEditOpen = false" />
 
     <ContainerLogsDialog :open="logsOpen" :container-id="logsTarget?.id ?? ''" :container-name="logsTarget?.name ?? ''"
       @close="logsOpen = false" />
@@ -923,85 +551,13 @@ td.remark-cell { padding: 4px 10px; }
 /* 网络表列宽（docker network ls --no-trunc）：名称弹性吸收余量；driver / scope 按
    docker 原始串最长形态（overlay / macvlan、swarm / global）取固定值；ID 列与镜像表
    同口径（短值 + title 悬停完整 64 位）。全部 mono 左对齐（同源直出字符串）。 */
-col.w-nname { width: auto; }
-col.w-ndrv { width: 96px; }
-col.w-nscope { width: 96px; }
-col.w-nid { width: 128px; }
 /* 卷表列宽（docker volume ls）：名称弹性吸收余量；驱动按 docker 原始串最长
    形态（local / nfs / cifs）取固定值；挂载路径为宿主机长路径，ellipsis +
    title 悬停完整值。全部 mono 左对齐（同源直出字符串）。 */
-col.w-vname { width: auto; }
-col.w-vdrv { width: 96px; }
-col.w-vmp { width: 320px; }
-col.w-cpname { width: auto; }
-col.w-cpstatus { width: 120px; }
-col.w-cpconf { width: 320px; }
 
 /* ── Compose 下钻 ── */
-.drill-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.drill-toggle:hover { color: var(--c-primary); }
-.caret { display: inline-block; transition: transform .15s ease; color: var(--c-text-mute); }
-.caret.open { transform: rotate(90deg); }
-.drill-panel {
-  border-top: 1px solid var(--c-border);
-  padding: var(--row-py) 16px;
-  background: var(--c-surface-2);
-}
-.drill-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-  font-size: var(--fs-13);
-}
-.drill-head .count { color: var(--c-text-mute); }
 /* 数量不一致是高信息量的异常，用警示色而非品牌色（品牌色是"操作"，不是"注意"） */
-.drill-warn { color: var(--c-warn); font-size: var(--fs-12); }
-.drill-empty { color: var(--c-text-mute); font-size: var(--fs-13); margin: 0; }
-/* down 弹窗里的"卷不会删"说明：用中性色而不是警示色——它讲的是"没你想的那么危险" */
-.down-note {
-  margin: 0;
-  font-size: var(--fs-13);
-  color: var(--c-text-dim);
-  line-height: 1.6;
-}
-.down-note code {
-  font-family: var(--mono);
-  font-size: var(--fs-12);
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--bg-inset);
-}
-col.w-dname { width: 240px; }
-col.w-dservice { width: 120px; }
-col.w-dstate { width: 96px; }
 
-/* ── 面板编排（stack 定义）── */
-.stack-card { margin-bottom: 14px; }
-col.w-sname { width: 220px; }
-col.w-snum { width: 72px; }
-col.w-sact { width: 88px; }
-/* 外部修改标记：这不是错误（用户有权改），但必须显眼到能解释"为什么保存不了" */
-.ext-mark {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: var(--fs-12);
-  background: var(--c-warn-bg);
-  color: var(--c-warn);
-}
 
 /* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 260px; }
