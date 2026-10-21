@@ -84,10 +84,17 @@ export const router = createRouter({
         { path: 'tasks', redirect: '/cron/tasks' },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: '用户' } },
         { path: 'audit', redirect: '/logs/audit' },
+        // 兜底：未知路径渲染 404 页（**不再重定向到首页**）。
+        // 放在布局 children 里 ⇒ 侧栏保留，用户能直接切去别处；
+        // 原来的 redirect 会让"旧书签/拼错地址"看起来像"面板把我踢回首页"。
+        {
+          path: ':pathMatch(.*)*',
+          name: 'not-found',
+          component: () => import('@/views/NotFoundView.vue'),
+          meta: { title: '页面不存在' },
+        },
       ],
     },
-    // 兜底：未匹配的路径重定向到首页。缺此条时访问未知 URL 会渲染空白页（无 404 视图）。
-    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 

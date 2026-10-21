@@ -63,6 +63,7 @@ const SUBTITLES: Record<string, string> = {
   'services-software': '白名单软件包的安装与卸载',
   'services-units': '服务启停 · 日志 · 配置',
   'service-detail': '单个服务的启停 · 日志 · 配置',
+  'not-found': '地址不存在 · 可从左侧菜单继续',
   sites: '虚拟主机站点管理',
   apps: 'systemd 托管进程 · 自动反代站点 · 构建请自行完成',
   databases: '连接管理 · 只读浏览 · 备份任务',
