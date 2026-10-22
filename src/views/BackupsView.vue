@@ -73,6 +73,7 @@ async function loadSystem() {
 }
 /** 下载走同源导航（cookie 自动带上），不需要额外拼 Authorization。 */
 function systemDownloadUrl(name: string) { return API.backups.systemDownload(name) }
+function artifactDownloadUrl(planId: number, name: string) { return API.backups.artifactDownload(planId, name) }
 const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
@@ -500,14 +501,15 @@ const selName = ref('')
         </div>
         <table v-if="curArtifacts.items.length" class="fixed" v-table-nav>
           <colgroup>
-            <col class="w-afile" /><col class="w-asize" /><col class="w-atime" />
+            <col class="w-afile" /><col class="w-asize" /><col class="w-atime" /><col class="w-aact" />
           </colgroup>
-          <thead><tr><th>文件</th><th>大小</th><th>时间</th></tr></thead>
+          <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="a in curArtifacts.items" :key="a.name">
               <td class="mono ellipsis" :title="a.name">{{ a.name }}</td>
               <td>{{ fmtSize(a.size) }}</td>
               <td class="dim">{{ fmtDateTime(a.mtime) }}</td>
+              <td><a class="btn-ghost btn-sm" :href="artifactDownloadUrl(curArtifacts.plan.id, a.name)" download>下载</a></td>
             </tr>
           </tbody>
         </table>
