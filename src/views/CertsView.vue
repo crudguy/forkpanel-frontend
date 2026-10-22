@@ -199,11 +199,15 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
             <td class="mono dim">{{ fmtDate(c.not_after) }}</td>
             <td :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</td>
             <td>
-              <label class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
+              <!-- 自动续期只对 ACME 有意义（后端 cert_auto_renew 对其余来源明确 400）。
+                   自签 / 手动证书没有可交互的 CA，给开关就是「看起来能点、点了报错」——
+                   改为不可点的 — 并把原因写进 title（与 SiteFormDialog 的 v-if 同口径）。 -->
+              <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
                 <input type="checkbox" :checked="c.auto_renew" :disabled="!sslReady || busy"
                   @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" />
                 <i />
-              </label>
+              </span>
+              <span v-else class="dim" title="自签 / 手动证书没有可交互的 CA，无法自动续期；到期前请手动点「续期」">—</span>
             </td>
             <td class="acts">
               <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '续期' : sslHint" @click="renewCert(c)">
