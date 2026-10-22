@@ -33,6 +33,7 @@ export const API = {
     capabilities: () => '/api/v1/system/capabilities',
     overview: () => '/api/v1/system/overview',
     users: () => '/api/v1/system/users',
+    directories: () => '/api/v1/system/directories',
   },
 
   metrics: {

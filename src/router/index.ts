@@ -25,6 +25,7 @@ export const router = createRouter({
           component: () => import('@/views/MonitorView.vue'),
           children: [
             { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '实时趋势' } },
+            { path: 'dirs', name: 'system-dirs', component: () => import('@/views/DirectoriesView.vue'), meta: { title: '目录与位置' } },
             { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],

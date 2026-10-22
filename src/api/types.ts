@@ -28,6 +28,23 @@ export interface PlatformInfo {
   kernel: string | null
 }
 
+/** 目录与文件位置（/system/directories）：按用途分组的条目 */
+export interface DirectoryItem {
+  label: string
+  path: string
+  desc: string | null
+}
+export interface DirectoryGroup {
+  key: string
+  title: string
+  items: DirectoryItem[]
+}
+export interface DirectoriesResp {
+  binary: string
+  frontend_embedded: boolean
+  groups: DirectoryGroup[]
+}
+
 export const CAP = {
   METRICS_READ: 'metrics.read',
   PROCESS_LIST: 'process.list',

@@ -60,6 +60,7 @@ const SUBTITLES: Record<string, string> = {
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
   'system-procs': '服务器全部进程 · 点表头可按 CPU / 内存 / 用户排序 · 可结束异常进程',
+  'system-dirs': '面板装到了哪 · 数据 / 日志 / Web 服务器 / 前端各在哪（与运行时实际落点一致）',
   'services-software': '白名单软件包的安装与卸载',
   'services-units': '服务启停 · 日志 · 配置',
   'service-detail': '单个服务的启停 · 日志 · 配置',

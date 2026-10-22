@@ -14,6 +14,7 @@ const tabs = [
   { to: '/system', label: '实时趋势' },
   { to: '/system/pro', label: '专业快照' },
   { to: '/system/procs', label: '进程管理' },
+  { to: '/system/dirs', label: '目录与位置' },
 ]
 </script>
 

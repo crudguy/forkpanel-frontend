@@ -44,6 +44,7 @@ const interval = ref(2000)
 const gran = ref<'1m' | '1h'>('1m')
 const history = ref<{ granularity: string; samples: HistRow[]; unavailable?: string } | null>(null)
 
+
 function mergeRealtime(samples: Sample[]) {
   if (!samples.length) return
   if (!buf.value.length) { buf.value = samples.slice(-MAXN); return }
@@ -247,6 +248,7 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
       <p class="dim pad">CPU / 内存 / 负载 历史趋势 · 当前粒度 {{ gran === '1m' ? '1 分钟' : '1 小时' }}</p>
     </div>
     <EmptyState v-else title="历史数据为空" hint="服务运行片刻后开始聚合落盘" />
+
   </div>
 </template>
 
@@ -269,5 +271,5 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 .chip { font: inherit; font-size: var(--fs-12); padding: 3px 11px; border-radius: 999px; cursor: pointer;
   color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
 .chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
-.chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
+  .chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
 </style>
