@@ -45,6 +45,13 @@ export interface DirectoriesResp {
   groups: DirectoryGroup[]
 }
 
+/** 系统自动备份（面板库每日快照，`panel-<unix>.db`） */
+export interface SystemBackup {
+  name: string
+  size: number
+  mtime: number
+}
+
 export const CAP = {
   METRICS_READ: 'metrics.read',
   PROCESS_LIST: 'process.list',

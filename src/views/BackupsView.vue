@@ -19,7 +19,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig } from '@/api/types'
+import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig, type SystemBackup } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
@@ -50,6 +50,29 @@ interface Artifact { name: string; size: number; mtime: number }
 
 const auth = useAuthStore()
 const plans = ref<Plan[]>([])
+
+// ── 系统自动备份（面板库每日快照，`panel-<unix>.db`）──
+//
+// 这块此前在页面上**完全不存在**：产物接口只认 `plan<id>-` 前缀，于是面板每天
+// 03:30 在写备份、用户一条都看不到，也不知道它们正在堆积。只读列表，不轮询。
+const sysItems = ref<SystemBackup[]>([])
+const sysError = ref('')
+const sysLoading = ref(false)
+async function loadSystem() {
+  sysLoading.value = true
+  try {
+    const r = await api.get<{ dir: string; items: SystemBackup[] }>(API.backups.system())
+    sysItems.value = r.items ?? []
+    sysError.value = ''
+  } catch (e) {
+    // 失败必须说出来：这一卡的全部价值就是"让你知道面板在备份"，静默空白等于骗人
+    sysError.value = errorText(e)
+  } finally {
+    sysLoading.value = false
+  }
+}
+/** 下载走同源导航（cookie 自动带上），不需要额外拼 Authorization。 */
+function systemDownloadUrl(name: string) { return API.backups.systemDownload(name) }
 const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
@@ -146,7 +169,7 @@ async function load() {
     (e) => { plans.value = []; error.value = errorText(e) },
   )
 }
-onMounted(load)
+onMounted(() => { load(); loadSystem() })
 
 async function create() {
   busy.value = true; error.value = ''
@@ -490,6 +513,38 @@ const selName = ref('')
         </table>
         <p v-else class="dim">该计划暂无产物（点「执行」生成）</p>
       </section>
+
+      <!-- 系统自动备份：面板库的每日快照。放在链外独立区块，零计划时也照常显示
+           （否则"面板在悄悄备份"这件事只在有计划时才可见，本末倒置）。 -->
+      <section class="card">
+        <div class="sec-head">
+          <Icon name="disk" :size="16" /> 系统自动备份
+          <span class="spacer" />
+          <span class="dim tiny">面板库每日 03:30 · 保留份数由 config.toml [db] backup_keep 控制</span>
+          <button class="btn-ghost btn-sm" type="button" :disabled="sysLoading" @click="loadSystem">
+            <Icon name="refresh" :size="13" /> 刷新
+          </button>
+        </div>
+        <p v-if="sysError" class="err" role="alert">{{ sysError }}</p>
+        <p v-else-if="sysLoading && !sysItems.length" class="dim">正在读取…</p>
+        <p v-else-if="!sysItems.length" class="dim">
+          暂无系统自动备份（每日 03:30 生成；Nano 档位不做，关闭见 [db] daily_backup）
+        </p>
+        <table v-else class="fixed">
+          <colgroup>
+            <col class="w-afile" /><col class="w-asize" /><col class="w-atime" /><col class="w-aact" />
+          </colgroup>
+          <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr v-for="b in sysItems" :key="b.name">
+              <td class="mono ellipsis" :title="b.name">{{ b.name }}</td>
+              <td>{{ fmtSize(b.size) }}</td>
+              <td class="dim">{{ fmtDateTime(b.mtime) }}</td>
+              <td><a class="btn-ghost btn-sm" :href="systemDownloadUrl(b.name)" download>下载</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </template>
 
     <!-- 删除计划（审计 U5：window.confirm → ConfirmDialog） -->
@@ -545,6 +600,7 @@ const selName = ref('')
 .w-afile { width: auto; }     /* 文件名弹性列 */
 .w-asize { width: 90px; }
 .w-atime { width: 150px; }
+.w-aact  { width: 88px; }
 
 /* B9：数字列右对齐（id / 保留份数 / 产物大小）。<col> 的 text-align 级联到该列
    所有 th/td（与 SitesView 的 align:'right' 同一范式）；这些列都是纯数值，

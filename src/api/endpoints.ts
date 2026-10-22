@@ -212,6 +212,9 @@ export const API = {
     // 远端连接自检：真的 PUT 一个探针对象再删掉（用备份实际要用的操作验证）
     testRemote: () => '/api/v1/backups/test-remote',
     artifacts: (id: number) => `/api/v1/backups/${id}/artifacts`,
+    // 系统自动备份（面板库每日快照）：此前只写不列，页面完全看不到
+    system: () => '/api/v1/backups/system',
+    systemDownload: (name: string) => `/api/v1/backups/system/${encodeURIComponent(name)}`,
     restore: (id: number) => `/api/v1/backups/${id}/restore`,
   },
   containers: {
