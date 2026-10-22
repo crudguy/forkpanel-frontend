@@ -813,12 +813,24 @@ defineExpose({ applySsl })
       </label>
       <!-- SPA history 路由回退：仅 static 类型有意义。开启后 nginx 用
            `try_files $uri $uri/ /index.html` 兜底，配合前端 history 模式单页应用。
-           对反代 / PHP / 重定向类型无意义，故仅 static 时显示。 -->
+           对反代 / PHP / 重定向类型无意义，故仅 static 时显示。
+           说明文案刻意常显（而非勾选后才出现）：这个开关的**取舍**要在做决定前
+           就看到——默认关闭，用户需要知道"我这是什么站点、该不该开"。 -->
       <label v-if="form.kind === 'static'" class="blk row-inline"
-        title="开启后未命中文件回退到 /index.html，适用于 Vue/React 等 history 模式单页应用">
+        title="history 模式单页应用（Vue/React Router）才需要；hash 模式（#/xxx）用不到">
         <input type="checkbox" v-model="form.spa" :disabled="!webSupported" />
         <span>SPA 回退（history 路由兜底到 index.html）</span>
       </label>
+      <p v-if="form.kind === 'static'" class="hint-note">
+        <Icon name="info" :size="14" class="ic" />
+        <span>
+          开启后，未命中文件的路径会改交 <code class="mono">/index.html</code>（HTTP 200），显示什么由前端路由决定——
+          直接访问 <code class="mono">/settings</code>、刷新、分享链接才不会 404。
+          <b>hash 模式（<code class="mono">#/xxx</code>）用不到</b>；多页站点别开（拼错的 URL 也会变成 200）。
+          <br>前提：根目录里得有 <code class="mono">index.html</code>，否则整站 404。
+          js/css 等资产缺失仍返回 404（不会被当成首页），便于定位构建产物问题。
+        </span>
+      </p>
       <!-- 整站重定向：仅 redirect 类型有意义。目标须 http(s):// 开头（后端校验），
            状态码限 301/302/307/308；$request_uri 自动追加，无需手填路径。 -->
       <template v-if="form.kind === 'redirect'">
