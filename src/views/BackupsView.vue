@@ -295,7 +295,7 @@ function askRestore(plan: Plan, name: string, fromRemote = false) {
   // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
   if (plan.kind === 'panel') {
     toast(
-      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务后手动替换。', 'info')
+      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务，再执行 panel restore-db <产物路径>。', 'info')
     return
   }
   restoreConfirm.value = { plan, name, fromRemote }
