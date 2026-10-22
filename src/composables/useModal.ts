@@ -27,6 +27,20 @@ import { watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
  */
 const CLOSE_MS = 140 // 与 main.css 的 .is-closing 动画时长（.14s）保持一致
 
+/**
+ * 打开中的浮层栈（模块级，跨组件共享）。**Esc / Tab 只归栈顶那个浮层处理。**
+ *
+ * 为什么需要：每个 useModal 都各自在 `document` 上挂**捕获阶段**的 keydown，
+ * 而同节点同阶段的监听按**注册顺序**触发——父弹窗先挂载 ⇒ 它先收到 Esc。
+ * 于是二级浮层（站点弹窗里的根证书指引 / 全屏配置编辑器）按 Esc 时，
+ * **父子两层一起关**。真机实测过这个存量 bug：打开「安装面板根证书」再按 Esc，
+ * `.site-modal` 与二级浮层同时消失，用户只想关掉里面那一层。
+ *
+ * 用栈而不是布尔「有没有嵌套」：三层及以上同样要逐层关，且互不相关的两个浮层
+ * （回收站 + SQL 控制台）也不会再互相抢 Esc。
+ */
+const openStack: symbol[] = []
+
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined'
     && !!window.matchMedia
@@ -40,6 +54,12 @@ export function useModal(
 ) {
   /** 关闭中标记：连按 Esc / 反复点遮罩时不要叠加多次 setTimeout */
   let closing = false
+  /** 本实例在栈里的身份（同一组件多处 useModal 也不会混） */
+  const token = Symbol('useModal')
+  const push = () => { if (!openStack.includes(token)) openStack.push(token) }
+  const pop = () => { const i = openStack.indexOf(token); if (i >= 0) openStack.splice(i, 1) }
+  /** 是否轮到本实例处理键盘：非栈顶一律让位（父弹窗的监听更早触发，不拦就一起关） */
+  const isTopmost = () => openStack[openStack.length - 1] === token
 
   function focusables(): HTMLElement[] {
     const el = root.value
@@ -68,6 +88,8 @@ export function useModal(
 
   function onKeydown(e: KeyboardEvent) {
     if (!isOpen() || !root.value) return
+    // 嵌套浮层：只有栈顶响应。父弹窗的监听注册更早、先执行，不拦这一下父子会一起关。
+    if (!isTopmost()) return
     if (e.key === 'Escape') {
       e.stopPropagation()
       close()
@@ -95,9 +117,11 @@ export function useModal(
     document.addEventListener('keydown', onKeydown, true)
     stop = watch(isOpen, (v) => {
       if (v) {
+        push()
         opener = document.activeElement as HTMLElement | null
         nextTick(() => focusables()[0]?.focus())
       } else {
+        pop()
         closing = false
         const back = opener
         opener = null
@@ -110,6 +134,7 @@ export function useModal(
   })
   onUnmounted(() => {
     document.removeEventListener('keydown', onKeydown, true)
+    pop()   // 父组件卸载时子浮层可能还开着：不摘栈会留下永久的假栈顶
     stop?.()
   })
 

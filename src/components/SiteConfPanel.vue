@@ -20,6 +20,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { fmtDateTime, type ConfVersion, type ConfVersionDetail, type Site } from '@/api/types'
 import { toast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import NginxEditor from '@/components/NginxEditor.vue'
@@ -88,6 +89,38 @@ const confAsk = ref(false)
 /** 外部修改（020）：磁盘内容与最后一次留档不一致——文件在面板之外被改过 */
 const confExternal = ref(false)
 
+// ── 全屏编辑（配置动辄几百行，行内 10 行的编辑器改它靠滚轮）──
+//
+// **二级浮层**：本组件宿主是站点编辑弹窗，故用 `.mask.level-2`（z-index 60，
+// 压过父弹窗的 50）并 Teleport 到 body——与下面两个 ConfirmDialog 同一段
+// Teleport、同一个理由（留在原地会被包进父弹窗的 v-if 子树，静默弹不出）。
+//
+// 内容与行内编辑器是**同一份** `confText`（v-model 直绑），不存在两份真值；
+// 「取消」靠打开时的快照还原——否则用户在全屏里改一半按 Esc，行内那份已被
+// 同步改掉，下次打开看到的是半成品。
+const fullOpen = ref(false)
+const fullBox = ref<HTMLElement | null>(null)
+const fullSnapshot = ref<string | null>(null)
+const { close: closeFull } = useModal(() => fullOpen.value, fullBox, cancelFull)
+
+function openFull() {
+  fullSnapshot.value = confText.value
+  fullOpen.value = true
+}
+function cancelFull() {
+  if (fullSnapshot.value !== null) {
+    confText.value = fullSnapshot.value
+    fullSnapshot.value = null
+  }
+  fullOpen.value = false
+}
+/** 全屏里保存：复用行内同一个 saveConf；**成功才关浮层**——失败要留在原地
+ *  看配置区自己的错误条（甩到别处等于让人自己找是哪儿写坏了）。 */
+async function saveFull() {
+  await saveConf()
+  if (!confErr.value) fullOpen.value = false
+}
+
 const confHint = computed(() => {
   if (!canManage.value) return '无 site.manage 权限'
   if (!isOwner.value) return '仅 owner 可保存原始配置'
@@ -114,6 +147,8 @@ function resetConf() {
   confPath.value = null; confText.value = ''; confManual.value = false
   confErr.value = ''; confBusy.value = false; confAsk.value = false
   confStale.value = false; confExternal.value = false
+  // 全屏编辑器一并归零：换站点时它必须是关着的（快照更不能跨站点残留）
+  fullOpen.value = false; fullSnapshot.value = null
   // 版本面板同样归零：上一站点展开的列表/报错/详情不能残留到下一个站点
   versOpen.value = false; versList.value = []; versErr.value = ''
   versOpenId.value = null; versDetail.value = null
@@ -374,6 +409,11 @@ watch(() => props.site?.id ?? null, (id) => {
               <span v-else>保存原文将<b>接管</b>这份配置：此后表单「保存并应用」不再覆盖它，直到「按表单重新生成」交还。</span>
             </p>
             <div class="conf-btns">
+              <button class="btn-ghost btn-sm"
+                :disabled="confBusy || !canManage || !isOwner || !webSupported || !editing?.enabled"
+                :title="confHint" @click="openFull">
+                <Icon name="edit" :size="13" /> 全屏编辑
+              </button>
               <button v-if="confManual" class="btn-ghost btn-sm"
                 :disabled="confBusy || !isOwner || !webSupported"
                 :title="regenHint" @click="confAsk = true">
@@ -433,6 +473,36 @@ watch(() => props.site?.id ?? null, (id) => {
     <ConfirmDialog :open="!!rollbackTarget" danger title="回滚配置版本"
       :detail="rollbackTarget ? `将把「${editing?.name ?? ''}」的磁盘配置替换为 ${fmtDateTime(rollbackTarget.created_at)} 留档的版本（${versSourceLabel(rollbackTarget.source)}）。替换前先把当前文件留档进版本链（可再次回滚找回），随后执行 nginx -t 校验并重载。` : ''"
       confirm-word="回滚" @confirm="doRollback" @cancel="rollbackTarget = null" />
+
+    <!-- 全屏编辑配置原文。二级浮层 → .mask.level-2（压过父弹窗的 .mask 50）；
+         Esc / 点遮罩走 useModal 的 closeFull（其回调即 cancelFull：关闭=取消=还原）。
+         快捷键挂在面板上而非编辑器内：keydown 从 textarea 冒泡上来即可命中。 -->
+    <div v-if="fullOpen" class="mask level-2" @click.self="closeFull"
+      @keydown.ctrl.enter.prevent="saveFull" @keydown.meta.enter.prevent="saveFull">
+      <div ref="fullBox" class="conf-full" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <Icon name="file" :size="16" />
+          <span class="modal-title">编辑配置原文 · {{ editing?.name }}</span>
+          <span v-if="confPath" class="mono dim tiny conf-path" :title="confPath">{{ confPath }}</span>
+          <span class="spacer" />
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeFull">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <NginxEditor v-model="confText" class="conf-full-editor" fill :spellcheck="false" />
+        <div class="conf-full-foot">
+          <span class="dim tiny">Ctrl/⌘ + Enter 保存 · Esc 关闭并还原到打开时的内容</span>
+          <span class="spacer" />
+          <span v-if="confTooBig" class="is-warn-text tiny">已超 64 KiB，保存会被后端拒绝</span>
+          <button class="btn-ghost btn-sm" @click="cancelFull">取消</button>
+          <button class="btn-primary btn-sm"
+            :disabled="confBusy || !canManage || !isOwner || !webSupported || !editing?.enabled"
+            :title="confHint" @click="saveFull">
+            <Icon name="check" :size="13" /> {{ confBusy ? '保存中…' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
     </Teleport>
 </template>
 <style scoped>
@@ -507,4 +577,30 @@ watch(() => props.site?.id ?? null, (id) => {
 
 .conf-size { flex: none; margin-left: 8px; }
 
+</style>
+
+<style scoped>
+/* 全屏编辑配置面板。遮罩（.mask.level-2）/ 标题行 / 关闭按钮 / 操作条基础式样统一取
+   main.css 公共类；这里只留面板自身尺寸，并用 --modal-py/--modal-px 告诉公共
+   .modal-head 本面板的内边距（与 SqlConsole 同款全幅面板同口径）。
+   ⚠️ 不用 grid + 覆写变量归零那套（site-modal 的做法）：那是给"标题行要通铺背景"
+   的场景。这里 head 带下边框即够，flex 列布局更直白。 */
+.conf-full {
+  --modal-py: 16px;
+  --modal-px: 20px;
+  width: min(1180px, 100%);
+  height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.conf-full > .modal-head { flex: 0 0 auto; }
+/* 编辑器撑满中间剩余空间：min-height:0 是 flex 子项能被压缩的前提，
+   否则 textarea 的固有高度会把面板顶高、底部操作条被挤出视口。 */
+.conf-full-editor { flex: 1 1 auto; min-height: 0; margin: 10px 0; }
+.conf-full-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.conf-full-foot .tiny { font-size: var(--fs-12); }
 </style>

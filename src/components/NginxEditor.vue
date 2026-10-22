@@ -20,6 +20,8 @@ const props = defineProps<{
   spellcheck?: boolean
   placeholder?: string
   ariaLabel?: string
+  /** 填充父容器高度（全屏编辑用）：textarea 撑满且禁手动缩放 */
+  fill?: boolean
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
@@ -70,7 +72,7 @@ function syncScroll() {
 </script>
 
 <template>
-  <div class="nginx-editor">
+  <div class="nginx-editor" :class="{ 'ne-fill': fill }">
     <pre ref="pre" class="ne-pre" aria-hidden="true"><code><span v-for="(s, i) in segs" :key="i" :class="s.c">{{ s.t }}</span></code></pre>
     <textarea
       ref="ta"
@@ -136,6 +138,10 @@ function syncScroll() {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px var(--c-primary-soft);
 }
+/* 填充模式（全屏编辑弹窗）：容器给高、内部撑满，禁 resize（有滚动条就够了）。
+   pre 是 absolute inset:0，自动跟随；只需把 textarea 撑开。 */
+.nginx-editor.ne-fill { height: 100%; display: flex; }
+.nginx-editor.ne-fill .ne-ta { flex: 1 1 auto; min-height: 0; height: 100%; resize: none; }
 /* 只读态（非 owner / 未接入底座时整框禁写）：必须与可编辑态有可见差异，
    否则用户以为能改、敲半天没反应。:has() 让着色层跟着 textarea 的 readonly 一起变
    （pre 在前、textarea 在后，兄弟选择器够不着，故从根容器反查）。 */
