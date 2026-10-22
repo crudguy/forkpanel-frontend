@@ -213,6 +213,8 @@ export const API = {
     testRemote: () => '/api/v1/backups/test-remote',
     artifacts: (id: number) => `/api/v1/backups/${id}/artifacts`,
     // 产物下载（流式；后端会校验 plan<id>- 前缀 + 沙箱父目录）
+    // 远端副本清单（本地盘出事时，只有它能告诉你异地还有哪几份）
+    remoteArtifacts: (id: number) => `/api/v1/backups/${id}/remote/artifacts`,
     artifactDownload: (id: number, name: string) =>
       `/api/v1/backups/${id}/artifacts/${encodeURIComponent(name)}`,
     // 系统自动备份（面板库每日快照）：此前只写不列，页面完全看不到

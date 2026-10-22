@@ -269,9 +269,28 @@ async function del(p: Plan) {
   finally { busy.value = false }
 }
 
+/** 远端副本清单（null = 未展开；[] = 已展开但远端为空） */
+const remoteItems = ref<string[] | null>(null)
+const remoteError = ref('')
+const remoteLoading = ref(false)
+async function loadRemote(plan: Plan) {
+  remoteLoading.value = true
+  remoteError.value = ''
+  try {
+    const r = await api.get<{ items: string[] }>(API.backups.remoteArtifacts(plan.id))
+    remoteItems.value = r.items ?? []
+  } catch (e) {
+    // 远端不可达要如实说：此时"看不到清单"不等于"远端没有备份"
+    remoteError.value = errorText(e)
+    remoteItems.value = []
+  } finally {
+    remoteLoading.value = false
+  }
+}
+
 /** 待确认恢复的产物（审计 U5：window.prompt → ConfirmDialog 确认词模式） */
-const restoreConfirm = ref<{ plan: Plan; name: string } | null>(null)
-function askRestore(plan: Plan, name: string) {
+const restoreConfirm = ref<{ plan: Plan; name: string; fromRemote: boolean } | null>(null)
+function askRestore(plan: Plan, name: string, fromRemote = false) {
   error.value = ''
   // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
   if (plan.kind === 'panel') {
@@ -279,7 +298,7 @@ function askRestore(plan: Plan, name: string) {
       '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务后手动替换。', 'info')
     return
   }
-  restoreConfirm.value = { plan, name }
+  restoreConfirm.value = { plan, name, fromRemote }
 }
 
 async function restoreFrom() {
@@ -292,6 +311,8 @@ async function restoreFrom() {
     const r = await api.post<{ task_id: string }>(API.backups.restore(plan.id), {
       artifact: name,
       confirm_token: '覆盖恢复',
+      // 远端恢复：后端会先按名字把对象拉回临时文件，再走同一条恢复流程
+      ...(rc.fromRemote ? { from_remote: true } : {}),
     })
     toast(`恢复任务已提交（${r.task_id}）。可在「任务中心」查看进度；如需回滚，任务详情里的 output_path 指向恢复前的快照。`)
     restoreConfirm.value = null
@@ -310,6 +331,9 @@ async function showArtifacts(p: Plan) {
   try {
     const items = await api.get<Artifact[]>(API.backups.artifacts(p.id))
     curArtifacts.value = { plan: p, items }
+    // 换计划时远端清单必须归零：留着上一份清单会让人以为 B 计划在远端有产物
+    remoteItems.value = null
+    remoteError.value = ''
   } catch (e) { error.value = errorText(e) }
 }
 
@@ -497,6 +521,14 @@ const selName = ref('')
           >
             <Icon name="restart" :size="13" /> 从此产物恢复（高危）
           </button>
+          <button class="btn-ghost btn-sm"
+            :disabled="!curArtifacts.plan.remote_kind || remoteLoading"
+            :title="curArtifacts.plan.remote_kind
+              ? '列出远端副本——本地盘出事后，只有它能告诉你异地还存着哪几份'
+              : '该计划未配置远端副本'"
+            @click="loadRemote(curArtifacts.plan)">
+            <Icon name="globe" :size="13" /> {{ remoteLoading ? '读取中…' : '远端副本' }}
+          </button>
           <button class="btn-ghost btn-sm" @click="curArtifacts = null">关闭</button>
         </div>
         <table v-if="curArtifacts.items.length" class="fixed" v-table-nav>
@@ -514,6 +546,32 @@ const selName = ref('')
           </tbody>
         </table>
         <p v-else class="dim">该计划暂无产物（点「执行」生成）</p>
+
+        <!-- 远端副本：与本地列表并列，互不替代。本地那份没了，这里仍在。 -->
+        <div v-if="remoteItems" class="remote-block">
+          <div class="remote-head">
+            <Icon name="globe" :size="14" /> 远端副本
+            <span class="dim">（{{ remoteItems.length }}）</span>
+            <span class="spacer" />
+            <button class="btn-ghost btn-sm" @click="remoteItems = null">收起</button>
+          </div>
+          <p v-if="remoteError" class="err" role="alert">{{ remoteError }}</p>
+          <p v-else-if="!remoteItems.length" class="dim">远端没有本计划的产物</p>
+          <table v-else class="fixed">
+            <colgroup><col class="w-afile" /><col class="w-aact" /></colgroup>
+            <thead><tr><th>文件</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="n in remoteItems" :key="n">
+                <td class="mono ellipsis" :title="n">{{ n }}</td>
+                <td>
+                  <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy"
+                    title="先从远端下载到临时文件，再走同一条恢复流程（仍会先备份当前态）"
+                    @click="askRestore(curArtifacts.plan, n, true)">从远端恢复</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <!-- 系统自动备份：面板库的每日快照。放在链外独立区块，零计划时也照常显示
@@ -559,7 +617,7 @@ const selName = ref('')
     <!-- 从产物恢复（审计 U5：window.prompt → ConfirmDialog 确认词模式） -->
     <ConfirmDialog
       :open="!!restoreConfirm" danger title="从产物恢复（高危）"
-      :detail="restoreConfirm ? `即将用「${restoreConfirm.name}」覆盖 ${restoreConfirm.plan.target} 的当前数据。任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。` : ''"
+      :detail="restoreConfirm ? `即将用${restoreConfirm.fromRemote ? '【远端副本】' : '【本地产物】'}「${restoreConfirm.name}」覆盖 ${restoreConfirm.plan.target} 的当前数据。任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。` : ''"
       confirm-word="覆盖恢复" @confirm="restoreFrom" @cancel="restoreConfirm = null"
     />
 
@@ -603,6 +661,10 @@ const selName = ref('')
 .w-asize { width: 90px; }
 .w-atime { width: 150px; }
 .w-aact  { width: 88px; }
+.remote-block { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--c-border); }
+.remote-head { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-13);
+  color: var(--c-text); margin-bottom: 10px; }
+.remote-head .icon { color: var(--c-primary); }
 
 /* B9：数字列右对齐（id / 保留份数 / 产物大小）。<col> 的 text-align 级联到该列
    所有 th/td（与 SitesView 的 align:'right' 同一范式）；这些列都是纯数值，
