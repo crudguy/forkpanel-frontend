@@ -14,7 +14,7 @@
  * 状态语义：`last_result` 的 `partial` 表示**本地成功、远端上传失败**——
  * 本地那份是真的，所以不判为失败；但异地副本没成，必须让人一眼看见。
  */
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
@@ -50,6 +50,16 @@ interface Artifact { name: string; size: number; mtime: number }
 
 const auth = useAuthStore()
 const plans = ref<Plan[]>([])
+/** 数据库连接（`kind=db` 的目标下拉）。无 DB 权限/不支持时保持空数组，UI 给提示。 */
+const dbConns = ref<{ id: number; name: string; engine: string }[]>([])
+async function loadDbConns() {
+  try {
+    dbConns.value = await api.get<{ id: number; name: string; engine: string }[]>(API.db.connections())
+  } catch {
+    // 备份权限与数据库权限是两件事：这里失败不该影响备份页其余功能
+    dbConns.value = []
+  }
+}
 
 // ── 系统自动备份（面板库每日快照，`panel-<unix>.db`）──
 //
@@ -87,6 +97,12 @@ const form = ref({
   kind: 'panel', target: 'panel', dest_dir: 'plans',
   cron_expr: '', keep_count: 7, encrypt: false,
   remote: emptyRemote(),
+})
+
+/** 切换类型时重置目标：否则从"站点"切到"数据库"会带着旧站点名，
+ *  下拉框显示为空、提交时却把站点名当连接名发出去。 */
+watch(() => form.value.kind, (k) => {
+  form.value.target = k === 'panel' ? 'panel' : ''
 })
 
 /** 正在编辑远端的计划（null = 面板关闭）。cfg 的 secret 恒为空初值：凭据不回显。 */
@@ -170,7 +186,7 @@ async function load() {
     (e) => { plans.value = []; error.value = errorText(e) },
   )
 }
-onMounted(() => { load(); loadSystem() })
+onMounted(() => { load(); loadSystem(); loadDbConns() })
 
 async function create() {
   busy.value = true; error.value = ''
@@ -364,10 +380,15 @@ const selName = ref('')
             <select v-model="form.kind">
               <option value="panel">面板数据（SQLite 在线备份）</option>
               <option value="site">站点文件（tar.gz）</option>
+              <option value="db">数据库连接（按引擎导出）</option>
             </select>
           </label>
           <label>目标
-            <input v-model="form.target" :disabled="form.kind === 'panel'"
+            <select v-if="form.kind === 'db'" v-model="form.target">
+              <option value="" disabled>{{ dbConns.length ? '选择数据库连接…' : '暂无连接（先去「数据库」添加）' }}</option>
+              <option v-for="c in dbConns" :key="c.id" :value="c.name">{{ c.name }}（{{ c.engine }}）</option>
+            </select>
+            <input v-else v-model="form.target" :disabled="form.kind === 'panel'"
               :placeholder="form.kind === 'panel' ? 'panel' : '站点名（如 my-site）'" />
           </label>
           <label>产物子目录
@@ -380,7 +401,7 @@ const selName = ref('')
           <label>cron（可空）
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
-          <button class="btn-primary" :disabled="!canManage || busy || (form.kind === 'site' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
+          <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
 
         <RemoteTargetForm v-model="form.remote" :disabled="!canManage" />
@@ -389,6 +410,11 @@ const selName = ref('')
           text="静态加密采用 AES-256-GCM，主密钥不落库——丢失后备份将永远无法解密，请先单独备份主密钥。" />
         <p class="tip">
           产物落在面板备份根目录之下（相对路径，防越界）。可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。
+        </p>
+        <p class="tip">
+          数据库连接按引擎导出：SQLite 复制库文件（<code>.db</code>），MySQL / PostgreSQL 用
+          <code>mysqldump</code> / <code>pg_dump</code>（<code>.sql</code>）。恢复走同一套 provider
+          （覆盖前自动给当前库留快照）；SQL 转储只能校验"非空"，不会连库做语义校验。
         </p>
       </section>
 

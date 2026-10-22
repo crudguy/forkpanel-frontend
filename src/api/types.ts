@@ -820,7 +820,7 @@ export function certLevel(d: number | null): 'dim' | 'ok' | 'warn' | 'bad' {
 }
 
 /** 备份计划类型。 */
-export const backupKindLabel = enumLabel({ panel: '面板数据', site: '站点文件' })
+export const backupKindLabel = enumLabel({ panel: '面板数据', site: '站点文件', db: '数据库连接' })
 
 /** 备份最近一次结果。partial = 本地成功但远端失败。 */
 export const backupResultLabel = enumLabel({
