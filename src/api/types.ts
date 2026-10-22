@@ -52,6 +52,15 @@ export interface SystemBackup {
   mtime: number
 }
 
+/** `/backups/system` 响应：`keep` / `daily_backup` 是**进程里实际生效**的值
+ *  （config.toml `[db]`）。页面必须显示它们，写死 7 会在改过配置的机器上说谎。 */
+export interface SystemBackupsResp {
+  dir: string
+  items: SystemBackup[]
+  keep: number
+  daily_backup: boolean
+}
+
 export const CAP = {
   METRICS_READ: 'metrics.read',
   PROCESS_LIST: 'process.list',

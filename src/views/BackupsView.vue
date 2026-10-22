@@ -19,7 +19,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig, type SystemBackup } from '@/api/types'
+import { CAP, backupKindLabel, backupResultLabel, emptyRemote, fmtDateTime, fmtSize, remoteKindLabel, type RemoteConfig, type SystemBackup, type SystemBackupsResp } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
@@ -68,11 +68,17 @@ async function loadDbConns() {
 const sysItems = ref<SystemBackup[]>([])
 const sysError = ref('')
 const sysLoading = ref(false)
+/** 实际保留份数（后端下发的生效值；页面不得写死 7——改过 backup_keep 的机器会说谎） */
+const sysKeep = ref(0)
+/** 每日备份是否启用：用于区分「关了」与「还没到 03:30」，两者处置完全不同 */
+const sysDailyOn = ref(true)
 async function loadSystem() {
   sysLoading.value = true
   try {
-    const r = await api.get<{ dir: string; items: SystemBackup[] }>(API.backups.system())
+    const r = await api.get<SystemBackupsResp>(API.backups.system())
     sysItems.value = r.items ?? []
+    sysKeep.value = r.keep ?? 0
+    sysDailyOn.value = r.daily_backup !== false
     sysError.value = ''
   } catch (e) {
     // 失败必须说出来：这一卡的全部价值就是"让你知道面板在备份"，静默空白等于骗人
@@ -606,7 +612,7 @@ const selName = ref('')
         <div class="sec-head">
           <Icon name="disk" :size="16" /> 系统自动备份
           <span class="spacer" />
-          <span class="dim tiny">面板库每日 03:30 · 保留份数由 config.toml [db] backup_keep 控制</span>
+          <span class="dim tiny">面板库每日 03:30 · 实际保留 {{ sysKeep }} 份（config.toml [db] backup_keep）</span>
           <button class="btn-ghost btn-sm" type="button" :disabled="sysLoading" @click="loadSystem">
             <Icon name="refresh" :size="13" /> 刷新
           </button>
@@ -614,7 +620,9 @@ const selName = ref('')
         <p v-if="sysError" class="err" role="alert">{{ sysError }}</p>
         <p v-else-if="sysLoading && !sysItems.length" class="dim">正在读取…</p>
         <p v-else-if="!sysItems.length" class="dim">
-          暂无系统自动备份（每日 03:30 生成；Nano 档位不做，关闭见 [db] daily_backup）
+          {{ sysDailyOn
+            ? '暂无系统自动备份（每日 03:30 生成；Nano 档位不做）'
+            : '每日自动备份已关闭（config.toml [db] daily_backup = false）——不会自动产生快照，恢复面板库只能靠计划产物' }}
         </p>
         <table v-else class="fixed">
           <colgroup>
