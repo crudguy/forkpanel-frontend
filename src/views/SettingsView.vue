@@ -3,7 +3,9 @@
  * 设置页 = 运行环境排障（能力矩阵） + 面板设置（三段诚实模型）。
  *
  * 设置三段（与后端 routes/settings.rs 严格对应）：
- * - runtime：AI 助手 LLM 三键，可改即生效；api_key 经主密钥加密，后端永不明文回传
+ * - runtime：AI 助手 LLM 四键（endpoint / model / api_key / narrative 独立开关），
+ *   可改即生效；api_key 经主密钥加密，后端永不明文回传。narrative 缺省关——
+ *   关时后端不外发任何诊断数据（diagnose 回退纯规则报告），与未配置同路
  * - deployment：部署级配置只读展示（改 config.toml / PANEL_READ_ONLY 并重启）
  * - reserved：种子预留键未接线（wired:false），如实标注，绝不伪装成可生效
  */
@@ -49,6 +51,9 @@ const onError = (e: unknown) => { formError.value = errorText(e) }
 const llmEndpoint = ref('')
 const llmModel = ref('')
 const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
+// P0-2：叙事层独立开关。缺省关（后端 narrative_on 同款语义）——外发第三方端点
+// 必须显式同意，不搞「配齐三键就自动外发」。关时后端 llm_config() 直接 None。
+const llmNarrative = ref(false)
 const showKey = ref(false)
 
 // ── C10 测试连接：真实探测 OpenAI 兼容 /v1/models ──
@@ -130,6 +135,7 @@ async function load() {
     report.value = await api.get<SettingsReport>(API.settings.get())
     llmEndpoint.value = report.value.runtime.endpoint ?? ''
     llmModel.value = report.value.runtime.model ?? ''
+    llmNarrative.value = report.value.runtime.narrative ?? false
   }, onError)
 }
 
@@ -138,9 +144,11 @@ async function save() {
   saving.value = true
   formError.value = ''
   try {
-    const patch: Record<string, string | null> = {
+    // narrative 是布尔，其余三键是 string|null——类型如实反映后端白名单
+    const patch: Record<string, string | boolean | null> = {
       'assistant.llm_endpoint': llmEndpoint.value.trim() || null,
       'assistant.llm_model': llmModel.value.trim() || null,
+      'assistant.llm_narrative': llmNarrative.value,
     }
     if (llmKey.value.trim()) patch['assistant.llm_api_key'] = llmKey.value.trim()
     report.value = await api.patch<SettingsReport>(API.settings.patch(), { settings: patch })
@@ -180,12 +188,12 @@ onMounted(async () => {
     <template v-if="canManage">
       <section class="card">
         <div class="sec-head"><Icon name="sparkles" :size="16" /> AI 助手 · LLM 接入</div>
-        <!-- 诚实文案：诊断内核是内置规则引擎（开箱即用）；LLM 叙事层**尚未接线**——
-             此前写的是"配置 LLM 后叙事层自动启用"，但后端无任何消费点（已 grep 确认），
-             照那句写就是"改了却不生效"的谎言，与设置页自身的三段诚实模型相矛盾。 -->
+        <!-- 诚实文案（P0-2 改写）：叙事层**已接线**，但独立开关缺省关。
+             改之前这里写的是"尚未接线"（那时后端确实没有消费点）；现在反过来了：
+             配齐三键也**不会**自动外发，必须显式打开下面的开关。 -->
         <p class="sec-sub">
           AI 助手的诊断内核是内置规则引擎，开箱即用，不依赖此处配置。这里配置的是<strong>可选的 LLM 接入</strong>；
-          <strong>注意：叙事层目前尚未接线</strong>，配置会保存、可用「测试连接」验证，但暂不会被诊断调用。
+          叙事层已接线，但<strong>独立开关默认关闭</strong>——只有打开开关，诊断才会把（脱敏后的）数据发到上方配置的 Endpoint，否则一律回退纯规则报告。
         </p>
         <div v-if="loading" class="dim">加载中…</div>
         <template v-else-if="report">
@@ -213,6 +221,14 @@ onMounted(async () => {
                 </button>
               </div>
             </label>
+            <label class="field">
+              <span class="lbl">LLM 叙事层</span>
+              <input v-model="llmNarrative" type="checkbox" />
+              <span class="dim">关闭（默认）时仅内置规则诊断，不外发任何数据</span>
+            </label>
+            <!-- 披露文案由后端 NARRATIVE_NOTE 单一维护、原样渲染——前端不改写，
+                 杜绝「文档说已脱敏、代码没脱敏」的漂移。 -->
+            <p v-if="report.runtime.narrative_note" class="sec-note">{{ report.runtime.narrative_note }}</p>
           </div>
           <p class="sec-note">密钥经主密钥 AES-GCM 加密落库，界面与接口均不回显明文。</p>
           <p v-if="formError" class="err" role="alert">{{ formError }}</p>

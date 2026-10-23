@@ -586,6 +586,10 @@ export interface SettingsReport {
     endpoint: string | null
     model: string | null
     api_key_set: boolean
+    /** P0-2：叙事层独立开关，缺省 false；false 时后端不外发任何诊断数据 */
+    narrative: boolean
+    /** 开启后会外发什么的披露文案（后端单一维护，原样展示） */
+    narrative_note: string
   }
   deployment: {
     read_only: boolean
