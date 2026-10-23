@@ -19,6 +19,7 @@ import { API } from '@/api/endpoints'
 import { containerStateBadge, containerStateLabel } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import { COMPOSE_ACTIONS, type ComposeActionKey } from '@/composables/composeActions'
@@ -213,6 +214,9 @@ async function doComposeDown() {
     <p v-if="error" class="err" role="alert">
       {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button>
     </p>
+
+    <RiskBanner level="info"
+      text="项目级日志（docker compose logs）未接入面板，请到「终端」页用 docker CLI 查看；项目的启动 / 停止 / 清理已在下方开放。" />
 
     <!-- ── 面板编排（stack 定义）：不依赖 composeProjects.length ──
          空环境里恰恰最需要这个入口（一个项目都没跑起来时仍要能建第一个）。 -->

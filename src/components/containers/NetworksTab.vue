@@ -11,6 +11,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 
 /** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
  *  原始串（bridge / host / overlay / macvlan…；local / swarm / global），与面板其它
@@ -52,6 +53,9 @@ function shortId(id: string) {
     <p v-if="error" class="err" role="alert">
       {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button>
     </p>
+
+    <RiskBanner level="info"
+      text="面板只读列举 Docker 网络；创建 / 删除网络、容器接入 / 断开网络未接入面板——这些会改变网络连通性的操作，请到「终端」页用 docker CLI 执行。" />
 
     <div v-if="loading && !networks.length" class="skeleton shimmer box" />
     <div v-else-if="networks.length" class="card flush toolbar-card">

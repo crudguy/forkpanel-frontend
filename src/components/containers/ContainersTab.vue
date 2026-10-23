@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -181,6 +182,9 @@ async function saveRemark(c: Container, v: string) {
     <p v-if="error" class="err" role="alert">
       {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
     </p>
+
+    <RiskBanner level="info"
+      text="进入容器执行命令（docker exec）未接入面板，请到「终端」页用 docker CLI 操作。" />
 
     <div v-if="loading && !containers.length" class="skeleton shimmer box" />
     <div v-else-if="containers.length" class="card flush toolbar-card">

@@ -10,6 +10,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 
 /** Docker 卷行。driver 为 docker 原始串（local / nfs / cifs…），同口径不翻译；
  *  mountpoint 是卷数据在宿主机上的实际路径（排查磁盘占用用）。 */
@@ -44,6 +45,9 @@ watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
     <p v-if="error" class="err" role="alert">
       {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button>
     </p>
+
+    <RiskBanner level="info"
+      text="面板只读列举 Docker 卷；创建 / 删除卷未接入面板——删除卷会丢失其内全部数据，该操作请到「终端」页用 docker CLI 执行。" />
 
     <div v-if="loading && !volumes.length" class="skeleton shimmer box" />
     <div v-else-if="volumes.length" class="card flush toolbar-card">

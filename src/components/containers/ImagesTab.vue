@@ -20,6 +20,7 @@ import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import PullImageDialog from '@/components/PullImageDialog.vue'
+import RiskBanner from '@/components/RiskBanner.vue'
 import { usePolling } from '@/composables/usePolling'
 import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
 import { toast } from '@/composables/useToast'
@@ -103,6 +104,9 @@ function shortId(id: string) {
     <p v-if="error" class="err" role="alert">
       {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
     </p>
+
+    <RiskBanner level="info"
+      text="面板只提供镜像的列举与拉取；删除镜像未接入面板（磁盘回收动作，误删后需重新拉取），该操作请到「终端」页用 docker CLI 执行。" />
 
     <!-- ── 常用镜像（内置清单）：不依赖 images.length —— 一台刚装好的机器镜像数为 0，
          恰恰是最需要这份清单的时候 ── -->
