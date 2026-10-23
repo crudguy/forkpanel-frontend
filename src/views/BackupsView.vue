@@ -203,6 +203,13 @@ async function create() {
     busy.value = false
     return
   }
+  // 远端副本必须加密。后端同样会拒（400），这里提前拦只是为了给出可操作的提示，
+  // 而不是让用户提交后看到一句错误码文案。
+  if (form.value.remote.kind && !form.value.encrypt) {
+    error.value = '开启远端副本时必须勾选「静态加密」：明文备份会落到第三方存储（S3 / WebDAV），bucket 误公开即整库外泄'
+    busy.value = false
+    return
+  }
   try {
     await api.post(API.backups.create(), {
       kind: form.value.kind,
@@ -244,6 +251,12 @@ async function saveRemote() {
   if (!editRemote.value) return
   const id = editRemote.value.plan.id
   busy.value = true; error.value = ''
+  // 同上：这条路径是「先建本地计划、再补远端」，最容易绕过上面的新建校验
+  if (editRemote.value.cfg.kind && !editRemote.value.plan.encrypt) {
+    error.value = '该计划未开启静态加密：开启远端副本前请先在该计划的编辑里勾选「静态加密」（明文备份不得落到第三方存储）'
+    busy.value = false
+    return
+  }
   try {
     await api.patch(API.backups.patch(id), { remote: remotePayload(editRemote.value.cfg) })
     toast(`已更新计划 #${id} 的远端配置${
@@ -401,7 +414,7 @@ const selName = ref('')
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
-          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /var/lib/forkpanel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥">
+          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /var/lib/forkpanel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥。开启远端副本时此项为必填（明文备份不得落到第三方存储）">
             <input v-model="form.encrypt" type="checkbox" /> 静态加密
           </label>
           <label>cron（可空）
@@ -415,7 +428,7 @@ const selName = ref('')
         <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
           text="静态加密采用 AES-256-GCM，主密钥不落库——丢失后备份将永远无法解密，请先单独备份主密钥。" />
         <p class="tip">
-          产物落在面板备份根目录之下（相对路径，防越界）。可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。
+          产物落在面板备份根目录之下（相对路径，防越界）。可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。<b>开启远端副本时必须同时开启静态加密</b>：明文整库落到第三方存储，bucket 误公开即整库外泄，故后端会直接拒绝该组合。
         </p>
         <p class="tip">
           数据库连接按引擎导出：SQLite 复制库文件（<code>.db</code>），MySQL / PostgreSQL 用
