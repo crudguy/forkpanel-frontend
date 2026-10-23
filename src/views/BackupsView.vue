@@ -401,7 +401,7 @@ const selName = ref('')
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
-          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /etc/panel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥">
+          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /var/lib/forkpanel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥">
             <input v-model="form.encrypt" type="checkbox" /> 静态加密
           </label>
           <label>cron（可空）
