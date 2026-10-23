@@ -18,8 +18,10 @@
  * 卷列举（`docker volume ls`，「卷」Tab，需 container.view；只读、不自动轮询）、
  * Compose 项目列举（`docker compose ls --all --format json`，「Compose」Tab，需
  * container.view；只读、不自动轮询）。
- * 暂未实现（非安全刻意排除）：`docker exec`、网络的创建/删除与容器接入/断开、
- * 卷的创建/删除、compose 生命周期写操作（up/down/restart/logs）、stack。
+ * 已开放：Compose 生命周期写操作（up / stop / restart / down，见 ComposeTab 的确认流）
+ * 与面板编排 stack（GET·PUT `/containers/stacks`，见 StackEditorDialog）。
+ * **仍不提供**（非安全刻意排除）：`docker exec`、网络的创建/删除与容器接入/断开、
+ * 卷的创建/删除、compose 项目级 `logs`（请用 `docker compose logs` CLI）。
  */
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
