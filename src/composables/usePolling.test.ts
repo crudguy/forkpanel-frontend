@@ -92,4 +92,54 @@ describe('usePolling', () => {
     vi.advanceTimersByTime(5000)
     expect(fn).not.toHaveBeenCalled()
   })
+
+  it('异步 reject 收敛到 onError，且调度链不停摆（P1-21）', async () => {
+    const onError = vi.fn()
+    let shouldFail = true
+    const fn = vi.fn(() =>
+      shouldFail ? Promise.reject(new Error('async boom')) : Promise.resolve(),
+    )
+    usePolling({ fn, ms: 1000, onError })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect((onError.mock.calls[0][0] as Error).message).toBe('async boom')
+    // 关键：一次 reject 之后链必须继续，不能停摆（页面数据停止更新却无错误的旧病）
+    shouldFail = false
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fn.mock.calls.length).toBe(4) // 1000/2000/3000/4000 各一次
+    expect(onError).toHaveBeenCalledTimes(1) // 恢复后不再报错
+  })
+
+  it('同步 throw 收敛到 onError（P1-21）', () => {
+    const onError = vi.fn()
+    const fn = vi.fn(() => {
+      throw new Error('sync boom')
+    })
+    usePolling({ fn, ms: 1000, onError })
+    vi.advanceTimersByTime(1000)
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect((onError.mock.calls[0][0] as Error).message).toBe('sync boom')
+  })
+
+  it('未传 onError 时异步 reject 不静默：降级 console.error（P1-21）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fn = vi.fn(() => Promise.reject(new Error('async boom')))
+    usePolling({ fn, ms: 1000 })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(spy).toHaveBeenCalled()
+    expect(spy.mock.calls[0][1]).toBeInstanceOf(Error)
+    spy.mockRestore()
+  })
+
+  it('未传 onError 时同步 throw 不静默：降级 console.error（P1-21）', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fn = vi.fn(() => {
+      throw new Error('sync boom')
+    })
+    usePolling({ fn, ms: 1000 })
+    vi.advanceTimersByTime(1000)
+    expect(spy).toHaveBeenCalled()
+    expect(spy.mock.calls[0][1]).toBeInstanceOf(Error)
+    spy.mockRestore()
+  })
 })

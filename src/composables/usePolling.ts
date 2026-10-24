@@ -13,6 +13,8 @@
  *   （单测直接调，不依赖组件上下文）。
  * - `enabled`（getter）每 tick 求值：条件恢复后无需任何重启动作即生效。
  * - `pauseWhenHidden`（默认 true）：标签隐藏即停链，恢复可见**立即补一次**再续。
+ * - tick 失败（同步 throw / 异步 reject）一律收敛到 `onError`；不传则降级
+ *   `console.error`——绝不留下静默的 unhandled rejection（P1-21）。
  * - 间隔下限 200ms：防手滑写 0/1 把后端打爆。
  * - `stop()` 永久停止（供"任务跑完就不轮询"）；`restart()` 解除并重新排队，
  *   **不立即执行**；立即执行用 `run()`。
@@ -38,6 +40,10 @@ export interface PollingOptions {
   enabled?: () => boolean
   /** 标签不可见时是否暂停（默认 true）。false = 后台也继续轮询（慎用） */
   pauseWhenHidden?: boolean
+  /** tick 失败回调：同步 throw 与异步 reject 都会进这里。
+   *  不传则降级 `console.error`——避免回调 reject 变成静默的 unhandled
+   *  rejection，导致页面数据停止更新却无任何错误态（P1-21）。 */
+  onError?: (err: unknown) => void
 }
 
 export interface PollingHandle {
@@ -57,6 +63,7 @@ export function usePolling(opts: PollingOptions): PollingHandle {
   const getMs: () => number = typeof msValue === 'function' ? msValue : () => msValue
   const getEnabled = opts.enabled ?? (() => true)
   const pauseWhenHidden = opts.pauseWhenHidden ?? true
+  const onError = opts.onError
 
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
@@ -65,6 +72,23 @@ export function usePolling(opts: PollingOptions): PollingHandle {
 
   function clearTimer() {
     if (timer !== undefined) { clearTimeout(timer); timer = undefined }
+  }
+
+  /** 统一调用 fn：同步 throw 与异步 reject 都收敛到 onError（默认 console.error），
+   *  绝不变成静默的 unhandled rejection（P1-21）。**不 await**——保持自调度链不被拖住。 */
+  function safeRun() {
+    try {
+      const r = fn()
+      if (r && typeof (r as Promise<void>).then === 'function') {
+        (r as Promise<void>).catch(err => {
+          if (onError) onError(err)
+          else console.error('[usePolling] 轮询回调失败', err)
+        })
+      }
+    } catch (err) {
+      if (onError) onError(err)
+      else console.error('[usePolling] 轮询回调失败', err)
+    }
   }
 
   /** 排下一次：永久停止 / 隐藏态不续链。
@@ -81,7 +105,7 @@ export function usePolling(opts: PollingOptions): PollingHandle {
 
   function tick() {
     if (stopped) return
-    if (getEnabled()) void fn()
+    if (getEnabled()) safeRun()
     schedule()
   }
 
@@ -93,11 +117,11 @@ export function usePolling(opts: PollingOptions): PollingHandle {
     }
     if (stopped || !getEnabled()) return
     // 回可见：立即补一次（不等整周期），再续链
-    void fn()
+    safeRun()
     schedule()
   }
 
-  function run() { void fn() }
+  function run() { safeRun() }
 
   function restart() {
     stopped = false
