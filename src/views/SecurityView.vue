@@ -51,9 +51,13 @@ const { loading, error, run } = useAsync(true)
 
 async function load() {
   await run(async () => {
-    const b = await api.get<BaselineItem[]>(API.security.baseline()).catch(() => null)
+    // ⚠ 不得 `.catch(() => null)`：基线接口一旦失败，run 无法感知、error 永不设置，
+    // baseline.value 仍是 [] ⇒ 汇总算出 risks=0 直接显示「无风险项」——把故障渲染成
+    // 合规（二轮审计 P0-10）。交给 useAsync 捕获：失败会如实显示错误态 + 重试，
+    // 而不是用「无风险」掩盖。
+    const b = await api.get<BaselineItem[]>(API.security.baseline())
     baseline.value = Array.isArray(b) ? b : []
-    const s = await api.get<{ sessions: SessionInfo[] }>(API.security.sessions()).catch(() => null)
+    const s = await api.get<{ sessions: SessionInfo[] }>(API.security.sessions())
     sessions.value = s?.sessions ?? []
   })
 }
