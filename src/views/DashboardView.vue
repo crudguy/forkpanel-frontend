@@ -15,6 +15,7 @@ import MetricCard from '@/components/MetricCard.vue'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone, type MetricTone } from '@/composables/metricTone'
+import { bkTile, ctTile, siteTile, svcTile } from '@/composables/dashboardStatus'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
@@ -39,7 +40,8 @@ async function loadNotes() {
   try {
     const r = await api.get<ServerNote[]>(API.server.notes())
     notes.value = r ?? []
-  } catch { /* 静默：加载失败不拖累概览，卡片退化为空态 */ }
+    noteErr.value = ''
+  } catch (e) { noteErr.value = errorText(e) }
   noteLoaded.value = true
 }
 /** 保存既有便签：成功后本地更新，不整表 reload（updated_at 取本地秒，展示足够） */
@@ -205,29 +207,31 @@ const bk = ref<{ total: number; fail: number; ok: boolean }>({ total: 0, fail: 0
 
 const containerSupported = computed(() => auth.supported(CAP.CONTAINER_VIEW))
 
-const svcTone = computed(() => !svc.value.ok ? 'muted' : svc.value.failed > 0 ? 'danger' : 'ok')
-const ctTone = computed(() => !ct.value.ok ? 'muted' : ct.value.total > 0 && ct.value.running === 0 ? 'warn' : 'ok')
-const siteTone = computed(() => !site.value.ok ? 'muted' : 'ok')
-const bkTone = computed(() => !bk.value.ok ? 'muted' : bk.value.fail > 0 ? 'danger' : bk.value.total === 0 ? 'warn' : 'ok')
-
-const svcText = computed(() => !svc.value.ok ? '—' : svc.value.failed > 0 ? `${svc.value.failed} 个服务异常` : `${svc.value.active} 个运行中`)
-const ctText = computed(() => {
-  if (ct.value.ok) return `运行中 ${ct.value.running} / 共 ${ct.value.total}`
-  if (ctUnavailable.value === 'daemon_unreachable') return '守护进程不可达'
-  if (ctUnavailable.value === 'binary_missing') return '未安装 Docker'
-  return '不可用'
-})
-const bkText = computed(() => !bk.value.ok ? '—' : bk.value.total === 0 ? '未配置计划' : bk.value.fail > 0 ? `${bk.value.fail} 个计划失败` : '全部正常')
+// ── P1-20：抓取失败不再静默渲染成「—」 ──
+// 原先四路失败全是裸 catch 静默吞掉，ok 停留 false，磁贴显示「—」+ 灰点，与
+// 「健康但真的是空」在用户侧无法区分。现在失败写入错误文案，磁贴显示
+// 「加载失败」+ 琥珀点，区块级错误条给出原因与重试（与 ovError 同范式）。
+// 推导逻辑住在 composables/dashboardStatus.ts（.vue 纯逻辑没法单测）。
+const svcErr = ref('')
+const ctErr = ref('')
+const siteErr = ref('')
+const bkErr = ref('')
+const statusErr = computed(() => svcErr.value || ctErr.value || siteErr.value || bkErr.value)
+const svcView = computed(() => svcTile(svc.value, svcErr.value))
+const ctView = computed(() => ctTile(ct.value, ctErr.value, ctUnavailable.value))
+const siteView = computed(() => siteTile(site.value, siteErr.value))
+const bkView = computed(() => bkTile(bk.value, bkErr.value))
 
 async function loadStatus() {
-  // 各列表独立抓取，单点失败静默（审计 F19），不拖累整块渲染
+  // 各列表独立抓取，单点失败只让对应磁贴进入错误态（P1-20），不拖累整块渲染
   try {
     // 注意：服务列表是包装对象（{init_system, services}），不是裸数组
     const r = await api.get<{ services: { state: string }[] }>(API.services.list())
     const list = r.services ?? []
     svc.value = { total: list.length, active: list.filter(s => s.state === 'active').length,
       failed: list.filter(s => s.state === 'failed').length, ok: true }
-  } catch { /* 静默 */ }
+    svcErr.value = ''
+  } catch (e) { svcErr.value = errorText(e) }
   if (containerSupported.value) {
     // 能力双轨：container.view 只控制菜单/卡片可见（containerSupported 已判定），
     // 真正能否操作取决于 container.manage（守护进程可达性）。
@@ -237,7 +241,8 @@ async function loadStatus() {
       try {
         const list = await api.get<{ state: string }[]>(API.containers.list())
         ct.value = { total: list.length, running: list.filter(c => c.state === 'running').length, ok: true }
-      } catch { /* 静默 */ }
+        ctErr.value = ''
+      } catch (e) { ctErr.value = errorText(e) }
     } else {
       ctUnavailable.value = cm?.reason || 'unknown'
     }
@@ -245,11 +250,13 @@ async function loadStatus() {
   try {
     const list = await api.get<{ enabled: boolean }[]>(API.sites.list())
     site.value = { total: list.length, enabled: list.filter(s => s.enabled).length, ok: true }
-  } catch { /* 静默 */ }
+    siteErr.value = ''
+  } catch (e) { siteErr.value = errorText(e) }
   try {
     const list = await api.get<{ last_result: string | null }[]>(API.backups.list())
     bk.value = { total: list.length, fail: list.filter(p => p.last_result === 'fail').length, ok: true }
-  } catch { /* 静默 */ }
+    bkErr.value = ''
+  } catch (e) { bkErr.value = errorText(e) }
 }
 
 const sysInfo = computed(() => {
@@ -408,30 +415,33 @@ onUnmounted(() => { es?.close() })
       <!-- 运行状态总览（替换原快捷入口：导航由侧边栏承担，这里呈真实状态） -->
       <section class="card">
         <div class="sec-head"><Icon name="gauge" :size="16" /><span>运行状态</span></div>
+        <!-- P1-20：部分磁贴抓取失败时给出原因与重试（与指标卡 ovError 同范式）；
+              磁贴本身显示「加载失败」，这条错误条说明失败原因，重试会重抓全部四路。 -->
+        <p v-if="statusErr" class="err" role="alert">部分运行状态加载失败：{{ statusErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadStatus">重试</button></p>
         <div class="status">
           <RouterLink to="/services" class="st-tile">
-            <span class="st-dot" :class="svcTone" />
+            <span class="st-dot" :class="svcView.tone" />
             <span class="st-ico"><Icon name="server" :size="18" /></span>
             <span class="st-main">服务</span>
-            <span class="st-sub">{{ svcText }}</span>
+            <span class="st-sub">{{ svcView.text }}</span>
           </RouterLink>
           <RouterLink v-if="containerSupported" to="/containers" class="st-tile">
-            <span class="st-dot" :class="ctTone" />
+            <span class="st-dot" :class="ctView.tone" />
             <span class="st-ico"><Icon name="docker" :size="18" /></span>
             <span class="st-main">容器</span>
-            <span class="st-sub">{{ ctText }}</span>
+            <span class="st-sub">{{ ctView.text }}</span>
           </RouterLink>
           <RouterLink to="/sites" class="st-tile">
-            <span class="st-dot" :class="siteTone" />
+            <span class="st-dot" :class="siteView.tone" />
             <span class="st-ico"><Icon name="globe" :size="18" /></span>
             <span class="st-main">网站</span>
-            <span class="st-sub">{{ site.ok ? `共 ${site.total} 个 · 启用 ${site.enabled}` : '—' }}</span>
+            <span class="st-sub">{{ siteView.text }}</span>
           </RouterLink>
           <RouterLink to="/backups" class="st-tile">
-            <span class="st-dot" :class="bkTone" />
+            <span class="st-dot" :class="bkView.tone" />
             <span class="st-ico"><Icon name="archive" :size="18" /></span>
             <span class="st-main">备份</span>
-            <span class="st-sub">{{ bkText }}</span>
+            <span class="st-sub">{{ bkView.text }}</span>
           </RouterLink>
         </div>
       </section>
@@ -493,8 +503,8 @@ onUnmounted(() => { es?.close() })
         <InlineRemark v-if="adding" model-value="" :editable="true"
           :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
       </div>
-      <p v-else-if="noteLoaded" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
-      <p v-else class="muted">加载中…</p>
+      <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+      <p v-else-if="!noteLoaded" class="muted">加载中…</p>
     </section>
 
     <ConfirmDialog :open="!!delNote" danger title="删除便签"
