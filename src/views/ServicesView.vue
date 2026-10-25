@@ -28,6 +28,8 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { usePolling } from '@/composables/usePolling'
+// 软件区的卡片分组 / 单元兜底匹配 / 跨主版本文案：纯逻辑在 .ts 里（SFC 内测不了）
+import { findServiceUnit, groupInstalled, groupInstallable, majorUpgradeDetail } from '@/composables/serviceCards'
 import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -131,6 +133,10 @@ const TABS = [
 // 无关，混进已安装清单只会制造噪声（面板以 root 运行，白名单本就该尽量小）。
 // 与后端 ALLOWED_PACKAGES 的一致性由 ci/check-pkg-whitelist.sh 双向校验：
 // 后端新增而前端没加 → 用户拿不到安装入口；前端新增而后端没加 → 点了被 400 拒绝。
+//
+// ⚠ 别把 CATEGORIES 搬进 composables/：那个脚本硬编码了提取路径
+// (FE_SRC=…/src/views/ServicesView.vue) 并正则抽 pkgs: [...] 数组，搬走后它
+// 本地硬失败、CI 下静默跳过 —— 两端都是门禁失效，而失效的样子是「全绿」。
 const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
   { key: 'db', label: '数据库', pkgs: ['mariadb-server', 'postgresql'] },
@@ -142,52 +148,17 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'network', label: '网络', pkgs: ['wireguard-tools'] },
 ]
 
-// 软件（包）→ 服务（systemd 单元）的候选名。
-//
-// 用户想要的是"装上去的软件能管理"。但**包 ≠ 服务单元，名字也不总一致**：
-// mariadb-server 包对应的是 mariadb.service，apache2 包在 RHEL 上叫 httpd.service，
-// certbot 根本没有 service（它是 certbot.timer 定时器），ufw 也不是靠服务启停来管理。
-// 所以不能假设"每个软件都有服务"去给通用按钮——那等于给用户一批点了必失败的入口。
-//
-// 做法：只在**本机真实服务列表**（svcs）里反查，查到才渲染入口与状态，查不到就不显示。
-const UNIT_HINTS: Record<string, string[]> = {
-  'mariadb-server': ['mariadb', 'mysql', 'mysqld'],
-  redis: ['redis-server', 'redis'],
-  apache2: ['apache2', 'httpd'],
-  certbot: [],   // 靠定时器触发续期，没有常驻服务可管
-  ufw: [],       // 规则由「防火墙」页管理
-}
-
-/** 从「服务列表」兜底找该软件包对应的服务单元；找不到返回 null。
- *  主路径是后端在 /packages 里随包下发的 `unit`（绕过 systemctl list-units 对
- * enabled-but-dead 单元的遗漏）；这里是兜底：已运行/已加载的服务也照样能关联。
- *  返回 ServiceRef（只含 name/state），与后端下发形状一致。 */
-function svcRefFor(pkg: string): ServiceRef | null {
-  for (const cand of [pkg, ...(UNIT_HINTS[pkg] ?? [])]) {
-    // 后端服务的 name 是完整单元名（带 .service 后缀），也兼容无后缀形态
-    const hit = svcs.value.find(s => s.name === `${cand}.service` || s.name === cand)
-    if (hit) return { name: hit.name, state: hit.state }
-  }
-  return null
-}
+// 软件（包）→ 服务（systemd 单元）的候选名表（UNIT_HINTS）与匹配函数已从本文件抽走，
+// 见 composables/serviceCards.ts —— SFC 里的函数 vitest 收不到，抽出去才有测试钉住。
 
 // 已安装软件按类别分组：只保留确有包在 pkgs 里的类别（空类别不渲染小标题）。
-const installedByCat = computed(() => {
-  const all = pkgs.value ?? []
-  return CATEGORIES.map(c => ({
-    ...c,
-    // unit 为 null 表示该软件没有可管理的服务（如 certbot/ufw）——UI 据此不渲染入口
-    items: c.pkgs.map(n => all.find(x => x.name === n))
-      .filter((x): x is PackageInfo => !!x)
-      .map(p => ({ ...p, unit: p.unit ?? svcRefFor(p.name) })),
-  })).filter(c => c.items.length)
-})
+const installedByCat = computed(() =>
+  // 类别顺序与组内顺序都由 CATEGORIES 决定（卡片位置稳定，不随接口返回顺序跳位）；
+  // 后端下发的实测 unit 优先，查不到才用服务列表兜底。
+  groupInstalled(CATEGORIES, pkgs.value ?? [], n => findServiceUnit(n, svcs.value)))
 
 // 可安装软件按类别分组：白名单内、且尚未安装的包。
-const installableByCat = computed(() => CATEGORIES.map(c => ({
-  ...c,
-  items: c.pkgs.filter(p => !installedNames.value.has(p)),
-})).filter(c => c.items.length))
+const installableByCat = computed(() => groupInstallable(CATEGORIES, installedNames.value))
 
 async function load(silent = false) {
   // silent=true 是轮询刷新：不能重置 loading（否则表格每轮闪一次骨架），
@@ -275,7 +246,7 @@ const majorUpgrade = ref<{ name: string; version?: string; from: string; to: str
 const majorDetail = computed(() => {
   const m = majorUpgrade.value
   if (!m) return ''
-  return `将把 ${labelOf(m.name)} 从 v${m.from} 升级到 v${m.to}。${m.note}`
+  return majorUpgradeDetail({ label: labelOf(m.name), from: m.from, to: m.to, note: m.note })
 })
 async function confirmMajorUpgrade() {
   const m = majorUpgrade.value
