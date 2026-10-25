@@ -22,6 +22,8 @@ import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { CAP, type PackageInfo, type SiteRoute } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
+// IP 名单提交口径与 WafView 共用同一出处：两页提交的是同一个后端 ip_allow/ip_deny
+import { normIp } from './siteWaf'
 
 // ── 应用模板（仅反向代理） ──
 //
@@ -201,8 +203,8 @@ export function applyBody(
     rewrite_preset: f.rewritePreset,
     rewrite_custom: f.rewriteCustom,
     // 访问控制 / 反代增强 / 站点日志（021）：IP 名单以逗号分隔字符串提交（后端解析/校验）
-    ip_allow: f.ipAllow.split(/[,\s]+/).filter(Boolean).join(','),
-    ip_deny: f.ipDeny.split(/[,\s]+/).filter(Boolean).join(','),
+    ip_allow: normIp(f.ipAllow),
+    ip_deny: normIp(f.ipDeny),
     auth_basic: f.authBasic,
     auth_user: f.authUser.trim() || null,
     // 口令只写不读：仅在本次填写了才提交（否则保留现有 htpasswd 文件，不误清）

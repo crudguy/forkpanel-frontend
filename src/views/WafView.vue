@@ -39,12 +39,12 @@ import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+// WAF 段 / apply 体 / 草稿比对的纯逻辑在 .ts 里（SFC 内 vitest 收不到）
+import {
+  normIp, showIps, toDraft, draftDirty, siteBase, draftWafSeg, templateWafSeg,
+  applyBody, applyTemplateBody, kindLabel, type Draft,
+} from '@/composables/siteWaf'
 
-/** 每站点一份草稿：就地编辑，点「应用」才下发 */
-interface Draft {
-  on: boolean; profile: string; rate: number; burst: number
-  ipAllow: string; ipDeny: string
-}
 
 const auth = useAuthStore()
 const sites = ref<Site[]>([])
@@ -62,21 +62,9 @@ const canApply = computed(() => webSupported.value && canManage.value)
 /** caddy 后端：IP 名单双端都实装，但**限速被有意忽略**（标准 caddy 无 rate_limit） */
 const isCaddy = computed(() => auth.webBackend === 'caddy')
 
-/** IP 名单归一：逗号/空格分隔 → 逗号拼接（与 SitesView applyBody 同口径，后端一致） */
-function normIp(v: string): string {
-  return v.split(/[,\s]+/).filter(Boolean).join(',')
-}
-
-function toDraft(s: Site): Draft {
-  return {
-    on: s.waf_enabled,
-    profile: s.waf_profile ?? 'basic',
-    rate: s.waf_rate_per_sec ?? 0,
-    burst: s.waf_burst ?? 0,
-    ipAllow: (s.ip_allow ?? []).join(', '),
-    ipDeny: (s.ip_deny ?? []).join(', '),
-  }
-}
+// normIp（提交口径）/ toDraft 已抽到 composables/siteWaf.ts。
+// ⚠ 站点表单 useSiteForm.ts 与本页面共用同一个 normIp——两页提交的是同一个后端
+//   ip_allow/ip_deny 字段，各写一份必然漂移（改了口径会有一处漏改）。
 
 async function load() {
   await run(async () => {
@@ -92,15 +80,12 @@ async function load() {
   })
 }
 
-/** 是否有未应用的改动（含 IP 访问控制） */
+/** 是否有未应用的改动（含 IP 访问控制）。
+ *  三条判定语义——IP 比较前先归一、关闭时不比 profile/rate/burst、草稿缺失判不脏——
+ *  都在 composables/siteWaf.ts 的 draftDirty 里（那里才有测试盯着）；
+ *  本函数只负责**取该站的草稿**（读 reactive 状态属于视图职责）。 */
 function dirty(s: Site): boolean {
-  const d = drafts.value[s.id]; if (!d) return false
-  if (d.on !== s.waf_enabled) return true
-  if (normIp(d.ipAllow) !== (s.ip_allow ?? []).join(',')) return true
-  if (normIp(d.ipDeny) !== (s.ip_deny ?? []).join(',')) return true
-  return d.on && (d.profile !== (s.waf_profile ?? 'basic')
-    || d.rate !== (s.waf_rate_per_sec ?? 0)
-    || d.burst !== (s.waf_burst ?? 0))
+  return draftDirty(s, drafts.value[s.id])
 }
 
 /**
@@ -129,53 +114,9 @@ const summaryCards = computed(() => {
   ]
 })
 
-/**
- * apply 体的公共字段——**逐站应用与模板套用共用**。
- *
- * ⚠️ 抽成函数而不是各写一份：apply 是「期望状态」覆盖，漏传 upstreams/fpm 会把
- *    反代 / PHP 站的后端地址清空。两条路径共用同一出处才不会漏配（项目高频 bug）。
- *    `root` 是后端必填 String（非 Option），恒有值；不兜底成站点名（那会静默改根目录）。
- */
-function siteBase(s: Site) {
-  return {
-    name: s.name,
-    domains: s.domains,
-    root: s.root,
-    force_https: true,
-    kind: s.kind,
-    upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : undefined,
-    fpm: s.kind === 'php' ? (s.fpm ?? '') : undefined,
-  }
-}
-
-/** 逐站「应用」体：站点自身草稿的 waf + ip。 */
-function applyBody(s: Site, d: Draft) {
-  const waf = !d.on
-    ? { enabled: false }
-    : {
-        enabled: true,
-        profile: d.profile,
-        rate_per_sec: d.rate,           // 0 = 不限速（后端语义）
-        ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
-      }
-  return { ...siteBase(s), waf, ip_allow: normIp(d.ipAllow), ip_deny: normIp(d.ipDeny) }
-}
-
-/** 模板「套用」体：强制开 WAF 并套用模板的 waf + ip（套用即把该站设成模板值）。 */
-function applyTemplateBody(s: Site, t: WafTemplate) {
-  const rate = t.rate_per_sec || 0
-  const waf = {
-    enabled: true,
-    profile: t.waf_profile,
-    rate_per_sec: rate,
-    ...(rate > 0 && t.burst > 0 ? { burst: t.burst } : {}),
-  }
-  return {
-    ...siteBase(s), waf,
-    ip_allow: (t.ip_allow ?? []).join(','),
-    ip_deny: (t.ip_deny ?? []).join(','),
-  }
-}
+// siteBase / applyBody / applyTemplateBody / draftWafSeg / templateWafSeg 已抽到
+// composables/siteWaf.ts：逐站应用与模板套用**共用同一出处**，才不会漏传
+// upstreams / fpm（漏传会把反代或 PHP 站的后端地址清空）。
 
 async function applyWaf(s: Site) {
   const d = drafts.value[s.id]; if (!d) return
@@ -225,11 +166,6 @@ async function applyAll() {
   } finally { batchBusy.value = false; await load() }
 }
 
-function kindLabel(k: string): string {
-  if (k === 'proxy') return '反代'
-  if (k === 'php') return 'PHP'
-  return '静态'
-}
 
 /** 停用站点不可应用的原因（后端 apply 会把它置为启用） */
 function blockedReason(s: Site): string {
@@ -257,7 +193,7 @@ function openEditTpl(t: WafTemplate) {
   editingTplId.value = t.id
   tplForm.value = {
     name: t.name, profile: t.waf_profile, rate: t.rate_per_sec, burst: t.burst,
-    ipAllow: (t.ip_allow ?? []).join(', '), ipDeny: (t.ip_deny ?? []).join(', '),
+    ipAllow: showIps(t.ip_allow ?? []), ipDeny: showIps(t.ip_deny ?? []),
   }
   tplError.value = ''
   tplModalOpen.value = true
@@ -531,8 +467,8 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td>{{ wafProfileLabel(t.waf_profile) }}</td>
               <td class="num">{{ t.rate_per_sec || '不限速' }}</td>
               <td class="num col-opt">{{ t.rate_per_sec ? (t.burst || 'rate×2') : '—' }}</td>
-              <td class="mono dim ellipsis col-opt" :title="(t.ip_allow ?? []).join(', ')">
-                {{ (t.ip_allow ?? []).length ? (t.ip_allow ?? []).join(', ') : '—' }}
+              <td class="mono dim ellipsis col-opt" :title="showIps(t.ip_allow ?? [])">
+                {{ (t.ip_allow ?? []).length ? showIps(t.ip_allow ?? []) : '—' }}
               </td>
               <td class="mono dim ellipsis col-opt" :title="(t.ip_deny ?? []).join(', ')">
                 {{ (t.ip_deny ?? []).length ? (t.ip_deny ?? []).join(', ') : '—' }}
