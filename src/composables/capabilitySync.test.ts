@@ -70,3 +70,23 @@ describe('整页置灰点（P1-22：后端无同口径 501 时置灰即单方面
     exactly(prod('../views/CronView.vue'), 'supported(CAP.SCHEDULER_MANAGE)', 2, 'CronView')
   })
 })
+
+// 二轮审计 P2-5：按钮级置灰点。
+// 与整页置灰不同，这里只收掉三个操作按钮——进程列表来自 /proc（人人可读），
+// 发信号才要 euid 0，两者是不同能力。因此这里钉三层：
+// 读哪一位 / 三个按钮都受它约束 / 置灰时给出原因（静默置灰＝用户不知道为什么不能点）。
+describe('按钮置灰点（P2-5：PROCESS_SIGNAL 与 PROCESS_LIST 分流）', () => {
+  const p = prod('../views/ProcessesView.vue')
+
+  it('三个信号按钮读的是 PROCESS_SIGNAL（不是列表那一位）', () => {
+    exactly(p, 'supported(CAP.PROCESS_SIGNAL)', 1, 'ProcessesView.canSignal')
+  })
+
+  it('三个按钮全部受 canSignal 约束（漏一个＝那一路仍可点、点了吃 501）', () => {
+    exactly(p, ':disabled="!canSignal || busy === p.pid || p.pid <= 1"', 3, 'ProcessesView 信号按钮')
+  })
+
+  it('不支持时给出原因说明，而不是静默置灰', () => {
+    exactly(p, 'v-if="!canSignal" class="note"', 1, 'ProcessesView 信号能力说明')
+  })
+})

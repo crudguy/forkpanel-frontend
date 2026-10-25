@@ -119,6 +119,11 @@ const ACTION_META: Record<ProcAction, { label: string; title: string; danger: bo
   },
 }
 
+/** 发信号能力与列表能力**分流**：/proc 人人可读，向他人进程发信号却要 euid 0。
+ *  后端 processes::kill 有同口径的 PROCESS_SIGNAL 门（缺位即 501），
+ *  所以这里置灰是"双方合同"，不再是前端单方面的承诺。 */
+const canSignal = computed(() => auth.supported(CAP.PROCESS_SIGNAL))
+
 const killTarget = ref<Proc | null>(null)
 const action = ref<ProcAction>('term')
 
@@ -151,7 +156,15 @@ async function doKill() {
     killTarget.value = null
     await load()
   }
-  catch (e) { error.value = errorText(e) }
+  catch (e) {
+    // 按钮已置灰，但能力位可能在会话期内翻转（后端重启后降权）
+    // ——这时要把 501 说成人话，而不是吐一句原始状态码。
+    if (isUnsupported(e)) {
+      error.value = `当前环境不支持向进程发送信号（${auth.capabilities[CAP.PROCESS_SIGNAL]?.reason ?? '未知原因' }）`
+    } else {
+      error.value = errorText(e)
+    }
+  }
   finally { busy.value = null }
 }
 </script>
@@ -164,6 +177,9 @@ async function doKill() {
     <template v-else>
       <p v-if="pending" class="note">{{ pending }}</p>
       <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
+      <!-- 能看不能杀：进程列表来自 /proc（人人可读），发信号才要特权，故这里
+           不是整页置灰，而是只收掉三个操作按钮并说明原因。 -->
+      <p v-if="!canSignal" class="note">当前环境不支持向进程发送信号（{{ auth.capabilities[CAP.PROCESS_SIGNAL]?.reason ?? '未知原因' }}）：进程列表仍可查看，但无法结束 / 重载进程</p>
 
       <div v-if="loading" class="skeleton box" />
       <div v-else class="card flush procs-card">
@@ -213,15 +229,15 @@ async function doKill() {
                      重载=中性灰(refresh↻) / 结束=琥珀(stop■) / 立即终止=红(bolt⚡)，
                      危险度梯度对应 SIGHUP<SIGTERM<SIGKILL；图标形状差异大，一眼可辨。
                      文字说明保留在确认弹窗，hover 仍有 title 提示。 -->
-                <button class="btn-icon act-reload" :disabled="busy === p.pid || p.pid <= 1"
+                <button class="btn-icon act-reload" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
                   :title="ACTION_META.reload.title" @click="askKill(p, 'reload')">
                   <Icon name="refresh" :size="16" />
                 </button>
-                <button class="btn-icon act-term" :disabled="busy === p.pid || p.pid <= 1"
+                <button class="btn-icon act-term" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
                   :title="ACTION_META.term.title" @click="askKill(p, 'term')">
                   <Icon name="stop" :size="16" />
                 </button>
-                <button class="btn-icon act-kill" :disabled="busy === p.pid || p.pid <= 1"
+                <button class="btn-icon act-kill" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
                   :title="ACTION_META.kill.title" @click="askKill(p, 'kill')">
                   <Icon name="bolt" :size="16" />
                 </button>
