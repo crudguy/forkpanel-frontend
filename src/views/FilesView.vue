@@ -31,6 +31,9 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import { useModal } from '@/composables/useModal'
 import { filterEntries, filterHint, matchesQuery } from '@/composables/fileFilter'
 import { hasFiles, droppedFiles, createDragDepth, dropHint } from '@/composables/fileDrop'
+import {
+  buildCrumbs, collapseCrumbs, dirLabel, isOctalMode, joinPath, parentPath,
+} from '@/composables/filePath'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
 import { toast } from '@/composables/useToast'
@@ -148,11 +151,6 @@ async function load(toPath?: string) {
 onMounted(load)
 
 // ── 标签栏（多页签）──
-function tabLabel(p: string): string {
-  if (p === '/') return '根目录'
-  const seg = p.replace(/\/+$/, '').split('/').pop()
-  return seg || '根目录'
-}
 /** 新建标签：以当前激活标签所在目录为起点开一个分支（沿用用户选定的交互模型）。 */
 function openTab() {
   const t = makeTab(activeTab.value.path)
@@ -184,23 +182,10 @@ function closeTab(id: string) {
 // ── 面包屑（A7）：路径分段可点，直达任意上级 ──
 // 后端返回的 path 是规范路径（resolve 后的 SafePath 显示值），分段即可逆：
 // 每段 cumulative 拼回去就是合法路径，无需在前端解析 `..`。
-const crumbs = computed(() => {
-  const segs = path.value.split('/').filter(Boolean)
-  const out: { label: string; to: string }[] = [{ label: '根目录', to: '/' }]
-  let acc = ''
-  for (const s of segs) { acc += '/' + s; out.push({ label: s, to: acc }) }
-  return out
-})
-/** 超过 6 段时中段折叠为「…」（可点，跳到折叠前一级）——根目录 + 5 级深度足够定位，
- *  更深的路径整行会挤爆表头。折叠段取第 2 段（根目录之后第一级）作为落脚点。 */
-const CrumbsShown = 6
-const crumbsVisible = computed(() => {
-  const c = crumbs.value
-  if (c.length <= CrumbsShown) return { items: c, collapsedFrom: -1 }
-  const head = c.slice(0, 2)
-  const tail = c.slice(-3)
-  return { items: [...head, { label: '…', to: c[1].to }, ...tail], collapsedFrom: 2 }
-})
+const crumbs = computed(() => buildCrumbs(path.value))
+/** 折叠规则与「…」的落脚点见 composables/filePath.ts（根目录 + 5 级足够定位，
+ *  更深的路径整行会挤爆表头）。 */
+const crumbsVisible = computed(() => collapseCrumbs(crumbs.value, 6))
 // ⚠⚠ 导航（goto/up/enter）**不得自己改 tab.path**：一律把目标路径交给 load()。
 //
 // 曾经的写法是「先 path.value = 新目录，再 load()」，于是 load() 里
@@ -215,13 +200,11 @@ const crumbsVisible = computed(() => {
 function goto(p: string) { load(p) }
 
 function up() {
-  const p = path.value.replace(/\/+$/, '')
-  const i = p.lastIndexOf('/')
-  load(i <= 0 ? '/' : p.slice(0, i))
+  load(parentPath(path.value))
 }
 function enter(e: Entry) {
   if (e.kind !== 'dir') return open(e)
-  load((path.value.replace(/\/+$/, '') + '/' + e.name) || '/')
+  load(joinPath(path.value, e.name))
 }
 
 async function open(e: Entry) {
@@ -229,7 +212,7 @@ async function open(e: Entry) {
   try {
     const r = await api.get<{ content: string | null; binary: boolean; size: number; has_more: boolean }>(
       API.files.read(), {
-        params: { path: `${path.value.replace(/\/+$/, '')}/${e.name}` },
+        params: { path: joinPath(path.value, e.name) },
       })
     if (r.binary) { error.value = '二进制文件不支持在线编辑'; return }
     // has_more 为真说明后端按 2MB 上限截断了：完整文件比这大，编辑框里只有前半截。
@@ -247,7 +230,7 @@ async function save() {
   }
   try {
     await api.post(API.files.write(), {
-      path: path.value.replace(/\/+$/, '') + '/' + editing.value.name,
+      path: joinPath(path.value, editing.value.name),
       content: editing.value.content,
       // 乐观锁：带上读到的 mtime，被别人改过则拒绝覆盖
       expect_mtime: editing.value.mtime,
@@ -470,7 +453,7 @@ function askChmod(e: Entry) {
   ask.value = {
     title: '修改权限', label: '八进制权限（如 644 / 755）',
     value: e.mode ?? '', placeholder: '644', okText: '应用',
-    validate: (v) => (/^[0-7]{3,4}$/.test(v.trim()) ? null : '必须是 3-4 位八进制数，如 644'),
+    validate: (v) => (isOctalMode(v) ? null : '必须是 3-4 位八进制数，如 644'),
     onOk: (v) => {
       api.post(API.files.chmod(), { path: full(e.name), mode: v })
         .then(() => { toast(`已修改 ${e.name} 权限为 ${v}`); load() })
@@ -563,7 +546,7 @@ const helpOpen = ref(false)
 const canWrite = computed(() => auth.can('file.write') && auth.supported(CAP.FILE_WRITE))
 
 function full(p: string) {
-  return path.value.replace(/\/+$/, '') + '/' + p
+  return joinPath(path.value, p)
 }
 
 // fmtSize 已统一到 types.ts（此前此处与 TrashPanel 各写一份，BackupsView 是第三份且更差）
@@ -582,7 +565,7 @@ function full(p: string) {
         role="tab" :aria-selected="t.id === activeId" tabindex="0"
         @click="switchTab(t.id)" @keydown.enter.prevent="switchTab(t.id)">
         <Icon name="folder" :size="14" />
-        <span class="tab-label" :title="t.path">{{ tabLabel(t.path) }}</span>
+        <span class="tab-label" :title="t.path">{{ dirLabel(t.path) }}</span>
         <button v-if="tabs.length > 1" class="tab-x" type="button" aria-label="关闭标签"
           @click.stop="closeTab(t.id)"><Icon name="close" :size="12" /></button>
       </div>
@@ -595,9 +578,9 @@ function full(p: string) {
       <!-- A7 面包屑：路径分段可点直达；原先是整行 <code> 全路径 + 只有「上级」，
            深目录要连点多级。当前目录（末段）为纯文本，其余为按钮。 -->
       <nav class="crumbs" aria-label="路径">
-        <template v-for="(c, i) in crumbsVisible.items" :key="c.to">
+        <template v-for="(c, i) in crumbsVisible" :key="c.to">
           <span v-if="i > 0" class="sep" aria-hidden="true">/</span>
-          <button v-if="i < crumbsVisible.items.length - 1" class="crumb" type="button" :title="`跳到 ${c.to}`" @click="goto(c.to)">{{ c.label }}</button>
+          <button v-if="i < crumbsVisible.length - 1" class="crumb" type="button" :title="`跳到 ${c.to}`" @click="goto(c.to)">{{ c.label }}</button>
           <span v-else class="crumb now" :title="path">{{ c.label }}</span>
         </template>
       </nav>
