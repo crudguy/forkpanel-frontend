@@ -19,8 +19,16 @@
  * （`PackageCatalogEntry.units`），这里只做纯查找，不做任何模糊猜测。
  *
  * 本模块刻意**不**做「模糊匹配」（比如拿单元名前缀去 startsWith 包名）：`mysql.service`
- * 与 `mysqld.service` 都指向 mariadb 包，模糊匹配会把两个不同单元错误合并；而真正需要
- * 兼容的别名字符串（apache2 ↔ httpd 之类）后端 `units` 里已经写全了。
+ * 与 `mysqld.service` 都指向 mariadb 包，模糊匹配会把两个不同单元错误合并。
+ *
+ * ⚠ 这里原写着「需要兼容的别名字符串（apache2 ↔ httpd 之类）后端 `units` 里已经写全了」，
+ * **这句不实**（2026-10-25 核对）：后端 packages.rs 里 apache2 登记的 units 只有
+ * `["apache2.service"]`，并没有 httpd。新别名不会自动从那边流过来。
+ *
+ * 需要补别名时，注意这是**两条独立的数据流**，得各自补，别互相以为对方会兜：
+ *   · 本模块的 `units` —— 服务于「服务详情页 → 反查软件说明」，缺了只是说明区空。
+ *   · serviceCards.ts 的 `UNIT_HINTS` —— 服务于「软件页卡片 → 兜底找单元」，
+ *     缺了卡片就没有启停入口（且它那边另有落差，见该文件顶部注释）。
  */
 
 import type { PackageCatalogEntry } from '@/api/types'
