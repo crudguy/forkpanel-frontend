@@ -26,6 +26,9 @@ import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { allFieldHints } from '@/composables/appsFieldGuide'
+// dirnameOf 此前是本文件私有的第三份父目录实现（尾斜杠输入下会取到自身而非上级），
+// 统一走 composables/filePath 的 parentPath。
+import { parentPath } from '@/composables/filePath'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const auth = useAuthStore()
@@ -42,15 +45,11 @@ function close() { modalOpen.value = false }
 const pickerOpen = ref(false)
 const pickerMode = ref<'dir' | 'file'>('dir')
 const pickerTarget = ref<'workdir' | 'exec'>('workdir')
-function dirnameOf(p: string) {
-  const i = p.lastIndexOf('/')
-  return i <= 0 ? '/' : p.slice(0, i)
-}
 /** 文件模式着陆点：命令往往是「程序 参数」，取首个 token；绝对路径则展开到父目录。 */
 const pickerInitialPath = computed(() => {
   if (pickerTarget.value === 'exec') {
     const first = form.value.execStart.trim().split(/\s+/)[0]
-    if (first?.startsWith('/')) return dirnameOf(first)
+    if (first?.startsWith('/')) return parentPath(first)
   }
   return form.value.workdir || '/'
 })

@@ -17,6 +17,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
 import { useModal } from '@/composables/useModal'
+import { baseName, joinPath, normalizePath, parentPath } from '@/composables/filePath'
 
 interface Node {
   path: string
@@ -32,18 +33,15 @@ interface Node {
 const props = defineProps<{ open: boolean; initialPath?: string; mode?: 'dir' | 'file' }>()
 const emit = defineEmits<{ (e: 'select', p: string): void; (e: 'cancel'): void }>()
 
-const norm = (p: string) => p.replace(/\/+$/, '') || '/'
-const basename = (p: string) => (p === '/' ? '/' : p.slice(p.lastIndexOf('/') + 1) || '/')
-const parentOf = (p: string) => {
-  if (p === '/') return null
-  const i = p.lastIndexOf('/')
-  return i <= 0 ? '/' : p.slice(0, i)
-}
-// 注意 base 为 `/` 时的拼接：`norm('/')` 仍是 `/`，直接 `+ '/' + name` 会得到 `//bin`
-// 这种双斜杠路径。它照样能过一次网络请求，但 `visibleRows` 的 walk 是沿 children
-// 里的路径字符串找节点的，`//home` 与 expandTo 展开的 `/home` 是两个不同 key，
-// 于是展开链在根的子级处断掉——树只显示一层，且看不出任何报错。
-const joinDir = (base: string, name: string) => (norm(base) === '/' ? '' : norm(base)) + '/' + name
+// 路径工具此前本组件、AppsView、FilesView **各写一份**，边界还各差一点（尾斜杠输入、
+// 根目录拼接），统一走 composables/filePath（理由与坑位集中记在那里）。
+// 原名保留为别名，让本文件其余部分零改动。
+const norm = normalizePath
+const basename = baseName
+const joinDir = joinPath
+// ⚠ 到顶用 null 表示（「向上」按钮据此禁用）——这是**本组件**的语义：要的是「有没有
+//   上级」，不是「上级是谁」。共享的 parentPath 到顶一律停在 `/`，故在此包一层。
+const parentOf = (p: string) => (p === '/' ? null : parentPath(p))
 
 const ROOT = '/'
 const nodes = reactive<Record<string, Node>>({})
