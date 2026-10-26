@@ -3,29 +3,28 @@
  * 站点「新建 / 编辑」弹窗（含 SSL 证书区与日志区）。
  *
  * 从 SitesView 拆出来的边界：
- * - **只做「一个站点」的事**：表单回填 / 校验 / 保存下发 / SSL 签发续期删除 / 站点日志 /
- *   配置原文，全部是自成一体的动作，触发点也都在弹窗内（配置原文另归 SiteConfPanel）。
+ * - **只做「一个站点」的事**：表单回填 / 校验 / 保存下发 / 站点日志，全部是自成一体的
+ *   动作，触发点也都在弹窗内（配置原文归 SiteConfPanel，证书归 SiteSslSection）。
  * - **列表归父级**：批量操作、行内删除/重载、列显隐、检索都在 SitesView。
  * - 表单状态与后端对齐语义在 @/composables/useSiteForm；列治理在 useSiteColumns；
  *   能力 / 权限判定在 useSiteCaps（列表与弹窗共用同一份，避免两边各写一套后漂移）。
  *
- * ⚠️ 两个**双入口**动作决定了它们必须留在本组件而不是各自独立成组件：
- * - SSL 签发：列表行「证书」按钮与弹窗内「申请证书」都能触发。它对外的出口是
- *   `defineExpose({ applySsl })`——父级拿模板 ref 直接调用。签发弹窗**本体**已拆成
- *   <SiteSslDialog>（自持方式/邮箱/错误位），本组件只保留「什么时候开、给谁开」。
- *   它必须渲染在**独立于 `open` 的顶层**：列表入口触发时本弹窗并未打开，若把它放进
- *   `v-if="open"` 的块里，那条路径会静默失效（编译/类型全绿，只有运行时点了没反应）。
- * - 保存二选一（手动维护站点）：它是保存流程的一步，跟着 save() 走——「什么时候该问」
- *   的判断（实时 + 快照双取）留在本组件，弹窗本体是 <SiteSaveAskDialog>。
- *
- * 拆出去的浮层（都在 1600 行里混着，且彼此零耦合）：
- * - <SiteSslDialog>     申请证书（选方式 / 填 ACME 邮箱 / 提交）
- * - <SiteCaHelpDialog>  根证书安装指引（纯静态说明 + 一个下载）
+ * 已拆出去的区块 / 浮层（彼此零耦合）：
+ * - <SiteSslSection>    证书区 + 申请证书 + 根证书指引 + 删除确认（整块，含区块本体）
  * - <SiteSaveAskDialog> 手动维护站点的保存二选一
- * ⚠️ 拆它们时**刻意不动任何 grid 容器内部**：`section.sector` / `.adv` 的直接子元素
- *   靠父级 scoped 的 `>` 选择器跨列（`grid-column: 1/-1`）。子组件的内部元素只带自己的
- *   `data-v`，一旦把字段搬进子组件，那些规则会**静默全废**（vue-tsc / build / 单测全绿，
- *   只有量 computed style 才看得见：`gridColumn` 从 `1 / -1` 变 `auto`）。
+ * - <SiteConfPanel>     配置原文 / 历史版本与回滚
+ *
+ * ⚠️ **`section.sector` / `.adv` 内部不要拆**：它们的直接子元素靠父级 scoped 的 `>`
+ *   选择器跨列（`grid-column: 1/-1`）。子组件的内部元素只带自己的 `data-v`，一旦把
+ *   字段搬进子组件，那些规则会**静默全废**（vue-tsc / build / 单测全绿，只有量
+ *   computed style 才看得见：`gridColumn` 从 `1 / -1` 变 `auto`）。
+ *   ❌ 而且**别指望「把规则留在父级、靠 scoped 打到子组件根节点」**：实测 Vue 3.5
+ *   不会给子组件根节点补父级的 data-v（`.ssl` 上只有它自己的 `data-v-823400de`），
+ *   父级 `.modal-body .sector > .ssl` 永远命不中 ⇒ 证书区从跨两列缩成一列
+ *   （948→465），而所有门禁全绿。跨列由 **SiteSslSection 自己的 `.ssl` 声明**。
+ *
+ * ⚠️ 保存二选一是**保存流程的一步**：「什么时候该问」的判断（实时 + 快照双取）必须
+ *   留在本组件（它跟着 save() 走），弹窗本体才是 <SiteSaveAskDialog>。
  *
  * ⚠️ 表单初始化由本组件**自持**（`watch(() => props.open)`）：父级 openEdit 里调
  *   子组件方法是行不通的——DOM 更新是异步的，那一刻子组件还没挂载。
@@ -36,17 +35,15 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import {
-  certLevel, certSourceLabel, fmtDate, fmtDateTime,
+  fmtDateTime,
   type Cert, type RenewSweep, type Site,
 } from '@/api/types'
-import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import SiteConfPanel from '@/components/SiteConfPanel.vue'
-import SiteCaHelpDialog from '@/components/SiteCaHelpDialog.vue'
-import SiteSslDialog from '@/components/SiteSslDialog.vue'
+import SiteSslSection from '@/components/SiteSslSection.vue'
 import SiteSaveAskDialog from '@/components/SiteSaveAskDialog.vue'
 import { useSiteCaps } from '@/composables/useSiteCaps'
 import {
@@ -530,89 +527,22 @@ async function confirmClear() {
   } catch (e) { formError.value = errorText(e); errSeq.value++ }
   finally { busy.value = false }
 }
-// ── SSL：证书管理已并入「编辑站点」弹窗 ──
-/** 编辑弹窗内展示「当前站点」的证书：按域名过滤全局证书列表（证书以 domain 归属站点）。 */
-const siteCerts = computed<Cert[]>(() =>
-  editing.value ? props.certs.filter(c => (editing.value as Site).domains.includes(c.domain)) : [])
+// ── SSL：证书区已抽成 <SiteSslSection> ──
+// 那一段自带 5 个动作 / 3 条写接口，且**触发点全在块内**——它只需要知道「作用在
+// 哪个站点」「还能不能写」，不需要知道表单长什么样。留下的是本组件**独有**的两件事：
+// ① 错误落点（弹窗开着写弹窗，否则交回页面级——只有本组件知道 `open`）；
+// ② 忙碌态（申请证书会占用宿主的 busy，底部保存按钮一并置灰）。
+// ⚠️ 列表行「证书」按钮**不再**穿透本组件转发：SitesView 自己挂了一份 `site=null` 的
+//   证书区实例（区块不渲染，只留浮层）。此前那个 `defineExpose({ applySsl })` 两跳
+//   都只是为了「找一块弹窗没开时不在场的组件」——正是上一轮浮层消失事故的温床。
 
-/** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。弹窗本体见 <SiteSslDialog>。 */
-const sslModal = ref<{ site: Site; method: 'self-signed' | 'http-01'; email: string } | null>(null)
-
-/** 根证书安装指引弹窗。自签证书能被浏览器信任的**唯一**前提是把根 CA 装进信任库。
- *  弹窗本体（含关法与下载动作）见 <SiteCaHelpDialog>。 */
-const caHelp = ref(false)
-
-/**
- * 「申请证书」的开窗动作。
- *
- * 只有**两种渠道都可用**时才值得弹窗让用户选；只剩一种时直接执行——给一个"必败选项"
- * 让用户二选一，等于让他点两次才得到同一个结果。
- *
- * ⚠️ 签发失败与「ACME 缺邮箱」的报错由 <SiteSslDialog> 自持（`sslErr`）：
- *   签发弹窗叠在站点弹窗之上，错误写在这里的 `formError` 会被两层遮罩挡在后面。
- */
-function applySsl(s: Site) {
-  sslModal.value = { site: s, method: selfSignedSupported.value ? 'self-signed' : 'http-01', email: '' }
-}
-/** 编辑弹窗内「申请证书」：作用对象即当前正在编辑的站点。 */
-function applySslEditing() {
-  if (editing.value) applySsl(editing.value)
-}
-
-/**
- * 把证书类错误放到**用户当下真正看得见的那一层**：站点编辑弹窗 > 页面级。
- * 此前一律写页面级 error，弹窗开着时全被遮罩挡在后面 → 表现为"点了没反应"。
- * `asNotice`：能力未接入（还没装上）属提示而非报错，改走中性 toast。
- * toast 是浮层、恒在遮罩之上，故不需要"弹窗开着就降级到页面级"的分支。
- * ⚠️ 列表行「证书」按钮也走这条路径，那时本弹窗**没开**——错误只能交回页面级
- *   （父级），否则用户点列表的按钮、报错却永远看不见。
- * ⚠️ 签发弹窗那一层不在本函数的管辖内：它的错误由 <SiteSslDialog> 自己展示。
- */
-function sslErrTo(msg: string, asNotice = false) {
-  if (asNotice) { toast(msg, 'info'); return }
+/** 证书区的错误落点：只有本组件知道弹窗开没开。 */
+function onSslError(msg: string) {
   if (props.open) { formError.value = msg; errSeq.value++ }
   else emit('page-error', msg)
 }
-
-// ── 证书续期（自签同步 / ACME 任务化）/ 删除（纯数据操作）──
-const delCert = ref<Cert | null>(null)
-async function renewCert(c: Cert) {
-  busy.value = true
-  let ok = ''
-  try {
-    await api.post(API.certs.renew(c.id), {})
-    ok = `已续期 ${c.domain} 的证书`
-  } catch (e) {
-    if (isUnsupported(e)) sslErrTo('当前环境未接入证书续期能力', true)
-    else sslErrTo(errorText(e))
-  } finally { busy.value = false; emit('reload', false); if (ok) toast(ok) }
-}
-async function setAutoRenew(c: Cert, val: boolean) {
-  busy.value = true
-  try {
-    await api.patch(API.certs.autoRenew(c.id), { enabled: val })
-    c.auto_renew = val
-    toast(`${c.domain} 自动续期已${val ? '开启' : '关闭'}`)
-  } catch (e) {
-    if (isUnsupported(e)) sslErrTo('当前环境未接入 ACME，无法自动续期')
-    else sslErrTo(errorText(e))
-  } finally { busy.value = false }
-}
-async function doDeleteCert() {
-  if (!delCert.value) return
-  busy.value = true
-  const dom = delCert.value.domain
-  try {
-    await api.del(API.certs.remove(delCert.value.id))
-    delCert.value = null
-    emit('reload', false)
-    toast(`已删除证书 ${dom}`)
-  } catch (e) {
-    // 同 doDelete：失败必须关确认框，否则错误落在遮罩之后、表现为"点了没反应"
-    delCert.value = null
-    sslErrTo(errorText(e))
-  } finally { busy.value = false }
-}
+/** 能力未接入属提示而非报错：走中性 toast（toast 是浮层，恒在遮罩之上）。 */
+function onSslNotice(msg: string) { toast(msg, 'info') }
 // 站点「配置原文 + 历史版本与回滚」已抽成 <SiteConfPanel>：那段逻辑自带十余个独立
 // 状态与 3 条写接口，且触发点全在块内，合在这里只是让找入口变难。
 // 这里保留 `manual` / `stale` 两个开关——父级保存站点时要据此判断「手动维护站点的
@@ -643,9 +573,6 @@ function confSpecChanged(): boolean {
 
 // 保存二选一弹窗的通用弹窗行为（Esc / 焦点陷阱 / 离场动画）在 <SiteSaveAskDialog> 内，
 // 与全站弹窗同规——搬出去时连 useModal 一起走，宿主不再持有这个浮层的任何关法。
-
-// 列表行「证书」按钮的入口：那时本弹窗没开，签发弹窗是独立顶层浮层，照样能弹。
-defineExpose({ applySsl })
 
 </script>
 
@@ -1136,40 +1063,17 @@ defineExpose({ applySsl })
         </p>
       </div>
 
-      <!-- SSL 证书：站点配置的一部分，与站点同处一个编辑弹窗
-           （此前是页面下方独立的「证书」区块——与应用站点配置同理，单独成块既多余、
-            又让「该站点的证书」与「编辑该站点」割裂在两处；现在合并进来，
-            申请 / 续期 / 删除 / 自动续期 / 信任根证书全在弹窗内完成）。
-            仅编辑既有站点时出现：新建站点尚未落库、无法归属证书。 -->
-      <div v-if="editing" class="ssl">
-        <div class="ssl-head">
-          <span class="ssl-title"><Icon name="lock" :size="14" /> SSL 证书</span>
-          <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为当前站点申请证书' : sslHint" @click="applySslEditing">
-            <Icon name="plus" :size="13" /> 申请证书
-          </button>
-        </div>
-        <p class="cert-sweep dim tiny">自动续期扫描：{{ sweepSummary() }}</p>
-        <div v-if="siteCerts.length" class="ssl-list">
-          <div v-for="c in siteCerts" :key="c.id" class="ssl-row">
-            <div class="ssl-meta">
-              <span class="mono">{{ c.domain }}</span>
-              <span class="dim tiny">{{ certSourceLabel(c.source) }} · 到期 {{ fmtDate(c.not_after) }} · <span :class="certLevel(c.days_left)">{{ c.days_left === null ? '—' : `${c.days_left} 天` }}</span></span>
-            </div>
-            <div class="ssl-ops">
-              <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
-                <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy" @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
-              </span>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '续期这张证书' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
-              <button class="btn-ghost btn-sm danger" :disabled="!canSsl"
-          :title="canSsl ? '' : '无 ssl.manage 权限'" @click="delCert = c"><Icon name="trash" :size="13" /> 删除</button>
-            </div>
-          </div>
-        </div>
-        <EmptyState v-else title="暂无证书" hint="点上方「申请证书」为该站点签发（需 openssl 或 ACME）" />
-        <button class="btn-ghost btn-sm ca-link" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="caHelp = true">
-          <Icon name="lock" :size="13" /> 信任根证书
-        </button>
-      </div>
+      <!-- SSL 证书区（含「申请证书」浮层）已抽成 <SiteSslSection>。
+           ⚠️ 它必须是 `<section.sector>` 的**直接子元素**（本行不缩进成 grid 的子项之一），
+           而跨列 `grid-column: 1 / -1` 由 **SiteSslSection 自己的 `.ssl` 声明**——
+           别再想靠父级 `.modal-body .sector > .ssl`：scoped 不给子组件根节点补父级
+           data-v（实测），那条规则永远命不中。别在外面再包一层 div。 -->
+      <SiteSslSection :site="editing" :certs="certs" :sweep="sweep"
+        :busy="busy" :can-ssl="canSsl" :ssl-supported="sslSupported"
+        :self-signed-supported="selfSignedSupported" :ssl-ready="sslReady" :ssl-hint="sslHint"
+        @reload="emit('reload', false)" @update:busy="(v) => busy = v"
+        @ssl-error="onSslError" @ssl-notice="onSslNotice" />
+
 
       <!-- 站点「配置原文 / 历史版本与回滚」见 SiteConfPanel：状态与写接口自带，
            这里只负责把「作用在哪个站点」与「还能不能写」传进去。 -->
@@ -1199,10 +1103,6 @@ defineExpose({ applySsl })
     </div>
   </div>
 
-  <ConfirmDialog :open="!!delCert" danger title="删除证书"
-    :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
-    confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
-
   <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
     @select="onPickRoot" @cancel="pickerOpen = false" />
 
@@ -1210,12 +1110,11 @@ defineExpose({ applySsl })
     :initial-path="(form.routes[routePickerIdx]?.root) || siteRoot"
     @select="onPickRouteRoot" @cancel="routePickerOpen = false" />
 
-  <!-- 三个浮层已各自独立成组件（见文件头「拆出去的浮层」）。它们与本弹窗**平级**，
-       不嵌在 `v-if="open"` 块里：签发弹窗在列表行入口被触发时本弹窗并未打开。 -->
+  <!-- 保存二选一浮层与本弹窗**平级**，不嵌在 `v-if="open"` 块里：它是保存流程的
+       一步，但关闭主弹窗时不该连带销毁（见文件头「拆出去的浮层」）。
+       ⚠️ 签发弹窗与根证书指引**不在这里**了：它们跟着证书区搬进了 <SiteSslSection>，
+       同一个组件内自持开关，父级不必再转发。 -->
   <SiteSaveAskDialog v-model:open="saveAsk" :lead="saveAskLead" @choose="resumeSave" />
-  <SiteCaHelpDialog v-model:open="caHelp" />
-  <SiteSslDialog :req="sslModal" :busy="busy"
-    @update:req="(v) => sslModal = v" @update:busy="(v) => busy = v" @reload="emit('reload', false)" />
 
 </template>
 
@@ -1237,7 +1136,6 @@ defineExpose({ applySsl })
 @media (max-width: 500px) {
   .waf { grid-template-columns: minmax(0, 1fr); }
 }
-.cert-sweep { margin: 0 0 10px; padding-left: 2px; }
 .blk { display: block; margin-bottom: 12px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .blk input { width: 100%; margin-top: 4px; }
 /* 备注块（022）：标签与其它 blk 字段同规格；组件与标签间距同 input 的 margin-top */
@@ -1365,7 +1263,6 @@ defineExpose({ applySsl })
 .modal-body .sector > .waf,
 .modal-body .sector > .cc,
 .modal-body .sector > .adv,
-.modal-body .sector > .ssl,
 .modal-body .sector > .hint-note { grid-column: 1 / -1; }
 .modal-body .sector-h { grid-column: 1 / -1; font-size: var(--fs-14); font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
 /* 通用宽版弹窗（CA 指引等）操作条吸底：站点弹窗已在上方用 grid 行固定，不受影响 */
@@ -1382,16 +1279,6 @@ defineExpose({ applySsl })
    <SiteCaHelpDialog> / <SiteSslDialog> 的 scoped 样式——scoped 只作用于本组件渲染的
    元素，留在这里等于永不再命中的死代码。 */
 /* SSL 证书区块：位于「编辑站点」弹窗内，与 WAF 同用虚线分隔，表明它是站点配置的一部分 */
-.ssl { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
-.ssl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.ssl-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
-.ssl-list { display: flex; flex-direction: column; gap: 8px; }
-.ssl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px;
-  border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-hover); }
-.ssl-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ssl-meta .mono { font-family: var(--mono); font-size: var(--fs-13); }
-.ssl-ops { display: flex; align-items: center; gap: 6px; flex: none; }
-.ca-link { margin-top: 10px; }
 /* 自定义配置片段（019）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
    原文用等宽字体；只读态（非 owner）仍可选中复制。 */
 .cc { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
@@ -1464,7 +1351,5 @@ defineExpose({ applySsl })
 .routes-title { font-size: var(--fs-13); }
 /* 模板 chip 选中态加强：此前选中只改边框 + 浅底，与 hover（仅改边框）几乎分不出来 */
 .tpl-chip.is-on { color: var(--c-primary); font-weight: 600; box-shadow: inset 0 0 0 1px var(--c-primary); }
-/* 卡片列表行补 hover：表行有 tbody tr:hover，证书行 / 版本行此前完全没反馈 */
-.ssl-row:hover { background: var(--c-active); }
 
 </style>

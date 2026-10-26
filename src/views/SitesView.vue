@@ -36,6 +36,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
 import SiteFormDialog from '@/components/SiteFormDialog.vue'
+import SiteSslSection from '@/components/SiteSslSection.vue'
 import { SITE_COLS, useSiteColumns } from '@/composables/useSiteColumns'
 import { useSiteCaps } from '@/composables/useSiteCaps'
 import { fmtApplied, siteState, tlsState } from '@/composables/siteState'
@@ -89,8 +90,14 @@ const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
  * 错误通过 `page-error` 交回这里——否则用户点列表的按钮、报错却永远看不见。
  */
 const error = ref('')
-/** 弹窗实例：列表行「证书」按钮要直接用它的签发入口（弹窗本身可能没开）。 */
-const formDlg = ref<InstanceType<typeof SiteFormDialog> | null>(null)
+/**
+ * 证书区实例（`:site` 恒为 null 的那份）：列表行「证书」按钮直接调它的签发入口。
+ *
+ * 为什么不用弹窗里那份：弹窗内的证书区只在 `editing != null` 时渲染，弹窗没开时它
+ * 根本不存在——而列表行入口恰恰在弹窗没开时被点。此前这里是一个 `formDlg` 模板 ref
+ * 穿透转发给 SiteFormDialog 再转给证书区，两跳都只为了「找一块不在场的组件」。
+ */
+const rowSsl = ref<InstanceType<typeof SiteSslSection> | null>(null)
 const busy = ref(false)
 const loading = ref(false)
 /** 站点托管根目录（后端只读下发）。目录选择器的初始定位——不可硬编码，config 可覆盖。 */
@@ -99,7 +106,11 @@ const siteRoot = ref('')
 // 能力 / 权限判定抽到 @/composables/useSiteCaps：列表与站点编辑弹窗问的是同一批问题
 // （能不能建站 / 能不能下发 / 能不能签证书 / 重载要不要灰）。两份副本迟早漂移——
 // 漂移的表现是「列表里能点、弹窗里却是灰的」，最难查。这里只消费。
-const { canManage, webSupported, sslReady, sslHint, canReload, canCreate, createHint } = useSiteCaps()
+const {
+  canManage, webSupported, sslReady, sslHint, canReload, canCreate, createHint,
+  // 列表行「证书」按钮的入口实例也要这三项（它渲染的浮层要不要选 ACME / 自签）
+  canSsl, sslSupported, selfSignedSupported,
+} = useSiteCaps()
 /**
  * 列表**非静默加载失败**（区别于「真的一个站点都没有」）。
  * 不加这个标志时 `sites` 保持空数组 → 走 EmptyState「暂无站点 · 点新建站点」，
@@ -411,7 +422,7 @@ async function batchDelete() {
             <td class="actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage || busy" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
               <button class="btn-ghost btn-sm" :disabled="!canReload || busy" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">{{ rowBusyId === s.id ? '重载中…' : '重载' }}</span></button>
-              <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="formDlg?.applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
+              <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="rowSsl?.applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
               <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy" title="删除" @click="delTarget = s"><Icon name="trash" :size="13" /><span class="btn-label">删除</span></button>
             </td>
           </tr>
@@ -481,9 +492,21 @@ async function batchDelete() {
     <!-- 新建 / 编辑弹窗（含 SSL 证书区与站点日志区）：表单回填 / 校验 / 保存下发 /
          配置原文全部自持，父级只给「作用在哪个站点」与它不掌握的只读数据（证书列表、
          续期扫描状态、站点根目录）。 -->
-    <SiteFormDialog ref="formDlg" v-model:open="modalOpen" :site="editing"
+    <SiteFormDialog v-model:open="modalOpen" :site="editing"
       :certs="certs" :sweep="sweep" :site-root="siteRoot"
       @reload="load" @page-error="(m: string) => error = m" />
+
+    <!-- 列表行「证书」按钮的入口实例：与弹窗内那份**同一个组件、同一套浮层**，只是
+         `:site` 恒为 null ⇒ 区块本体（`.ssl`）不渲染，留在页面上的只有它的
+         <SiteSslDialog> 浮层。这样列表入口不必穿透 SiteFormDialog 转发，而弹窗那份
+         也不必在 `open=false` 时替父级兜底（两种入口的错误落点本来就不同：
+         列表行没有弹窗可写，只能写页面级）。
+         ⚠️ 两处都用同一个 `rowSsl` ref：同一时刻列表行只点一行，不会有两张浮层。 -->
+    <SiteSslSection ref="rowSsl" :site="null" :certs="certs" :sweep="sweep"
+      :busy="busy" :can-ssl="canSsl" :ssl-supported="sslSupported"
+      :self-signed-supported="selfSignedSupported" :ssl-ready="sslReady" :ssl-hint="sslHint"
+      @reload="load" @update:busy="(v) => busy = v"
+      @ssl-error="(m: string) => error = m" />
     <ConfirmDialog :open="!!delTarget" danger title="删除站点"
       :detail="delTarget ? `将删除站点「${delTarget.name}」及其关联证书，且无法恢复。\n\n站点目录 ${delTarget.root} 的文件不会被删除（如需清理请到「文件」页手动删除）。` : ''"
       confirm-word="删除" @confirm="doDelete" @cancel="delTarget = null" />
