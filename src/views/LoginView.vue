@@ -112,6 +112,34 @@ async function copyPassword() {
   window.setTimeout(() => { copied.value = false }, 1500)
 }
 
+// 首启「从文件读取令牌」：浏览器经 localhost 端点取服务器磁盘上的明文令牌，
+// 免手抄终端输出。仅 localhost 可取（远程 / 反代在 non-loopback 终结 → 403）；
+// 面板已初始化（owner 已存在 / 令牌已用 / 过期）→ 404。
+const readTokenError = ref('')
+async function readTokenFromFile() {
+  if (bBusy.value) return
+  readTokenError.value = ''
+  try {
+    const d = await api.get<{ token: string }>(API.auth.bootstrapToken(), { skipAuthRedirect: true })
+    if (d?.token) {
+      bToken.value = d.token
+      bError.value = ''        // 取到令牌清掉可能的「令牌过期」提示
+    } else {
+      readTokenError.value = '未能取到令牌，请在服务器本地访问面板'
+    }
+  } catch (e) {
+    const code = (e as { code?: number }).code
+    if (code === 10003) {
+      readTokenError.value = '该操作仅限本机（localhost）访问：请在服务器本地或经 SSH 隧道（ssh -L）访问面板'
+    } else if (code === 10004) {
+      readTokenError.value = '面板已完成初始化或令牌不可用，请直接登录'
+      mode.value = 'login'
+    } else {
+      readTokenError.value = errorText(e)
+    }
+  }
+}
+
 async function submitBootstrap() {
   if (bBusy.value) return
   bError.value = ''
@@ -155,8 +183,12 @@ async function submitBootstrap() {
 
       <label>
         <span>引导令牌</span>
-        <input v-model="bToken" autocomplete="off" spellcheck="false" required :disabled="bBusy" placeholder="32 位十六进制" />
+        <div class="pw-field">
+          <input v-model="bToken" autocomplete="off" spellcheck="false" required :disabled="bBusy" placeholder="32 位十六进制" />
+          <button type="button" class="pw-toggle" :disabled="bBusy" @click="readTokenFromFile">从文件读取</button>
+        </div>
       </label>
+      <p v-if="readTokenError" class="error" role="alert">{{ readTokenError }}</p>
 
       <label>
         <span>管理员用户名</span>

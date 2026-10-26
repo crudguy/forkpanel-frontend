@@ -23,6 +23,8 @@ export const API = {
     login: () => '/api/v1/auth/login',
     logout: () => '/api/v1/auth/logout',
     me: () => '/api/v1/auth/me',
+    // 首启向导「从文件读取令牌」按钮：仅在 localhost 可取（后端对回环硬拒），避免手抄终端令牌
+    bootstrapToken: () => '/api/v1/auth/bootstrap-token',
     password: () => '/api/v1/auth/password',
     mfaEnroll: () => '/api/v1/auth/mfa/enroll',
     mfaVerify: () => '/api/v1/auth/mfa/verify',
