@@ -4,7 +4,7 @@ import { ref } from 'vue'
  * 能力矩阵类型与判定。
  *
  * ⚠️ 核心纪律：前端**禁止**写 `if (isLinux)` / `navigator.platform` / `target_os`。
- * 一切平台差异都由后端 capabilities 驱动。这样 Windows/macOS 接入时前端零改动。
+ * 一切平台差异都由后端 capabilities 驱动（后端只支持 Linux，但前端仍不假设）。
  */
 
 export interface Capability {
@@ -772,7 +772,7 @@ export const fwDirectionLabel = enumLabel({ in: '入站', out: '出站' })
 /** 防火墙后端（能力位 backend 字段）。 */
 export const fwBackendLabel = enumLabel({
   nftables: 'nftables', iptables: 'iptables', ufw: 'ufw',
-  firewalld: 'firewalld', pf: 'pf', windows: 'Windows', None: '无',
+  firewalld: 'firewalld', None: '无',
 })
 
 /** 证书（ssl_certs 行）。列表 / 续期 / 删除 / 自动续期在 CertsView 与 SitesView 共用，
