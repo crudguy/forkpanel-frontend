@@ -11,10 +11,21 @@
  *
  * ⚠️ 两个**双入口**动作决定了它们必须留在本组件而不是各自独立成组件：
  * - SSL 签发：列表行「证书」按钮与弹窗内「申请证书」都能触发。它对外的出口是
- *   `defineExpose({ applySsl })`——父级拿模板 ref 直接调用。证书弹窗本身是**独立于
- *   `open` 的顶层浮层**：列表入口触发时本弹窗并未打开，若把它放进 `v-if="open"`
- *   的块里，那条路径会静默失效（编译/类型全绿，只有运行时点了没反应）。
- * - 保存二选一（手动维护站点）：它是保存流程的一步，跟着 save() 走。
+ *   `defineExpose({ applySsl })`——父级拿模板 ref 直接调用。签发弹窗**本体**已拆成
+ *   <SiteSslDialog>（自持方式/邮箱/错误位），本组件只保留「什么时候开、给谁开」。
+ *   它必须渲染在**独立于 `open` 的顶层**：列表入口触发时本弹窗并未打开，若把它放进
+ *   `v-if="open"` 的块里，那条路径会静默失效（编译/类型全绿，只有运行时点了没反应）。
+ * - 保存二选一（手动维护站点）：它是保存流程的一步，跟着 save() 走——「什么时候该问」
+ *   的判断（实时 + 快照双取）留在本组件，弹窗本体是 <SiteSaveAskDialog>。
+ *
+ * 拆出去的浮层（都在 1600 行里混着，且彼此零耦合）：
+ * - <SiteSslDialog>     申请证书（选方式 / 填 ACME 邮箱 / 提交）
+ * - <SiteCaHelpDialog>  根证书安装指引（纯静态说明 + 一个下载）
+ * - <SiteSaveAskDialog> 手动维护站点的保存二选一
+ * ⚠️ 拆它们时**刻意不动任何 grid 容器内部**：`section.sector` / `.adv` 的直接子元素
+ *   靠父级 scoped 的 `>` 选择器跨列（`grid-column: 1/-1`）。子组件的内部元素只带自己的
+ *   `data-v`，一旦把字段搬进子组件，那些规则会**静默全废**（vue-tsc / build / 单测全绿，
+ *   只有量 computed style 才看得见：`gridColumn` 从 `1 / -1` 变 `auto`）。
  *
  * ⚠️ 表单初始化由本组件**自持**（`watch(() => props.open)`）：父级 openEdit 里调
  *   子组件方法是行不通的——DOM 更新是异步的，那一刻子组件还没挂载。
@@ -34,6 +45,9 @@ import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import SiteConfPanel from '@/components/SiteConfPanel.vue'
+import SiteCaHelpDialog from '@/components/SiteCaHelpDialog.vue'
+import SiteSslDialog from '@/components/SiteSslDialog.vue'
+import SiteSaveAskDialog from '@/components/SiteSaveAskDialog.vue'
 import { useSiteCaps } from '@/composables/useSiteCaps'
 import {
   APP_TEMPLATES, DOMAIN_RE, SITE_NAME_RE, applyBody, confSpecNow,
@@ -521,86 +535,43 @@ async function confirmClear() {
 const siteCerts = computed<Cert[]>(() =>
   editing.value ? props.certs.filter(c => (editing.value as Site).domains.includes(c.domain)) : [])
 
-/** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。 */
+/** SSL 签发弹窗（审计 U6：替代 window.prompt 选方式/填邮箱）。弹窗本体见 <SiteSslDialog>。 */
 const sslModal = ref<{ site: Site; method: 'self-signed' | 'http-01'; email: string } | null>(null)
-/**
- * 签发弹窗**自己**的错误位。
- *
- * 签发弹窗是叠在站点弹窗之上的第二层遮罩，此时页面级的 error/notice 会被两层遮罩
- * 挡在后面——用户什么都看不见，只看到点「申请」没反应。所以这一层的报错必须落在
- * 它自己的可见区域里。
- */
-const sslErr = ref('')
 
-/** 根证书安装指引弹窗。自签证书能被浏览器信任的**唯一**前提是把根 CA 装进信任库。 */
+/** 根证书安装指引弹窗。自签证书能被浏览器信任的**唯一**前提是把根 CA 装进信任库。
+ *  弹窗本体（含关法与下载动作）见 <SiteCaHelpDialog>。 */
 const caHelp = ref(false)
 
-// 另外两个弹窗同样接统一关闭出口（此前 CA 指引与 SSL 签发都只有点遮罩一种关法，
-// 没有 Esc，也没有焦点返还）
-const caBox = ref<HTMLElement | null>(null)
-const { close: closeCaHelp } = useModal(() => caHelp.value, caBox, () => { caHelp.value = false })
-const sslBox = ref<HTMLElement | null>(null)
-const { close: closeSslModal } = useModal(() => !!sslModal.value, sslBox, () => { sslModal.value = null })
 /**
- * 下载面板根证书（ca.crt）。
+ * 「申请证书」的开窗动作。
  *
- * 用 location 直下而非 fetch——与 FilesView 下载同范式：GET + cookie 认证即可，
- * 不需要（也不能）带 CSRF 头，响应流交给浏览器原生处理（自动落到下载目录）。
+ * 只有**两种渠道都可用**时才值得弹窗让用户选；只剩一种时直接执行——给一个"必败选项"
+ * 让用户二选一，等于让他点两次才得到同一个结果。
+ *
+ * ⚠️ 签发失败与「ACME 缺邮箱」的报错由 <SiteSslDialog> 自持（`sslErr`）：
+ *   签发弹窗叠在站点弹窗之上，错误写在这里的 `formError` 会被两层遮罩挡在后面。
  */
-function downloadCa() {
-  window.location.href = API.certs.ca()
-}
-
-/**
- * 把签发类错误放到**用户当下真正看得见的那一层**：签发弹窗 > 站点编辑弹窗 > 页面级。
- * 此前一律写页面级 error/notice，弹窗开着时全被遮罩挡在后面 → 表现为"点了没反应"。
- * `asNotice`：能力未接入（还没装上）属提示而非报错，改走中性 toast。
- * toast 是浮层、恒在遮罩之上，故不再需要"弹窗开着就降级到页面级"的分支。
- * ⚠️ 列表行「证书」按钮也走这条路径，那时本弹窗**没开**——错误只能交回页面级
- *   （父级），否则用户点列表的按钮、报错却永远看不见。
- */
-function sslErrTo(msg: string, asNotice = false) {
-  if (sslModal.value) { sslErr.value = msg; return }
-  if (asNotice) { toast(msg, 'info'); return }
-  if (props.open) { formError.value = msg; errSeq.value++ }
-  else emit('page-error', msg)
-}
-
-/** 行内「SSL」快捷入口：直接开签发弹窗（仅一种渠道可用时立即执行，不给"必败选项"）。 */
 function applySsl(s: Site) {
-  if (!(selfSignedSupported.value && sslSupported.value)) {
-    execSsl(s, selfSignedSupported.value ? 'self-signed' : 'http-01', '')
-    return
-  }
-  sslErr.value = ''
-  sslModal.value = { site: s, method: 'self-signed', email: '' }
+  sslModal.value = { site: s, method: selfSignedSupported.value ? 'self-signed' : 'http-01', email: '' }
 }
 /** 编辑弹窗内「申请证书」：作用对象即当前正在编辑的站点。 */
 function applySslEditing() {
   if (editing.value) applySsl(editing.value)
 }
 
-async function execSsl(s: Site, method: 'self-signed' | 'http-01', email: string) {
-  busy.value = true; sslErr.value = ''
-  // ACME 必须有账户邮箱：CA 靠它发到期/异常通知，缺了就明确报错，不代填假地址
-  if (method === 'http-01' && !email.trim()) {
-    sslErrTo('ACME 签发需要账户邮箱')
-    busy.value = false
-    return
-  }
-  try {
-    const r = await api.post<{ task_id?: string }>(
-      API.sites.sslApply(s.id), { domains: s.domains, method, email: method === 'http-01' ? email.trim() : undefined })
-    toast(method === 'self-signed'
-      ? `已为 ${s.name} 签发面板自签证书（记得「重载」使配置生效）`
-      : `已提交 ${s.name} 的 ACME 签发任务${r?.task_id ? `（${r.task_id}）` : ''}，可在任务中心查看进度`)
-    sslModal.value = null
-    if (method === 'self-signed') emit('reload', false)
-  } catch (e) {
-    // 能力未接入属于"还没装上"，沿用绿色提示语义；真出错才是红色。
-    if (isUnsupported(e)) sslErrTo('当前环境未接入证书签发能力（需 openssl 或 ACME）', true)
-    else sslErrTo(errorText(e))
-  } finally { busy.value = false }
+/**
+ * 把证书类错误放到**用户当下真正看得见的那一层**：站点编辑弹窗 > 页面级。
+ * 此前一律写页面级 error，弹窗开着时全被遮罩挡在后面 → 表现为"点了没反应"。
+ * `asNotice`：能力未接入（还没装上）属提示而非报错，改走中性 toast。
+ * toast 是浮层、恒在遮罩之上，故不需要"弹窗开着就降级到页面级"的分支。
+ * ⚠️ 列表行「证书」按钮也走这条路径，那时本弹窗**没开**——错误只能交回页面级
+ *   （父级），否则用户点列表的按钮、报错却永远看不见。
+ * ⚠️ 签发弹窗那一层不在本函数的管辖内：它的错误由 <SiteSslDialog> 自己展示。
+ */
+function sslErrTo(msg: string, asNotice = false) {
+  if (asNotice) { toast(msg, 'info'); return }
+  if (props.open) { formError.value = msg; errSeq.value++ }
+  else emit('page-error', msg)
 }
 
 // ── 证书续期（自签同步 / ACME 任务化）/ 删除（纯数据操作）──
@@ -670,9 +641,8 @@ function confSpecChanged(): boolean {
   return confSpecBase.value !== '' && confSpecNow(form.value) !== confSpecBase.value
 }
 
-// 保存二选一弹窗的通用弹窗行为（Esc / 焦点陷阱 / 离场动画）——与全站弹窗同规。
-const saveAskBox = ref<HTMLElement | null>(null)
-const { close: closeSaveAsk } = useModal(() => saveAsk.value, saveAskBox, () => { saveAsk.value = false })
+// 保存二选一弹窗的通用弹窗行为（Esc / 焦点陷阱 / 离场动画）在 <SiteSaveAskDialog> 内，
+// 与全站弹窗同规——搬出去时连 useModal 一起走，宿主不再持有这个浮层的任何关法。
 
 // 列表行「证书」按钮的入口：那时本弹窗没开，签发弹窗是独立顶层浮层，照样能弹。
 defineExpose({ applySsl })
@@ -682,7 +652,7 @@ defineExpose({ applySsl })
 <template>
   <!-- ⚠️ 多个根元素**平级**：签发弹窗 / CA 指引 / 保存二选一都是浮层，绝不能嵌进
        主弹窗的 v-if 块内部（那样主弹窗一关它们就随宿主一起消失，且编译与类型检查
-       全绿，只有运行时「点了没反应」）。 -->
+       全绿，只有运行时「点了没反应」）。三者的本体已各自拆成组件，见文件末尾。 -->
 
   <!-- 新建 / 编辑弹窗 -->
   <div v-if="open" class="mask" @click.self="modalClose">
@@ -1232,27 +1202,6 @@ defineExpose({ applySsl })
   <ConfirmDialog :open="!!delCert" danger title="删除证书"
     :detail="delCert ? `将删除证书「${delCert.domain}」。` : ''"
     confirm-word="删除" @confirm="doDeleteCert" @cancel="delCert = null" />
-  <!-- 保存二选一：手动维护站点 + 表单改了影响配置的字段（或已未同步）。
-       不弹这步 = 表单值静默入库而磁盘配置不动 → 面板与 nginx 分叉（as11 真实踩过）。
-       level-2：叠加在编辑弹窗之上（与目录选择器同级抬层）。 -->
-  <div v-if="saveAsk" class="mask level-2" @click.self="closeSaveAsk">
-    <div ref="saveAskBox" class="modal stack" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3 class="modal-title">保存手动维护的站点</h3>
-        <button class="modal-close" type="button" aria-label="关闭" @click="closeSaveAsk">
-          <Icon name="close" :size="16" />
-        </button>
-      </div>
-      <p class="modal-lead">{{ saveAskLead }}</p>
-      <div class="modal-actions">
-        <button class="btn-ghost" @click="closeSaveAsk">取消</button>
-        <button class="btn-ghost" title="只把表单值入库；磁盘配置保持不变（随后会标记「未同步」）"
-          @click="resumeSave(false)">仅保存（不覆盖配置）</button>
-        <button class="btn-primary" title="按当前表单覆盖磁盘配置：先自动备份原配置，再重新渲染并重载"
-          @click="resumeSave(true)">按表单重新生成</button>
-      </div>
-    </div>
-  </div>
 
   <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
     @select="onPickRoot" @cancel="pickerOpen = false" />
@@ -1261,98 +1210,13 @@ defineExpose({ applySsl })
     :initial-path="(form.routes[routePickerIdx]?.root) || siteRoot"
     @select="onPickRouteRoot" @cancel="routePickerOpen = false" />
 
-  <!-- 根证书安装指引：自签 leaf 由面板本地根 CA 签发，不把根装进信任库浏览器必然报不可信。
-       这是「自签证书没法在本地用」的正解——不是换证书，而是装根。 -->
-  <div v-if="caHelp" class="mask" @click.self="closeCaHelp">
-    <div ref="caBox" class="modal wide" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3 class="modal-title">安装面板根证书</h3>
-        <button class="modal-close" type="button" aria-label="关闭" @click="closeCaHelp">
-          <Icon name="close" :size="16" />
-        </button>
-      </div>
-      <p class="modal-lead">
-        面板自签的站点证书，全部由<b>本机这一张根 CA</b> 签发。浏览器只信任「已装进信任库的根 CA」，
-        所以直接访问会提示「不受信任 / 非私密连接」——这是证书链原理，不是面板坏了。
-        <b>导入一次</b>即可：这张 CA 签发的全部本地站点（含以后新建的）都直接受信，无需再点「继续前往」。
-      </p>
-      <!-- 公共 .hint-note.is-warn（此前 .ca-warn 私有复刻了一版警告样式） -->
-      <p class="hint-note is-warn">
-        <Icon name="alert" :size="14" class="ic" />
-        <span>根证书仅用于本机开发。<b>不要</b>把它装到不受你控制的机器上——装上等于信任该 CA 签发的任何证书。</span>
-      </p>
+  <!-- 三个浮层已各自独立成组件（见文件头「拆出去的浮层」）。它们与本弹窗**平级**，
+       不嵌在 `v-if="open"` 块里：签发弹窗在列表行入口被触发时本弹窗并未打开。 -->
+  <SiteSaveAskDialog v-model:open="saveAsk" :lead="saveAskLead" @choose="resumeSave" />
+  <SiteCaHelpDialog v-model:open="caHelp" />
+  <SiteSslDialog :req="sslModal" :busy="busy"
+    @update:req="(v) => sslModal = v" @update:busy="(v) => busy = v" @reload="emit('reload', false)" />
 
-      <div class="ca-actions">
-        <button class="btn-primary" @click="downloadCa()"><Icon name="download" :size="14" /> 下载根证书（ca.crt）</button>
-      </div>
-
-      <div class="ca-steps">
-        <div class="ca-step">
-          <div class="ca-step-h">① 下载</div>
-          <p class="dim">点上方按钮，浏览器会保存 <code>forkpanel-local-ca.crt</code>（PEM 格式的 X.509 证书）。</p>
-        </div>
-        <div class="ca-step">
-          <div class="ca-step-h">② 装入信任库</div>
-          <p class="dim"><b>Debian / Ubuntu 系统级</b>（curl、wget 与部分 Chromium 读系统库）：</p>
-          <pre class="ca-code">sudo cp forkpanel-local-ca.crt /usr/local/share/ca-certificates/forkpanel-local-ca.crt
-sudo update-ca-certificates</pre>
-          <p class="dim"><b>Firefox</b> 用的是自带信任库，系统级导入对它无效：设置 → 隐私与安全 → 证书 →
-            查看证书 → 证书颁发机构 → 导入，选中该文件并勾选<b>「信任由此 CA 标识的网站」</b>。</p>
-          <p class="dim"><b>Chrome / Chromium</b>：设置 → 隐私和安全 → 安全 → 管理证书 →
-            受信任的根证书颁发机构 → 导入（Linux 上通常装完系统级后重启浏览器即可）。</p>
-        </div>
-        <div class="ca-step">
-          <div class="ca-step-h">③ 验证</div>
-          <pre class="ca-code">curl --cacert forkpanel-local-ca.crt -I https://127.0.0.1</pre>
-          <p class="dim">返回 <code>HTTP/2 200</code> 且无证书告警即导入成功。浏览器需<b>完全退出后重开</b>才会重读信任库。</p>
-        </div>
-      </div>
-
-      <div class="modal-foot">
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="closeCaHelp">关闭</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SSL 签发弹窗（审计 U6）：替代 window.prompt 选方式/填邮箱；行内「SSL」与编辑弹窗「申请证书」共用 -->
-  <!-- 签发弹窗叠在站点弹窗之上 → .level-2（此前与父弹窗同为 z-50，只靠 DOM 顺序压住） -->
-  <div v-if="sslModal" class="mask level-2" @click.self="closeSslModal">
-    <div ref="sslBox" class="modal" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3 class="modal-title">为「{{ sslModal.site.name }}」申请证书</h3>
-        <button class="modal-close" type="button" aria-label="关闭" @click="closeSslModal">
-          <Icon name="close" :size="16" />
-        </button>
-      </div>
-      <!-- 这里出的错若写页面级 error/notice，会被两层遮罩挡在后面，
-           用户只觉得"点了申请没反应"。故在弹窗内自带错误位。 -->
-      <p v-if="sslErr" class="err-bar" role="alert">
-        <Icon name="alert" :size="15" class="ic" /><span>{{ sslErr }}</span>
-      </p>
-      <label class="ssl-opt">
-        <input type="radio" value="self-signed" v-model="sslModal.method" />
-        <span><b>面板自签</b><br /><span class="dim">离线可用、立即可得；需先导入面板根证书浏览器才受信（见「信任根证书」）</span></span>
-      </label>
-      <label class="ssl-opt">
-        <input type="radio" value="http-01" v-model="sslModal.method" />
-        <span><b>ACME http-01</b><br /><span class="dim">可信证书，需公网 80 端口可达 + certbot</span></span>
-      </label>
-      <label v-if="sslModal.method === 'http-01'" class="blk">
-        ACME 账户邮箱（必填，用于到期与异常通知）
-        <input v-model="sslModal.email" type="email" placeholder="ops@example.com" autocomplete="email" />
-      </label>
-      <div class="modal-foot">
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="closeSslModal">取消</button>
-          <button class="btn-primary" :disabled="busy || (sslModal.method === 'http-01' && !sslModal.email.trim())"
-            @click="execSsl(sslModal.site, sslModal.method, sslModal.email)">
-            {{ busy ? '提交中…' : '申请' }}</button>
-        </div>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
@@ -1514,16 +1378,9 @@ sudo update-ca-certificates</pre>
    否则半透明底会让滚上来的字段文字透出；③ 外观取公共 .err-bar，此处只调排布。 */
 .modal.wide.site-modal > .modal-head > .form-msg { flex-basis: 100%; margin: 0; }
 /* .field-err / .err-bar（含抖动动画与 prefers-reduced-motion 降级）已提到 main.css
-   公共规则；本页只保留 CA 指引的步骤式样。 */
-.ca-actions { display: flex; gap: 10px; margin: 0 0 18px; }
-.ca-steps { display: flex; flex-direction: column; gap: 14px; }
-.ca-step-h { font-weight: 600; font-size: var(--fs-13); margin-bottom: 6px; color: var(--c-primary); }
-.ca-step p { margin: 0 0 6px; font-size: var(--fs-12-5); line-height: 1.65; }
-.ca-code { margin: 6px 0; padding: 9px 11px; border-radius: 8px; font-size: var(--fs-12); line-height: 1.6;
-  overflow-x: auto; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); }
-.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
-.ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
-.ssl-opt input { width: auto; margin-top: 2px; }
+   公共规则。.ca-*（根证书指引步骤）与 .ssl-opt（签发方式选择）随各自浮层搬进了
+   <SiteCaHelpDialog> / <SiteSslDialog> 的 scoped 样式——scoped 只作用于本组件渲染的
+   元素，留在这里等于永不再命中的死代码。 */
 /* SSL 证书区块：位于「编辑站点」弹窗内，与 WAF 同用虚线分隔，表明它是站点配置的一部分 */
 .ssl { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
 .ssl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
