@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
+import { generateStrongPassword, passwordPolicyOk } from '@/utils/password'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -78,16 +79,38 @@ const bPassword = ref('')
 const bPassword2 = ref('')
 const bError = ref('')
 const bBusy = ref(false)
+const reveal = ref(false)        // 口令明文/掩码切换（含生成后的可见性）
+const copied = ref(false)        // 「已复制」瞬时反馈
 
 // 与后端 check_password_policy 同规则的本地镜像（≥10 位 + ≥2 字符类）
-const policyOk = computed(() => {
-  const p = bPassword.value
-  if (p.length < 10) return false
-  const classes =
-    (/[a-z]/.test(p) ? 1 : 0) + (/[A-Z]/.test(p) ? 1 : 0) +
-    (/\d/.test(p) ? 1 : 0) + (/[^a-zA-Z0-9]/.test(p) ? 1 : 0)
-  return classes >= 2
-})
+const policyOk = computed(() => passwordPolicyOk(bPassword.value))
+
+// 小白一键生成强口令：填充两框并立即明文展示，避免手抄随机串出错
+function genPassword() {
+  const p = generateStrongPassword()
+  bPassword.value = p
+  bPassword2.value = p
+  reveal.value = true
+}
+
+// 复制到剪贴板（优先异步 Clipboard API，退化到 execCommand 兜底）
+async function copyPassword() {
+  if (!bPassword.value) return
+  try {
+    await navigator.clipboard.writeText(bPassword.value)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = bPassword.value
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } catch { /* 剪贴板不可用，忽略 */ }
+    document.body.removeChild(ta)
+  }
+  copied.value = true
+  window.setTimeout(() => { copied.value = false }, 1500)
+}
 
 async function submitBootstrap() {
   if (bBusy.value) return
@@ -142,13 +165,20 @@ async function submitBootstrap() {
 
       <label>
         <span>密码</span>
-        <input v-model="bPassword" type="password" autocomplete="new-password" required :disabled="bBusy" />
+        <div class="pw-field">
+          <input v-model="bPassword" :type="reveal ? 'text' : 'password'" autocomplete="new-password" required :disabled="bBusy" />
+          <button type="button" class="pw-toggle" :disabled="bBusy" @click="reveal = !reveal">{{ reveal ? '隐藏' : '显示' }}</button>
+        </div>
       </label>
+      <div class="pw-actions">
+        <button type="button" class="btn-ghost btn-sm" :disabled="bBusy" @click="genPassword">生成强口令</button>
+        <button type="button" class="btn-ghost btn-sm" :disabled="bBusy || !bPassword" @click="copyPassword">{{ copied ? '已复制' : '复制' }}</button>
+      </div>
       <p class="hint" :class="{ ok: policyOk }">{{ policyOk ? '密码强度达标' : '至少 10 位，且包含字母 / 数字 / 符号中的两类' }}</p>
 
       <label>
         <span>确认密码</span>
-        <input v-model="bPassword2" type="password" autocomplete="new-password" required :disabled="bBusy" />
+        <input v-model="bPassword2" :type="reveal ? 'text' : 'password'" autocomplete="new-password" required :disabled="bBusy" />
       </label>
 
       <p v-if="bError" class="error" role="alert">{{ bError }}</p>
@@ -217,4 +247,13 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13)
 .hint.ok { color: var(--c-ok); }
 .tip { color: var(--c-text-dim); font-size: var(--fs-12); margin: 4px 0 0; text-align: center; }
 .tip code { font-size: var(--fs-12); }
+.pw-field { display: flex; gap: 8px; align-items: stretch; }
+.pw-field input { flex: 1; min-width: 0; }
+.pw-toggle {
+  flex: none; padding: 0 12px; font-size: var(--fs-13);
+  border-radius: var(--radius-xs); border: 1px solid var(--c-border);
+  background: transparent; color: var(--c-text-dim); cursor: pointer;
+}
+.pw-toggle:hover:not(:disabled) { color: var(--c-text); }
+.pw-actions { display: flex; gap: 8px; margin: -2px 0 2px; }
 </style>
