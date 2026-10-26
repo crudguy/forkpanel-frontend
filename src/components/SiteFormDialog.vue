@@ -22,7 +22,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
-import { api, errorText, errorFieldDetail, isUnsupported } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import {
   certLevel, certSourceLabel, fmtDate, fmtDateTime,
@@ -36,9 +36,10 @@ import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import SiteConfPanel from '@/components/SiteConfPanel.vue'
 import { useSiteCaps } from '@/composables/useSiteCaps'
 import {
-  APP_TEMPLATES, BACKEND_FIELD, DOMAIN_RE, SITE_NAME_RE, applyBody, confSpecNow,
-  emptyForm, fieldMsg, newRoute, useSiteForm, type RouteRow,
+  APP_TEMPLATES, DOMAIN_RE, SITE_NAME_RE, applyBody, confSpecNow,
+  emptyForm, newRoute, useSiteForm, type RouteRow,
 } from '@/composables/useSiteForm'
+import { resolveSaveError } from '@/composables/siteSaveError'
 
 const props = defineProps<{
   open: boolean
@@ -399,24 +400,19 @@ async function save() {
   } finally { busy.value = false }
 }
 
-/** 保存失败的统一落点（本次保存 + 二选一续跑共用同一套字段映射与抖动反馈）。 */
+/**
+ * 保存失败的统一落点（本次保存 + 二选一续跑共用同一套字段映射与抖动反馈）。
+ *
+ * 「挂哪儿、什么文案」的决策在 `@/composables/siteSaveError`（纯函数，可单测）；
+ * 这里只负责把结论落到对应的 ref 上。
+ */
 function mapSaveError(e: unknown) {
-  // **能定位到字段就挂在字段旁**；定位不到（网络/服务端异常）才用通用错误条。
-  const fd = errorFieldDetail(e)
-  if (fd) {
-    const m = BACKEND_FIELD[fd.field]
-    if (m) {
-      fieldErrs.value = { [m.key]: fieldMsg(m.msg, fd.reason) }
-      revealField(m.key)
-    } else {
-      formError.value = fieldMsg('提交内容有误，请检查后重试', fd.reason)
-    }
-  } else if ((e as { code?: number } | null)?.code === 50001) {
-    // 50001 = 路径越界。本表单里唯一的路径输入就是根目录，落到它旁边。
-    fieldErrs.value = { root: errorText(e) }
-    revealField('root')
+  const t = resolveSaveError(e)
+  if (t.kind === 'field') {
+    fieldErrs.value = { [t.key]: t.message }
+    revealField(t.key)
   } else {
-    formError.value = errorText(e)
+    formError.value = t.message
   }
   // 递增序号：错误条被重建 → 抖动动画重播，用户连点保存每次都得到可见反馈。
   errSeq.value++
