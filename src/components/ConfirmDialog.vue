@@ -16,6 +16,14 @@ const props = defineProps<{
   /** 要求输入该词才能确认；留空则只需点击 */
   confirmWord?: string
   danger?: boolean
+  /**
+   * 二级浮层（`.mask.level-2`，z-index 60）：**当确认框叠在另一个已打开的弹窗之上时必传**。
+   *
+   * 默认的 `.mask` 是 z-index 50，与一级弹窗同级——同时存在时谁在上面完全取决于
+   * DOM 顺序（碰运气）。本项目踩过：证书区在「编辑站点」弹窗内，确认框若仍是 50，
+   * 顺序一变就会被主弹窗盖住，表现为「点了删除没反应」。层级总表见 main.css。
+   */
+  level2?: boolean
 }>()
 const emit = defineEmits<{ (e: 'confirm'): void; (e: 'cancel'): void }>()
 
@@ -39,7 +47,7 @@ const { close } = useModal(() => props.open, box, cancel)
 </script>
 
 <template>
-  <div v-if="open" class="mask" @click.self="close">
+  <div v-if="open" class="mask" :class="{ 'level-2': level2 }" @click.self="close">
     <div ref="box" class="modal stack" role="dialog" aria-modal="true">
       <div class="modal-head">
         <h3 class="modal-title" :class="{ danger }">{{ title }}</h3>

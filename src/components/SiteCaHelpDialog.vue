@@ -7,6 +7,10 @@
  * 唯一副作用是下载 ca.crt。——这类纯静态说明页留在 1600 行的站点表单里，只会让
  * 「改证书文案」这件事变成要在整张表单里定位。
  *
+ * ⚠️ 遮罩用 `.mask.level-2`（z-index 60）：本浮层**永远**叠在「编辑站点」弹窗（50）
+ *    之上，用默认的 `.mask` 会与主弹窗同级，谁在上面取决于 DOM 顺序（碰运气）。
+ *    层级总表见 main.css。
+ *
  * ⚠️ 它是**独立顶层浮层**：由宿主组件的 `v-if` 控制挂载，必须放在主弹窗
  *    `v-if="open"` 块**之外**，否则主弹窗一关它也跟着消失（而它自己并不依赖主弹窗
  *    任何字段——从「SSL 证书」区点开、关掉主弹窗后它本可以还开着，现在统一随主
@@ -40,7 +44,7 @@ function downloadCa() {
 <template>
   <!-- 根证书安装指引：自签 leaf 由面板本地根 CA 签发，不把根装进信任库浏览器必然报不可信。
        这是「自签证书没法在本地用」的正解——不是换证书，而是装根。 -->
-  <div v-if="open" class="mask" @click.self="close">
+  <div v-if="open" class="mask level-2" @click.self="close">
     <div ref="box" class="modal wide" role="dialog" aria-modal="true">
       <div class="modal-head">
         <h3 class="modal-title">安装面板根证书</h3>
