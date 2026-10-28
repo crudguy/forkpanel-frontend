@@ -27,10 +27,14 @@
  *    后果，不用 `window.confirm`。
  */
 import { ref, onMounted, computed } from 'vue'
-import { api, errorText, isUnsupported } from '@/api/client'
+import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, unsupportedReason, type ExposeStatus, type ExposeApplyReq } from '@/api/types'
+// 响应体类型也用 types.ts 里已声明的 `ExposeApplyResp` / `ExposeRemoveResp`：
+// 那两个此前一直无人 import，调用点各自写内联字面量类型，于是后端改响应字段时
+// 前端不会有任何类型报错——接上才能让契约真正生效。
+import { CAP, unsupportedReason, type ExposeStatus, type ExposeApplyReq,
+         type ExposeApplyResp, type ExposeRemoveResp } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
@@ -59,14 +63,15 @@ const key = ref('')
 
 async function load() {
   error.value = ''
-  // 请求级门控：能力不支持时后端 status 仍返 200（以便本页说清原因），
-  // 但 apply/remove 会 501。这里照常取状态——它正是"为什么不能用"的来源。
+  // 本页是**只读**入口：后端 status 只要求 `system.view`，不要求 `system.manage`
+  // （"是否已对外暴露"不是秘密，能看系统概览的人就该看得见）。
+  // 故这里**不需要** isUnsupported 分支——501 只由 apply/remove 的
+  // ensure_supported 产出，status 从不返回 501；真实失败（403/5xx）一律落到 error。
   busy.value = true
   try {
     status.value = await api.get<ExposeStatus>(API.system.expose.status())
   } catch (e) {
-    if (isUnsupported(e)) status.value = null
-    else error.value = errorText(e)
+    error.value = errorText(e)
   } finally { busy.value = false }
 }
 
@@ -110,8 +115,10 @@ function prepareApply() {
 async function doApply() {
   confirmApply.value = false
   busy.value = true; error.value = ''
+  // 记下本次提交的域名：响应体缺 `domain` 时用它兜底（见下方 outputTitle）。
+  const want = domain.value.trim()
   const body: ExposeApplyReq = {
-    domain: domain.value.trim(),
+    domain: want,
     allow: parsedAllow(),
     self_signed: tlsMode.value === 'self_signed',
     fullchain: tlsMode.value === 'custom' ? fullchain.value.trim() : null,
@@ -119,14 +126,18 @@ async function doApply() {
     no_firewall: noFirewall.value,
   }
   try {
-    const r = await api.post<{ domain: string; output: string }>(API.system.expose.apply(), body)
-    outputTitle.value = `已在 ${r.domain} 开启公网访问`
+    const r = await api.post<ExposeApplyResp>(API.system.expose.apply(), body)
+    // 兜底：响应体缺 `domain`（字段改名 / 降级响应）时回落到用户填的值，
+    // 否则标题会渲染成「已在 undefined 开启公网访问」。
+    // 与紧邻的 `r.output ?? ''` 同口径——同一函数内不该一处兜一处不兜。
+    outputTitle.value = `已在 ${r.domain ?? want} 开启公网访问`
     output.value = r.output ?? ''
     toast('公网访问已开启')
     await load()
   } catch (e) {
     // 失败不是"静默没了"：脚本的 stdout/stderr 就是用户唯一能看到的原因，
-    // 后端把它拼在错误信息里，这里原样展示（不止 toast 一闪而过）。
+    // 后端把它拼在错误信息里，这里**原样写进 output** 并清掉顶部 error——
+    // 只写 error 的话 <pre> 整块不渲染，一闪而过的提示等于没有。
     outputTitle.value = '开启失败'
     output.value = errorText(e)
     error.value = ''
@@ -137,14 +148,17 @@ async function doRemove() {
   confirmRemove.value = false
   busy.value = true; error.value = ''
   try {
-    const r = await api.post<{ output: string }>(API.system.expose.remove())
+    const r = await api.post<ExposeRemoveResp>(API.system.expose.remove())
     outputTitle.value = '已撤销公网访问'
     output.value = r.output ?? ''
     toast('已撤销公网访问')
     await load()
   } catch (e) {
+    // 与 doApply 的失败分支**完全同口径**：写进 output（可见）并清掉 error。
+    // 否则撤销失败时同一段原因会同时出现在顶部横幅与 <pre> 里。
     outputTitle.value = '撤销失败'
     output.value = errorText(e)
+    error.value = ''
   } finally { busy.value = false }
 }
 
@@ -155,19 +169,29 @@ onMounted(load)
   <div class="expose-view">
     <EmptyState v-if="!auth.supported(CAP.EXPOSE_MANAGE)"
       title="当前环境不支持公网暴露向导"
-      hint="公网暴露需要 nginx、expose-public.sh 脚本，且面板以 root 运行"
+      hint="公网暴露需要 nginx、expose-public.sh 脚本，且面板以 root 运行。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口见「设置 → 部署配置」或安装输出。"
       :reason="capReason ?? undefined" />
+    <!-- ⚠️ 整页置灰由 `capabilitySync.test.ts` 钉住（后端 apply/remove 双侧已接
+         ensure_supported），故此处**不**降级成"进了页面再说"——但必须给出替代
+         通道，否则用户看到灰项无从下手，观感等同于功能缺失。 -->
 
     <template v-else>
       <div class="tools-row">
         <div class="status-line">
-          <span class="badge" :class="status?.exposed ? 'badge-warn' : 'badge-ok'">
-            {{ status?.exposed ? '正在对外暴露' : '仅本机可访问' }}
-          </span>
-          <span v-if="status?.exposed" class="badge" :class="status.tls ? 'badge-ok' : 'badge-danger'">
-            {{ status.tls ? 'HTTPS 已启用' : '无 HTTPS' }}
-          </span>
-          <span v-if="status && !status.script_installed" class="badge badge-danger">脚本缺失</span>
+          <!-- ⚠️ `status` 为空时**不得给出任何结论**。此前徽章无条件渲染，
+               `status?.exposed` 为 undefined 时落到绿色「仅本机可访问」——
+               把「首帧加载中 / 读取失败」呈现成了「确定未暴露」。在安全页上，
+               「以为没暴露」与「以为已暴露」是同样危险的一类误读。 -->
+          <template v-if="status">
+            <span class="badge" :class="status.exposed ? 'badge-warn' : 'badge-ok'">
+              {{ status.exposed ? '正在对外暴露' : '仅本机可访问' }}
+            </span>
+            <span v-if="status.exposed" class="badge" :class="status.tls ? 'badge-ok' : 'badge-danger'">
+              {{ status.tls ? 'HTTPS 已启用' : '无 HTTPS' }}
+            </span>
+            <span v-if="!status.script_installed" class="badge badge-danger">脚本缺失</span>
+          </template>
+          <span v-else class="badge badge-danger">状态未知（读取失败，请点刷新重试）</span>
         </div>
         <span class="spacer" />
         <RefreshBtn :disabled="busy" @click="load" />
@@ -201,6 +225,10 @@ onMounted(load)
         <p class="tip">
           面板默认只监听 <code>127.0.0.1</code>。开启后会由 nginx 反向代理对外提供访问，
           并用防火墙把来源限制在你填写的网段内。
+        </p>
+        <p class="tip">
+          <b>不需要</b>把 <code>bind</code> 改成 <code>0.0.0.0</code>：nginx 就在本机，
+          反代到回环端口照样能对外服务，面板自身则始终零暴露面。
         </p>
 
         <div class="form">

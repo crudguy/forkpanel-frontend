@@ -117,6 +117,31 @@ describe('脚本输出必须可见（失败时是唯一线索）', () => {
   })
 })
 
+describe('状态未知不得伪装成「仅本机可访问」', () => {
+  const t = section('template')
+
+  // 徽章此前无条件渲染：`status?.exposed` 为 undefined 时走 else 分支，显示绿色
+  // 「仅本机可访问」。于是首帧加载中、或读取失败时，用户看到的是**确定的**
+  // "未暴露"结论——在安全页上，这与"以为已暴露"是同样危险的一类误读。
+  it('徽章外层有 v-if="status"，不是无条件渲染', () => {
+    expect(t).toContain('<template v-if="status">')
+  })
+
+  it('未知态有独立文案，且不与确定态文案混在同一分支', () => {
+    const a = t.indexOf('<template v-if="status">')
+    expect(a, '找不到 status 分支').toBeGreaterThanOrEqual(0)
+    const b = t.indexOf('</template>', a)
+    expect(b, 'status 分支未闭合').toBeGreaterThan(a)
+    const inner = t.slice(a, b)
+    // 确定态结论只在 status 分支内出现
+    expect(inner).toContain('正在对外暴露')
+    // 未知态结论**不得**出现在确定态分支里
+    expect(inner).not.toContain('状态未知')
+    // 未知态结论存在于模板中（v-else 分支）
+    expect(t).toContain('状态未知')
+  })
+})
+
 describe('证书成对（只给一个会让脚本静默回退成自签）', () => {
   const s = section('script')
 
