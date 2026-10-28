@@ -2,13 +2,16 @@
 /**
  * 侧边导航（一级扁平模式，2026-10-14 起）。
  *
- * 设计变更：此前是「8 组折叠 + 折叠态组图标 drill-down」两级菜单。实际导航项只有
- * 18 个，两级归类收益有限，而折叠态点到子项要多一层点击，体感更复杂。用户决定
- * 改回一级菜单——本文件即新实现。
+ * 设计变更：此前是「8 组折叠 + 折叠态组图标 drill-down」两级菜单。实际导航项
+ * 由 `navItems.ts` 单一维护（当前 19 项），两级归类收益有限，而折叠态点到子项要
+ * 多一层点击，体感更复杂。用户决定改回一级菜单——本文件即新实现。
+ *
+ * ⚠️ 本文件里若出现具体项数，属于**会过时的计数注释**：增删导航项时必须同步，
+ *   否则后来者会照着错的基数改。故此处不再写死数字，改指回单一事实源。
  *
  * 一级模型：
- * - 展开态（234px）：18 项单列表，按 group 字段插入**静态**分组分隔线（不可点、
- *   不折叠、无 drill），保留「证书归哪」的归类提示但不增加操作步数。
+ * - 展开态（234px）：全部导航项单列表，按 group 字段插入**静态**分组分隔线
+ *   （不可点、不折叠、无 drill），保留「证书归哪」的归类提示但不增加操作步数。
  * - 折叠态（76px）：每路由一个图标直接点（icon-per-route），tooltip 出 label /
  *   禁用原因。不再有组图标中转、不再有 drill-down。
  *
@@ -47,9 +50,13 @@ const items = computed<NavItem[]>(() =>
 )
 
 const route = useRoute()
-// 含页内子 Tab 的菜单（主机监控 /system/*、软件与服务 /services/*、日志 /logs/audit、
-// 任务 /cron/tasks、安全 /firewall/baseline）高亮按**前缀**匹配；
-// 其余仍精确匹配——概览 '/' 是所有路径的前缀，绝不能改前缀，否则全页常亮。
+// 高亮统一按**前缀**匹配（含页内子 Tab 的菜单如 /system/*、/services/*、
+// /logs/audit、/cron/tasks、/firewall/baseline 都靠它）。
+//
+// ⚠️ 概览 `/` 不需要特殊照顾：拼成 `it.to + '/'` 后是 `'//'`，
+//   `route.path.startsWith('//')` 恒为假，天然不参与前缀匹配。
+//   此前注释写的是" '/' 匹配一切，靠长度取胜"——结论恰好正确，但推理是错的，
+//   照那条推理去"优化"会引入回归（见下方 ⚠️ 双高亮说明）。
 //
 // ⚠️ 但纯前缀匹配在「一个菜单项是另一个的前缀」时会**双高亮**：`/system`
 // 是 `/system/expose` 的真前缀，访问公网访问页时「主机监控」和「公网访问」
@@ -67,6 +74,31 @@ const matchedPath = computed(() => {
 })
 function isOn(it: Item): boolean {
   return matchedPath.value === it.to
+}
+
+/**
+ * 禁用项要「点不动，但说得出为什么不动」。
+ *
+ * ⚠️ 此前靠 CSS `.item.disabled { pointer-events: none }` 挡点击，副作用是把
+ *    `:title`**（禁用原因）一起屏蔽了**——鼠标悬停什么都不出、键盘也够不着，
+ *    用户只看到一项灰着，观感上等同于"这功能没做"。能力位不支持的项（如未装
+ *    nginx 时的「公网访问」）尤其致命：看不出原因就无从补救。
+ *
+ * 故改为 JS 拦点击：元素照常接收 hover，tooltip 出得来，但点了不跳转。
+ *
+ * ⚠️ 必须是 `.capture` 而不是普通 `@click`：`<RouterLink>` 内部把
+ *   `onClick: link.navigate` 挂在根 `<a>` 上，我们写在外层的 `@click` 会以
+ *   fallthrough attr 合并成 `[navigate, 我们的处理器]`，**我们的那个后跑**
+ *   ——那时 navigate 已经 push 过了，拦不住。加 `.capture` 后走
+ *   `addEventListener(..., {capture:true})`，按 DOM 派发顺序先于 navigate，
+ *   此时 `e.preventDefault()` 生效，navigate 开头检查
+ *   `e.defaultPrevented` 直接返回，不跳转。
+ *
+ * 这一条由 `SideNav.disabledReason.test.ts` 源码级钉住（禁止回退 pointer-events，
+ * 也禁止把 `.capture` 简化成普通 `@click`）。
+ */
+function onNavClick(it: NavItem, e: MouseEvent) {
+  if (it.off) e.preventDefault()
 }
 </script>
 
@@ -93,6 +125,7 @@ function isOn(it: Item): boolean {
           :aria-current="isOn(it) ? 'page' : undefined"
           :aria-disabled="it.off ? 'true' : undefined"
           :tabindex="it.off ? -1 : undefined"
+          @click.capture="onNavClick(it, $event)"
         >
           <Icon :name="it.icon" :size="19" class="ico" />
           <span class="label">{{ it.label }}</span>
@@ -171,7 +204,10 @@ function isOn(it: Item): boolean {
   width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--gradient);
   box-shadow: 0 0 10px var(--c-primary);
 }
-.item.disabled { opacity: .4; pointer-events: none; }
+/* 置灰但**必须保留 hover**：`:title`（禁用原因）是用户获知"为什么不能用"的
+   唯一途径，`pointer-events: none` 会把它一起屏蔽——曾导致能力位不支持的菜单项
+   悬停无任何提示，看起来像功能缺失。点击拦截改由 onNavClick 负责。 */
+.item.disabled { opacity: .4; cursor: not-allowed; }
 
 .bottom {
   flex: none; border-top: 1px solid var(--c-border);

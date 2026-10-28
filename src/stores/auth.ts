@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, type CapabilityMap, type Limits, type PlatformInfo } from '@/api/types'
+import { CAP, unsupportedReason, type CapabilityMap, type Limits, type PlatformInfo } from '@/api/types'
 
 export interface Me {
   user: string
@@ -44,9 +44,20 @@ export const useAuthStore = defineStore('auth', () => {
   /** 菜单/操作是否可用：能力位 AND 权限点 */
   const enabled = (capKey: string, perm: string) => supported(capKey) && can(perm)
 
-  /** 置灰原因：先说平台不支持，再说权限不足 */
+  /**
+   * 置灰原因：先说平台不支持（**透出后端给的具体原因**），再说权限不足。
+   *
+   * ⚠️ 具体原因不能省。`当前环境不支持此功能` 这类笼统话在排障上等于没说：
+   *   用户看到「公网访问」灰着，却不知道是缺 nginx、缺脚本还是没跑在 root，
+   *   既不会去装也无从求助，观感上等同于"这功能没做"。后端已在
+   *   `unsupported_reason` 里带了可执行归因（`need_nginx` / `script_missing` /
+   *   `non_root`），这里原样透出即可——不新造文案，避免与后端口径漂移。
+   */
   const whyDisabled = (capKey: string, perm: string): string | null => {
-    if (!supported(capKey)) return '当前环境不支持此功能'
+    if (!supported(capKey)) {
+      const why = unsupportedReason(capabilities.value, capKey)
+      return why ? `当前环境不支持：${why}` : '当前环境不支持此功能'
+    }
     if (!can(perm)) return '权限不足'
     return null
   }
