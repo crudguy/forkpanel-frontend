@@ -50,8 +50,13 @@ export interface DirectoriesResp {
 // 状态判据在**后端**（探测 expose-public.sh 落的两个文件），前端不自行推断：
 // - exposed ← /etc/nginx/conf.d/forkpanel-public-access.conf 存在
 // - tls     ← panel.service.d/panel-tls.conf 存在
-// 因此这里没有任何「猜」的逻辑；`supported` 也与能力位同源，但**单独下发**，
-// 让本页在能力位加载失败时仍能说清「为什么不能用」。
+// 因此这里没有任何「猜」的逻辑。
+//
+// ⚠ `supported` / `unsupported_reason` 与能力位同源（后端也取自
+//   `state.capabilities`），由 status **冗余下发**以保持契约自洽；
+//   但本页的整页门控读的是 `auth.supported(CAP.EXPOSE_MANAGE)`，
+//   **并不消费这两个字段**——不要据此处注释以为已有"能力位加载失败"的兜底，
+//   那条兜底目前并不存在（若将来要补，应让门控在能力位缺失时回落到 status）。
 export interface ExposeStatus {
   /** 是否正在对外暴露（nginx 反代配置存在） */
   exposed: boolean
@@ -656,6 +661,30 @@ export interface SettingsReport {
   deployment: {
     read_only: boolean
     tier: 'nano' | 'small' | 'standard'
+    /** 连续登录失败达此次数即锁定账号（`[security] max_login_attempts`） */
+    max_login_attempts: number
+    /** 会话空闲超时，`fmt_dur` 产出，形如 `30m` / `12h` / `45s` */
+    session_idle: string
+    /** 会话绝对超时，格式同上 */
+    session_absolute: string
+    /** 审计日志保留天数（`[audit] retention_days`） */
+    audit_retention_days: number
+    /** 审计表单行数上限，超出即裁剪（`[audit] max_rows`） */
+    audit_max_rows: number
+    /**
+     * `[server] localhost_only`：为真时 `Config::addr()` **强制只监听 127.0.0.1**
+     * （覆盖 `bind`，故只改 bind 不生效）。
+     *
+     * 这是「面板为什么只能从本机访问」的唯一事实源。页面必须展示它并给出放开
+     * 方式——否则用户只会看到"局域网连不上"，却无从知道该改哪里。
+     */
+    localhost_only: boolean
+    /** 每日自动备份开关（`[db] daily_backup`） */
+    db_daily_backup: boolean
+    /** SQLite 落盘同步档，归一化大写（`[db] synchronous`） */
+    db_synchronous: string
+    /** 备份保留份数（`[db] backup_keep`） */
+    db_backup_keep: number
     hint: string
   }
   reserved: {
