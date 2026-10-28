@@ -43,6 +43,21 @@ const supportedCount = computed(() => caps.value.filter(([, c]) => c.supported).
 const report = ref<SettingsReport | null>(null)
 const saving = ref(false)
 const formError = ref('')
+
+/**
+ * 面板实际监听地址的可读标签。
+ *
+ * ⚠️ 只报 `localhost_only` 这一位后端事实，**不自行推断 bind**：bind 不在响应里，
+ *   猜出来的值在用户改过 config.toml 后就会变成谎言。而 `localhost_only` 为真时
+ *   后端是**强制**只听 127.0.0.1（会覆盖 bind）——这正是"局域网连不上"的根因，
+ *   必须让用户看见，否则他只会以为面板坏了。
+ */
+const listenLabel = computed(() => {
+  if (!report.value) return '-'
+  return report.value.deployment.localhost_only
+    ? '仅本机 127.0.0.1（localhost_only = true，会覆盖 bind）'
+    : '非回环地址（localhost_only = false）'
+})
 // ── 首屏面板设置加载：useAsync 收敛 loading/error 状态机 ──
 // formError 被 save/clearKey/testConn 共享，故 onError 写回 formError（不改名）；
 // 用 useAsync(false)：load 有 canManage 早退，权限不足时不应卡在「加载中…」。
@@ -264,8 +279,48 @@ onMounted(async () => {
           <div class="kv-row"><span class="k">只读模式</span>
             <code class="mono">{{ report.deployment.read_only ? '开启（PANEL_READ_ONLY=1）' : '关闭' }}</code></div>
           <div class="kv-row"><span class="k">资源档位</span><code class="mono">{{ report.deployment.tier }}</code></div>
+          <div class="kv-row"><span class="k">监听地址</span><code class="mono">{{ listenLabel }}</code></div>
+          <div class="kv-row"><span class="k">登录失败锁定</span>
+            <code class="mono">{{ report.deployment.max_login_attempts }} 次</code></div>
+          <div class="kv-row"><span class="k">会话超时</span>
+            <code class="mono">空闲 {{ report.deployment.session_idle }} / 绝对 {{ report.deployment.session_absolute }}</code></div>
+          <div class="kv-row"><span class="k">审计保留</span>
+            <code class="mono">{{ report.deployment.audit_retention_days }} 天 / {{ report.deployment.audit_max_rows }} 行</code></div>
+          <div class="kv-row"><span class="k">每日备份</span>
+            <code class="mono">{{ report.deployment.db_daily_backup ? '开启' : '关闭' }}，保留 {{ report.deployment.db_backup_keep }} 份（synchronous = {{ report.deployment.db_synchronous }}）</code></div>
         </div>
         <p class="sec-note">{{ report.deployment.hint }}</p>
+
+        <!-- 仅本机监听时的可达性引导：这段是"为什么局域网连不上"的唯一答案。
+             此前后端一直返回 localhost_only，但页面从不展示它，用户只会看到
+             "IP:端口 打不开"，既不知因也不知怎么改。 -->
+        <div v-if="report.deployment.localhost_only" class="reach-hint">
+          <div class="rh-head"><Icon name="globe" :size="15" /> 为什么局域网里其他设备连不上？</div>
+          <p>
+            面板以 root 运行，且本构建的 <code class="mono">serve</code> 永远是明文 HTTP（不提供 HTTPS）。
+            两者叠加时，监听非回环地址等于把 root 操作入口明文放到网络上，登录口令可被嗅探。
+            所以默认（也是推荐）策略是<b>只监听回环</b>，由外部手段提供访问通道。
+          </p>
+          <ul>
+            <li>
+              <b>临时远程（推荐，零改配置）</b>：建 SSH 本地端口转发
+              <code class="mono">ssh -L &lt;端口&gt;:127.0.0.1:&lt;端口&gt; &lt;user&gt;@&lt;server&gt;</code>，
+              然后浏览器访问 <code class="mono">http://127.0.0.1:&lt;端口&gt;</code>。
+            </li>
+            <li>
+              <b>长期对外</b>：用「公网访问」向导或站点反代——面板仍绑回环，由 nginx 终结 TLS，
+              面板自身零暴露面；即便反代配错，SSH 隧道这条应急入口依然存在。
+            </li>
+            <li>
+              <b>确需局域网直连</b>：编辑
+              <code class="mono">/etc/forkpanel/config.toml</code>，把 <code class="mono">[server]</code>
+              下的 <code class="mono">localhost_only</code> 设为 <code class="mono">false</code>、
+              <code class="mono">bind</code> 设为 <code class="mono">"0.0.0.0"</code>，
+              再执行 <code class="mono">systemctl restart panel</code>。
+              <b>只改 bind 不生效</b>（会被 localhost_only 覆盖）。仅在可信内网使用。
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section v-if="report" class="card">
@@ -386,6 +441,26 @@ onMounted(async () => {
 <style scoped>
 .sec-sub { color: var(--c-text-mute); font-size: var(--fs-12-5); margin: 4px 0 10px; }
 .sec-note { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
+
+/* 「为什么连不上」引导块：仅 localhost_only 时出现。用 warn 底色而非再嵌一张卡片，
+   与上方只读键值表区分开——它是操作指引，不是配置项。 */
+.reach-hint {
+  margin-top: 10px; padding: 12px 14px;
+  background: color-mix(in srgb, var(--c-warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 30%, transparent);
+  border-radius: 10px;
+  font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.75;
+}
+.rh-head {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600; color: var(--c-text); margin-bottom: 6px;
+}
+.reach-hint p { margin: 0 0 8px; }
+.reach-hint ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.reach-hint code {
+  font-family: var(--mono); background: color-mix(in srgb, var(--c-border) 60%, transparent);
+  padding: 1px 4px; border-radius: 4px;
+}
 .form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .lbl { font-size: var(--fs-12-5); color: var(--c-text-dim); }
