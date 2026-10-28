@@ -26,6 +26,10 @@ export const router = createRouter({
           children: [
             { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '实时趋势' } },
             { path: 'dirs', name: 'system-dirs', component: () => import('@/views/DirectoriesView.vue'), meta: { title: '目录与位置' } },
+            // 公网暴露向导：默认零暴露（只监听回环）是产品主张，所以"要不要开公网"是
+            // 一个需要引导的决定，不是藏在防火墙/站点里的散装开关。挂在 /system 下与
+            // 后端端点 /system/expose/* 语义一致。
+            { path: 'expose', name: 'system-expose', component: () => import('@/views/ExposeWizardView.vue'), meta: { title: '公网访问' } },
             { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],

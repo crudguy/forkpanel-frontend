@@ -50,8 +50,23 @@ const route = useRoute()
 // 含页内子 Tab 的菜单（主机监控 /system/*、软件与服务 /services/*、日志 /logs/audit、
 // 任务 /cron/tasks、安全 /firewall/baseline）高亮按**前缀**匹配；
 // 其余仍精确匹配——概览 '/' 是所有路径的前缀，绝不能改前缀，否则全页常亮。
+//
+// ⚠️ 但纯前缀匹配在「一个菜单项是另一个的前缀」时会**双高亮**：`/system`
+// 是 `/system/expose` 的真前缀，访问公网访问页时「主机监控」和「公网访问」
+// 会同时点亮，看起来像当前停在了两个地方。故取**最长前缀优先**：只有当没有
+// 另一个更具体的菜单项也匹配时，才认为本项是当前项。
+const matchedPath = computed(() => {
+  let best = ''
+  for (const it of items.value) {
+    const hit = route.path === it.to || route.path.startsWith(it.to + '/')
+    // '/' 是空前缀语义上匹配一切，但它的 to 长度是 1；用严格长度比较即可，
+    // 因为任何以 '/' 开头且更长的命中都会胜过它（概览只在真的在首页时点亮）。
+    if (hit && it.to.length > best.length) best = it.to
+  }
+  return best
+})
 function isOn(it: Item): boolean {
-  return route.path === it.to || route.path.startsWith(it.to + '/')
+  return matchedPath.value === it.to
 }
 </script>
 

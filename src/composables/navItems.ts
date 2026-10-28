@@ -37,6 +37,9 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view', group: '日志' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '任务' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '系统' },
+  // 公网暴露向导：能力位只管"能不能开"，真实是否已暴露由页面自己读 /system/expose/status。
+  // 权限点用 system.manage——开启公网访问等同系统级运维动作（与后端 require 同口径）。
+  { to: '/system/expose', label: '公网访问', icon: 'globe', cap: CAP.EXPOSE_MANAGE, perm: 'system.manage', group: '系统' },
   { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage', group: '系统' },
