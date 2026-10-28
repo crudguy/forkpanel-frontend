@@ -69,6 +69,10 @@ describe('整页置灰点（P1-22：后端无同口径 501 时置灰即单方面
   it('CronView 两处（脚本早退 + 模板空态）都读 SCHEDULER_MANAGE', () => {
     exactly(prod('../views/CronView.vue'), 'supported(CAP.SCHEDULER_MANAGE)', 2, 'CronView')
   })
+
+  it('ExposeWizardView 整页置灰读 EXPOSE_MANAGE（后端 apply/remove 双侧已接 ensure_supported）', () => {
+    exactly(prod('../views/ExposeWizardView.vue'), 'supported(CAP.EXPOSE_MANAGE)', 1, 'ExposeWizardView')
+  })
 })
 
 // 二轮审计 P2-5：按钮级置灰点。
