@@ -36,6 +36,15 @@ export const API = {
     overview: () => '/api/v1/system/overview',
     users: () => '/api/v1/system/users',
     directories: () => '/api/v1/system/directories',
+    /** 公网暴露向导（域名反代 + 防火墙白名单 + TLS）。
+     *  status 只需 system.view（状态不是秘密）；apply / remove 需 system.manage
+     *  且经 CSRF。能力位 EXPOSE_MANAGE 不支持时三者分别返 200（status 带
+     *  supported=false）/ 501。**只有 apply / remove 会真的改动系统**。 */
+    expose: {
+      status: () => '/api/v1/system/expose/status',
+      apply: () => '/api/v1/system/expose/apply',
+      remove: () => '/api/v1/system/expose/remove',
+    },
   },
 
   metrics: {

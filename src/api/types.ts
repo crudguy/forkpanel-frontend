@@ -45,6 +45,58 @@ export interface DirectoriesResp {
   groups: DirectoryGroup[]
 }
 
+// ── 公网暴露向导（对应 openapi `ExposeStatus` / `ExposeApplyReq` / `ExposeApplyResp`）──
+//
+// 状态判据在**后端**（探测 expose-public.sh 落的两个文件），前端不自行推断：
+// - exposed ← /etc/nginx/conf.d/forkpanel-public-access.conf 存在
+// - tls     ← panel.service.d/panel-tls.conf 存在
+// 因此这里没有任何「猜」的逻辑；`supported` 也与能力位同源，但**单独下发**，
+// 让本页在能力位加载失败时仍能说清「为什么不能用」。
+export interface ExposeStatus {
+  /** 是否正在对外暴露（nginx 反代配置存在） */
+  exposed: boolean
+  /** 是否启用 HTTPS 终结 */
+  tls: boolean
+  /** expose-public.sh 是否已安装（缺失时 apply 必失败） */
+  script_installed: boolean
+  /** 能力位 EXPOSE_MANAGE 是否支持 */
+  supported: boolean
+  /** 不支持的原因（need_nginx / script_missing / non_root）；supported=true 时为 null */
+  unsupported_reason: string | null
+}
+
+/** POST /system/expose/apply 的请求体。
+ *
+ * 校验规则**不在此复制**（同约束放两处必漂移）：域名与 CIDR 的合法性由后端
+ * `panel_core::expose` 判定并回中文原因，前端只做「空值就先别提交」这类即时提示。
+ * ⚠️ fullchain / key 必须成对，且优先于 self_signed（脚本侧语义）。 */
+export interface ExposeApplyReq {
+  /** 对外域名，如 panel.example.com（至少两级，顶级域不含数字） */
+  domain: string
+  /** 允许访问的来源网段（IPv4 CIDR），至少一个；名单外一律拒绝 */
+  allow: string[]
+  /** true = 现场生成自签证书（浏览器会告警） */
+  self_signed?: boolean
+  /** 已有证书链路径（与 key 成对） */
+  fullchain?: string | null
+  /** 证书私钥路径（与 fullchain 成对） */
+  key?: string | null
+  /** true = 不自动放行防火墙端口 */
+  no_firewall?: boolean
+}
+
+export interface ExposeApplyResp {
+  /** 已生效的域名 */
+  domain: string
+  /** 脚本 stdout（逐步结果，原样展示给用户——那是失败时唯一的信息来源） */
+  output: string
+}
+
+export interface ExposeRemoveResp {
+  /** 脚本 stdout */
+  output: string
+}
+
 /** 系统自动备份（面板库每日快照，`panel-<unix>.db`） */
 export interface SystemBackup {
   name: string
@@ -90,6 +142,12 @@ export const CAP = {
   TERMINAL_MANAGE: 'terminal.manage',
   /// 用户与角色管理：面板内建功能（非 OS 能力），恒支持
   USER_MANAGE: 'user.manage',
+  /// 公网暴露向导（域名反代 + 防火墙白名单 + TLS）。
+  ///
+  /// ⚠️ 本能力位**不代表已经对外暴露**，只代表「具备开启条件」（有 nginx +
+  /// expose 脚本已装 + 面板以 root 运行）。真实是否暴露看 `/system/expose/status`
+  /// 的 `exposed` 字段——两者混用会让「能开」变成「已开」。
+  EXPOSE_MANAGE: 'expose.manage',
 } as const
 
 /** 不支持时的可读原因（用于菜单置灰的 tooltip） */
@@ -113,6 +171,10 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
     // compose 没装」（Debian 的 docker.io 包不带插件，需另装 docker-compose-plugin）。
     // 不映射会让用户看到英文原文，也说不清该装什么。
     case 'compose_unavailable': return '未安装 Docker Compose 插件（需 docker-compose-plugin）'
+    // 公网暴露向导的三条拒绝原因（panel-os::expose_capability）
+    case 'need_nginx': return '当前 Web 服务器不是 nginx，公网暴露向导只支持 nginx'
+    case 'script_missing': return '未安装 expose-public.sh（重跑 install.sh 或手动部署该脚本）'
+    case 'non_root': return '面板未以 root 运行，无法改 nginx 与防火墙'
     default: return c.reason
   }
 }
