@@ -135,6 +135,9 @@ function connect(id: string = activeId.value) {
   if (!enabled.value || !tab) return
   const s = ensureTerm(id)
   if (!s || s.ws) return          // 已有连接则不重复建（WS 一条 = 一个 PTY = 一个并发名额）
+  // 首进 / 新标签在 connect 前先按容器实际尺寸 fit：否则 PTY 以 xterm 默认 80×24
+  // 启动，终端只占容器左侧一条（vim/htop 布局错乱），要等用户拖窗才纠正。
+  s.fit?.fit()
   tab.errorMsg = ''
   tab.status = '连接中…'
   let ws: WebSocket
