@@ -10,7 +10,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import type { SystemSnapshot } from '@/api/types'
+import { CAP, type SystemSnapshot } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
 import { usePolling } from '@/composables/usePolling'
@@ -133,7 +133,7 @@ function tick() { void loadSnapshot(); void loadHeader() }
 // 2s 一轮；隐藏暂停/回可见补拉交给 usePolling。
 // 旧实现手写了 onVisibility + 两处 setInterval，注释里"恢复前先清旧句柄"
 // 的坑是手写产物。
-usePolling({ fn: tick, ms: 2000 })
+usePolling({ fn: tick, ms: 2000, enabled: () => auth.supported(CAP.METRICS_READ) && auth.can('system.view') })
 
 onMounted(tick)
 </script>

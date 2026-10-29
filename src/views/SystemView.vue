@@ -12,6 +12,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
+import { CAP } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
 import { usePolling } from '@/composables/usePolling'
@@ -43,6 +44,10 @@ const buf = ref<Sample[]>([])
 const interval = ref(2000)
 const gran = ref<'1m' | '1h'>('1m')
 const history = ref<{ granularity: string; samples: HistRow[]; unavailable?: string } | null>(null)
+/** 历史请求序号：快速切粒度时丢弃旧响应，避免「标签说 1m、曲线是 1h」 */
+let histSeq = 0
+/** 页面准入：能力位 + 权限点（轮询 enabled 用；导航已按同口径门控） */
+const canView = computed(() => auth.supported(CAP.METRICS_READ) && auth.can('system.view'))
 
 
 function mergeRealtime(samples: Sample[]) {
@@ -74,8 +79,14 @@ async function loadRealtime() {
 
 async function loadHistory() {
   if (auth.me?.tier === 'nano') { history.value = null; return }
-  try { history.value = await api.get(API.metrics.history(), { params: { gran: gran.value } }) }
-  catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
+  const seq = ++histSeq
+  const g = gran.value
+  try {
+    const r = await api.get<{ granularity: string; samples: HistRow[]; unavailable?: string }>(
+      API.metrics.history(), { params: { gran: g } })
+    if (seq !== histSeq) return   // 已有更新的粒度在途，丢弃本次结果
+    history.value = r
+  } catch { /* 保留上一帧：history 随 realtime 轮询重拉，确定性失败已在 rtError 提示 */ }
 }
 
 // 实时曲线：间隔取后端采样间隔（1~3s 夹取）。间隔是**变量**——自调度链在
@@ -83,9 +94,9 @@ async function loadHistory() {
 // 与 onVisibility 各一份），注释里"恢复前先清旧句柄否则两个定时器同时跑"的坑
 // 正是手写的产物；交给 usePolling 后隐藏暂停/回可见补拉/卸载清理都不再出现。
 const rtPollMs = () => Math.min(Math.max(interval.value || 2000, 1000), 3000)
-usePolling({ fn: loadRealtime, ms: rtPollMs })
+usePolling({ fn: loadRealtime, ms: rtPollMs, enabled: () => canView.value })
 // 历史曲线 30s 一轮（变化慢，且 nano 档自身会短路）
-usePolling({ fn: loadHistory, ms: 30_000 })
+usePolling({ fn: loadHistory, ms: 30_000, enabled: () => canView.value })
 
 onMounted(() => { loadRealtime(); loadHistory() })
 
@@ -125,7 +136,7 @@ function buildPoints(accessor: (s: Sample) => number, max: number) {
 }
 
 const cpuPts = computed(() => buildPoints(s => s.cpu, 100))
-const memPts = computed(() => buildPoints(() => memPct.value, 100))
+const memPts = computed(() => buildPoints(s => s.mem_total_kib ? s.mem_used_kib / s.mem_total_kib * 100 : 0, 100))
 const loadPts = computed(() => buildPoints(s => s.load1, loadMax.value))
 const diskPts = computed(() =>
   buildPoints(s => s.disk_total_bytes ? (s.disk_used_bytes / s.disk_total_bytes * 100) : 0, 100))

@@ -54,7 +54,7 @@ async function load(silent = false) {
 // 克制——进程列表不需要那么高的刷新率。
 // 3s 一轮（刻意压低的刷新率：进程列表不需要 1s 级实时）；隐藏暂停 / 回可见
 // 补拉 / 卸载清理交给 usePolling，不再手写 start/stop/onVisibility。
-usePolling({ fn: () => load(true), ms: 3000 })
+usePolling({ fn: () => load(true), ms: 3000, enabled: () => listOk.value })
 onMounted(load)
 
 // ── 表头排序（纯前端，数据已全量拉回，点击即时排序，不回源）──
@@ -122,6 +122,7 @@ const ACTION_META: Record<ProcAction, { label: string; title: string; danger: bo
 /** 发信号能力与列表能力**分流**：/proc 人人可读，向他人进程发信号却要 euid 0。
  *  后端 processes::kill 有同口径的 PROCESS_SIGNAL 门（缺位即 501），
  *  所以这里置灰是"双方合同"，不再是前端单方面的承诺。 */
+const listOk = computed(() => auth.supported(CAP.PROCESS_LIST))
 const canSignal = computed(() => auth.enabled(CAP.PROCESS_SIGNAL, 'system.manage'))
 
 const killTarget = ref<Proc | null>(null)
@@ -171,7 +172,7 @@ async function doKill() {
 
 <template>
   <PageLayout>
-    <EmptyState v-if="!auth.supported(CAP.PROCESS_LIST)"
+    <EmptyState v-if="!listOk"
       title="当前环境不支持进程管理" :reason="auth.capabilities[CAP.PROCESS_LIST]?.reason ?? undefined" />
 
     <template v-else>
