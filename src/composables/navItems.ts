@@ -33,13 +33,16 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_VIEW, perm: 'container.view', group: '数据' },
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view', group: '数据' },
   { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read', group: '数据' },
-  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.METRICS_READ, perm: 'firewall.view', group: '安全' },
+  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.manage', group: '安全' },
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view', group: '日志' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '任务' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '系统' },
-  // 公网暴露向导：能力位只管"能不能开"，真实是否已暴露由页面自己读 /system/expose/status。
-  // 权限点用 system.manage——开启公网访问等同系统级运维动作（与后端 require 同口径）。
-  { to: '/system/expose', label: '公网访问', icon: 'globe', cap: CAP.EXPOSE_MANAGE, perm: 'system.manage', group: '系统' },
+  // 公网暴露向导：分两层权限——
+  // · 查看"是否已对外暴露"只需 system.view（后端 status 只要求 system.view，任何登录用户都能看）；
+  // · 真正"开启/撤销"才是 system.manage（与后端 apply/remove 的 require 同口径）。
+  // 故导航项用 system.view：只读角色能进页面看状态，但 apply/remove 按钮由页面内的
+  // canManage（system.manage）挡下，看不到也点不动"开/撤"。
+  { to: '/system/expose', label: '公网访问', icon: 'globe', cap: CAP.EXPOSE_MANAGE, perm: 'system.view', group: '系统' },
   { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage', group: '系统' },
