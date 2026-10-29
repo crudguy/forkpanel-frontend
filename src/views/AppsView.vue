@@ -347,7 +347,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
         <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
-        <RefreshBtn :disabled="loading || busyId !== null" @click="load" />
+        <RefreshBtn :disabled="loading || busyId !== null" @click="load()" />
         <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
