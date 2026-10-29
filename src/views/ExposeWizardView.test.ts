@@ -86,8 +86,10 @@ describe('能力不支持：说明原因，而非静默置灰', () => {
   const t = section('template')
 
   it('不支持时渲染 EmptyState 且绑定 reason', () => {
-    expect(t).toContain('v-if="!auth.supported(CAP.EXPOSE_MANAGE)"')
-    exactly(t, ':reason="capReason ?? undefined"', 1, 'EmptyState.reason')
+    // P2-4：门控主判据仍是能力位；但能力位**尚未加载完**时（status.supported 已为真）
+    // 回落到 !status?.supported 作兜底，避免"能力位没到就先弹置灰"的闪屏。
+    expect(t).toContain('v-if="!auth.supported(CAP.EXPOSE_MANAGE) && !status?.supported"')
+    exactly(t, ':reason="capReason ?? status?.unsupported_reason ?? undefined"', 1, 'EmptyState.reason')
   })
 
   it('EmptyState 的 reason 来自 unsupportedReason（含中文映射）', () => {

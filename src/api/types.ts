@@ -53,10 +53,11 @@ export interface DirectoriesResp {
 // 因此这里没有任何「猜」的逻辑。
 //
 // ⚠ `supported` / `unsupported_reason` 与能力位同源（后端也取自
-//   `state.capabilities`），由 status **冗余下发**以保持契约自洽；
-//   但本页的整页门控读的是 `auth.supported(CAP.EXPOSE_MANAGE)`，
-//   **并不消费这两个字段**——不要据此处注释以为已有"能力位加载失败"的兜底，
-//   那条兜底目前并不存在（若将来要补，应让门控在能力位缺失时回落到 status）。
+//   `state.capabilities`），由 status **冗余下发**以保持契约自洽。
+//   本页整页门控的主判据仍是 `auth.supported(CAP.EXPOSE_MANAGE)`；但当能力位
+//   尚未加载完（status.supported 已为真、能力位却还没到位）时，回落到
+//   `!status?.supported` 作兜底，避免"能力位还没到就先弹置灰"的闪屏。
+//   门控仍由能力位主导，status 仅补一道加载态兜底（见 ExposeWizardView.vue）。
 export interface ExposeStatus {
   /** 是否正在对外暴露（nginx 反代配置存在） */
   exposed: boolean

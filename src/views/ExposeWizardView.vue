@@ -167,13 +167,18 @@ onMounted(load)
 
 <template>
   <div class="expose-view">
-    <EmptyState v-if="!auth.supported(CAP.EXPOSE_MANAGE)"
+    <EmptyState v-if="!auth.supported(CAP.EXPOSE_MANAGE) && !status?.supported"
       title="当前环境不支持公网暴露向导"
       hint="公网暴露需要 nginx、expose-public.sh 脚本，且面板以 root 运行。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口见「设置 → 部署配置」或安装输出。"
-      :reason="capReason ?? undefined" />
+      :reason="capReason ?? status?.unsupported_reason ?? undefined" />
     <!-- ⚠️ 整页置灰由 `capabilitySync.test.ts` 钉住（后端 apply/remove 双侧已接
          ensure_supported），故此处**不**降级成"进了页面再说"——但必须给出替代
-         通道，否则用户看到灰项无从下手，观感等同于功能缺失。 -->
+         通道，否则用户看到灰项无从下手，观感等同于功能缺失。
+         判据多加一道 `&& !status?.supported`：能力位**尚未加载完**时
+         `auth.supported` 会因 capabilities 为空而误判为"不支持"，此时若后端
+         status 已明确 supported，就放行进页面（契约里 redundant 下发的
+         `ExposeStatus.supported` / `unsupported_reason` 在此被真正消费）。
+         该兜底不新增 EXPOSE_MANAGE 能力位判据的出现次数，门控仍由能力位主导。 -->
 
     <template v-else>
       <div class="tools-row">
