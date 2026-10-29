@@ -83,6 +83,7 @@ usePolling({ fn: refresh, ms: 3000, enabled: () => auto.value && props.open })
 </script>
 
 <template>
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="box" class="modal stack" role="dialog" aria-modal="true" :aria-label="`容器日志 ${containerName}`">
       <div class="modal-head">
@@ -126,6 +127,7 @@ usePolling({ fn: refresh, ms: 3000, enabled: () => auto.value && props.open })
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>

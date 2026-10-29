@@ -54,6 +54,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 </script>
 
 <template>
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="box" class="modal stack" role="dialog" aria-modal="true" aria-label="拉取镜像">
       <div class="modal-head">
@@ -85,6 +86,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>

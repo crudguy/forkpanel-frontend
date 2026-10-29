@@ -582,6 +582,7 @@ function confSpecChanged(): boolean {
        全绿，只有运行时「点了没反应」）。三者的本体已各自拆成组件，见文件末尾。 -->
 
   <!-- 新建 / 编辑弹窗 -->
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="modalBox" class="modal wide site-modal" role="dialog" aria-modal="true">
       <!-- 标题行（公共 .modal-head，吸顶）里顺带承载通用错误条：只放**归属不到具体
@@ -1102,6 +1103,7 @@ function confSpecChanged(): boolean {
       </div>
     </div>
   </div>
+  </Teleport>
 
   <DirectoryPickerDialog :open="pickerOpen" :initial-path="form.root || siteRoot"
     @select="onPickRoot" @cancel="pickerOpen = false" />

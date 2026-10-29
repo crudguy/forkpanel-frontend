@@ -75,6 +75,7 @@ async function submit() {
 </script>
 
 <template>
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="modalClose">
     <div ref="box" class="modal" role="dialog" aria-modal="true" aria-labelledby="pwd-title">
       <div class="modal-head">
@@ -124,6 +125,7 @@ async function submit() {
       </template>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>

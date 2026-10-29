@@ -101,6 +101,7 @@ function onKey(e: KeyboardEvent) {
 </script>
 
 <template>
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="emit('close')">
     <div class="pal" role="dialog" aria-label="命令面板">
       <div class="box">
@@ -139,6 +140,7 @@ function onKey(e: KeyboardEvent) {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>

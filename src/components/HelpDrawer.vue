@@ -14,6 +14,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 </script>
 
 <template>
+  <Teleport to="body">
   <div v-if="open" class="mask" @click.self="emit('close')" @keydown.esc.window="emit('close')">
     <aside class="hd" role="dialog" aria-modal="true" aria-label="说明">
       <div class="hd-head">
@@ -27,6 +28,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
       <div class="hd-body"><slot /></div>
     </aside>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>
