@@ -26,14 +26,15 @@ export const router = createRouter({
           children: [
             { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '实时趋势' } },
             { path: 'dirs', name: 'system-dirs', component: () => import('@/views/DirectoriesView.vue'), meta: { title: '目录与位置' } },
-            // 公网暴露向导：默认零暴露（只监听回环）是产品主张，所以"要不要开公网"是
-            // 一个需要引导的决定，不是藏在防火墙/站点里的散装开关。挂在 /system 下与
-            // 后端端点 /system/expose/* 语义一致。
-            { path: 'expose', name: 'system-expose', component: () => import('@/views/ExposeWizardView.vue'), meta: { title: '公网访问' } },
             { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],
         },
+        // 公网访问：独立顶层路由，不放进 /system 的 Tab 条（它属「安全」域，侧栏也归
+        // 「安全」组）。旧链接 /system/expose 重定向至此；后端端点仍是
+        // /api/v1/system/expose/*，与前端路由无关。
+        { path: 'expose', name: 'system-expose', component: () => import('@/views/ExposeWizardView.vue'), meta: { title: '公网访问' } },
+        { path: 'system/expose', redirect: '/expose' },
         // 「软件 / 服务」是同一页的两个 Tab，**由子路由承载**（两条路由指向同一组件）：
         // 顶栏标题随子路由 meta.title 变化、Tab 可深链可前进后退，与「主机监控」同范式。
         // 旧链接 /services 重定向到默认 Tab（软件）。

@@ -45,8 +45,9 @@ export const NAV_ITEMS: NavDef[] = [
   // —— 安全：守边界（防火墙 + 公网暴露同处，边界决策一处完成）——
   { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.manage', group: '安全' },
   // 公网访问原埋在「系统」组底部；它与防火墙同质（对外暴露 / 边界防御），2026-10-29 上移至此。
+  // 路由同时从 /system/expose 提为顶层 /expose（不再挂在主机监控 Tab 下）；旧链接由路由重定向兜住。
   // 图标由 globe 改为 network：globe 已被「网站」占用，折叠态 76px 下两者会撞脸。
-  { to: '/system/expose', label: '公网访问', icon: 'network', cap: CAP.EXPOSE_MANAGE, perm: 'system.view', group: '安全' },
+  { to: '/expose', label: '公网访问', icon: 'network', cap: CAP.EXPOSE_MANAGE, perm: 'system.view', group: '安全' },
   // —— 运维：排障（日志 / 任务 / 终端 合并，消除单条目分组噪音）——
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view', group: '运维' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
