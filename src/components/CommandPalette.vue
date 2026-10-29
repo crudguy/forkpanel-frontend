@@ -48,9 +48,19 @@ const pages = computed<Cmd[]>(() =>
     })),
 )
 
-const extras = computed<Cmd[]>(() => [
-  { key: 'act:notif', label: '打开通知', icon: 'bell', group: '快捷操作', run: () => router.push('/notifications') },
-])
+// 快捷操作也要过**同一套**可达性判定，与菜单置灰口径一致：目标若是某个导航页（有
+// cap/perm），就不该搜得到却点过去 501；非导航页（如 /notifications 本身不卡能力位）
+// 则天然可达，直接放行。
+const reachable = (to: string): boolean => {
+  const n = NAV_ITEMS.find((x) => x.to === to)
+  return n ? auth.whyDisabled(n.cap, n.perm) === null : true
+}
+
+const extras = computed<Cmd[]>(() =>
+  ([
+    { key: 'act:notif', label: '打开通知', icon: 'bell', group: '快捷操作', to: '/notifications', run: () => router.push('/notifications') },
+  ] as (Cmd & { to: string })[]).filter((c) => reachable(c.to)),
+)
 
 const all = computed<Cmd[]>(() => [...pages.value, ...extras.value])
 
