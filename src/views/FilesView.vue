@@ -217,12 +217,14 @@ async function open(e: Entry) {
     if (r.binary) { error.value = '二进制文件不支持在线编辑'; return }
     // has_more 为真说明后端按 2MB 上限截断了：完整文件比这大，编辑框里只有前半截。
     // 若允许写回，会用截断版覆盖原文件——这是唯一会造成不可逆数据丢失的口子，必须拦死。
-    editing.value = { name: e.name, content: r.content ?? '', mtime: e.modified, hasMore: r.has_more }
+    editing.value = { dir: path.value, name: e.name, content: r.content ?? '', mtime: e.modified, hasMore: r.has_more }
   } catch (err) { error.value = errorText(err) }
 }
 
 async function save() {
   if (!editing.value) return
+  // 只读账号：编辑器已只读化、保存钮已隐藏，这里再兜一道，防止绕过按钮直接调用
+  if (!canWrite.value) { error.value = '当前账号无文件写入权限，保存已阻止'; return }
   // 截断预览严禁写回：否则覆盖原文件即丢失后半截（不可逆）
   if (editing.value.hasMore) {
     error.value = '当前文件大于 2MB，编辑器只载入了前半部分；保存会截断原文件，已禁止。请下载后用本地编辑器修改。'
@@ -230,7 +232,7 @@ async function save() {
   }
   try {
     await api.post(API.files.write(), {
-      path: joinPath(path.value, editing.value.name),
+      path: joinPath(editing.value.dir, editing.value.name),
       content: editing.value.content,
       // 乐观锁：带上读到的 mtime，被别人改过则拒绝覆盖
       expect_mtime: editing.value.mtime,
@@ -527,7 +529,7 @@ async function execBatch(op: 'trash' | 'move' | 'copy', paths: string[], dest?: 
   finally { batchBusy.value = false }
 }
 
-const editing = ref<{ name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
+const editing = ref<{ dir: string; name: string; content: string; mtime: number; hasMore: boolean } | null>(null)
 const confirmDel = ref<{ name: string; isDir: boolean } | null>(null)
 
 /** 批量选择：存条目名（当前目录内唯一） */
@@ -685,7 +687,7 @@ function full(p: string) {
               <!-- 重命名 / 权限（审计 F3）：行内直接入口，目录与文件均可 -->
               <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askRename(e)">重命名</button>
               <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askChmod(e)">权限</button>
-              <button v-if="canWrite" class="btn-ghost btn-sm danger" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm danger" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
             </td>
           </tr>
         </tbody>
@@ -720,12 +722,12 @@ function full(p: string) {
         <strong>{{ editing.name }}</strong>
         <span class="spacer" />
         <button class="btn-ghost" @click="editing = null">取消</button>
-        <button class="btn-primary" :disabled="editing.hasMore" @click="save">保存</button>
+        <button v-if="canWrite" class="btn-primary" :disabled="editing.hasMore" @click="save">保存</button>
       </header>
       <p v-if="editing.hasMore" class="warn" role="alert">
         该文件大于 2MB，编辑器仅载入了前半部分内容。保存已禁用，以免覆盖并截断原文件。请用「下载」取到完整文件后在本地编辑。
       </p>
-      <textarea v-model="editing.content" spellcheck="false" aria-label="文件内容" />
+      <textarea v-model="editing.content" spellcheck="false" :readonly="!canWrite" aria-label="文件内容" />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>
     </div>
 
