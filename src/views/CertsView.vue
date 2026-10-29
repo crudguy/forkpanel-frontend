@@ -49,17 +49,17 @@ const sslHint = computed(() => {
   return '需 openssl 或 ACME'
 })
 
-async function load() {
+async function load(silent = false) {
   await run(async () => {
     const [cs, ss] = await Promise.all([
       api.get<Cert[]>(API.certs.list()),
       api.get<Site[]>(API.sites.list()),
     ])
-    certs.value = cs
-    sites.value = ss
+    certs.value = cs ?? []
+    sites.value = ss ?? []
     try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
     catch { /* 扫描状态缺失不阻断证书列表 */ }
-  })
+  }, undefined, { silent })
 }
 onMounted(load)
 
@@ -82,8 +82,9 @@ async function renewCert(c: Cert) {
     toast(`已续期 ${c.domain} 的证书`)
   } catch (e) {
     if (isUnsupported(e)) toast('当前环境未接入证书续期能力', 'warn')
-    else error.value = errorText(e)
-  } finally { busy.value = false; await load() }
+    // 写失败必须留在页面上：随后的静默刷新会把 error 清掉（此前续期失败完全静默）
+    else toast(`续期 ${c.domain} 失败：${errorText(e)}`, 'err')
+  } finally { busy.value = false; await load(true) }
 }
 async function setAutoRenew(c: Cert, val: boolean) {
   busy.value = true; error.value = ''
@@ -100,7 +101,8 @@ async function doDeleteCert() {
   if (!delCert.value) return
   busy.value = true; error.value = ''
   try { await api.del(API.certs.remove(delCert.value.id)); delCert.value = null; await load() }
-  catch (e) { error.value = errorText(e) }
+  // 失败也要关框：否则确认框继续盖着、错误在遮罩后面，用户只看到「点了没反应」
+  catch (e) { delCert.value = null; toast(`删除失败：${errorText(e)}`, 'err') }
   finally { busy.value = false }
 }
 

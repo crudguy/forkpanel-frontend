@@ -121,8 +121,8 @@ const loadFailed = ref(false)
 async function load(silent = false) {
   if (!silent) { loading.value = true; error.value = ''; loadFailed.value = false }
   try {
-    sites.value = await api.get<Site[]>(API.sites.list())
-    certs.value = await api.get<Cert[]>(API.certs.list())
+    sites.value = (await api.get<Site[]>(API.sites.list())) ?? []
+    certs.value = (await api.get<Cert[]>(API.certs.list())) ?? []
     try { sweep.value = await api.get<RenewSweep>(API.certs.renewSweep()) }
     catch { /* 扫描状态缺失不阻断证书列表 */ }
     try { siteRoot.value = (await api.get<{ site_root: string }>(API.sites.root())).site_root }
@@ -209,8 +209,9 @@ async function reloadSite(s: Site) {
     toast(`已重载 ${s.name}`)
   } catch (e) {
     if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法重载配置', 'warn')
-    else error.value = errorText(e)
-  } finally { rowBusyId.value = null; busy.value = false; await load() }
+    // 写失败必须留在页面上：随后的静默刷新会把 error 清掉（此前失败对用户完全静默）
+    else toast(`重载 ${s.name} 失败：${errorText(e)}`, 'err')
+  } finally { rowBusyId.value = null; busy.value = false; await load(true) }
 }
 
 // ── 列表批量操作（评估 G3：批量启用 / 停用 / 删除）──

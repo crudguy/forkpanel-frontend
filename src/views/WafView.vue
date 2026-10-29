@@ -66,18 +66,18 @@ const isCaddy = computed(() => auth.webBackend === 'caddy')
 // ⚠ 站点表单 useSiteForm.ts 与本页面共用同一个 normIp——两页提交的是同一个后端
 //   ip_allow/ip_deny 字段，各写一份必然漂移（改了口径会有一处漏改）。
 
-async function load() {
+async function load(silent = false) {
   await run(async () => {
     // 站点与模板一并加载：模板 CRUD/套用都在本页，统一 error/loading 通道
     const [s, t] = await Promise.all([
       api.get<Site[]>(API.sites.list()),
       api.get<WafTemplate[]>(API.waf.templates.list()),
     ])
-    sites.value = s
-    templates.value = t
+    sites.value = s ?? []
+    templates.value = t ?? []
     // 每次加载都重置草稿：下拉/输入是"当前生效值"的镜像，不留上次未应用的脏值
-    drafts.value = Object.fromEntries(s.map(x => [x.id, toDraft(x)]))
-  })
+    drafts.value = Object.fromEntries((s ?? []).map(x => [x.id, toDraft(x)]))
+  }, undefined, { silent })
 }
 
 /** 是否有未应用的改动（含 IP 访问控制）。
@@ -158,12 +158,13 @@ async function applyAll() {
       } catch (e) {
         // 一个失败即停：多半是环境/权限类问题，继续跑只会把后面站点也刷成同样的错
         if (isUnsupported(e)) toast('当前环境未接入 Web 服务器，无法应用配置', 'warn')
-        else error.value = `${s.name} 下发失败：${errorText(e)}`
+        // 写失败必须留在页面上：随后的静默刷新会把 error 清掉
+        else toast(`${s.name} 下发失败：${errorText(e)}`, 'err')
         break
       }
     }
     if (ok) toast(`已应用 ${ok} 个站点的 WAF 配置`)
-  } finally { batchBusy.value = false; await load() }
+  } finally { batchBusy.value = false; await load(true) }
 }
 
 
@@ -336,7 +337,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 
 <template>
   <div class="view">
-    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
+    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
 
     <!-- 首屏必须先给骨架：请求还在飞就渲染「暂无…」会让"没有"和"没加载出来"长得一样 -->
     <div v-if="loading && !sites.length" class="skeleton box" />
@@ -363,7 +364,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
             :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
             · {{ blockedPending }} 项不可下发
           </span>
-          <RefreshBtn :disabled="batchBusy" sm @click="load" />
+          <RefreshBtn :disabled="batchBusy" sm @click="load()" />
           <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
           <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
             :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
@@ -446,7 +447,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <span class="sec-title">策略模板</span>
         <span class="count">共 {{ templates.length }} 个</span>
         <span class="spacer" />
-        <RefreshBtn :disabled="loading" sm @click="load" />
+        <RefreshBtn :disabled="loading" sm @click="load()" />
         <button v-if="canManage" class="btn-primary btn-sm" @click="openCreateTpl">
           <Icon name="plus" :size="14" /> 新建模板
         </button>
