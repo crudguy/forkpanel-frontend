@@ -23,6 +23,7 @@ import { useAsync } from '@/composables/useAsync'
 const auth = useAuthStore()
 const route = useRoute()
 const canManage = computed(() => auth.can('settings.manage'))
+const clearKeyOpen = ref(false)
 
 // 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
@@ -231,7 +232,7 @@ onMounted(async () => {
                 <button class="btn-ghost" type="button" :title="showKey ? '隐藏' : '显示'" @click="showKey = !showKey">
                   <Icon :name="showKey ? 'lock' : 'key'" :size="14" />
                 </button>
-                <button v-if="report.runtime.api_key_set" class="btn-ghost danger" type="button" :disabled="saving" @click="clearKey">
+                <button v-if="report.runtime.api_key_set" class="btn-ghost danger" type="button" :disabled="saving" @click="clearKeyOpen = true">
                   清除
                 </button>
               </div>
@@ -435,6 +436,10 @@ onMounted(async () => {
       :detail="delRole ? `删除角色「${delRole}」？此操作不可撤销。` : ''"
       @confirm="delRole && deleteRole(delRole)" @cancel="delRole = null"
     />
+
+    <ConfirmDialog :open="clearKeyOpen" danger title="清除 API Key"
+      detail="将删除加密存储的 API Key；AI 助手会退回纯规则诊断，重新启用需再次填写服务商密钥。"
+      @confirm="clearKeyOpen = false; clearKey()" @cancel="clearKeyOpen = false" />
   </div>
 </template>
 
