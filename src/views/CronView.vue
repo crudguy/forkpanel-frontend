@@ -83,7 +83,8 @@ async function create() {
 async function doDelete() {
   if (!del.value) return
   try { await api.del(API.cron.job(del.value.id)); del.value = null; load() }
-  catch (e) { error.value = errorText(e) }
+  // 失败也关框：否则确认框继续盖着、错误在遮罩后
+  catch (e) { del.value = null; toast(`删除任务失败：${errorText(e)}`, 'err') }
 }
 
 function openEdit(j: Job) {
@@ -116,7 +117,8 @@ async function doPreview(expr: string) {
   } catch (e) {
     previewNext.value = []
     previewExpr.value = ''
-    error.value = errorText(e)
+    // 预览也可能发生在编辑弹窗内：页面级 error 会被 .mask 挡住，改走全局 toast
+    toast(`预览失败：${errorText(e)}`, 'err')
   } finally { previewBusy.value = false }
 }
 

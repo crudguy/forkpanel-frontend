@@ -92,7 +92,8 @@ async function revoke(s: SessionInfo) {
     revokeTarget.value = null
     await load()
   }
-  catch (e) { error.value = errorText(e) }
+  // 失败也关框：否则确认框继续盖着、错误在遮罩后，用户只看到「点了没反应」
+  catch (e) { revokeTarget.value = null; toast(`吊销会话失败：${errorText(e)}`, 'err') }
 }
 
 
@@ -133,7 +134,7 @@ async function fix(c: BaselineItem) {
       : '该项已符合预期，未做改动')
     pendingFix.value = null
     await load()
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { pendingFix.value = null; toast(`修复失败：${errorText(e)}`, 'err') }
   finally { acting.value = false }
 }
 
@@ -176,13 +177,16 @@ const disableMfa = ref(false)
 // Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗三者皆无）。
 // X / 点遮罩 / 取消按钮统一走 closeMfa。
 const mfaBox = ref<HTMLElement | null>(null)
-const { close: closeMfa } = useModal(() => disableMfa.value, mfaBox, () => { disableMfa.value = false })
+const { close: closeMfa } = useModal(() => disableMfa.value, mfaBox, () => { disableMfa.value = false; mfaDisableError.value = '' })
 const mfaDisableCode = ref('')
+/** MFA 关闭弹窗内的错误位：页面级 error 会被 .mask 挡住 */
+const mfaDisableError = ref('')
 
 async function doDisable() {
   const code = mfaDisableCode.value.trim()
   if (!code) return
   error.value = ''
+  mfaDisableError.value = ''
   acting.value = true
   try {
     await api.post(API.auth.mfaDisable(), { code })
@@ -191,7 +195,7 @@ async function doDisable() {
     toast('MFA 已关闭。')
     disableMfa.value = false
     mfaDisableCode.value = ''
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { mfaDisableError.value = errorText(e) }
   finally { acting.value = false }
 }
 </script>
@@ -300,7 +304,7 @@ async function doDisable() {
             </div>
 
             <div v-else class="ops-row">
-              <button class="btn-ghost btn-sm danger" :disabled="acting" @click="disableMfa = true">关闭 MFA</button>
+              <button class="btn-ghost btn-sm danger" :disabled="acting" @click="mfaDisableError = ''; disableMfa = true">关闭 MFA</button>
               <span class="muted small">关闭需出示动态口令或恢复码</span>
             </div>
           </section>
@@ -334,6 +338,9 @@ async function doDisable() {
         <!-- 内联 style 一律收进公共类（.modal-lead）：散落的 style 属性无法统一维护 -->
         <p class="modal-lead">
           关闭需出示第二因子，否则一个被劫持的会话就能顺手关掉账户的 MFA。
+        </p>
+        <p v-if="mfaDisableError" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ mfaDisableError }}</span>
         </p>
         <label class="blk">动态口令（6 位）或一次性恢复码
           <input v-model="mfaDisableCode" autocomplete="off" @keyup.enter="doDisable" />

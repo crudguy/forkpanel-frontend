@@ -142,7 +142,8 @@ async function doDelete() {
     await api.del(API.firewall.removeRule(r.id))
     delTarget.value = null
     await load()
-  } catch (e) { error.value = errorText(e) }
+  // 失败也关框：否则确认框继续盖着、错误在遮罩后，用户只看到「点了没反应」
+  } catch (e) { delTarget.value = null; toast(`删除规则失败：${errorText(e)}`, 'err') }
   finally { busy.value = false }
 }
 
