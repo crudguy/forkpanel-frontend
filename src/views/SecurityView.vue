@@ -330,6 +330,7 @@ async function doDisable() {
     />
 
     <!-- 关闭 MFA：出示第二因子（动态口令或恢复码） -->
+    <Teleport to="body">
     <div v-if="disableMfa" class="mask" @click.self="closeMfa">
       <div ref="mfaBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -358,6 +359,7 @@ async function doDisable() {
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

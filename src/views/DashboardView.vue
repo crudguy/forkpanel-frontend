@@ -539,7 +539,9 @@ onUnmounted(() => { es?.close() })
       :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
       @confirm="doDeleteNote" @cancel="delNote = null" />
 
-    <!-- 卡片设置弹窗（A1）：显隐开关；顺序在概览页直接拖拽卡片调整 -->
+    <!-- 卡片设置弹窗（A1）：显隐开关；顺序在概览页直接拖拽卡片调整。
+         浮层 Teleport 到 body：避免祖先出现 backdrop-filter/transform 时被裁切成小盒。 -->
+    <Teleport to="body">
     <div v-if="layoutOpen" class="mask" @click.self="closeLayout">
       <div ref="layoutBox" class="modal" role="dialog" aria-modal="true" aria-label="卡片设置">
         <div class="modal-head">
@@ -561,6 +563,7 @@ onUnmounted(() => { es?.close() })
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

@@ -8,7 +8,7 @@
  * 纪律：只展示**需要人处置**的事件（失败/风险），成功不通知——
  * 通知一旦变成噪音，用户会整体忽略它。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
@@ -29,6 +29,7 @@ interface NotificationItem {
 }
 
 const auth = useAuthStore()
+const canView = computed(() => auth.can('system.view'))
 const items = ref<NotificationItem[]>([])
 const unread = ref(0)
 const { loading, error, run } = useAsync()
@@ -82,7 +83,7 @@ async function remove(n: NotificationItem) {
   }
 }
 
-onMounted(load)
+onMounted(() => { if (canView.value) load() })
 </script>
 
 <template>
@@ -95,8 +96,9 @@ onMounted(load)
     </div>
 
     <p v-if="error" class="err-bar">{{ error }}</p>
-    <p v-if="loading" class="muted">加载中…</p>
-    <EmptyState v-if="!loading && !items.length"
+    <p v-if="!canView" class="muted">当前账号无通知查看权限（需要 system.view）。</p>
+    <p v-if="canView && loading" class="muted">加载中…</p>
+    <EmptyState v-if="canView && !loading && !items.length"
       title="暂无通知"
       hint="备份失败、恢复失败等需要人工处置的事件会出现在这里">
       <template #cta>
@@ -104,7 +106,7 @@ onMounted(load)
       </template>
     </EmptyState>
 
-    <ul class="list">
+    <ul v-if="canView" class="list">
       <li v-for="n in items" :key="n.id" class="item" :class="[n.level, { read: n.read }]">
         <div class="row">
           <strong>{{ n.title }}</strong>

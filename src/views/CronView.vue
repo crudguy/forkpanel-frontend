@@ -262,7 +262,8 @@ async function triggerWebhook(j: Job) {
         :detail="`将删除 ${del?.id}，该任务的后续执行会一并取消。`"
         @confirm="doDelete" @cancel="del = null" />
 
-      <!-- 编辑弹窗：PATCH /cron/jobs/{id} -->
+      <!-- 编辑弹窗：PATCH /cron/jobs/{id}。浮层 Teleport 到 body，避免被祖先裁切 -->
+      <Teleport to="body">
       <div v-if="edit" class="mask" @click.self="closeEditModal">
         <div ref="editBox" class="modal wide stack" role="dialog" aria-modal="true">
           <div class="modal-head">
@@ -313,6 +314,7 @@ async function triggerWebhook(j: Job) {
           </div>
         </div>
       </div>
+      </Teleport>
     </template>
   </div>
 </template>

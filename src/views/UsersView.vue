@@ -130,7 +130,7 @@ async function doDelete() {
   try { await api.del(API.users.remove(delTarget.value.id)); delTarget.value = null; load() }
   catch (e) { error.value = errorText(e) }
 }
-onMounted(load)
+onMounted(() => { if (canManage.value) load() })
 </script>
 
 <template>
