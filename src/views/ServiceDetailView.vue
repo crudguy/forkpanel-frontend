@@ -261,6 +261,8 @@ function toggleFollow() {
 type CfgTarget = 'unit' | 'dropin'
 
 const cfgTarget = ref<CfgTarget>('unit')
+/** 配置请求序号：快速切 unit/drop-in 时丢弃旧响应，避免 A 的配置覆盖 B */
+let cfgSeq = 0
 const cfg = ref<ServiceConfig | null>(null)
 const cfgDraft = ref('')
 const cfgLoading = ref(false)
@@ -270,16 +272,21 @@ const cfgRestart = ref(false)
 const cfgSaved = ref(false)
 
 async function loadConfig() {
+  const seq = ++cfgSeq
+  const target = cfgTarget.value
+  const unitName = unit.value
   cfgLoading.value = true; cfgError.value = ''; cfg.value = null; cfgSaved.value = false
   try {
     const r = await api.get<ServiceConfig>(
-      API.services.config(unit.value), { params: { target: cfgTarget.value } })
+      API.services.config(unitName), { params: { target } })
+    if (seq !== cfgSeq || unit.value !== unitName) return   // 已切目标/单元，丢弃本次结果
     cfg.value = r
     cfgDraft.value = r.content
   } catch (e) {
+    if (seq !== cfgSeq || unit.value !== unitName) return
     if (isUnsupported(e)) cfgError.value = '当前环境不支持在线编辑配置'
     else cfgError.value = errorText(e)
-  } finally { cfgLoading.value = false }
+  } finally { if (seq === cfgSeq) cfgLoading.value = false }
 }
 
 function openConfigTab() {

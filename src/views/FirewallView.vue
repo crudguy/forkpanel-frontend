@@ -52,10 +52,13 @@ async function load() {
     backend.value = r.backend; active.value = r.active
     // 兜底：后端无规则时可能返 null（表格的 sorted/统计都假定是数组）
     rules.value = r.rules ?? []
-  } catch (e) { error.value = errorText(e) }
+    loaded.value = true
+  } catch (e) { loaded.value = false; error.value = errorText(e) }
 }
 
 const canManage = computed(() => auth.enabled(CAP.FIREWALL_MANAGE, 'firewall.manage'))
+/** 是否成功读到过真实状态：失败时不能把「未知」渲染成「未启用」（会诱导用户去点启用） */
+const loaded = ref(false)
 
 async function apply() {
   busy.value = true; error.value = ''; confirmAllow.value = false
@@ -211,7 +214,7 @@ onMounted(() => { load(); loadFail2ban() })
              「未启用 / 后端：—」，会被读成"防火墙关了，点『启用』就行"——而真实情况是
              根本没有受支持的后端。故不支持时给出「不可用」，原因交给下方 EmptyState 说明。 -->
         <template v-if="auth.supported(CAP.FIREWALL_MANAGE)">
-          <span class="badge" :class="active ? 'badge-ok' : 'badge-danger'">{{ active ? '已启用' : '未启用' }}</span>
+          <span class="badge" :class="!loaded ? 'badge-warn' : (active ? 'badge-ok' : 'badge-danger')">{{ !loaded ? '状态未知' : (active ? '已启用' : '未启用') }}</span>
           <span class="badge">后端：{{ fwBackendLabel(backend) }}</span>
         </template>
         <span v-else class="badge">不可用</span>

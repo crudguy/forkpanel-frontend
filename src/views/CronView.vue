@@ -39,7 +39,7 @@ const editBusy = ref(false)
 const editError = ref('')
 
 async function load() {
-  error.value = ''; note.value = ''
+  error.value = ''
   // 请求级门控：系统无 crontab 时 scheduler.manage=no，列表端点返 501
   if (!auth.supported(CAP.SCHEDULER_MANAGE)) return
   await run(
@@ -67,7 +67,7 @@ const canManage = computed(() => auth.enabled(CAP.SCHEDULER_MANAGE, 'cron.manage
 // 创建按钮加 busy 态（审计 U8）：此前请求期间按钮可重复点击，产生重复任务
 const createBusy = ref(false)
 async function create() {
-  error.value = ''
+  error.value = ''; note.value = ''
   createBusy.value = true
   try {
     await api.post(API.cron.jobs(), {
