@@ -98,9 +98,17 @@ function parsePorts(s: string): { ok: boolean; msg?: string } {
 }
 function validSource(s: string): boolean {
   if (!s.trim()) return true
-  const ip = s.trim()
-  if (!/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(ip)) return false
-  return ip.split('/')[0].split('.').every(o => Number(o) <= 255)
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(s.trim())
+  if (!m) return false
+  // IPv4 每段 0-255，并拒绝前导零（01 这类写法在部分后端语义不同）
+  const octets = [m[1], m[2], m[3], m[4]]
+  if (octets.some(o => (o.length > 1 && o.startsWith('0')) || Number(o) > 255)) return false
+  if (m[5] !== undefined) {
+    // 前缀长度必须 0-32；同时拒绝 00/01 这类前导零写法
+    if (m[5].length > 1 && m[5].startsWith('0')) return false
+    if (Number(m[5]) > 32) return false
+  }
+  return true
 }
 function prepareApply() {
   allowErr.value = ''
