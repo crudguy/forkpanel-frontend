@@ -261,9 +261,14 @@ function logout() {
           <Icon name="search" :size="18" />
         </button>
 
-        <!-- AI 助手顶栏常驻入口（C9）：原先入口埋在侧边栏末位，高频问诊路径太长 -->
-        <RouterLink v-if="assistOk" :to="{ name: 'assistant', query: { ctx: (route.meta.title as string) || undefined } }" class="btn-icon ghost" title="AI 助手">
-          <Icon name="sparkles" :size="18" />
+        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与「搜索」同款的纯图标钮，
+             用户很难从一个 ✦ 判断它是 AI 助手。改为品牌色胶囊 + 文字标签，让入口
+             「显而易见」（呼应本次重设计的首要目标）；窄屏隐藏文字只留图标，避免挤压标题。
+             门控 assistOk 与侧栏 /assistant 同口径（METRICS_READ + system.view）。 -->
+        <RouterLink v-if="assistOk" :to="{ name: 'assistant', query: { ctx: (route.meta.title as string) || undefined } }"
+          class="ai-entry" title="AI 助手：基于当前页上下文的诊断与建议">
+          <Icon name="sparkles" :size="16" />
+          <span class="ai-label">AI 助手</span>
         </RouterLink>
 
         <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
@@ -483,8 +488,23 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .task-chip:hover { box-shadow: 0 0 0 1px var(--c-primary); }
 
+/* AI 助手顶栏入口：品牌色胶囊 + 文字，与搜索/通知的纯图标钮区分开，
+   让「问 AI」在任意页面都一眼可见（C9 强化）。 */
+.ai-entry {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 34px; padding: 0 12px; border-radius: 999px;
+  color: var(--c-primary); background: var(--c-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--c-primary) 38%, transparent);
+  font-size: var(--fs-12-5); font-weight: 600; text-decoration: none;
+  transition: background .15s ease, border-color .15s ease;
+}
+.ai-entry:hover { background: color-mix(in srgb, var(--c-primary) 18%, transparent); border-color: var(--c-primary); }
+
 @media (max-width: 720px) {
   .sysinfo { display: none; }
   .health { display: none; }
+  /* 顶栏右侧簇在手机宽度下要装下搜索/通知/主题/用户，AI 入口退化为纯图标 */
+  .ai-label { display: none; }
+  .ai-entry { padding: 0 9px; }
 }
 </style>
