@@ -24,6 +24,7 @@
  * 卷的创建/删除、compose 项目级 `logs`（请用 `docker compose logs` CLI）。
  */
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { useAsync } from '@/composables/useAsync'
 import { API } from '@/api/endpoints'
@@ -45,7 +46,15 @@ import ComposeTab from '@/components/containers/ComposeTab.vue'
 import { COMPOSE_ACTIONS_TEXT } from '@/composables/composeActions'
 
 const auth = useAuthStore()
-const tab = ref<'containers' | 'images' | 'stats' | 'networks' | 'volumes' | 'compose'>('containers')
+const route = useRoute()
+const router = useRouter()
+const TAB_KEYS = ['containers', 'images', 'stats', 'networks', 'volumes', 'compose'] as const
+type TabKey = typeof TAB_KEYS[number]
+/** ?tab= 白名单校验：非法值回退「容器」，不让 query 决定任意字符串 */
+function tabFromQuery(v: unknown): TabKey {
+  return typeof v === 'string' && (TAB_KEYS as readonly string[]).includes(v) ? v as TabKey : 'containers'
+}
+const tab = ref<TabKey>(tabFromQuery(route.query.tab))
 // 顶部 Tab（容器/镜像/资源/网络/卷/Compose）走本地状态，复用通用 TabBar 组件（细分段控件 + 渐变激活），
 // 与主机监控等页面外观统一；图标位可选，激活态白底上随 currentColor 变白。
 const tabs = [
@@ -144,8 +153,16 @@ async function restartPanel() {
 
 function switchTab(t: string) {
   // 各 Tab 的子组件在 active 变真时自己拉数据（见 components/containers/*Tab.vue）
-  tab.value = t as 'containers' | 'images' | 'stats' | 'networks' | 'volumes' | 'compose'
+  const k = tabFromQuery(t)
+  tab.value = k
+  // 深链：页签写入 ?tab=，刷新 / 分享 / 前进后退都能回到同一页
+  void router.push({ query: { ...route.query, tab: k } })
 }
+// 浏览器前进/后退或外部深链进入时，把 query 同步回本地 tab
+watch(() => route.query.tab, (v) => {
+  const k = tabFromQuery(v)
+  if (k !== tab.value) tab.value = k
+})
 
 </script>
 
