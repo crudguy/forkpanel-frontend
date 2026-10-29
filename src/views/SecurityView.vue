@@ -48,6 +48,8 @@ const baseline = ref<BaselineItem[]>([])
 const auth = useAuthStore()
 const sessions = ref<SessionInfo[]>([])
 const { loading, error, run } = useAsync(true)
+/** 区分「加载失败」与「动作失败」：前者不渲染汇总卡（否则显示风险 0），后者保留页面内容 */
+const loadFailed = ref(false)
 
 async function load() {
   await run(async () => {
@@ -59,7 +61,8 @@ async function load() {
     baseline.value = Array.isArray(b) ? b : []
     const s = await api.get<{ sessions: SessionInfo[] }>(API.security.sessions())
     sessions.value = s?.sessions ?? []
-  })
+    loadFailed.value = false
+  }, (e) => { loadFailed.value = true; error.value = errorText(e) })
 }
 onMounted(load)
 
@@ -204,7 +207,7 @@ async function doDisable() {
   <div>
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
-    <template v-else>
+    <template v-else-if="!loadFailed">
       <!-- ① 汇总卡：通过 / 风险 / 不适用 -->
       <div class="grid cols-3 summary">
         <MetricCard v-for="c in summaryCards" :key="c.label" v-bind="c" />

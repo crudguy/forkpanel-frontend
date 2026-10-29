@@ -7,7 +7,7 @@
  * 每 2 秒刷新快照 / 3 秒刷新进程（procfs 读取开销 <0.02ms，轮询极轻）。
  */
 import { ref, onMounted, computed } from 'vue'
-import { api, errorText, isUnsupported } from '@/api/client'
+import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, type SystemSnapshot } from '@/api/types'
@@ -121,9 +121,8 @@ async function loadSnapshot() {
     snap.value = await api.get<SystemSnapshot>(API.metrics.snapshot())
     snapError.value = ''
   } catch (e) {
-    // 保留上一帧避免网络抖动闪空是对的；但 501/403 是确定性失败，
-    // 一直静默会让「暂无数据」变成排障黑洞（审计 F19）
-    if (isUnsupported(e)) snapError.value = errorText(e)
+    // 任何失败都要落错误态：只认 10009 会把 403/500/网络错误渲染成「暂无快照」
+    snapError.value = errorText(e)
   }
   finally { loading.value = false }
 }
@@ -140,7 +139,7 @@ onMounted(tick)
 
 <template>
   <PageLayout>
-    <p v-if="snapError" class="err" role="alert">{{ snapError }}</p>
+    <p v-if="snapError" class="err" role="alert">{{ snapError }}<button class="btn-ghost btn-sm err-retry" type="button" @click="tick">重试</button></p>
 
     <div v-if="loading && !snap" class="card skeleton" style="height:280px" />
     <template v-else-if="snap">
@@ -241,7 +240,7 @@ onMounted(tick)
       <EmptyState v-else title="无温度传感器（本机无 /sys/class/hwmon）" />
 
     </template>
-    <EmptyState v-else title="暂无快照数据" hint="采集由内部调度器驱动，稍候自动出现" />
+    <EmptyState v-else-if="!snapError" title="暂无快照数据" hint="采集由内部调度器驱动，稍候自动出现" />
   </PageLayout>
 </template>
 

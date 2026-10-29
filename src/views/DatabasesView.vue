@@ -256,29 +256,37 @@ const bHint = computed(() =>
   browse.value ? dbHint(bLevel.value, browseInput.value, browse.value.conn.engine) : null)
 const bCrumbs = computed(() => dbCrumbs(browseInput.value))
 
+let browseSeq = 0
 async function openBrowse(c: Conn) {
   error.value = ''
+  const seq = ++browseSeq
   browse.value = {
     conn: c, dbs: [], db: '', schemas: [], schema: '',
     tables: [], tablesLoading: false, table: '', data: null,
   }
-  try { browse.value.dbs = await api.get<string[]>(API.db.databases(c.id)) }
-  catch (e) { error.value = errorText(e) }
+  try {
+    const dbs = await api.get<string[]>(API.db.databases(c.id))
+    if (seq !== browseSeq || !browse.value) return
+    browse.value.dbs = dbs ?? []
+  } catch (e) { if (seq === browseSeq) error.value = errorText(e) }
 }
 
 /** 选库：清空所有下游状态，再按该库**重新**查下一级与表清单 */
 async function pickDb(db: string) {
   const b = browse.value; if (!b) return
+  const seq = ++browseSeq
   b.db = db
   b.schemas = []; b.schema = ''
   b.tables = []; b.table = ''; b.data = null
   b.tablesLoading = true
   try {
-    b.schemas = await api.get<DbSchemaNode[]>(API.db.schemas(b.conn.id, db))
+    const schemas = await api.get<DbSchemaNode[]>(API.db.schemas(b.conn.id, db))
+    if (seq !== browseSeq) return   // 已切到别的库，丢弃本次 schema
+    b.schemas = schemas ?? []
     // 有 schema 层时**自动选中可预览的第一个**（PG 恒为 public）。原因见 defaultSchema 注释：
     // tables() 本来就只读 public，界面停在"未选"与事实不符。
     b.schema = defaultSchema(b.schemas)
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { if (seq === browseSeq) error.value = errorText(e) }
   await loadTables()
 }
 
@@ -292,21 +300,31 @@ async function pickSchema(schema: string) {
 
 async function loadTables() {
   const b = browse.value; if (!b || !b.db) return
+  const seq = ++browseSeq
+  const connId = b.conn.id, db = b.db
   b.tablesLoading = true
-  try { b.tables = await api.get<DbTableInfo[]>(API.db.tables(b.conn.id, b.db)) }
-  catch (e) { error.value = errorText(e); b.tables = [] }
-  finally { b.tablesLoading = false }
+  try {
+    const tables = await api.get<DbTableInfo[]>(API.db.tables(connId, db))
+    if (seq !== browseSeq) return   // 已切库/切 schema，丢弃本次表清单
+    b.tables = tables ?? []
+  } catch (e) { if (seq === browseSeq) { error.value = errorText(e); b.tables = [] } }
+  finally { if (seq === browseSeq) b.tablesLoading = false }
 }
 
 async function pickTable(table: string, page = 1) {
   const b = browse.value; if (!b || !table) { if (b) b.data = null; return }
+  const seq = ++browseSeq
+  const connId = b.conn.id, db = b.db
   b.table = table
-  const url = `${API.db.rows(b.conn.id, b.db, table)}?page=${page}&page_size=${PAGE_SIZE}`
-  try { b.data = await api.get<RowsData>(url) }
-  catch (e) { error.value = errorText(e); b.data = null }
+  const url = `${API.db.rows(connId, db, table)}?page=${page}&page_size=${PAGE_SIZE}`
+  try {
+    const data = await api.get<RowsData>(url)
+    if (seq !== browseSeq) return   // 已翻到别的页/表，丢弃本次结果
+    b.data = data
+  } catch (e) { if (seq === browseSeq) { error.value = errorText(e); b.data = null } }
 }
 
-function closeBrowse() { browse.value = null }
+function closeBrowse() { browseSeq++; browse.value = null }
 
 /** 导出当前表为 CSV。
  *

@@ -361,18 +361,21 @@ async function restoreFrom() {
   }
 }
 
+let artifactsSeq = 0
 async function showArtifacts(p: Plan) {
   error.value = ''
   // 切换计划时必须清空上一次选中的产物名：否则在 A 计划选过产物后打开 B 计划，
   // 恢复目标是 A 的产物（selName 全局复用），会导致误恢复。
   selName.value = ''
+  const seq = ++artifactsSeq
   try {
     const items = await api.get<Artifact[]>(API.backups.artifacts(p.id))
-    curArtifacts.value = { plan: p, items }
+    if (seq !== artifactsSeq) return   // 已切到别的计划，丢弃本次产物清单
+    curArtifacts.value = { plan: p, items: items ?? [] }
     // 换计划时远端清单必须归零：留着上一份清单会让人以为 B 计划在远端有产物
     remoteItems.value = null
     remoteError.value = ''
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { if (seq === artifactsSeq) error.value = errorText(e) }
 }
 
 /** 选中的产物名（恢复目标）。产物按名称倒序，默认取最新一份。 */

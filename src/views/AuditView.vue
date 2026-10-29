@@ -85,7 +85,9 @@ function toTs(s: string): number | undefined {
   return Number.isFinite(t) ? Math.floor(t / 1000) : undefined
 }
 
+let loadSeq = 0
 async function load() {
+  const seq = ++loadSeq
   await run(async () => {
     expanded.value = null
     const since = toTs(f.value.since)
@@ -104,6 +106,7 @@ async function load() {
     if (until != null) params.until = until
 
     const r = await api.get<{ items: AuditEntry[]; page: number; page_size: number; total: number }>(API.audit(), { params })
+    if (seq !== loadSeq) return   // 已有更新的筛选/翻页在途，丢弃本次结果
     rows.value = r?.items ?? []
     total.value = r?.total ?? 0
     // 动作候选：从真实记录累积（datalist 建议）
