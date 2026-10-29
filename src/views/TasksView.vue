@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { fmtDateTime, taskStateBadge, taskStateLabel } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -15,6 +16,11 @@ interface Task {
   started_at: number | null; finished_at: number | null; exit_code: number | null
   output_path?: string | null; duration_secs?: number | null; needs_human?: boolean
 }
+
+const auth = useAuthStore()
+// 准入与取消动作分别对应后端 tasks.rs 的 TASK_VIEW / TASK_MANAGE（无能力位门控）。
+const canView = computed(() => auth.can('task.view'))
+const canCancel = computed(() => auth.can('task.manage'))
 
 const tasks = ref<Task[]>([])
 // 列表的 loading/error 生命周期交给 useAsync（与其余 12 个视图同一套）；
@@ -30,7 +36,7 @@ function load() {
     tasks.value = Array.isArray(r) ? r : []
   })
 }
-onMounted(load)
+onMounted(() => { if (canView.value) load() })
 
 function isLive(t: Task | null) { return !!t && (t.state === 'running' || t.state === 'queued') }
 
@@ -41,7 +47,7 @@ function isLive(t: Task | null) { return !!t && (t.state === 'running' || t.stat
  *  换看另一个任务时 restart() 解除永久停（上一个任务跑完时停过）。 */
 const taskPoll = usePolling({
   ms: 2000,
-  enabled: () => isLive(sel.value),
+  enabled: () => canView.value && isLive(sel.value),
   fn: async () => {
     if (!sel.value) return
     try {
@@ -67,6 +73,7 @@ async function open(t: Task) {
 }
 
 async function cancel(t: Task) {
+  if (!canCancel.value) return
   try {
     await api.post(API.tasks.cancel(t.id))
     load()
@@ -83,7 +90,8 @@ const stateText = taskStateLabel
 <template>
   <div>
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
-    <div v-if="loading" class="skeleton box" />
+    <EmptyState v-if="!canView" title="无任务查看权限" reason="需要 task.view" />
+    <div v-else-if="loading" class="skeleton box" />
     <template v-else>
       <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
            page-head 横条，工具条紧贴它操作的表；横滚交给内部 .t-scroll。 -->
@@ -120,7 +128,7 @@ const stateText = taskStateLabel
               <td class="muted nowrap">{{ fmtDateTime(t.started_at) }}</td>
               <td class="nowrap">
                 <button class="btn-sm" @click.stop="open(t)"><Icon name="terminal" :size="14" /> 输出</button>
-                <button v-if="isLive(t)" class="btn-ghost btn-sm danger" @click.stop="cancel(t)">取消</button>
+                <button v-if="isLive(t) && canCancel" class="btn-ghost btn-sm danger" title="取消任务" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
             <tr v-if="!tasks.length"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>

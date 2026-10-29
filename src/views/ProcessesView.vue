@@ -122,7 +122,7 @@ const ACTION_META: Record<ProcAction, { label: string; title: string; danger: bo
 /** 发信号能力与列表能力**分流**：/proc 人人可读，向他人进程发信号却要 euid 0。
  *  后端 processes::kill 有同口径的 PROCESS_SIGNAL 门（缺位即 501），
  *  所以这里置灰是"双方合同"，不再是前端单方面的承诺。 */
-const canSignal = computed(() => auth.supported(CAP.PROCESS_SIGNAL))
+const canSignal = computed(() => auth.enabled(CAP.PROCESS_SIGNAL, 'system.manage'))
 
 const killTarget = ref<Proc | null>(null)
 const action = ref<ProcAction>('term')
@@ -179,7 +179,7 @@ async function doKill() {
       <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
       <!-- 能看不能杀：进程列表来自 /proc（人人可读），发信号才要特权，故这里
            不是整页置灰，而是只收掉三个操作按钮并说明原因。 -->
-      <p v-if="!canSignal" class="note">当前环境不支持向进程发送信号（{{ auth.capabilities[CAP.PROCESS_SIGNAL]?.reason ?? '未知原因' }}）：进程列表仍可查看，但无法结束 / 重载进程</p>
+      <p v-if="!canSignal" class="note">无法向进程发送信号（{{ auth.whyDisabled(CAP.PROCESS_SIGNAL, 'system.manage') ?? '未知原因' }}）：进程列表仍可查看，但无法结束 / 重载进程</p>
 
       <div v-if="loading" class="skeleton box" />
       <div v-else class="card flush procs-card">

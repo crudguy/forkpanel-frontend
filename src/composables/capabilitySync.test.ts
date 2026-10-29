@@ -82,8 +82,8 @@ describe('整页置灰点（P1-22：后端无同口径 501 时置灰即单方面
 describe('按钮置灰点（P2-5：PROCESS_SIGNAL 与 PROCESS_LIST 分流）', () => {
   const p = prod('../views/ProcessesView.vue')
 
-  it('三个信号按钮读的是 PROCESS_SIGNAL（不是列表那一位）', () => {
-    exactly(p, 'supported(CAP.PROCESS_SIGNAL)', 1, 'ProcessesView.canSignal')
+  it('三个信号按钮读的是 PROCESS_SIGNAL + system.manage（后端双门）', () => {
+    exactly(p, "enabled(CAP.PROCESS_SIGNAL, 'system.manage')", 1, 'ProcessesView.canSignal')
   })
 
   it('三个按钮全部受 canSignal 约束（漏一个＝那一路仍可点、点了吃 501）', () => {

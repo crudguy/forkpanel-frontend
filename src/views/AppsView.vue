@@ -389,16 +389,21 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
               </label>
             </td>
             <td class="app-acts-cell">
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '先启用托管才能启动' : '启动'"
+              <button class="btn-ghost btn-sm" :disabled="!canManage || !a.enabled || busyId === a.id"
+                :title="!canManage ? '无 service.manage 权限' : (!a.enabled ? '先启用托管才能启动' : '启动')"
                 @click="act(a, 'start')"><Icon name="play" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '应用未托管，无法停止' : '停止'"
+              <button class="btn-ghost btn-sm" :disabled="!canManage || !a.enabled || busyId === a.id"
+                :title="!canManage ? '无 service.manage 权限' : (!a.enabled ? '应用未托管，无法停止' : '停止')"
                 @click="act(a, 'stop')"><Icon name="stop" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="!a.enabled || busyId === a.id" :title="!a.enabled ? '先启用托管才能重启' : '重启'"
+              <button class="btn-ghost btn-sm" :disabled="!canManage || !a.enabled || busyId === a.id"
+                :title="!canManage ? '无 service.manage 权限' : (!a.enabled ? '先启用托管才能重启' : '重启')"
                 @click="act(a, 'restart')"><Icon name="refresh" :size="13" /></button>
-              <button class="btn-ghost btn-sm" :disabled="busyId === a.id" title="编辑" @click="openEdit(a)">
+              <button class="btn-ghost btn-sm" :disabled="!canManage || busyId === a.id"
+                :title="canManage ? '编辑' : '无 service.manage 权限'" @click="openEdit(a)">
                 <Icon name="edit" :size="13" />
               </button>
-              <button class="btn-ghost btn-sm" :disabled="busyId === a.id" title="删除" @click="askRemove(a)">
+              <button class="btn-ghost btn-sm" :disabled="!canManage || busyId === a.id"
+                :title="canManage ? '删除' : '无 service.manage 权限'" @click="askRemove(a)">
                 <Icon name="trash" :size="13" />
               </button>
             </td>

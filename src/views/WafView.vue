@@ -254,6 +254,8 @@ function togglePick(id: number) {
 }
 async function doApplyTpl() {
   const t = applyTpl.value; if (!t) return
+  // 只读账号：按钮已置灰，这里再兜一道，防止程序化调用绕过
+  if (!canApply.value) return
   const targets = sites.value.filter(s => applyPicks.value.has(s.id))
   applyBusy.value = true
   let ok = 0; let failMsg = ''
@@ -474,7 +476,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
                 {{ (t.ip_deny ?? []).length ? (t.ip_deny ?? []).join(', ') : '—' }}
               </td>
               <td class="acts">
-                <button class="btn-ghost btn-sm" :disabled="!sites.length" title="套用到站点" @click="openApplyTpl(t)">套用</button>
+                <button class="btn-ghost btn-sm" :disabled="!canApply || !sites.length" :title="canApply ? '套用到站点' : '无 site.manage 权限或 Web 服务器不可用'" @click="openApplyTpl(t)">套用</button>
                 <button v-if="canManage" class="btn-ghost btn-sm" @click="openEditTpl(t)">编辑</button>
                 <button v-if="canManage" class="btn-ghost btn-sm danger" @click="delTpl = t">删除</button>
               </td>
@@ -670,7 +672,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" @click="applyTpl = null" :disabled="applyBusy">取消</button>
-            <button class="btn-primary" :disabled="applyBusy || !applyPicks.size" @click="doApplyTpl">
+            <button class="btn-primary" :disabled="!canApply || applyBusy || !applyPicks.size" @click="doApplyTpl">
               {{ applyBusy ? '套用中…' : `套用到 ${applyPicks.size} 个站点` }}
             </button>
           </div>

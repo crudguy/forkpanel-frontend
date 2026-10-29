@@ -16,6 +16,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { fmtDateTime, notifLevelLabel } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
+import { useAuthStore } from '@/stores/auth'
 
 interface NotificationItem {
   id: number
@@ -27,6 +28,7 @@ interface NotificationItem {
   read: boolean
 }
 
+const auth = useAuthStore()
 const items = ref<NotificationItem[]>([])
 const unread = ref(0)
 const { loading, error, run } = useAsync()
@@ -112,7 +114,7 @@ onMounted(load)
         <p v-if="n.body" class="body">{{ n.body }}</p>
         <div class="row-actions">
           <button v-if="!n.read" class="btn-ghost btn-sm" @click="markRead(n)">标记已读</button>
-          <button class="btn-ghost btn-sm danger" @click="delTarget = n">删除</button>
+          <button v-if="auth.can('system.manage')" class="btn-ghost btn-sm danger" title="删除通知（需 system.manage）" @click="delTarget = n">删除</button>
         </div>
       </li>
     </ul>
