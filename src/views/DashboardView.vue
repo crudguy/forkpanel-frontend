@@ -197,6 +197,19 @@ const loadTone = computed<MetricTone>(() => {
   return l > 4 ? 'danger' : l > 2 ? 'warn' : 'load'
 })
 
+// ── 模块入口（2026-10-29 概览 Hub）──
+// 按侧栏 6 组里的前 5 个业务域给「一键直达」；「系统」组属低频管理，不占首屏。
+// 只回答「去哪」（静态职责说明），「好不好」交给下方「运行状态」实时磁贴——分工不重复。
+// 门控与侧栏同口径（whyDisabled === null）：不可达的模块整卡隐藏，避免「点过去才发现 501」。
+const MODULES: { to: string; label: string; hint: string; icon: string; cap: string; perm: string }[] = [
+  { to: '/system', label: '监控', hint: '实时趋势 · 进程 · 快照', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view' },
+  { to: '/services', label: '服务', hint: '软件包 · systemd · 应用', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view' },
+  { to: '/databases', label: '数据', hint: '数据库 · 容器 · 备份 · 文件', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view' },
+  { to: '/firewall', label: '安全', hint: '防火墙 · 公网暴露', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.manage' },
+  { to: '/logs', label: '运维', hint: '日志 · 任务 · 终端', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view' },
+]
+const modules = computed(() => MODULES.filter(m => auth.whyDisabled(m.cap, m.perm) === null))
+
 // ── 运行状态总览（替换原"快捷入口"导航网格：侧边栏已覆盖导航，这里改呈真实状态）──
 const svc = ref<{ total: number; active: number; failed: number; ok: boolean }>({ total: 0, active: 0, failed: 0, ok: false })
 const ct = ref<{ total: number; running: number; ok: boolean }>({ total: 0, running: 0, ok: false })
@@ -412,7 +425,22 @@ onUnmounted(() => { es?.close() })
         <RouterLink to="/system/procs" class="btn-ghost btn-sm">查看占用进程</RouterLink>
       </div>
 
-      <!-- 运行状态总览（替换原快捷入口：导航由侧边栏承担，这里呈真实状态） -->
+            <!-- 模块入口（2026-10-29 概览 Hub）：5 个业务域一键直达，与侧栏分组同构。
+           轻量卡片（比下方状态磁贴更矮），只回答「去哪」；实时状态仍由「运行状态」承载。 -->
+      <section v-if="modules.length" class="card">
+        <div class="sec-head"><Icon name="bolt" :size="16" /><span>模块入口</span></div>
+        <div class="mod-grid">
+          <RouterLink v-for="m in modules" :key="m.to" :to="m.to" class="mod-card">
+            <span class="mod-ico"><Icon :name="m.icon" :size="18" /></span>
+            <span class="mod-body">
+              <span class="mod-name">{{ m.label }}</span>
+              <span class="mod-hint">{{ m.hint }}</span>
+            </span>
+          </RouterLink>
+        </div>
+      </section>
+
+<!-- 运行状态总览（替换原快捷入口：导航由侧边栏承担，这里呈真实状态） -->
       <section class="card">
         <div class="sec-head"><Icon name="gauge" :size="16" /><span>运行状态</span></div>
         <!-- P1-20：部分磁贴抓取失败时给出原因与重试（与指标卡 ovError 同范式）；
@@ -560,6 +588,23 @@ onUnmounted(() => { es?.close() })
            border: 1px solid var(--c-danger); border-radius: 10px;
            background: var(--c-danger-soft); color: var(--c-danger); font-size: var(--fs-13-5); }
 .hot-tip span { flex: 1; }
+
+/* 模块入口：5 个业务域的一键直达。比「运行状态」磁贴更矮更轻——
+   它只承载「去哪」，不承载状态，避免与下方实时磁贴抢视觉权重。 */
+.mod-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; }
+.mod-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--c-border); background: var(--c-surface-2);
+  text-decoration: none; color: var(--c-text);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.mod-card:hover { transform: translateY(-2px); border-color: var(--c-border-strong); box-shadow: var(--shadow); }
+.mod-ico { flex: none; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--c-primary-soft); color: var(--c-primary); }
+.mod-body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.mod-name { font-size: var(--fs-13-5); font-weight: 600; }
+.mod-hint { font-size: var(--fs-12); color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── A1 个性化：卡片拖拽与设置弹窗 ── */
 .card-drag { cursor: grab; }
