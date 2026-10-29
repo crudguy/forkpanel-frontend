@@ -270,6 +270,9 @@ function toggleFollow() {
 }
 
 onMounted(loadSources)
+// 卸载即断开 SSE 与节流定时器：实时跟随状态下切页/切 Tab 时，旧实例不释放会
+// 一直保留一条 EventSource（后端对应一条 journalctl 跟随进程），属无界泄漏。
+onUnmounted(() => { closeStream(); loadSeq++ })
 // 切源：跟随中重开流，否则重新拉取
 watch(cur, () => { if (follow.value) openStream(); else load() })
 // A8：改级别 / 时间筛选 → 重新拉取（筛选条件一并带进 stats 与 stream，口径一致）
