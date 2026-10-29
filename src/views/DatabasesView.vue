@@ -592,6 +592,7 @@ async function exportCsv() {
     <SqlConsole v-if="sqlConn" :conn="sqlConn" @close="sqlConn = null" />
 
     <!-- 恢复弹窗（高危）：确认词与备份恢复同源（「覆盖恢复」） -->
+    <Teleport to="body">
     <div v-if="restoreTarget" class="mask" @click.self="closeRestore">
       <div ref="restoreBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -628,8 +629,10 @@ async function exportCsv() {
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 编辑连接弹窗：username/password 不回显 → 留空=不修改 -->
+    <Teleport to="body">
     <div v-if="editTarget" class="mask" @click.self="editTarget = null">
       <div class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -672,6 +675,7 @@ async function exportCsv() {
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 删除连接确认（仅删面板登记，不动真实库/文件） -->
     <ConfirmDialog v-if="delTarget" :open="!!delTarget" danger title="删除数据库连接"

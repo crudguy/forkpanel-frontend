@@ -416,6 +416,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     </div>
 
     <!-- 新建 / 编辑弹窗 -->
+    <Teleport to="body">
     <div v-if="modalOpen" class="mask" @click.self="modalClose">
       <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -573,6 +574,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         </div>
       </div>
     </div>
+    </Teleport>
 
     <DirectoryPickerDialog :open="pickerOpen" :mode="pickerMode" :initial-path="pickerInitialPath"
       @select="onPick" @cancel="pickerOpen = false" />

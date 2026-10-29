@@ -200,6 +200,7 @@ onMounted(() => { if (canManage.value) load() })
     </template>
 
     <!-- 新建 / 编辑弹窗 -->
+    <Teleport to="body">
     <div v-if="showModal" class="mask" @click.self="closeUserModal">
       <div ref="userBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -246,6 +247,7 @@ onMounted(() => { if (canManage.value) load() })
         </div>
       </div>
     </div>
+    </Teleport>
 
     <ConfirmDialog :open="!!delTarget" danger title="删除用户"
       :detail="delTarget ? `将删除 ${delTarget.username}（${delTarget.role}），其登录会话会立即失效。` : ''"

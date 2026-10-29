@@ -235,6 +235,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     </HelpDrawer>
 
     <!-- 申请证书弹窗 -->
+    <Teleport to="body">
     <div v-if="sslModal" class="mask" @click.self="closeSslModal">
       <div ref="sslBox" class="modal" role="dialog" aria-modal="true" aria-label="申请证书">
         <div class="modal-head">
@@ -270,8 +271,10 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 删除确认 -->
+    <Teleport to="body">
     <div v-if="delCert" class="mask" @click.self="closeDelCert">
       <div ref="delBox" class="modal" role="dialog" aria-modal="true" aria-label="删除证书">
         <div class="modal-head">
@@ -290,6 +293,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

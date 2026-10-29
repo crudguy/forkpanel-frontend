@@ -594,6 +594,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
     <!-- ── 以下浮层一律放链尾：不得插在 v-if / v-else 链中间，也不得嵌进别的浮层 v-if 块内 ── -->
 
     <!-- 模板 新建 / 编辑 -->
+    <Teleport to="body">
     <div v-if="tplModalOpen" class="mask" @click.self="tplModalOpen = false">
       <div class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -645,8 +646,10 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 模板套用到站点 -->
+    <Teleport to="body">
     <div v-if="applyTpl" class="mask" @click.self="applyTpl = null">
       <div class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -680,6 +683,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- 删除模板确认（低危：仅移除预设，不影响已套用站点） -->
     <ConfirmDialog v-if="delTpl" :open="!!delTpl" danger title="删除策略模板"

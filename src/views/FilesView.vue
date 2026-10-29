@@ -745,6 +745,7 @@ function full(p: string) {
       @confirm="confirmBatchDel = false; runBatch('trash')" @cancel="confirmBatchDel = false" />
 
     <!-- 通用输入弹窗（新建文件夹 / 重命名 / 权限 / 批量目标） -->
+    <Teleport to="body">
     <div v-if="ask" class="mask" @click.self="closeAsk">
       <div ref="askBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -764,6 +765,7 @@ function full(p: string) {
         </div>
       </div>
     </div>
+    </Teleport>
 
     <TrashPanel v-if="showTrash" @close="showTrash = false" @changed="load()" />
 
