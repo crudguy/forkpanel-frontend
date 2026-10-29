@@ -115,8 +115,9 @@ router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
   const auth = useAuthStore()
   if (!auth.loggedIn) {
-    try { await auth.loadMe() } catch { return { name: 'login' } }
-    if (!auth.loggedIn) return { name: 'login' }
+    // 带 redirect：登录后回到原本要去的页面（深链 / 会话过期不再一律落概览）
+    try { await auth.loadMe() } catch { return { name: 'login', query: { redirect: to.fullPath } } }
+    if (!auth.loggedIn) return { name: 'login', query: { redirect: to.fullPath } }
   }
   return true
 })

@@ -9,7 +9,7 @@
  *   令牌由 `panel serve` 首启打印到服务器终端（一次性、30 分钟）。
  */
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
@@ -18,6 +18,7 @@ import { generateStrongPassword, passwordPolicyOk } from '@/utils/password'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 // checking：status 查询中；bootstrap：首启向导；done：建号成功待登录
 const mode = ref<'checking' | 'login' | 'bootstrap' | 'done'>('checking')
@@ -43,13 +44,19 @@ const needTotp = ref(false)
 const error = ref('')
 const busy = ref(false)
 
+/** 登录后回跳：只接受站内绝对路径，拒绝 //evil.com 与 http(s):// 外链 */
+function safeRedirect(v: unknown): string {
+  const s = typeof v === 'string' ? v : ''
+  return s.startsWith('/') && !s.startsWith('//') ? s : '/'
+}
+
 async function submit() {
   if (busy.value) return
   busy.value = true
   error.value = ''
   try {
     await auth.login(username.value, password.value, needTotp.value ? totp.value : undefined)
-    await router.replace('/')
+    await router.replace(safeRedirect(route.query.redirect))
   } catch (e) {
     const code = (e as { code?: number }).code
     if (code === 10010) {
