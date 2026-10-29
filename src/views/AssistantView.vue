@@ -25,7 +25,8 @@ const canOpen = computed(() => auth.can('system.view'))
  *  （纯前端偏好增强），但带上页面名用户更容易把问题说清、关键词路由也更准。 */
 const ctxPage = computed(() => {
   const c = typeof route.query.ctx === 'string' ? route.query.ctx.trim() : ''
-  return c && c !== 'AI 助手' ? c : ''
+  // 只接受顶栏传的页面标题：截断长度，避免任意链接注入超长文本 / 指令前缀
+  return c && c !== 'AI 助手' ? c.slice(0, 40) : ''
 })
 function askAboutPage() {
   if (ctxPage.value) ask(`解释一下「${ctxPage.value}」这个页面：它负责什么、常见问题有哪些`)
@@ -48,11 +49,11 @@ async function ask(q: string) {
   turns.value.push(turn)
   try {
     turn.report = await api.post<AssistantReport>(API.assistant.diagnose(), { question: text })
+    question.value = ''   // 成功才清空：失败时保留问题，用户可直接重试
   } catch (e) {
     turn.err = errorText(e)
   } finally {
     busy.value = false
-    question.value = ''
   }
 }
 

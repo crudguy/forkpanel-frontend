@@ -47,14 +47,17 @@ async function load() {
   })
 }
 
+const markingId = ref<number | null>(null)
 async function markRead(n: NotificationItem) {
+  if (n.read || markingId.value === n.id) return   // 防连点重复 POST / 未读数多减
+  markingId.value = n.id
   try {
     await api.post(API.notifications.markRead(n.id))
     n.read = true
     unread.value = Math.max(0, unread.value - 1)
   } catch (e) {
     error.value = errorText(e)
-  }
+  } finally { markingId.value = null }
 }
 
 async function readAll() {
@@ -113,7 +116,7 @@ onMounted(load)
         </div>
         <p v-if="n.body" class="body">{{ n.body }}</p>
         <div class="row-actions">
-          <button v-if="!n.read" class="btn-ghost btn-sm" @click="markRead(n)">标记已读</button>
+          <button v-if="!n.read" class="btn-ghost btn-sm" :disabled="markingId === n.id" @click="markRead(n)">标记已读</button>
           <button v-if="auth.can('system.manage')" class="btn-ghost btn-sm danger" title="删除通知（需 system.manage）" @click="delTarget = n">删除</button>
         </div>
       </li>
@@ -146,5 +149,6 @@ onMounted(load)
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tag { font-size: var(--fs-12); opacity: .7; }
 .time { font-size: var(--fs-12); opacity: .6; margin-left: auto; }
-.body { margin: 6px 0; white-space: pre-wrap; font-size: var(--fs-13); opacity: .85; }
+.body { margin: 6px 0; white-space: pre-wrap; font-size: var(--fs-13); opacity: .85;
+  overflow-wrap: anywhere; word-break: break-word; }
 </style>

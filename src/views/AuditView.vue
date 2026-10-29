@@ -132,7 +132,7 @@ function toggle(i: number) { expanded.value = expanded.value === i ? null : i }
 
 function fmt(ts?: number) { return fmtDateTime(ts) }
 function resClass(r: string) {
-  if (r === 'ok') return 'b-ok'
+  if (r === 'ok' || r === 'changed') return 'b-ok'
   if (r === 'queued') return 'b-wait'
   if (r === 'denied' || r === 'error' || r === 'fail') return 'b-bad'
   return ''
@@ -164,6 +164,9 @@ onMounted(load)
           <option value="queued">queued</option>
           <option value="denied">denied</option>
           <option value="error">error</option>
+          <option value="changed">changed</option>
+          <option value="unchanged">unchanged</option>
+          <option value="fail">fail</option>
         </select>
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
         <label class="dt">起始<input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限）" /></label>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, roleLabel } from '@/api/types'
@@ -56,11 +56,10 @@ async function load() {
       users.value = (await api.get<UserOut[]>(API.users.list())) ?? []
     },
     (e) => {
-      const t = errorText(e)
-      // 仅当后端真正返回 unsupported（如能力未开通）才降级为「即将推出」；
-      // 标准宿主上 GET /users 返回数组，用户管理完整可用（users.rs 已完整实现）。
-      if (t.includes('尚未接入') || t.includes('M5')) notReady.value = true
-      else error.value = t
+      // 判结构化错误码，不判中文文案：errorText 的措辞一改（10009 已统一成
+      // 「当前环境未接入该能力…」），字符串匹配就会静默失效。
+      if (isUnsupported(e)) notReady.value = true
+      else error.value = errorText(e)
     },
   )
 }

@@ -16,8 +16,10 @@ const route = useRoute()
 const router = useRouter()
 
 function back() {
-  // 没有历史时（直接粘贴地址进来）退回概览
-  if (window.history.length > 1) router.back()
+  // `window.history.length` 统计的是整个标签页（从外站点进来也 >1），会把用户退回外站。
+  // 只看 router 自己记录的上一页：为空才退回概览。
+  const prev = (router.options.history.state as { back?: string | null } | undefined)?.back
+  if (prev) router.back()
   else void router.push('/')
 }
 </script>
