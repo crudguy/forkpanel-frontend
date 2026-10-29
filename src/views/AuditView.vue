@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, auditResultLabel, fmtDateTime } from '@/api/types'
+import { CAP, AUDIT_RESULT_KEYS, auditResultLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -160,13 +160,7 @@ onMounted(load)
         </datalist>
         <select v-model="f.result">
           <option value="">全部结果</option>
-          <option value="ok">ok</option>
-          <option value="queued">queued</option>
-          <option value="denied">denied</option>
-          <option value="error">error</option>
-          <option value="changed">changed</option>
-          <option value="unchanged">unchanged</option>
-          <option value="fail">fail</option>
+          <option v-for="r in AUDIT_RESULT_KEYS" :key="r" :value="r">{{ auditResultLabel(r) }}</option>
         </select>
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
         <label class="dt">起始<input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限）" /></label>

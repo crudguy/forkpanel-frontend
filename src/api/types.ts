@@ -954,6 +954,9 @@ export const auditResultLabel = enumLabel({
   queued: '已入队', denied: '已拒绝', error: '出错', fail: '失败',
 })
 
+/** 审计结果的可选键（与 auditResultLabel 的键一一对应；下拉选项由此生成，避免前后端漂移） */
+export const AUDIT_RESULT_KEYS = ['ok', 'changed', 'unchanged', 'queued', 'denied', 'error', 'fail'] as const
+
 /** 内置角色。 */
 export const roleLabel = enumLabel({
   owner: '拥有者', admin: '管理员', operator: '操作员', viewer: '只读',
