@@ -57,6 +57,8 @@ async function load() {
 }
 
 const canManage = computed(() => auth.enabled(CAP.FIREWALL_MANAGE, 'firewall.manage'))
+/** fail2ban 按钮的门控：后端只要求 firewall.manage 权限 + FAIL2BAN 能力（后者由区块 v-if 保证） */
+const canF2b = computed(() => auth.can('firewall.manage'))
 /** 是否成功读到过真实状态：失败时不能把「未知」渲染成「未启用」（会诱导用户去点启用） */
 const loaded = ref(false)
 
@@ -293,48 +295,50 @@ onMounted(() => { load(); loadFail2ban() })
         </template>
       </EmptyState>
 
-      <!-- fail2ban 入侵防御：独立能力位 fail2ban.manage 门控（nftables 下恒不支持）；未装时 f2b.available=false 走空态 -->
-      <section class="card f2b" v-if="auth.supported(CAP.FAIL2BAN)">
-        <div class="sec-head"><Icon name="shield" :size="16" /> fail2ban 入侵防御
-          <span v-if="f2b" class="badge" :class="f2b.active ? 'badge-ok' : 'badge-dim'">{{ f2b.active ? '运行中' : '未运行' }}</span>
-        </div>
+    </template>
 
-        <p v-if="f2bError" class="err" role="alert">{{ f2bError }}</p>
+    <!-- fail2ban 入侵防御：独立能力位 fail2ban.manage 门控（nftables 下恒不支持）；未装时 f2b.available=false 走空态。
+         必须在「防火墙不支持」的 v-else 之外——它是独立能力位，不能让防火墙后端缺失把它一起隐藏。 -->
+    <section class="card f2b" v-if="auth.supported(CAP.FAIL2BAN)">
+      <div class="sec-head"><Icon name="shield" :size="16" /> fail2ban 入侵防御
+        <span v-if="f2b" class="badge" :class="f2b.active ? 'badge-ok' : 'badge-dim'">{{ f2b.active ? '运行中' : '未运行' }}</span>
+      </div>
 
-        <template v-if="f2b && f2b.available">
-          <p v-if="!f2b.jails.length" class="tip">尚未启用任何 jail。安装 fail2ban 后通常需在 <code>jail.local</code> 中启用具体服务（如 sshd）才会开始监控。</p>
-          <div v-else class="f2b-list">
-            <div class="f2b-jail" v-for="j in f2b.jails" :key="j.name">
-              <div class="f2b-jail-head">
-                <span class="mono f2b-name">{{ j.name }}</span>
-                <span class="f2b-stats dim">失败 {{ j.currently_failed }} / 累计 {{ j.total_failed }} · 封禁 {{ j.banned }}</span>
-                <span class="spacer" />
-                <label class="switch-row">
-                  <span class="switch">
-                    <input type="checkbox" :checked="j.enabled" :disabled="!canManage || jailBusy === j.name"
-                      @change="toggleJail(j, $event)" /><i />
-                  </span>
-                </label>
-              </div>
-              <div class="f2b-ips" v-if="j.banned_ips.length">
-                <span class="dim tiny">已封禁：</span>
-                <span class="ip-chip" v-for="ip in j.banned_ips" :key="ip">
-                  <span class="mono">{{ ip }}</span>
-                  <button class="ip-x" type="button" :disabled="!canManage || unbanBusy === `${j.name}|${ip}`"
-                    :title="`解封 ${ip}`" @click="unban(j.name, ip)">
-                    <Icon name="close" :size="12" />
-                  </button>
+      <p v-if="f2bError" class="err" role="alert">{{ f2bError }}</p>
+
+      <template v-if="f2b && f2b.available">
+        <p v-if="!f2b.jails.length" class="tip">尚未启用任何 jail。安装 fail2ban 后通常需在 <code>jail.local</code> 中启用具体服务（如 sshd）才会开始监控。</p>
+        <div v-else class="f2b-list">
+          <div class="f2b-jail" v-for="j in f2b.jails" :key="j.name">
+            <div class="f2b-jail-head">
+              <span class="mono f2b-name">{{ j.name }}</span>
+              <span class="f2b-stats dim">失败 {{ j.currently_failed }} / 累计 {{ j.total_failed }} · 封禁 {{ j.banned }}</span>
+              <span class="spacer" />
+              <label class="switch-row">
+                <span class="switch">
+                  <input type="checkbox" :checked="j.enabled" :disabled="!canF2b || jailBusy === j.name"
+                    @change="toggleJail(j, $event)" /><i />
                 </span>
-              </div>
+              </label>
+            </div>
+            <div class="f2b-ips" v-if="j.banned_ips.length">
+              <span class="dim tiny">已封禁：</span>
+              <span class="ip-chip" v-for="ip in j.banned_ips" :key="ip">
+                <span class="mono">{{ ip }}</span>
+                <button class="ip-x" type="button" :disabled="!canF2b || unbanBusy === `${j.name}|${ip}`"
+                  :title="`解封 ${ip}`" @click="unban(j.name, ip)">
+                  <Icon name="close" :size="12" />
+                </button>
+              </span>
             </div>
           </div>
-        </template>
+        </div>
+      </template>
 
-        <EmptyState v-else-if="f2b && !f2b.available" title="未检测到 fail2ban"
-          hint="本机未安装 fail2ban-client，无法在此管理入侵封禁。装好后刷新即可。" />
-        <p v-else-if="f2bBusy" class="tip">加载中…</p>
-      </section>
-    </template>
+      <EmptyState v-else-if="f2b && !f2b.available" title="未检测到 fail2ban"
+        hint="本机未安装 fail2ban-client，无法在此管理入侵封禁。装好后刷新即可。" />
+      <p v-else-if="f2bBusy" class="tip">加载中…</p>
+    </section>
 
     <ConfirmDialog :open="confirmOff" danger title="关闭防火墙"
       detail="关闭后面板创建的所有放行规则将不再生效，正在放行的端口（含 SSH）会随后端策略变化，可能导致无法远程连接。请确认你了解此操作的后果。"
