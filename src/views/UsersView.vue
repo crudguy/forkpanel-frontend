@@ -53,7 +53,7 @@ async function load() {
     async () => {
       notReady.value = false
       // 后端 GET /users 返回**裸数组** UserOut[]（不是包装对象）
-      users.value = await api.get<UserOut[]>(API.users.list())
+      users.value = (await api.get<UserOut[]>(API.users.list())) ?? []
     },
     (e) => {
       const t = errorText(e)

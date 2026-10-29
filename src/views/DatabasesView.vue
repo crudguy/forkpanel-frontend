@@ -187,22 +187,25 @@ async function saveRemark(c: Conn, v: string) {
 
 // ── 恢复（高危，覆盖当前库）──
 const restoreTarget = ref<Conn | null>(null)
+/** 恢复弹窗内的错误位：失败必须显示在遮罩之内，页面级 error 会被 .mask 挡住 */
+const restoreError = ref('')
 const restoreForm = ref({ file: '', confirm: '' })
 
 function openRestore(c: Conn) {
   error.value = ''
   restoreForm.value = { file: '', confirm: '' }
+  restoreError.value = ''
   restoreTarget.value = c
 }
 
 // 恢复弹窗统一行为：Esc 关闭 + 焦点陷阱（审计 U1）
 const restoreBox = ref<HTMLElement | null>(null)
 // 统一关闭出口：X / 点遮罩 / 取消按钮 / Esc 都走它（离场动画 + 焦点返还）
-const { close: closeRestore } = useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = null })
+const { close: closeRestore } = useModal(() => !!restoreTarget.value, restoreBox, () => { restoreTarget.value = null; restoreError.value = '' })
 
 async function doRestore() {
   const c = restoreTarget.value; if (!c) return
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; restoreError.value = ''
   try {
     const r = await api.post<{ task_id?: number }>(API.db.restore(c.id), {
       file: restoreForm.value.file.trim(),
@@ -210,7 +213,7 @@ async function doRestore() {
     })
     toast(r.task_id ? `已提交恢复任务 #${r.task_id}（请在任务面板查看）` : '恢复完成')
     restoreTarget.value = null
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { restoreError.value = errorText(e) }
   finally { busy.value = false }
 }
 
@@ -584,6 +587,9 @@ async function exportCsv() {
           <Icon name="alert" :size="14" class="ic" />
           <span>将用指定备份文件<b>覆盖当前库</b>，恢复过程中库不可用。仅支持
             SQLite 立即恢复；文件必须位于文件管理允许根内。</span>
+        </p>
+        <p v-if="restoreError" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ restoreError }}</span>
         </p>
         <label class="blk">备份文件路径
           <input v-model="restoreForm.file" placeholder="/backups/myapp-2026.sql" />

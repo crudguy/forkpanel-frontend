@@ -352,7 +352,10 @@ async function restoreFrom() {
     toast(`恢复任务已提交（${r.task_id}）。可在「任务中心」查看进度；如需回滚，任务详情里的 output_path 指向恢复前的快照。`)
     restoreConfirm.value = null
   } catch (e) {
-    error.value = errorText(e)
+    // 失败也要关框：ConfirmDialog 在 emit 前已清空确认词，若继续开着，错误又被遮罩
+    // 挡住，用户只会看到「点了没反应」。改为关框 + 全局 toast。
+    restoreConfirm.value = null
+    toast(`恢复失败：${errorText(e)}`, 'err')
   } finally {
     busy.value = false
   }

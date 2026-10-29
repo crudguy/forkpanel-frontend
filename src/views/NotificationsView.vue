@@ -39,9 +39,9 @@ function fmt(ts: number): string {
 
 async function load() {
   await run(async () => {
-    items.value = await api.get<NotificationItem[]>(API.notifications.list(), {
+    items.value = (await api.get<NotificationItem[]>(API.notifications.list(), {
       params: { limit: 100 },
-    })
+    })) ?? []
     const r = await api.get<{ count: number }>(API.notifications.unreadCount())
     unread.value = r.count
   })

@@ -31,7 +31,7 @@ async function load(silent = false) {
     // r 已是拆信封后的裸数组 ProcessInfo[]（client.ts 自动取 body.data）；
     // 原 Array.isArray(r) ? r : r.processes 分支是旧信封时代的死代码，删去。
     const r = await api.get<ProcessInfo[]>(API.processes.list(), { params: { limit: 0, sort: 'cpu' } })
-    procs.value = r
+    procs.value = r ?? []
     // 仅手动刷新/首次加载才清错误：轮询失败不该让常驻的表格抖动，
     // 但也不能把错误静默吞掉——下一轮成功即自愈。
     if (!silent) { error.value = ''; pending.value = '' }
