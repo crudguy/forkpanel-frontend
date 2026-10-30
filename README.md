@@ -3,6 +3,12 @@
 **技术栈**：Vue 3 `<script setup>` + TypeScript + Vite 6 + Pinia + vue-router 4
 **形态**：构建期产出 `dist/`（带内容哈希），由后端（`panel-backend`）编译期内嵌进单文件二进制，运行期零 Node 依赖。
 
+> **分发与安装不在本仓库**：面板以单文件二进制分发（已内嵌本仓库 `dist/`），安装 / 升级由
+> 后端仓库的 [`get-panel.sh`](https://github.com/crudguy/forkpanel-backend/blob/main/deploy/get-panel.sh)
+> 一键完成。该 CLI 安装器现已支持**下载进度条（ETA）**与**断点续传**；完整说明见后端
+> [`README.md`](https://github.com/crudguy/forkpanel-backend) 与
+> [`docs/distribution.md`](https://github.com/crudguy/forkpanel-backend/blob/main/docs/distribution.md)。
+
 ---
 
 ## 本仓库职责（与后端彻底分离）
