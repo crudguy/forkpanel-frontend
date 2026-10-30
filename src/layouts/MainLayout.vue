@@ -9,6 +9,7 @@ import Icon from '@/components/Icon.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
+import { sysBadgeTip } from '@/composables/sysBadge'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
 import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
@@ -185,15 +186,9 @@ onMounted(onHealthTick)
 
 const hpct = (x: number) => Math.min(100, Math.max(2, x)) + '%'
 const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')
-const healthTip = computed(() => {
-  const h = health.value
-  if (!h) return '系统健康（点击查看概览）'
-  const p = auth.platform
-  const host = p ? `${p.distro || p.os} · ${p.arch}` : ''
-  const d = Math.floor(h.uptime / 86400), hr = Math.floor((h.uptime % 86400) / 3600)
-  const up = h.uptime >= 86400 ? `${d} 天 ${hr} 小时` : `${hr} 小时`
-  return `CPU ${h.cpu.toFixed(1)}% · 内存 ${h.mem.toFixed(1)}% · 磁盘 ${h.disk.toFixed(1)}%\n${host} · 已运行 ${up}｜点击查看概览`
-})
+// 合并胶囊（原 A12 健康徽标 + 系统信息胶囊）：tooltip 文案唯一源在 composables/sysBadge.ts，
+// 两种形态（有/无 metrics 读数）都在 sysBadge.test.ts 真跑断言。
+const healthTip = computed(() => sysBadgeTip(health.value, auth.platform))
 
 // 命令面板：全局 ⌘K / Ctrl+K 唤起（评估报告 A11）。即便焦点在终端输入框也照常触发，
 // 因为这是面板级快捷键，不应被页面内输入框吞掉。
@@ -232,29 +227,26 @@ function logout() {
 
         <span class="spacer" />
 
-        <!-- 系统健康徽标（A12）：CPU/内存/磁盘迷你条，点击直达概览；悬浮出完整读数与主机信息。
-             无 metrics 能力时整钮隐藏。 -->
-        <RouterLink v-if="healthOk && health" to="/" class="health" :title="healthTip">
-          <span class="hb" :class="htone(health.cpu)"><i :style="{ width: hpct(health.cpu) }" /></span>
-          <span class="hb" :class="htone(health.mem)"><i :style="{ width: hpct(health.mem) }" /></span>
-          <span class="hb" :class="htone(health.disk)"><i :style="{ width: hpct(health.disk) }" /></span>
+        <!-- 系统徽标胶囊（2026-10-30 合并自 A12 健康徽标 + 系统信息胶囊）：两枚相邻胶囊
+             重复承载同一主机信息（healthTip 里也拼了 distro·arch），视觉互相冲突。
+             合并后 = distro·arch 常驻文本 + CPU/内存/磁盘迷你条（metrics 可用时），
+             无 metrics 时退化为纯文本胶囊。tooltip 文案见 composables/sysBadge.ts。
+             点击目标取能力矩阵而非概览：#caps 深链是排障唯一入口（菜单为何置灰、
+             端点为何 501），概览在侧栏首项、指标条→概览属冗余快捷方式；
+             早年「胶囊挨着主题切换」的偏好由本次合并让位（用户裁决合并优先）。 -->
+        <RouterLink v-if="auth.platform || (healthOk && health)" to="/settings#caps" class="health" :title="healthTip">
+          <span v-if="auth.platform" class="ht">{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
+          <span v-if="healthOk && health" class="hbars">
+            <span class="hb" :class="htone(health.cpu)"><i :style="{ width: hpct(health.cpu) }" /></span>
+            <span class="hb" :class="htone(health.mem)"><i :style="{ width: hpct(health.mem) }" /></span>
+            <span class="hb" :class="htone(health.disk)"><i :style="{ width: hpct(health.disk) }" /></span>
+          </span>
         </RouterLink>
 
         <!-- 运行中任务计数（与任务中心同源）：仅在有任务时出现 -->
         <RouterLink v-if="tasksOk && runningTasks > 0" to="/cron/tasks" class="task-chip"
           :title="`${runningTasks} 个任务运行中，点击查看`">
           <Icon name="clock" :size="13" /> {{ runningTasks }}
-        </RouterLink>
-
-        <!-- 系统基础信息（从侧边栏底部移来）：distro·arch，hover 看 kernel/init 详情。
-             平台字段由 /system/capabilities 下发，loadMe 时已加载；未就绪前不渲染。
-             置于右侧簇、紧邻深色模式按钮（用户偏好：放最右、挨着主题切换）。 -->
-        <!-- 能力矩阵是排障首选信息（菜单为何置灰、端点为何 501），原先埋在设置页深处，
-             这里把胶囊做成入口一键直达（路由已配 hash 滚动，落到 #caps 锚点）。 -->
-        <RouterLink v-if="auth.platform" to="/settings#caps" class="sysinfo"
-          :title="`${auth.platform.distro || auth.platform.os}${auth.platform.kernel ? ' · ' + auth.platform.kernel : ''} · ${auth.platform.init}｜点击查看运行环境与能力矩阵`">
-          <Icon name="monitor" :size="15" />
-          <span>{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
         </RouterLink>
 
         <button class="btn-icon ghost" type="button" title="命令面板（Ctrl / ⌘ + K）" @click="paletteOpen = true">
@@ -396,23 +388,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .title-block { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 1px; }
 .subtitle { font-size: var(--fs-12); line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
 
-/* 系统基础信息胶囊：右侧状态簇的一员，紧凑、hover 出详情，点击直达能力矩阵 */
 .bell { position: relative; color: var(--c-text-dim); }
 .bell:hover { color: var(--c-text); }
 .badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
              padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: #fff;
              font-size: var(--fs-12); line-height: 17px; text-align: center; font-weight: 500;
              box-shadow: 0 0 0 2px var(--c-surface); }
-.sysinfo {
-  display: flex; align-items: center; gap: 7px; flex: none;
-  height: 34px; padding: 0 12px;
-  border: 1px solid var(--c-border); border-radius: 999px;
-  background: var(--c-bg); color: var(--c-text-dim);
-  font-size: var(--fs-12-5); white-space: nowrap; text-decoration: none;
-  transition: color .15s ease, background .15s ease;
-}
-.sysinfo:hover { color: var(--c-text); background: var(--c-hover); }
-
 .spacer { flex: 1; }
 
 .user-wrap { position: relative; }
@@ -466,14 +447,18 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    面板以表格/卡片为主，填满比"限制行长"更实用，故直接铺满可用宽度。 */
 .wrap { width: 100%; }
 
-/* ── 系统健康徽标（A12）：三条迷你指标条 + 运行中任务计数 ── */
+/* ── 系统徽标胶囊（A12 健康徽标 + 系统信息胶囊合并）：distro·arch 文本 + 三条迷你指标条 ── */
 .health {
-  display: inline-flex; flex-direction: column; justify-content: center; gap: 3px;
-  height: 34px; padding: 0 10px; flex: none;
-  border: 1px solid var(--c-border); border-radius: 10px;
-  text-decoration: none; transition: border-color .15s ease, background .15s ease;
+  display: inline-flex; align-items: center; gap: 9px; flex: none;
+  height: 34px; padding: 0 12px;
+  border: 1px solid var(--c-border); border-radius: 999px;
+  background: var(--c-bg); color: var(--c-text-dim);
+  font-size: var(--fs-12-5); text-decoration: none;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
 }
-.health:hover { border-color: var(--c-border-strong); background: var(--c-hover); }
+.health:hover { color: var(--c-text); background: var(--c-hover); border-color: var(--c-border-strong); }
+.ht { white-space: nowrap; }
+.hbars { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 .hb { width: 30px; height: 4px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
 .hb > i { display: block; height: 100%; border-radius: 999px; transition: width .4s ease; }
 .hb.ok > i { background: var(--c-ok); }
@@ -501,7 +486,6 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ai-entry:hover { background: color-mix(in srgb, var(--c-primary) 18%, transparent); border-color: var(--c-primary); }
 
 @media (max-width: 720px) {
-  .sysinfo { display: none; }
   .health { display: none; }
   /* 顶栏右侧簇在手机宽度下要装下搜索/通知/主题/用户，AI 入口退化为纯图标 */
   .ai-label { display: none; }
