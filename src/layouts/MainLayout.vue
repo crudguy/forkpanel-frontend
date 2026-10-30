@@ -78,7 +78,7 @@ const SUBTITLES: Record<string, string> = {
   cron: '平台原生调度，表达式语义由后端校验',
   'cron-tasks': '后台任务与执行进度（运行中每 2 秒自动刷新）',
   users: '面板账号与权限',
-  settings: '运行环境与能力矩阵排查',
+  settings: '面板与功能模块的配置与开关中心',
   notifications: '面板内消息 · 未读计数 · 一键全部已读',
   terminal: '内置 Web 终端（宿主级 shell）· 操作后请务必登出',
   assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',

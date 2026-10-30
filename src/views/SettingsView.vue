@@ -1,13 +1,21 @@
 <script setup lang="ts">
 /**
- * 设置页 = 运行环境排障（能力矩阵） + 面板设置（三段诚实模型）。
+ * 设置页 = 系统与功能模块的配置与开关中心（2026-10-30 重构定位）。
  *
- * 设置三段（与后端 routes/settings.rs 严格对应）：
- * - runtime：AI 助手 LLM 四键（endpoint / model / api_key / narrative 独立开关），
+ * 只保留「可编辑 / 可执行」的内容，纯只读系统信息展示全部移除：
+ * - AI 助手 LLM 接入：四键（endpoint / model / api_key / narrative 独立开关），
  *   可改即生效；api_key 经主密钥加密，后端永不明文回传。narrative 缺省关——
  *   关时后端不外发任何诊断数据（diagnose 回退纯规则报告），与未配置同路
- * - deployment：部署级配置只读展示（改 config.toml / PANEL_READ_ONLY 并重启）
- * - reserved：种子预留键未接线（wired:false），如实标注，绝不伪装成可生效
+ * - 角色与权限（RBAC）：创建/删除自定义角色；「我的权限」徽章并入本卡作参照
+ *   （创建角色的规则 = 权限必须是自身权限的子集，徽章就是那个"自身权限"）
+ * - 面板维护：重启 / 检查更新 / 执行升级（owner 门控）+ localhost_only 可达性引导
+ * - 能力矩阵（#caps）：功能模块开关状态总览（只读），topbar 系统徽标深链唯一落点
+ *
+ * 已移除的只读展示（勿复活，守卫 SettingsView.refocus.test.ts 钉住）：
+ * 运行环境卡（平台/发行版/内核/档位/用户——topbar 徽标 tooltip 已有）、
+ * 部署配置键值表、面板与安装键值表（安装落点在「系统 → 目录」页）、
+ * 预留项（未接线）卡、独立权限徽章卡。
+ * deployment / reserved 字段仍由 /settings API 下发（后端契约不动），前端只是不再渲染。
  */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -34,7 +42,7 @@ const upgradeOpen = ref(false)
 const upgrading = ref(false)
 const canCheckUpdate = computed(() => auth.can('system.manage'))
 
-// 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
+// 深链定位（topbar 系统徽标胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
 // 内容补上后锚点会被顶偏，故在数据就绪后再定位一次。
 function scrollToHash() {
@@ -54,21 +62,8 @@ const report = ref<SettingsReport | null>(null)
 const saving = ref(false)
 const formError = ref('')
 
-/**
- * 面板实际监听地址的可读标签。
- *
- * ⚠️ 只报 `localhost_only` 这一位后端事实，**不自行推断 bind**：bind 不在响应里，
- *   猜出来的值在用户改过 config.toml 后就会变成谎言。而 `localhost_only` 为真时
- *   后端是**强制**只听 127.0.0.1（会覆盖 bind）——这正是"局域网连不上"的根因，
- *   必须让用户看见，否则他只会以为面板坏了。
- */
-const listenLabel = computed(() => {
-  if (!report.value) return '-'
-  return report.value.deployment.localhost_only
-    ? '仅本机 127.0.0.1（localhost_only = true，会覆盖 bind）'
-    : '非回环地址（localhost_only = false）'
-})
-/** 安装与运行位置（只读）；旧后端缺该字段时按 null 处理，不伪造默认值。 */
+/** 安装与运行位置；旧后端缺该字段时按 null 处理，不伪造默认值。
+ *  仍被维护操作消费：can_restart / can_upgrade / 升级确认框与 waitForUpgrade 的基准版本。 */
 const installation = computed(() => report.value?.deployment.installation ?? null)
 
 // ── 首屏面板设置加载：useAsync 收敛 loading/error 状态机 ──
@@ -364,45 +359,16 @@ onMounted(async () => {
       </section>
 
       <section v-if="report" class="card">
-        <div class="sec-head"><Icon name="gear" :size="16" /> 部署配置（只读）</div>
-        <div class="kv">
-          <div class="kv-row"><span class="k">只读模式</span>
-            <code class="mono">{{ report.deployment.read_only ? '开启（PANEL_READ_ONLY=1）' : '关闭' }}</code></div>
-          <div class="kv-row"><span class="k">资源档位</span><code class="mono">{{ report.deployment.tier }}</code></div>
-          <div class="kv-row"><span class="k">监听地址</span><code class="mono">{{ listenLabel }}</code></div>
-          <div class="kv-row"><span class="k">登录失败锁定</span>
-            <code class="mono">{{ report.deployment.max_login_attempts }} 次</code></div>
-          <div class="kv-row"><span class="k">会话超时</span>
-            <code class="mono">空闲 {{ report.deployment.session_idle }} / 绝对 {{ report.deployment.session_absolute }}</code></div>
-          <div class="kv-row"><span class="k">审计保留</span>
-            <code class="mono">{{ report.deployment.audit_retention_days }} 天 / {{ report.deployment.audit_max_rows }} 行</code></div>
-          <div class="kv-row"><span class="k">每日备份</span>
-            <code class="mono">{{ report.deployment.db_daily_backup ? '开启' : '关闭' }}，保留 {{ report.deployment.db_backup_keep }} 份（synchronous = {{ report.deployment.db_synchronous }}）</code></div>
-        </div>
+        <div class="sec-head"><Icon name="gear" :size="16" /> 面板维护</div>
+        <p class="sec-sub">
+          重启与升级是本页仅有的系统级操作；部署级参数（监听、会话、审计、备份等）
+          在面板内<strong>不可改</strong>，需按下方提示编辑 config.toml 后重启生效——
+          那类只读数值不再在此罗列，安装落点见「系统 → 目录」页。
+        </p>
 
-        <!-- 面板与安装（只读）：版本 / 实际落点 / 服务状态。
-             重启是 owner 专属（后端 can_restart 判定），admin 只看到说明。 -->
-        <div class="sec-head sub"><Icon name="server" :size="16" /> 面板与安装</div>
-        <div v-if="installation" class="kv">
-          <div class="kv-row"><span class="k">版本</span>
-            <code class="mono">{{ installation.app_version }}（{{ installation.build }}）</code></div>
-          <div class="kv-row"><span class="k">安装位置</span>
-            <code class="mono">{{ installation.bin_path }}</code></div>
-          <div class="kv-row"><span class="k">配置目录</span>
-            <code class="mono">{{ installation.config_dir }}</code></div>
-          <div class="kv-row"><span class="k">数据目录</span>
-            <code class="mono">{{ installation.data_dir }}</code></div>
-          <div class="kv-row"><span class="k">日志目录</span>
-            <code class="mono">{{ installation.log_dir }}</code></div>
-          <div class="kv-row"><span class="k">服务状态</span>
-            <code class="mono">{{ installation.service_manager }} ·
-              {{ installation.service_active === null ? '无法判定' : installation.service_active ? '运行中' : '已停止' }} ·
-              {{ installation.service_enabled === null ? '自启未知' : installation.service_enabled ? '开机自启' : '未设自启' }}</code></div>
-          <div class="kv-row"><span class="k">最新版本</span>
-            <code class="mono"><template v-if="checkingUpgrade">检查中…</template><template v-else-if="upgradeErr">检查失败：{{ upgradeErr }}</template><template v-else-if="upgrade?.available">有新版本 {{ upgrade.latest }}（当前 {{ upgrade.current }}）</template><template v-else-if="upgrade">已是最新（{{ upgrade.current }}）</template><template v-else>未检查</template></code></div>
-        </div>
-        <div v-if="installation" class="restart-row">
-          <button v-if="installation.can_restart" class="btn-ghost btn-sm" type="button"
+        <!-- 操作行：重启是 owner 专属（后端 can_restart 判定），admin 只看到说明。 -->
+        <div class="restart-row">
+          <button v-if="installation?.can_restart" class="btn-ghost btn-sm" type="button"
             :disabled="restarting" @click="restartOpen = true">
             {{ restarting ? '重启中…' : '重启面板' }}
           </button>
@@ -410,16 +376,20 @@ onMounted(async () => {
             :disabled="checkingUpgrade" @click="checkUpgrade">
             {{ checkingUpgrade ? '检查中…' : '检查更新' }}
           </button>
-          <button v-if="upgrade?.available && installation.can_upgrade" class="btn-ghost btn-sm" type="button"
+          <button v-if="upgrade?.available && installation?.can_upgrade" class="btn-ghost btn-sm" type="button"
             :disabled="upgrading" @click="upgradeOpen = true">
             {{ upgrading ? '升级中…' : '执行升级' }}
           </button>
-          <span class="dim tiny">{{ installation.can_restart ? '重启会中断当前连接；服务恢复后页面自动刷新。' : '仅 owner 可重启面板。' }}</span>
+          <span class="dim tiny">{{ installation?.can_restart ? '重启会中断当前连接；服务恢复后页面自动刷新。' : '仅 owner 可重启面板。' }}</span>
         </div>
-        <p v-if="upgrade?.available" class="sec-note">
-          目标版本 <b>{{ upgrade.latest }}</b>。命令行：<code class="mono">sudo panel upgrade</code>
+        <!-- 检查更新反馈：只在点过「检查更新」后出现（操作反馈，不是常驻系统信息）。 -->
+        <p v-if="checkingUpgrade" class="sec-note">检查中…</p>
+        <p v-else-if="upgradeErr" class="sec-note">检查失败：{{ upgradeErr }}</p>
+        <p v-else-if="upgrade?.available" class="sec-note">
+          有新版本 <b>{{ upgrade.latest }}</b>（当前 {{ upgrade.current }}）。命令行：<code class="mono">sudo panel upgrade</code>
           （下载 → 验签 → 失败自动回滚；配置与数据保留）。
         </p>
+        <p v-else-if="upgrade" class="sec-note">已是最新（{{ upgrade.current }}）。</p>
         <p v-if="upgrade?.available && installation && !installation.can_upgrade" class="sec-note">
           Web 升级不可用：{{ installation.upgrade_blocked_reason }}
         </p>
@@ -458,31 +428,10 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section v-if="report" class="card">
-        <div class="sec-head"><Icon name="clock" :size="16" /> 预留项（未接线）</div>
-        <p class="sec-sub">{{ report.reserved.note }}</p>
-        <div class="kv">
-          <div class="kv-row" v-for="(v, k) in report.reserved.values" :key="k">
-            <span class="k mono">{{ k }}</span><code class="mono">{{ v }}</code>
-          </div>
-        </div>
-      </section>
     </template>
 
-    <!-- ── 运行环境排障（所有人可见）── -->
-    <section class="card">
-      <div class="sec-head"><Icon name="server" :size="16" /> 运行环境</div>
-      <div class="kv">
-        <div class="kv-row"><span class="k">平台</span><code class="mono">{{ auth.platform?.os ?? '—' }} / {{ auth.platform?.arch ?? '—' }}</code></div>
-        <div class="kv-row"><span class="k">发行版</span><code class="mono">{{ auth.platform?.distro ?? '—' }}</code></div>
-        <div class="kv-row"><span class="k">内核</span><code class="mono">{{ auth.platform?.kernel ?? '—' }}</code></div>
-        <div class="kv-row"><span class="k">资源档位</span><code class="mono">{{ auth.me?.tier ?? '—' }}</code></div>
-        <div class="kv-row"><span class="k">当前用户</span><code class="mono">{{ auth.me?.user }}（{{ auth.me?.role }}）</code></div>
-      </div>
-    </section>
-
-    <!-- 能力矩阵：排障时第一个要看的东西（菜单为什么置灰、功能为什么 501），
-         故挂在锚点 #caps 上，topbar 系统信息胶囊一键直达。 -->
+    <!-- 能力矩阵：功能模块的开关状态总览（菜单为什么置灰、功能为什么 501），
+         挂在锚点 #caps 上，topbar 系统徽标一键直达。 -->
     <section id="caps" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
       <table class="fixed" v-table-nav>
@@ -503,21 +452,22 @@ onMounted(async () => {
       <p class="tip">不可用项会在对应菜单自动置灰。原因码来自后端能力探测。</p>
     </section>
 
-    <section class="card">
-      <div class="sec-head"><Icon name="key" :size="16" /> 权限</div>
-      <div class="perms">
-        <code v-for="p in auth.me?.permissions ?? []" :key="p">{{ p }}</code>
-      </div>
-    </section>
-
     <!-- 角色管理（RBAC，需 user.manage） -->
     <section v-if="canRoles" class="card">
-      <div class="sec-head"><Icon name="users" :size="16" /> 角色（RBAC）</div>
+      <div class="sec-head"><Icon name="users" :size="16" /> 角色与权限（RBAC）</div>
       <p class="sec-note">
         内置角色的权限由<strong>代码</strong>定义，不可改也不可删。自定义角色的权限必须是
         <strong>你自己拥有权限的子集</strong>——否则任何拿到用户管理权的人都能造出一个权限更大的角色
         再把自己升上去。另：角色权限变更对<strong>已登录会话</strong>需重新登录才生效（权限在登录时快照）。
       </p>
+      <!-- 我的权限徽章（原独立只读卡并入）：就是上文"自身权限的子集"那个自身权限，
+           放在创建表单旁边作对照，不再单独占一张卡。 -->
+      <div class="myperms">
+        <span class="lbl">我的权限（登录时快照）</span>
+        <div class="perms">
+          <code v-for="p in auth.me?.permissions ?? []" :key="p">{{ p }}</code>
+        </div>
+      </div>
       <p v-if="roleErr" class="err" role="alert">{{ roleErr }}</p>
 
       <div v-if="roles.length" class="card flush">
@@ -588,7 +538,7 @@ onMounted(async () => {
 <style scoped>
 .sec-sub { color: var(--c-text-mute); font-size: var(--fs-12-5); margin: 4px 0 10px; }
 .sec-note { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
-.sec-head.sub { margin-top: 18px; }
+.myperms { margin: 12px 0 2px; display: flex; flex-direction: column; gap: 6px; }
 .restart-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 
 /* 「为什么连不上」引导块：仅 localhost_only 时出现。用 warn 底色而非再嵌一张卡片，
@@ -637,10 +587,6 @@ onMounted(async () => {
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); cursor: pointer; }
 .perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
-.kv { display: flex; flex-direction: column; }
-.kv-row { display: flex; gap: 12px; font-size: var(--fs-13); padding: 7px 0; border-bottom: 1px solid var(--c-border); }
-.kv-row:last-child { border-bottom: none; }
-.kv-row > .k { width: 220px; flex: none; color: var(--c-text-dim); }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }
 .perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: var(--fs-12); font-family: var(--mono); }
 /* 能力矩阵表列宽：原因为唯一弹性列；角色表列宽：角色名为唯一弹性列。 */
@@ -653,10 +599,4 @@ col.w-rlperm { width: 120px; }
 col.w-rlsrc { width: 100px; }
 col.w-rlacts { width: 90px; }
 
-/* 窄屏：键名固定 220px 时，360px 视口的值区只剩 ~70px（长值全被截断）。
-   改为上下堆叠，键名不再占位。 */
-@media (max-width: 720px) {
-  .kv-row { flex-direction: column; gap: 2px; }
-  .kv-row > .k { width: auto; }
-}
 </style>
