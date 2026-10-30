@@ -37,6 +37,8 @@ import TabBar from '@/components/TabBar.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import type { StackServicePayload } from '@/composables/stackForm'
 import { toast } from '@/composables/useToast'
+import { usePolling } from '@/composables/usePolling'
+import { createInstallProgress, fmtElapsed } from '@/composables/installProgress'
 import ImagesTab from '@/components/containers/ImagesTab.vue'
 import StatsTab from '@/components/containers/StatsTab.vue'
 import NetworksTab from '@/components/containers/NetworksTab.vue'
@@ -72,6 +74,60 @@ const installBusy = ref(false)
 const installTaskId = ref<string | null>(null)
 const installError = ref('')
 
+// ── 安装就地进度（2026-10-30）：一键安装的下载/安装全程反馈 ──
+// 数据源：任务 SSE（/events/tasks，progress/log/finished，按任务 id 过滤）+
+// 任务详情轮询兜底终态（SSE 断线/丢事件也不至于永远转圈）。
+// 无 task.view 权限时退化为只显示已用时（绝不假装有进度），状态机见
+// composables/installProgress.ts。
+const canTrackTask = computed(() => auth.can('task.view'))
+const {
+  phase: installPhase, percent: installPct, message: installMsg,
+  stage: installStage, eta: installEta, elapsedMs: installElapsed,
+  stalled: installStalled,
+  start: installProgStart, taskAccepted: installProgAccepted,
+  onProgress: installProgProgress, onLog: installProgLog,
+  onFinished: installProgFinished, tick: installProgTick,
+} = createInstallProgress()
+
+let installEs: EventSource | null = null
+function closeInstallEs() {
+  if (installEs) { installEs.close(); installEs = null }
+}
+function startInstallTracking(taskId: number) {
+  closeInstallEs()
+  if (!canTrackTask.value) return
+  const es = new EventSource(API.events.tasks())
+  installEs = es
+  es.addEventListener('progress', (ev) => {
+    const d = JSON.parse((ev as MessageEvent).data) as { id: number; percent: number; message: string | null }
+    if (d.id === taskId) installProgProgress(d.percent, d.message ?? '')
+  })
+  es.addEventListener('log', (ev) => {
+    const d = JSON.parse((ev as MessageEvent).data) as { id: number; line: string }
+    if (d.id === taskId) installProgLog(d.line)
+  })
+  es.addEventListener('finished', (ev) => {
+    const d = JSON.parse((ev as MessageEvent).data) as { id: number; state: string }
+    if (d.id === taskId) { installProgFinished(d.state); closeInstallEs() }
+  })
+  es.onerror = () => { /* EventSource 自带重连；终态另有轮询兜底 */ }
+}
+/** 终态兜底轮询：SSE 断线/丢事件时也能落到 done/failed。 */
+async function pollInstallTerminal() {
+  if (installPhase.value !== 'running' || !installTaskId.value) return
+  try {
+    const t = await api.get<{ state: string }>(API.tasks.get(Number(installTaskId.value)))
+    if (t.state !== 'running' && t.state !== 'queued') {
+      installProgFinished(t.state)
+      closeInstallEs()
+    }
+  } catch { /* 静默：下一轮再试 */ }
+}
+// 1s 心跳驱动已用时/ETA/停滞判断；4s 轮询兜底终态。隐藏页暂停由 usePolling 统一管。
+usePolling({ fn: () => installProgTick(), ms: 1_000 })
+usePolling({ fn: () => void pollInstallTerminal(), ms: 4_000 })
+onUnmounted(closeInstallEs)
+
 // 诊断分支下的"修复"交互状态（daemon_unreachable：把复制命令换成按钮）
 const fixBusy = ref(false)
 const fixError = ref('')
@@ -105,12 +161,18 @@ const unavailableHint = computed(() => {
 /** 提交一键安装 Docker（经后端任务队列，高危二次确认）。 */
 async function doInstall() {
   installBusy.value = true; installError.value = ''; installTaskId.value = null
+  installProgStart()
   try {
     const r = await api.post<{ task_id: string; package: string }>(
       API.containers.install(), { confirm_token: '安装 Docker' })
     installTaskId.value = r.task_id
-    toast(`已提交安装任务（${r.package}），可在"任务"页查看进度。装完后请把面板运行用户加入 docker 组并重启面板。`)
-  } catch (e) { installError.value = errorText(e) }
+    installProgAccepted()
+    startInstallTracking(Number(r.task_id))
+    // 不再只发一条 toast：下方进度卡就地反馈下载/安装全程（含失败重试入口）
+  } catch (e) {
+    installError.value = errorText(e)
+    installProgFinished('fail')
+  }
   finally { installBusy.value = false; installOpen.value = false }
 }
 
@@ -189,7 +251,6 @@ watch(() => route.query.tab, (v) => {
         <button class="btn-primary" :disabled="installBusy" @click="installOpen = true">
           <Icon name="download" :size="15" /> 安装 Docker
         </button>
-        <span v-if="installTaskId" class="ok-note">已提交安装任务（ID：{{ installTaskId }}），可在"任务"页查看进度</span>
       </div>
 
       <!-- daemon_unreachable：可视化修复（按钮代替"复制命令去执行"） -->
@@ -210,6 +271,46 @@ watch(() => route.query.tab, (v) => {
           需要 system.manage 与 container.manage 权限才能执行修复操作。
         </span>
         <p v-if="fixError" class="err">{{ fixError }}</p>
+      </div>
+
+      <!-- 安装就地进度卡（2026-10-30）：提交后下载/安装全程反馈，不再"界面长时间无动静像掉线"。
+           百分比来自后端 apt 输出行数分档（10/30/55/75/90，见 installProgress.ts 刻度说明），
+           ETA 只在 percent>=10 后显示且永远带「约」。失败/停滞给重试（重新二次确认，
+           幂等键保证运行中重复提交返回同一任务）与任务页入口。 -->
+      <div v-if="installPhase !== 'idle'" class="install-prog"
+        :class="{ failed: installPhase === 'failed', done: installPhase === 'done' }">
+        <div class="ip-head">
+          <span class="ip-title">
+            <Icon name="download" :size="14" />
+            {{ installPhase === 'done' ? 'Docker 安装完成'
+              : installPhase === 'failed' ? 'Docker 安装失败'
+              : installPhase === 'submitting' ? '正在提交安装任务…'
+              : `Docker ${installStage}` }}
+          </span>
+          <span class="ip-meta">已用 {{ fmtElapsed(installElapsed) }}<template v-if="installPhase === 'running'"> · {{ installEta }}</template></span>
+        </div>
+        <div class="ip-bar"><i :class="installPhase === 'failed' ? 'bad' : installStalled ? 'warn' : 'ok'"
+          :style="{ width: installPct + '%' }" /></div>
+        <code v-if="installMsg" class="ip-msg">{{ installMsg }}</code>
+
+        <p v-if="installPhase === 'running' && installStalled" class="ip-warn">
+          超过 90 秒没有任何进度输出：可能是网络卡住或软件源变慢。可到「任务」页查看完整日志，或重试安装。
+        </p>
+        <p v-if="installPhase === 'running' && !canTrackTask" class="ip-warn">
+          当前账号无「任务查看」权限，无法实时展示进度；请管理员到「任务」页关注该任务状态。
+        </p>
+        <p v-if="installPhase === 'failed'" class="ip-warn">
+          安装失败（最后一行输出见上）。到「任务」页查看完整日志定位原因后重试。
+        </p>
+        <p v-if="installPhase === 'done'" class="ip-ok">
+          下一步：把面板用户加入 docker 组 → 重启面板 → 刷新本页即可管理容器。
+        </p>
+        <div v-if="installPhase === 'failed' || (installPhase === 'running' && installStalled)" class="ip-actions">
+          <button class="btn-ghost btn-sm" type="button" :disabled="installBusy" @click="installOpen = true">
+            <Icon name="restart" :size="14" /> 重试安装（需再次确认）
+          </button>
+          <RouterLink v-if="canTrackTask" class="btn-ghost btn-sm ip-link" to="/cron/tasks">到「任务」页查看日志</RouterLink>
+        </div>
       </div>
 
       <p v-if="installError" class="err">{{ installError }}</p>
@@ -297,4 +398,26 @@ watch(() => route.query.tab, (v) => {
 .diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .diag-actions .dim { font-size: var(--fs-12); }
 .tabs-wrap { margin-bottom: 12px; }
+
+/* ── 安装就地进度卡（2026-10-30）── */
+.install-prog {
+  margin-top: 12px; padding: 12px 14px;
+  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
+}
+.install-prog.failed { border-color: color-mix(in srgb, var(--c-danger) 40%, transparent); }
+.install-prog.done { border-color: color-mix(in srgb, var(--c-ok) 40%, transparent); }
+.ip-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ip-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-13); }
+.ip-meta { font-size: var(--fs-12); color: var(--c-text-dim); font-family: var(--mono); }
+.ip-bar { margin-top: 8px; height: 6px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
+.ip-bar > i { display: block; height: 100%; border-radius: 999px; transition: width .6s ease; }
+.ip-bar > i.ok { background: var(--c-primary); }
+.ip-bar > i.warn { background: var(--c-warn); }
+.ip-bar > i.bad { background: var(--c-danger); }
+.ip-msg { display: block; margin-top: 8px; font-family: var(--mono); font-size: var(--fs-12);
+  color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ip-warn { margin: 8px 0 0; font-size: var(--fs-12-5); color: var(--c-warn); }
+.ip-ok { margin: 8px 0 0; font-size: var(--fs-12-5); color: var(--c-ok); }
+.ip-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ip-link { text-decoration: none; display: inline-flex; align-items: center; }
 </style>
