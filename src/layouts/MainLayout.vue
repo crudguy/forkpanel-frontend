@@ -184,6 +184,20 @@ function onHealthTick() {
 usePolling({ fn: onHealthTick, ms: 15_000 })
 onMounted(onHealthTick)
 
+// ── 面板版本常驻展示（确认「更新是否生效」）：公开端点 /api/v1/version 返回的是
+// 正在运行的二进制编译期版本（CARGO_PKG_VERSION），重启后即显示新版本——这是用户
+// 判断「升级成功没」最直观的依据。升级流程会刷新页面，故一次性拉取即可。
+const appVersion = ref('')
+const appBuild = ref('')
+async function loadVersion() {
+  try {
+    const v = await api.get<{ app: string; build?: string }>(API.version())
+    appVersion.value = v?.app ? `v${v.app}` : ''
+    appBuild.value = v?.build && v.build !== 'dev' ? v.build : ''
+  } catch { /* 静默：取不到不影响任何操作 */ }
+}
+onMounted(loadVersion)
+
 const hpct = (x: number) => Math.min(100, Math.max(2, x)) + '%'
 const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')
 // 合并胶囊（原 A12 健康徽标 + 系统信息胶囊）：tooltip 文案唯一源在 composables/sysBadge.ts，
@@ -242,6 +256,10 @@ function logout() {
             <span class="hb" :class="htone(health.disk)"><i :style="{ width: hpct(health.disk) }" /></span>
           </span>
         </RouterLink>
+
+        <!-- 面板版本常驻展示：更新后重启即生效，用户一眼确认升级成功与否 -->
+        <span v-if="appVersion" class="ver-chip"
+          :title="`面板版本 ${appVersion}${appBuild ? ' · 构建 ' + appBuild : ''}（更新后重启即生效）`">{{ appVersion }}<template v-if="appBuild"> · {{ appBuild }}</template></span>
 
         <!-- 运行中任务计数（与任务中心同源）：仅在有任务时出现 -->
         <RouterLink v-if="tasksOk && runningTasks > 0" to="/cron/tasks" class="task-chip"
@@ -472,6 +490,16 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   transition: box-shadow .15s ease;
 }
 .task-chip:hover { box-shadow: 0 0 0 1px var(--c-primary); }
+
+/* 面板版本胶囊：与 health 胶囊同款外形，常驻顶栏左侧信息簇，更新后重启即变。 */
+.ver-chip {
+  display: inline-flex; align-items: center; flex: none; height: 34px; padding: 0 12px;
+  border: 1px solid var(--c-border); border-radius: 999px;
+  background: var(--c-bg); color: var(--c-text-dim);
+  font-size: var(--fs-12-5); font-weight: 600; white-space: nowrap;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.ver-chip:hover { color: var(--c-text); background: var(--c-hover); border-color: var(--c-border-strong); }
 
 /* AI 助手顶栏入口：品牌色胶囊 + 文字，与搜索/通知的纯图标钮区分开，
    让「问 AI」在任意页面都一眼可见（C9 强化）。 */
