@@ -4,7 +4,7 @@
  * 与「主机监控(SystemView)」的分工：SystemView 看时间趋势（实时滚动 + 历史落盘），
  * 本页看**完整结构快照**——CPU 每核、负载 1/5/15、内存 + 交换明细、每挂载点磁盘、
  * 每网卡吞吐、进程数 + Top 进程。数据来自后端已采集的 SystemSnapshot，纯按需拉取，
- * 每 2 秒刷新快照 / 3 秒刷新进程（procfs 读取开销 <0.02ms，轮询极轻）。
+ * 每 2 秒刷新快照（进程数随快照一并刷新；procfs 读取开销 <0.02ms，轮询极轻）。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -83,7 +83,7 @@ function loadRatio(l: number): number {
   return Math.min(r / 2, 1) * 100 // 以 2×核心数为满刻度
 }
 
-/** 确定性失败（501 未实现 / 403 无权限）的显式提示；网络抖动保持静默重试 */
+/** 任何失败（含网络抖动）都落错误态并显式提示；轮询每 2 秒自动重试自愈 */
 const snapError = ref('')
 
 /** A2：顶端指标头改读面板**统一的采样序列**（与「实时趋势」页同一环形缓冲）——

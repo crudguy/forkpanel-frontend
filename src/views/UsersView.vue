@@ -21,8 +21,15 @@ interface UserOut {
   /** MFA 是否已启用：后端由 mfa_enabled_at IS NOT NULL 派生，与 /auth/me 口径一致 */
   mfa_enabled: boolean
   disabled: boolean
-  created_at: number
   last_login_at: number | null
+}
+
+/** PATCH /users/{id} 的请求体：口令留空=不改，故 `password` 可选。 */
+interface UserPatchBody {
+  role: string
+  allowed_roots: string[]
+  disabled: boolean
+  password?: string
 }
 
 const auth = useAuthStore()
@@ -110,7 +117,7 @@ async function save() {
   const roots = form.value.rootsText.split(',').map(s => s.trim()).filter(Boolean)
   try {
     if (editing.value) {
-      const body: any = { role: form.value.role, allowed_roots: roots, disabled: form.value.disabled }
+      const body: UserPatchBody = { role: form.value.role, allowed_roots: roots, disabled: form.value.disabled }
       if (form.value.password) body.password = form.value.password
       await api.patch(API.users.patch(editing.value.id), body)
     } else {
