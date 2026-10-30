@@ -686,6 +686,23 @@ export interface SettingsReport {
     db_synchronous: string
     /** 备份保留份数（`[db] backup_keep`） */
     db_backup_keep: number
+    /** 安装与运行位置（只读；不是可 PATCH 的设置项） */
+    installation: {
+      app_version: string
+      build: string
+      platform: string
+      bin_path: string
+      config_dir: string
+      data_dir: string
+      log_dir: string
+      service_manager: 'systemd'
+      /** `systemctl is-active`；null = 无法判定（非 systemd / 命令缺失），不得当成「已停止」 */
+      service_active: boolean | null
+      /** `systemctl is-enabled`；null 同上 */
+      service_enabled: boolean | null
+      /** 仅 owner 为 true；admin 可改设置但不能重启服务 */
+      can_restart: boolean
+    }
     hint: string
   }
   reserved: {

@@ -36,6 +36,9 @@ export const API = {
     overview: () => '/api/v1/system/overview',
     users: () => '/api/v1/system/users',
     directories: () => '/api/v1/system/directories',
+    /** 重启面板（owner + system.manage）。202 = job 已交给 PID 1；
+     *  前端把请求失败也视作已发起，轮询 /version 判定恢复。 */
+    restart: () => '/api/v1/system/restart',
     /** 公网暴露向导（域名反代 + 防火墙白名单 + TLS）。
      *  status 只需 system.view（状态不是秘密）；apply / remove 需 system.manage
      *  且经 CSRF。能力位 EXPOSE_MANAGE 不支持时三者分别返 200（status 带

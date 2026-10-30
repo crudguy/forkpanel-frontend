@@ -24,6 +24,8 @@ const auth = useAuthStore()
 const route = useRoute()
 const canManage = computed(() => auth.can('settings.manage'))
 const clearKeyOpen = ref(false)
+const restartOpen = ref(false)
+const restarting = ref(false)
 
 // 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
@@ -59,6 +61,9 @@ const listenLabel = computed(() => {
     ? '仅本机 127.0.0.1（localhost_only = true，会覆盖 bind）'
     : '非回环地址（localhost_only = false）'
 })
+/** 安装与运行位置（只读）；旧后端缺该字段时按 null 处理，不伪造默认值。 */
+const installation = computed(() => report.value?.deployment.installation ?? null)
+
 // ── 首屏面板设置加载：useAsync 收敛 loading/error 状态机 ──
 // formError 被 save/clearKey/testConn 共享，故 onError 写回 formError（不改名）；
 // 用 useAsync(false)：load 有 canManage 早退，权限不足时不应卡在「加载中…」。
@@ -190,6 +195,37 @@ async function clearKey() {
   } finally { saving.value = false }
 }
 
+/**
+ * 重启后面板会短暂断连：请求本身失败是**预期**，不能据此报错。
+ * 真正的判据是 `/api/v1/version` 重新可用——恢复后刷新页面即可拿到新进程。
+ * 40 秒上限：Type=simple 单元通常 1~3 秒起来；超过说明没起来，必须让用户去查。
+ */
+async function waitForRestart() {
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    try {
+      await api.get(API.version())
+      location.reload()
+      return
+    } catch { /* 还没起来，继续等 */ }
+  }
+  restarting.value = false
+  toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
+}
+
+async function doRestart() {
+  restartOpen.value = false
+  if (restarting.value) return
+  restarting.value = true
+  try {
+    await api.post(API.system.restart(), {})
+  } catch {
+    // 重启瞬间连接被切断是预期行为；是否真的起来由 /version 轮询判定
+  }
+  toast('重启已发起，页面会在服务恢复后自动刷新')
+  await waitForRestart()
+}
+
 onMounted(async () => {
   await load()
   // 角色列表需要 user.manage；loadRoles 内部自判权限，非管理员直接跳过
@@ -290,6 +326,34 @@ onMounted(async () => {
           <div class="kv-row"><span class="k">每日备份</span>
             <code class="mono">{{ report.deployment.db_daily_backup ? '开启' : '关闭' }}，保留 {{ report.deployment.db_backup_keep }} 份（synchronous = {{ report.deployment.db_synchronous }}）</code></div>
         </div>
+
+        <!-- 面板与安装（只读）：版本 / 实际落点 / 服务状态。
+             重启是 owner 专属（后端 can_restart 判定），admin 只看到说明。 -->
+        <div class="sec-head sub"><Icon name="server" :size="16" /> 面板与安装</div>
+        <div v-if="installation" class="kv">
+          <div class="kv-row"><span class="k">版本</span>
+            <code class="mono">{{ installation.app_version }}（{{ installation.build }}）</code></div>
+          <div class="kv-row"><span class="k">安装位置</span>
+            <code class="mono">{{ installation.bin_path }}</code></div>
+          <div class="kv-row"><span class="k">配置目录</span>
+            <code class="mono">{{ installation.config_dir }}</code></div>
+          <div class="kv-row"><span class="k">数据目录</span>
+            <code class="mono">{{ installation.data_dir }}</code></div>
+          <div class="kv-row"><span class="k">日志目录</span>
+            <code class="mono">{{ installation.log_dir }}</code></div>
+          <div class="kv-row"><span class="k">服务状态</span>
+            <code class="mono">{{ installation.service_manager }} ·
+              {{ installation.service_active === null ? '无法判定' : installation.service_active ? '运行中' : '已停止' }} ·
+              {{ installation.service_enabled === null ? '自启未知' : installation.service_enabled ? '开机自启' : '未设自启' }}</code></div>
+        </div>
+        <div v-if="installation?.can_restart" class="restart-row">
+          <button class="btn-ghost btn-sm" type="button" :disabled="restarting" @click="restartOpen = true">
+            {{ restarting ? '重启中…' : '重启面板' }}
+          </button>
+          <span class="dim tiny">会中断当前连接；服务恢复后页面自动刷新。</span>
+        </div>
+        <p v-else-if="installation" class="dim tiny">仅 owner 可重启面板。</p>
+
         <p class="sec-note">{{ report.deployment.hint }}</p>
 
         <!-- 仅本机监听时的可达性引导：这段是"为什么局域网连不上"的唯一答案。
@@ -440,12 +504,18 @@ onMounted(async () => {
     <ConfirmDialog :open="clearKeyOpen" danger title="清除 API Key"
       detail="将删除加密存储的 API Key；AI 助手会退回纯规则诊断，重新启用需再次填写服务商密钥。"
       @confirm="clearKeyOpen = false; clearKey()" @cancel="clearKeyOpen = false" />
+
+    <ConfirmDialog :open="restartOpen" danger title="重启面板"
+      detail="将执行 systemctl restart panel：当前页面会短暂断连，服务恢复后自动刷新；正在运行的任务与上传会被中断。"
+      @confirm="doRestart" @cancel="restartOpen = false" />
   </div>
 </template>
 
 <style scoped>
 .sec-sub { color: var(--c-text-mute); font-size: var(--fs-12-5); margin: 4px 0 10px; }
 .sec-note { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
+.sec-head.sub { margin-top: 18px; }
+.restart-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 
 /* 「为什么连不上」引导块：仅 localhost_only 时出现。用 warn 底色而非再嵌一张卡片，
    与上方只读键值表区分开——它是操作指引，不是配置项。 */
