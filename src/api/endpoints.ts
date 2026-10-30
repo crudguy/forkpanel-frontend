@@ -42,6 +42,9 @@ export const API = {
     /** 检查更新（只读，不下载/不写盘）。system.manage + 只读限流；
      *  网络失败仍是 200，由 data.error 说明原因。 */
     upgradeCheck: () => '/api/v1/system/upgrade/check',
+    /** 触发 Web 升级（默认关闭；owner + [danger] allow_web_upgrade + systemd-run）。
+     *  202 只代表已交给瞬时单元；是否成功看 /version 是否恢复。 */
+    upgrade: () => '/api/v1/system/upgrade',
     /** 公网暴露向导（域名反代 + 防火墙白名单 + TLS）。
      *  status 只需 system.view（状态不是秘密）；apply / remove 需 system.manage
      *  且经 CSRF。能力位 EXPOSE_MANAGE 不支持时三者分别返 200（status 带

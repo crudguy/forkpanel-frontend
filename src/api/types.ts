@@ -702,6 +702,10 @@ export interface SettingsReport {
       service_enabled: boolean | null
       /** 仅 owner 为 true；admin 可改设置但不能重启服务 */
       can_restart: boolean
+      /** Web 升级是否可用：owner + [danger] allow_web_upgrade + systemd-run */
+      can_upgrade: boolean
+      /** 不可升级的具体原因；null = 可升级 */
+      upgrade_blocked_reason: string | null
     }
     hint: string
   }

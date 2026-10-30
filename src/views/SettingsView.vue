@@ -30,6 +30,8 @@ const restarting = ref(false)
 const upgrade = ref<UpgradeCheck | null>(null)
 const checkingUpgrade = ref(false)
 const upgradeErr = ref('')
+const upgradeOpen = ref(false)
+const upgrading = ref(false)
 const canCheckUpdate = computed(() => auth.can('system.manage'))
 
 // 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
@@ -234,6 +236,36 @@ async function checkUpgrade() {
   }
 }
 
+/** 升级期间服务会先退出再回来：等「见过断连」或「版本号变了」再刷新，避免旧进程
+ *  刚一应答就 reload、页面看起来像没升级。3 分钟兜底。 */
+async function waitForUpgrade(from: string) {
+  let sawDown = false
+  const deadline = Date.now() + 180_000
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      const v = await api.get<{ app: string }>(API.version())
+      if (sawDown || v.app !== from) { location.reload(); return }
+    } catch { sawDown = true }
+  }
+  upgrading.value = false
+  toast('升级 3 分钟内未完成：请 SSH 执行 journalctl -u panel-upgrade -n 50 查看', 'err')
+}
+
+async function doUpgrade() {
+  upgradeOpen.value = false
+  if (upgrading.value) return
+  upgrading.value = true
+  try {
+    await api.post(API.system.upgrade(), { version: upgrade.value?.latest ?? null })
+    toast('升级已交给后台执行，页面会在服务恢复后刷新')
+    await waitForUpgrade(installation.value?.app_version ?? '')
+  } catch (e) {
+    upgrading.value = false
+    toast(errorText(e), 'err')
+  }
+}
+
 async function doRestart() {
   restartOpen.value = false
   if (restarting.value) return
@@ -378,10 +410,18 @@ onMounted(async () => {
             :disabled="checkingUpgrade" @click="checkUpgrade">
             {{ checkingUpgrade ? '检查中…' : '检查更新' }}
           </button>
+          <button v-if="upgrade?.available && installation.can_upgrade" class="btn-ghost btn-sm" type="button"
+            :disabled="upgrading" @click="upgradeOpen = true">
+            {{ upgrading ? '升级中…' : '执行升级' }}
+          </button>
           <span class="dim tiny">{{ installation.can_restart ? '重启会中断当前连接；服务恢复后页面自动刷新。' : '仅 owner 可重启面板。' }}</span>
         </div>
         <p v-if="upgrade?.available" class="sec-note">
-          升级：<code class="mono">sudo sh get-panel.sh</code>（下载 → 验签 → 替换并重启；配置与数据保留）。
+          目标版本 <b>{{ upgrade.latest }}</b>。命令行：<code class="mono">sudo panel upgrade</code>
+          （下载 → 验签 → 失败自动回滚；配置与数据保留）。
+        </p>
+        <p v-if="upgrade?.available && installation && !installation.can_upgrade" class="sec-note">
+          Web 升级不可用：{{ installation.upgrade_blocked_reason }}
         </p>
 
         <p class="sec-note">{{ report.deployment.hint }}</p>
@@ -538,6 +578,10 @@ onMounted(async () => {
     <ConfirmDialog :open="restartOpen" danger title="重启面板"
       detail="将执行 systemctl restart panel：当前页面会短暂断连，服务恢复后自动刷新；正在运行的任务与上传会被中断。"
       @confirm="doRestart" @cancel="restartOpen = false" />
+
+    <ConfirmDialog :open="upgradeOpen" danger title="执行升级" confirm-word="UPGRADE"
+      :detail="`将从 ${installation?.app_version ?? '当前版本'} 升级到 ${upgrade?.latest ?? '最新版'}：下载签名包并验签后替换二进制并重启；失败会自动回滚旧版本。输入 UPGRADE 确认。`"
+      @confirm="doUpgrade" @cancel="upgradeOpen = false" />
   </div>
 </template>
 
