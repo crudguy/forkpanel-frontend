@@ -712,6 +712,23 @@ export interface SettingsReport {
   }
 }
 
+// ── 检查更新（对应 openapi `UpgradeCheck`）──
+export interface UpgradeCheck {
+  current: string
+  latest: string | null
+  latest_tag: string | null
+  /** 数字核心版本更大才为 true；同核心的预发布不算可升级 */
+  available: boolean
+  prerelease: boolean
+  published_at: string | null
+  source: 'github'
+  /** false = 宿主无 curl，无法检查 */
+  supported: boolean
+  checked_at: number
+  /** 失败原因；null = 本次检查成功 */
+  error: string | null
+}
+
 // ── 首启上手清单（C2，对应 openapi `OnboardingState`）──
 /** 步骤 id 由后端固定给出（5 步）；前端不得自行发明或补充 */
 export type OnboardingStepId =

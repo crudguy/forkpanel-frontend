@@ -15,7 +15,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import type { SettingsReport, LlmTestResult } from '@/api/types'
+import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
@@ -26,6 +26,11 @@ const canManage = computed(() => auth.can('settings.manage'))
 const clearKeyOpen = ref(false)
 const restartOpen = ref(false)
 const restarting = ref(false)
+// 检查更新：后端只读探测 GitHub Releases；网络失败由 data.error 带回，不抛 5xx
+const upgrade = ref<UpgradeCheck | null>(null)
+const checkingUpgrade = ref(false)
+const upgradeErr = ref('')
+const canCheckUpdate = computed(() => auth.can('system.manage'))
 
 // 深链定位（topbar 系统信息胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
@@ -213,6 +218,22 @@ async function waitForRestart() {
   toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
 }
 
+async function checkUpgrade() {
+  if (checkingUpgrade.value) return
+  checkingUpgrade.value = true
+  upgradeErr.value = ''
+  try {
+    const r = await api.get<UpgradeCheck>(API.system.upgradeCheck())
+    upgrade.value = r
+    // 网络失败也是 200：不要把「检查失败」渲染成整块红色错误
+    if (r.error) upgradeErr.value = r.error
+  } catch (e) {
+    upgradeErr.value = errorText(e)
+  } finally {
+    checkingUpgrade.value = false
+  }
+}
+
 async function doRestart() {
   restartOpen.value = false
   if (restarting.value) return
@@ -345,14 +366,23 @@ onMounted(async () => {
             <code class="mono">{{ installation.service_manager }} ·
               {{ installation.service_active === null ? '无法判定' : installation.service_active ? '运行中' : '已停止' }} ·
               {{ installation.service_enabled === null ? '自启未知' : installation.service_enabled ? '开机自启' : '未设自启' }}</code></div>
+          <div class="kv-row"><span class="k">最新版本</span>
+            <code class="mono"><template v-if="checkingUpgrade">检查中…</template><template v-else-if="upgradeErr">检查失败：{{ upgradeErr }}</template><template v-else-if="upgrade?.available">有新版本 {{ upgrade.latest }}（当前 {{ upgrade.current }}）</template><template v-else-if="upgrade">已是最新（{{ upgrade.current }}）</template><template v-else>未检查</template></code></div>
         </div>
-        <div v-if="installation?.can_restart" class="restart-row">
-          <button class="btn-ghost btn-sm" type="button" :disabled="restarting" @click="restartOpen = true">
+        <div v-if="installation" class="restart-row">
+          <button v-if="installation.can_restart" class="btn-ghost btn-sm" type="button"
+            :disabled="restarting" @click="restartOpen = true">
             {{ restarting ? '重启中…' : '重启面板' }}
           </button>
-          <span class="dim tiny">会中断当前连接；服务恢复后页面自动刷新。</span>
+          <button v-if="canCheckUpdate" class="btn-ghost btn-sm" type="button"
+            :disabled="checkingUpgrade" @click="checkUpgrade">
+            {{ checkingUpgrade ? '检查中…' : '检查更新' }}
+          </button>
+          <span class="dim tiny">{{ installation.can_restart ? '重启会中断当前连接；服务恢复后页面自动刷新。' : '仅 owner 可重启面板。' }}</span>
         </div>
-        <p v-else-if="installation" class="dim tiny">仅 owner 可重启面板。</p>
+        <p v-if="upgrade?.available" class="sec-note">
+          升级：<code class="mono">sudo sh get-panel.sh</code>（下载 → 验签 → 替换并重启；配置与数据保留）。
+        </p>
 
         <p class="sec-note">{{ report.deployment.hint }}</p>
 
