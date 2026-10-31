@@ -188,12 +188,10 @@ onMounted(onHealthTick)
 // 正在运行的二进制编译期版本（CARGO_PKG_VERSION），重启后即显示新版本——这是用户
 // 判断「升级成功没」最直观的依据。升级流程会刷新页面，故一次性拉取即可。
 const appVersion = ref('')
-const appBuild = ref('')
 async function loadVersion() {
   try {
-    const v = await api.get<{ app: string; build?: string }>(API.version())
+    const v = await api.get<{ app: string }>(API.version())
     appVersion.value = v?.app ? `v${v.app}` : ''
-    appBuild.value = v?.build && v.build !== 'dev' ? v.build : ''
   } catch { /* 静默：取不到不影响任何操作 */ }
 }
 onMounted(loadVersion)
@@ -259,7 +257,7 @@ function logout() {
 
         <!-- 面板版本常驻展示：更新后重启即生效，用户一眼确认升级成功与否 -->
         <span v-if="appVersion" class="ver-chip"
-          :title="`面板版本 ${appVersion}${appBuild ? ' · 构建 ' + appBuild : ''}（更新后重启即生效）`">{{ appVersion }}<template v-if="appBuild"> · {{ appBuild }}</template></span>
+          :title="`面板版本 ${appVersion}（更新后重启即生效）`">{{ appVersion }}</span>
 
         <!-- 运行中任务计数（与任务中心同源）：仅在有任务时出现 -->
         <RouterLink v-if="tasksOk && runningTasks > 0" to="/cron/tasks" class="task-chip"
