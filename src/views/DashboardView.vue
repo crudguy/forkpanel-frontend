@@ -383,15 +383,6 @@ onUnmounted(() => { es?.close() })
 
 <template>
   <div class="dash">
-    <!-- 卡片设置（A1 个性化）：显隐开关；顺序在下方直接拖拽卡片调整。
-         原 page-head 横条已去掉（只为一个设置钮不值得占一条页面级空横条），
-         改为内容区右上角工具行——与 SitesView/ProcessesView「工具条收进卡片顶栏」同范式。 -->
-    <div v-if="canLayout && auth.supported(CAP.METRICS_READ)" class="dash-tools">
-      <button class="btn-ghost btn-sm" title="卡片显示与排序（在页面上直接拖拽卡片调整顺序）" @click="layoutOpen = true">
-        <Icon name="gear" :size="14" /> 卡片设置
-      </button>
-    </div>
-
     <!-- C2 首启上手清单：未关闭且未全部完成时占位首屏（组件内部自判显隐与加载）。
          必须放在 v-if/v-else 链之外——插进链中会打断相邻关系，模板直接编译失败。 -->
     <OnboardingChecklist />
@@ -569,10 +560,6 @@ onUnmounted(() => { es?.close() })
 
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
-
-/* 概览无卡头，页面级 page-head 横条已去掉，卡片设置收为内容区右上角工具行
-   （与 SitesView/ProcessesView「工具条收进卡片顶栏」同范式）。 */
-.dash-tools { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* 本机便签（025）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
    但不改填充色——避免和告警/热区提示抢视觉权重。 */
