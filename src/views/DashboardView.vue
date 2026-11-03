@@ -369,9 +369,41 @@ onUnmounted(() => { es?.close() })
 
 <template>
   <div class="dash">
-    <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
-      当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
-    </p>
+    <!-- 不支持资源监控：仅提示 + 本机便签（便签不依赖 metrics 能力，能力缺失时它是页面上唯一的卡片） -->
+    <template v-if="!auth.supported(CAP.METRICS_READ)">
+      <p class="muted">
+        当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
+      </p>
+      <section class="card server-note">
+        <div class="sec-head">
+          <Icon name="note" :size="16" /><span>本机便签</span>
+          <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
+            @click="adding = true">
+            <Icon name="plus" :size="13" />添加
+          </button>
+        </div>
+        <p v-if="noteErr" class="err" role="alert">{{ noteErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadNotes">重试</button></p>
+        <div v-if="notes.length || adding" class="note-list">
+          <div v-for="n in notes" :key="n.id" class="note-row">
+            <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
+              :saver="(v: string) => saveNote(n.id, v)"
+              placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+            <template v-if="canSystemManage">
+              <span class="note-time" :title="fmtDateTime(n.updated_at)">
+                {{ noteTime(n.updated_at) }}
+              </span>
+              <button class="note-del" title="删除这条便签" @click="delNote = n">
+                <Icon name="trash" :size="13" />
+              </button>
+            </template>
+          </div>
+          <InlineRemark v-if="adding" model-value="" :editable="true"
+            :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
+        </div>
+        <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+        <p v-else-if="!noteLoaded" class="muted">加载中…</p>
+      </section>
+    </template>
 
     <template v-else>
       <p v-if="ovError" class="err" role="alert">{{ ovError }}<button class="btn-ghost btn-sm err-retry" type="button" @click="poll()">重试</button></p>
@@ -432,9 +464,9 @@ onUnmounted(() => { es?.close() })
         </div>
       </section>
 
-      <!-- 系统信息 + 告警。两列：此处只有 2 张卡，原用 cols-3 会让第三列**永远空着**
-           （>1180px 时白占 1/3 行宽；≤1180px 的 cols-3 本就退化成两列，故窄屏无变化）。 -->
-      <div class="grid cols-2">
+      <!-- 系统信息 + 告警与事件 + 本机便签：三列同行、统一卡片样式；
+           ≤1180px 退化为两列、≤720px 单列（与指标卡栅格一致）。 -->
+      <div class="grid cols-3">
         <section class="card info">
           <div class="sec-head"><Icon name="server" :size="16" /><span>系统信息</span></div>
           <dl>
@@ -457,41 +489,38 @@ onUnmounted(() => { es?.close() })
           </ul>
           <div v-else class="ok-state"><span class="dot ok" /> 系统运行正常，无活跃告警</div>
         </section>
+
+        <section class="card server-note">
+          <div class="sec-head">
+            <Icon name="note" :size="16" /><span>本机便签</span>
+            <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
+              @click="adding = true">
+              <Icon name="plus" :size="13" />添加
+            </button>
+          </div>
+          <p v-if="noteErr" class="err" role="alert">{{ noteErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadNotes">重试</button></p>
+          <div v-if="notes.length || adding" class="note-list">
+            <div v-for="n in notes" :key="n.id" class="note-row">
+              <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
+                :saver="(v: string) => saveNote(n.id, v)"
+                placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
+              <template v-if="canSystemManage">
+                <span class="note-time" :title="fmtDateTime(n.updated_at)">
+                  {{ noteTime(n.updated_at) }}
+                </span>
+                <button class="note-del" title="删除这条便签" @click="delNote = n">
+                  <Icon name="trash" :size="13" />
+                </button>
+              </template>
+            </div>
+            <InlineRemark v-if="adding" model-value="" :editable="true"
+              :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
+          </div>
+          <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+          <p v-else-if="!noteLoaded" class="muted">加载中…</p>
+        </section>
       </div>
     </template>
-
-    <!-- 本机便签（025，多条）：A1 降级——从首屏顶部移到页尾（首屏优先呈"这台机器是否健康"），
-         仍不依赖 metrics 能力（能力缺失时它是页面上唯一的卡片）；且必须留在 v-if/v-else 链
-         **之外**（塞进链中会打断相邻关系，模板直接编译失败）。 -->
-    <section class="card server-note">
-      <div class="sec-head">
-        <Icon name="note" :size="16" /><span>本机便签</span>
-        <button v-if="canSystemManage && noteLoaded && !adding" class="btn-ghost btn-sm note-add"
-          @click="adding = true">
-          <Icon name="plus" :size="13" />添加
-        </button>
-      </div>
-      <p v-if="noteErr" class="err" role="alert">{{ noteErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadNotes">重试</button></p>
-      <div v-if="notes.length || adding" class="note-list">
-        <div v-for="n in notes" :key="n.id" class="note-row">
-          <InlineRemark class="note-body" :model-value="n.content" :editable="canSystemManage && noteLoaded"
-            :saver="(v: string) => saveNote(n.id, v)"
-            placeholder="点击填写：这台机器是干嘛的、跑着什么、有什么禁忌（如：勿随意重启）…" />
-          <template v-if="canSystemManage">
-            <span class="note-time" :title="fmtDateTime(n.updated_at)">
-              {{ noteTime(n.updated_at) }}
-            </span>
-            <button class="note-del" title="删除这条便签" @click="delNote = n">
-              <Icon name="trash" :size="13" />
-            </button>
-          </template>
-        </div>
-        <InlineRemark v-if="adding" model-value="" :editable="true"
-          :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
-      </div>
-      <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
-      <p v-else-if="!noteLoaded" class="muted">加载中…</p>
-    </section>
 
     <ConfirmDialog :open="!!delNote" danger title="删除便签"
       :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
@@ -528,9 +557,7 @@ onUnmounted(() => { es?.close() })
 <style scoped>
 .dash { display: flex; flex-direction: column; gap: 18px; }
 
-/* 本机便签（025）：防误操作位。一条品牌色左边线让它从一众指标卡里被认出来，
-   但不改填充色——避免和告警/热区提示抢视觉权重。 */
-.server-note { border-left: 3px solid var(--c-primary); }
+/* 本机便签（025）：与「系统信息 / 告警与事件」同处一行卡片，去掉独立左边线以统一观感。 */
 .note-add { margin-left: auto; }
 .note-list { display: flex; flex-direction: column; gap: 10px; }
 .note-row { display: flex; align-items: flex-start; gap: 6px; }
