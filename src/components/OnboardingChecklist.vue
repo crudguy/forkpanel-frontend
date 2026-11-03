@@ -12,6 +12,10 @@
  * 仍显示为已完成——这一步**只能靠用户守约**，所以勾选框对可自动判定的步骤
  * 直接禁用（`auto=true`）：勾不勾结果都一样，做成可点就是假动作。
  *
+ * ⭐**必做 vs 推荐**：必做项（`required`）才计入完成判据（清单收起 / 进度条）。
+ * WAF 标为推荐——它属安全加固而非上手必做，若计入必做会强制新手一上来就开 WAF
+ * （可能误伤业务）。推荐项仍由真实状态自动判定，只是不阻塞清单收起。
+ *
  * 权限：读取对全员开放；勾选 / 关闭需 settings.manage（面板级共享进度）。
  */
 import { computed, onMounted, ref } from 'vue'
@@ -27,11 +31,18 @@ const err = ref('')
 const busy = ref(false)
 
 const canEdit = computed(() => auth.can('settings.manage'))
-const allDone = computed(() => !!state.value && state.value.done_count >= state.value.total)
-/** 清单的意义是「还差什么」：已关闭或已全做完就不再占首屏位置 */
+// 必做项才计入完成判据：WAF 是推荐项（required=false），不阻塞清单收起，
+// 否则「完成清单」会强制新手一上来就开 WAF。纯推荐项进度单独 0 计入也无害。
+// 用 `!== false` 而非 `!!`：后端未下发 required（老版本）时按必做处理，与设置页一致，
+// 避免老后端下清单永不收起、且每步都被误标「推荐」。
+const reqSteps = computed(() => (state.value?.steps ?? []).filter((s) => s.required !== false))
+const reqDone = computed(() => reqSteps.value.filter((s) => s.done).length)
+const reqTotal = computed(() => reqSteps.value.length)
+const allDone = computed(() => reqTotal.value > 0 && reqDone.value >= reqTotal.value)
+/** 清单的意义是「还差什么」：已关闭或已全做完（必做项）就不再占首屏位置 */
 const visible = computed(() => !!state.value && !state.value.dismissed && !allDone.value)
 const pct = computed(() =>
-  state.value && state.value.total ? Math.round((state.value.done_count / state.value.total) * 100) : 0,
+  reqTotal.value ? Math.round((reqDone.value / reqTotal.value) * 100) : 0,
 )
 
 async function load() {
@@ -79,7 +90,7 @@ function toggle(s: { id: OnboardingStepId; auto: boolean; checked: boolean }) {
     <div class="sec-head">
       <Icon name="list" :size="16" />
       <span>上手清单</span>
-      <span class="prog">{{ state.done_count }} / {{ state.total }}</span>
+      <span class="prog">{{ reqDone }} / {{ reqTotal }} 必做</span>
       <span class="spacer" />
       <button v-if="canEdit" class="btn-ghost btn-sm" :disabled="busy" title="关闭清单（进度仍保留，可随时在设置里重新开始）"
         @click="save(checkedIds(), true)">
@@ -87,8 +98,8 @@ function toggle(s: { id: OnboardingStepId; auto: boolean; checked: boolean }) {
       </button>
     </div>
 
-    <div class="bar" role="progressbar" :aria-valuenow="state.done_count" :aria-valuemin="0"
-      :aria-valuemax="state.total" :aria-label="`上手清单进度 ${state.done_count} / ${state.total}`">
+    <div class="bar" role="progressbar" :aria-valuenow="reqDone" :aria-valuemin="0"
+      :aria-valuemax="reqTotal" :aria-label="`上手清单进度 ${reqDone} / ${reqTotal} 必做`">
       <i :style="{ width: `${pct}%` }" />
     </div>
 
@@ -103,7 +114,9 @@ function toggle(s: { id: OnboardingStepId; auto: boolean; checked: boolean }) {
           <span class="t">{{ s.title }}</span>
           <span class="d">{{ s.desc }}</span>
         </div>
-        <span v-if="s.auto" class="badge badge-ok" title="按服务器上的真实数据判定已完成">已自动完成</span>
+        <span v-if="s.auto && s.done" class="badge badge-ok" title="按服务器上的真实数据判定已完成">已自动完成</span>
+        <span v-else-if="s.done" class="badge badge-ok">已完成</span>
+        <span v-else-if="s.required === false" class="badge badge-rec" title="推荐项：不计入完成判据，可跳过">推荐</span>
         <RouterLink :to="s.route" class="btn-ghost btn-sm go">
           前往<Icon name="chevron" :size="13" />
         </RouterLink>
@@ -132,4 +145,7 @@ li input:disabled { cursor: not-allowed; }
 .d { font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.5; }
 li.done .t { color: var(--c-text-dim); }
 .go { flex: none; display: inline-flex; align-items: center; gap: 3px; }
+/* 推荐项徽标：与 badge-ok 同形，仅换色，提示"可跳过、不计入完成判据" */
+.badge-rec { flex: none; font-size: var(--fs-12); padding: 1px 7px; border-radius: 999px;
+  color: var(--c-primary); border: 1px solid var(--c-primary-soft); background: var(--c-primary-soft); }
 </style>

@@ -754,6 +754,8 @@ export interface OnboardingStep {
   auto: boolean
   /** checked || auto：渲染只看这个 */
   done: boolean
+  /** 是否计入完成判据；false = 推荐项（如 WAF），不阻塞清单收起 */
+  required: boolean
 }
 
 export interface OnboardingState {

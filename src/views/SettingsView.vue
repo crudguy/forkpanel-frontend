@@ -23,7 +23,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
+import type { SettingsReport, LlmTestResult, UpgradeCheck, OnboardingState } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
@@ -41,6 +41,32 @@ const upgradeErr = ref('')
 const upgradeOpen = ref(false)
 const upgrading = ref(false)
 const canCheckUpdate = computed(() => auth.can('system.manage'))
+
+// 上手清单：与概览页清单组件内「不再显示」互为入口，兑现其 tooltip 承诺的"设置里重新开始"。
+// WAF 为推荐项、不计入完成判据（避免诱导新手一上来就开 WAF 误伤业务）。
+const onboarding = ref<OnboardingState | null>(null)
+const onboardingBusy = ref(false)
+const onboardingErr = ref('')
+// required !== false：后端未下发时按必做处理（向后兼容），WAF 显式 false 才降为推荐
+const reqSteps = computed(() => (onboarding.value?.steps ?? []).filter((s) => s.required !== false))
+const reqDone = computed(() => reqSteps.value.filter((s) => s.done).length)
+const reqTotal = computed(() => reqSteps.value.length)
+async function loadOnboarding() {
+  if (!canManage.value) return
+  try { onboarding.value = await api.get<OnboardingState>(API.settings.onboarding()) }
+  catch { /* 清单是引导性内容，读失败不阻塞设置页 */ }
+}
+async function restartOnboarding() {
+  if (onboardingBusy.value) return
+  onboardingBusy.value = true
+  onboardingErr.value = ''
+  try {
+    // 清进度 + 取消隐藏：已关闭的清单重新出现，进行中的清单回到初始。
+    onboarding.value = await api.put<OnboardingState>(API.settings.onboarding(), { checked: [], dismissed: false })
+    toast('上手清单已重新开始')
+  } catch (e) { onboardingErr.value = errorText(e) }
+  finally { onboardingBusy.value = false }
+}
 
 // 深链定位（topbar 系统徽标胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
@@ -278,6 +304,7 @@ onMounted(async () => {
   await load()
   // 角色列表需要 user.manage；loadRoles 内部自判权限，非管理员直接跳过
   await loadRoles()
+  await loadOnboarding()
   scrollToHash()
 })
 </script>
@@ -426,6 +453,23 @@ onMounted(async () => {
             </li>
           </ul>
         </div>
+      </section>
+
+      <!-- 上手清单：与概览页清单组件内「不再显示」互为入口，兑现其 tooltip 承诺的"设置里重新开始"。
+           WAF 为推荐项、不计入完成判据（避免诱导新手一上来就开 WAF 误伤业务）。 -->
+      <section v-if="onboarding" class="card">
+        <div class="sec-head"><Icon name="list" :size="16" /> 上手清单</div>
+        <p class="sec-sub">
+          首次登录后出现在概览页的「5 步上手」引导；必做项完成或手动关闭后自动消失。
+          WAF 为<strong>推荐</strong>项，不计入完成判据。
+        </p>
+        <div class="restart-row">
+          <span class="dim tiny">{{ onboarding.dismissed ? '当前已关闭' : `进行中：${reqDone} / ${reqTotal} 必做` }}</span>
+          <button class="btn-ghost btn-sm" type="button" :disabled="onboardingBusy" @click="restartOnboarding">
+            {{ onboardingBusy ? '处理中…' : '重新开始' }}
+          </button>
+        </div>
+        <p v-if="onboardingErr" class="err" role="alert">{{ onboardingErr }}</p>
       </section>
 
     </template>
