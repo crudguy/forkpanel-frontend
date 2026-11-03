@@ -118,6 +118,13 @@ const route = useRoute()
 const tab = computed<'software' | 'services'>(() =>
   route.name === 'services-units' ? 'services' : 'software')
 
+// 「?filter=failed」深链：概览磁贴报「N 个服务异常」时，点进来只列失败项。
+// 客户端过滤而非给 API 传 filter —— svcs 同时供软件卡片反查服务状态，
+// 裁掉会让「已安装软件」的服务状态误显示为无服务。
+const onlyFailed = computed(() => route.query.filter === 'failed')
+const shownSvcs = computed(() => onlyFailed.value
+  ? svcs.value.filter(s => s.state === 'failed') : svcs.value)
+
 // 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
 // 高亮按 route.path 精确比对）。顺序与侧边栏菜单名「软件与服务」对齐：
 // 软件在前（默认 Tab）、服务在后。
@@ -516,6 +523,8 @@ async function removePkg(n: string) {
 // 服务的启停 / 日志 / 配置编辑都在独立详情页（/services/:unit）；本页只做入口。
 // 原先这三块挤在模态弹窗里，配置编辑器与日志区都只有半屏高，且地址不可分享。
 const router = useRouter()
+/** 退出「仅看失败」筛选，回到完整服务列表。 */
+function clearFilter() { router.replace({ name: 'services-units' }) }
 function goDetail(s: Svc) {
   router.push({ name: 'service-detail', params: { unit: s.name } })
 }
@@ -583,6 +592,11 @@ async function doConfirmed() {
         title="当前环境不支持服务管理"
         :reason="auth.capabilities[CAP.SERVICE_MANAGE]?.reason ?? undefined" />
       <div v-else class="card flush svc-card">
+        <!-- 从概览「N 个服务异常」磁贴深链进来时生效：只列失败项，一键回到全部 -->
+        <p v-if="onlyFailed && !loading" class="filter-tip">
+          仅显示失败的服务（{{ shownSvcs.length }}）
+          <button class="btn-ghost btn-sm" type="button" @click="clearFilter">显示全部</button>
+        </p>
         <!-- 首次加载骨架；轮询(silent)不触发，表格不闪骨架 -->
         <div v-if="loading" class="skeleton shimmer box" />
         <template v-else>
@@ -595,7 +609,7 @@ async function doConfirmed() {
               <th>服务</th><th>状态</th><th class="num">开机自启</th><th>说明</th><th class="acts-col">操作</th>
             </tr></thead>
             <tbody>
-              <tr v-for="s in svcs" :key="s.name" class="rowlink" @click="goDetail(s)">
+              <tr v-for="s in shownSvcs" :key="s.name" class="rowlink" @click="goDetail(s)">
                 <td class="svc-name" :title="s.name">
                   {{ s.name }}
                   <span v-if="!s.managed" class="badge"
@@ -606,7 +620,10 @@ async function doConfirmed() {
                 <td class="dim svc-desc">{{ s.description ?? '—' }}</td>
                 <td class="acts-col nowrap"><button class="btn-ghost btn-sm">详情 ›</button></td>
               </tr>
-              <tr v-if="!svcs.length"><td colspan="5"><EmptyState title="未发现服务" /></td></tr>
+              <tr v-if="!shownSvcs.length"><td colspan="5">
+                <EmptyState :title="onlyFailed ? '没有失败的服务' : '未发现服务'"
+                  :hint="onlyFailed ? '异常已恢复，或该筛选下暂无失败单元' : undefined" />
+              </td></tr>
             </tbody>
           </table>
         </div>
@@ -874,6 +891,12 @@ async function doConfirmed() {
 /* 类别计数：一眼看出"这类包本机装了几个 / 还剩几个可选"，不用逐个包名去数 */
 .cat-count { margin-left: auto; font-size: var(--fs-12); font-weight: 500;
   color: var(--c-text-dim); background: var(--c-hover); padding: 1px 8px; border-radius: 999px; }
+
+/* 「仅看失败」筛选条：从概览磁贴深链进来时的上下文提示 + 一键退出 */
+.filter-tip { display: flex; align-items: center; gap: 10px; margin: 0;
+  padding: 10px 16px; font-size: var(--fs-13); color: var(--c-text-dim);
+  border-bottom: 1px solid var(--c-border); }
+.filter-tip .btn-ghost { margin-left: auto; }
 
 /* 服务表格：固定列宽，避免长单元名(php8.1-fpm/mariadb-server)把右侧列挤出视口。
    类名用 w- 前缀，与单元格自身 class 区分（同进程页范式）。 */

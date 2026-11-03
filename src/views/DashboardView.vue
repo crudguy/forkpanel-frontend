@@ -221,6 +221,13 @@ const ctView = computed(() => ctTile(ct.value, ctErr.value, ctUnavailable.value)
 const siteView = computed(() => siteTile(site.value, siteErr.value))
 const bkView = computed(() => bkTile(bk.value, bkErr.value))
 
+/** 服务磁贴跳转目标：**必须直达「服务」Tab**。
+ *  ⚠ 不能跳 `/services` —— 它会重定向到默认的「软件」Tab，进去满屏是软件包，
+ *  看不到 systemd 服务列表（概览报「N 个服务异常」、点进去却像"没有异常"，就是这么来的）。
+ *  有异常时附带 `?filter=failed`，服务页只列失败项，省去在长列表里翻找。 */
+const svcTo = computed(() =>
+  !svcErr.value && svc.value.failed > 0 ? '/services/units?filter=failed' : '/services/units')
+
 async function loadStatus() {
   // 各列表独立抓取，单点失败只让对应磁贴进入错误态（P1-20），不拖累整块渲染
   try {
@@ -437,7 +444,7 @@ onUnmounted(() => { es?.close() })
               磁贴本身显示「加载失败」，这条错误条说明失败原因，重试会重抓全部四路。 -->
         <p v-if="statusErr" class="err" role="alert">部分运行状态加载失败：{{ statusErr }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadStatus">重试</button></p>
         <div class="status">
-          <RouterLink to="/services" class="st-tile">
+          <RouterLink :to="svcTo" class="st-tile">
             <span class="st-dot" :class="svcView.tone" />
             <span class="st-ico"><Icon name="server" :size="18" /></span>
             <span class="st-main">服务</span>
