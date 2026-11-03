@@ -104,6 +104,13 @@ let es: EventSource | undefined
 // pollingMode 为假时链空转（tick 里被 enabled 拦下），与 SSE 分支互斥不双跑。
 usePolling({ fn: poll, ms: 10_000, enabled: () => auth.pollingMode })
 
+// 运行状态磁贴（服务 / 容器 / 网站 / 备份）单独一轮：此前只在 onMounted 拉一次，
+// 长期停在概览页时计数会过期——服务恢复后磁贴仍显示「N 个服务异常」，点进去却对不上。
+// 30s 比指标卡的 10s 更克制：四路请求（services/containers/sites/backups）合起来不轻，
+// 而这几类状态变化频率低。隐藏暂停 / 回可见补拉由 usePolling 统一处理；
+// 能力缺失时磁贴不渲染，enabled 每 tick 求值会把链空转掉。
+usePolling({ fn: loadStatus, ms: 30_000, enabled: () => auth.supported(CAP.METRICS_READ) })
+
 // 实时推送是 overview 的字段子集，必须「合并」而非整体替换——
 // 否则 SSE 不含的 disk/net/degraded 等字段会被覆盖成 undefined（进而显示 0）。
 function apply(d: Partial<Overview>) { ov.value = { ...(ov.value || {}), ...d } as Overview }
