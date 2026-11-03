@@ -84,6 +84,7 @@ export const router = createRouter({
         { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue'), meta: { title: '终端' } },
         { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 助手' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
+        { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue'), meta: { title: '帮助' } },
         { path: 'processes', redirect: '/system/procs' },
         { path: 'professional', redirect: '/system/pro' },
         { path: 'security', redirect: '/firewall/baseline' },

@@ -733,45 +733,6 @@ export interface UpgradeCheck {
   error: string | null
 }
 
-// ── 首启上手清单（C2，对应 openapi `OnboardingState`）──
-/** 步骤 id 由后端固定给出（5 步）；前端不得自行发明或补充 */
-export type OnboardingStepId =
-  | 'trust_ca'
-  | 'create_site'
-  | 'issue_cert'
-  | 'enable_waf'
-  | 'backup_plan'
-
-export interface OnboardingStep {
-  id: OnboardingStepId
-  title: string
-  desc: string
-  /** 前端路由：「前往」直达 */
-  route: string
-  /** 用户手动勾选 */
-  checked: boolean
-  /** 由后端真实状态判定已完成 —— 此时勾选框须禁用（勾了结果也不变） */
-  auto: boolean
-  /** checked || auto：渲染只看这个 */
-  done: boolean
-  /** 是否计入完成判据；false = 推荐项（如 WAF），不阻塞清单收起 */
-  required: boolean
-}
-
-export interface OnboardingState {
-  steps: OnboardingStep[]
-  dismissed: boolean
-  updated_at: number | null
-  done_count: number
-  total: number
-}
-
-/** PUT /settings/onboarding 的请求体：整体替换勾选集合 */
-export interface OnboardingPut {
-  checked: OnboardingStepId[]
-  dismissed?: boolean
-}
-
 // ── C10 测试连接（对应 openapi `LlmTestResult`）──
 export interface LlmTestResult {
   ok: boolean

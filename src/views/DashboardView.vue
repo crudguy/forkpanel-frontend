@@ -18,7 +18,6 @@ import { cpuTone, type MetricTone } from '@/composables/metricTone'
 import { bkTile, ctTile, siteTile, svcTile } from '@/composables/dashboardStatus'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
-import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
@@ -383,10 +382,6 @@ onUnmounted(() => { es?.close() })
 
 <template>
   <div class="dash">
-    <!-- C2 首启上手清单：未关闭且未全部完成时占位首屏（组件内部自判显隐与加载）。
-         必须放在 v-if/v-else 链之外——插进链中会打断相邻关系，模板直接编译失败。 -->
-    <OnboardingChecklist />
-
     <p v-if="!auth.supported(CAP.METRICS_READ)" class="muted">
       当前环境不支持资源监控（{{ auth.capabilities[CAP.METRICS_READ]?.reason ?? '未知原因' }}）
     </p>

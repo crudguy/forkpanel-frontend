@@ -56,4 +56,10 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage', group: '系统' },
+  // —— 帮助：常驻入口，与概览/设置同用「恒显」能力位（system.view），
+  //   不绑定任何业务模块能力，确保任意环境都能打开。
+  //   ⚠ 不要为它单开一个「帮助」分组：SideNav 会给每个新分组渲染组标题，
+  //   单条目分组就会显示成「帮助 / 帮助」两行重复文字。它本身已在全列表末尾，
+  //   放进「系统」组同样落在侧边栏最下方。
+  { to: '/help', label: '帮助', icon: 'help', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
 ]

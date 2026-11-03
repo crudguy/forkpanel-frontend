@@ -88,6 +88,7 @@ const SUBTITLES: Record<string, string> = {
   containers: 'Docker · 列举 / 创建 / 启停 / 删除 · Compose 项目管理',
   waf: '各站点防护档位与 CC 限速 · 随 nginx 配置一同下发',
   certs: '各站点证书总览 · 申请 · 续期 · 根证书信任',
+  help: '常用操作指引 · 模块说明 · 安全提示与排障',
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 
