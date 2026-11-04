@@ -350,7 +350,7 @@ async function doComposeDown() {
 
     <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
       :project="stackEditTarget?.project" :services="stackEditTarget?.services"
-      @confirm="onStackSubmit" @cancel="stackEditOpen = false" />
+      @submit="onStackSubmit" @cancel="stackEditOpen = false" />
   </div>
 </template>
 
