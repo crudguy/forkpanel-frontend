@@ -13,6 +13,7 @@
 import { ref, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
 import Icon from '@/components/Icon.vue'
+import ExpandableTextarea from '@/components/ExpandableTextarea.vue'
 import {
   draftError,
   emptyServiceDraft,
@@ -123,7 +124,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 
           <label>
             <span>启动命令<small>（每行一个参数；含空格的参数写在一行里）</small></span>
-            <textarea v-model="d.commandText" rows="2" placeholder="nginx&#10;-g&#10;daemon off;" spellcheck="false" />
+            <ExpandableTextarea v-model="d.commandText" :rows="2" :placeholder="'nginx\n-g\ndaemon off;'" />
           </label>
 
           <div class="fields two">
