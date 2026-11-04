@@ -46,7 +46,7 @@ const emit = defineEmits<{
 const name = ref('')
 const image = ref('')
 const restart = ref('no')
-const portsText = ref('')     // 每行一条 host:container[/proto]
+const portsText = ref('')     // 每行一条 [IP:]host:container[/proto]
 const envText = ref('')       // 每行一条 KEY=VALUE
 const volumesText = ref('')   // 每行一条 src:dst[:ro]
 const cmdText = ref('')       // 每行一个参数
@@ -150,8 +150,11 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
         </label>
 
         <label>
-          <span>端口映射<small>（每行一条 host:container[/proto]）</small></span>
-          <textarea v-model="portsText" rows="2" placeholder="8080:80&#10;443:443/tcp" spellcheck="false" />
+          <span>端口映射<small>（每行一条 [IP:]host:container[/proto]）</small></span>
+          <textarea v-model="portsText" rows="2" placeholder="8080:80&#10;127.0.0.1:8000:80" spellcheck="false" />
+          <p class="hint-note">
+            <span>省略 IP 时监听所有地址；只想本机访问（再由反代转发）就写 <code>127.0.0.1:8080:80</code>。</span>
+          </p>
         </label>
 
         <label>
