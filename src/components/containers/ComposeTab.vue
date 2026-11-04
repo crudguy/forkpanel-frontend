@@ -22,6 +22,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
+import StackImportDialog from '@/components/StackImportDialog.vue'
 import { COMPOSE_ACTIONS, type ComposeActionKey } from '@/composables/composeActions'
 import {
   containersOfProject, drillEmptyHint, projectCountMismatch,
@@ -93,6 +94,7 @@ const stacks = ref<StackRow[]>([])
 const stackEditOpen = ref(false)
 const stackEditTarget = ref<StackRow | null>(null)
 const stackBusy = ref(false)
+const stackImportOpen = ref(false)
 
 async function loadStacks() {
   if (!props.supported) return
@@ -109,12 +111,17 @@ function openStackEditor(row?: StackRow) {
   stackEditOpen.value = true
 }
 
+function openStackImport() {
+  stackImportOpen.value = true
+}
+
 async function onStackSubmit(project: string, services: StackServicePayload[]) {
   stackBusy.value = true
   try {
     await api.put(API.containers.stack(project), { services })
     toast(`已保存编排：${project}`)
     stackEditOpen.value = false
+    stackImportOpen.value = false
     await loadStacks()
   } catch (e) {
     error.value = errorText(e)
@@ -224,6 +231,9 @@ async function doComposeDown() {
       <div class="card-toolbar">
         <span class="count">面板编排 · 已定义 {{ stacks.length }} 个</span>
         <span class="spacer" />
+        <!-- 导入入口始终可见（即便还没有任何编排）：从别处拿来的 yaml+env 一键部署 -->
+        <button v-if="canManage" class="btn-ghost btn-sm" type="button"
+          @click="openStackImport()">导入编排</button>
         <!-- 空态时由下方 EmptyState 的 #cta 承担入口，这里不重复出现 -->
         <button v-if="canManage && stacks.length" class="btn-primary btn-sm" type="button"
           @click="openStackEditor()">新建编排</button>
@@ -351,6 +361,9 @@ async function doComposeDown() {
     <StackEditorDialog :open="stackEditOpen" :busy="stackBusy"
       :project="stackEditTarget?.project" :services="stackEditTarget?.services"
       @submit="onStackSubmit" @cancel="stackEditOpen = false" />
+
+    <StackImportDialog :open="stackImportOpen" :busy="stackBusy"
+      @submit="onStackSubmit" @cancel="stackImportOpen = false" />
   </div>
 </template>
 

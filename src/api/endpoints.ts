@@ -295,6 +295,9 @@ export const API = {
     stacks: () => '/api/v1/containers/stacks',
     stack: (project: string) =>
       `/api/v1/containers/stacks/${encodeURIComponent(project)}`,
+    /** 安全导入预览：粘贴外部 compose YAML（+ 可选 .env），后端只抽取白名单子集。
+     *  POST，需 container.manage；只读、不写盘。返回 spec + 被丢弃字段 + 提示 + 错误。 */
+    stackImportPreview: () => '/api/v1/containers/stacks/import-preview',
   },
 
   server: {
