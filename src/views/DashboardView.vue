@@ -8,9 +8,9 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
-import { api, errorText } from '@/api/client'
+import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, fmtDateTime, type ServerNote } from '@/api/types'
+import { CAP, fmtDateTime, type ServerNote, type ProcessInfo } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
@@ -202,6 +202,170 @@ const loadTone = computed<MetricTone>(() => {
   const l = ov.value?.load1 ?? 0
   return l > 4 ? 'danger' : l > 2 ? 'warn' : 'load'
 })
+
+// ── 指标卡 hover 悬浮详情：鼠标移到任意指标卡上方弹出详情浮层 ──
+// 设计要点：
+// 1. 单例浮层，Teleport 到 body——避免祖先 transform/backdrop-filter 把浮层裁成小盒；
+// 2. position: fixed + 卡片 getBoundingClientRect() 定位，上方空间不足且下方充裕时翻到下方，
+//    水平方向按视口夹紧，绝不溢出屏幕；
+// 3. pointer-events: none——浮层永不抢 hover，鼠标移出卡片即隐藏，无闪烁/卡死；
+// 4. TIP_H 仅用于翻转判定（预估高度），无需实测，避免测量导致的定位跳动。
+const tipCard = ref<MetricItem | null>(null)
+const tipDetail = ref<{ rows: { k: string; v: string }[]; status: string; tone: MetricTone } | null>(null)
+const tipStyle = ref<Record<string, string>>({})
+const tipVisible = ref(false)
+const TIP_W = 250
+const TIP_H = 190
+
+const TONE_LABEL: Record<string, string> = {
+  primary: '正常', cyan: '正常', ok: '正常', load: '正常', neutral: '正常',
+  hot: '偏高', warn: '警告', danger: '危险',
+}
+
+/** 各指标卡的悬浮详情内容；数据缺失（ov 未到）时返回 null，不弹浮层。 */
+function cardDetail(id?: string): { rows: { k: string; v: string }[]; status: string; tone: MetricTone } | null {
+  const o = ov.value
+  if (!o) return null
+  switch (id) {
+    case 'cpu':
+      return {
+        rows: [
+          { k: '实时使用率', v: `${cpu.value} %` },
+          { k: '采样口径', v: '采集循环整周期均值' },
+          { k: '刷新方式', v: auth.pollingMode ? '每 10s 轮询' : 'SSE 实时推送' },
+        ],
+        status: TONE_LABEL[cpuTone(Number(cpu.value))] ?? '正常',
+        tone: cpuTone(Number(cpu.value)),
+      }
+    case 'mem': {
+      const pct = memPct.value
+      return {
+        rows: [
+          { k: '已用内存', v: `${((o.mem_used_kib ?? 0) / 1048576).toFixed(1)} GB` },
+          { k: '总内存', v: `${((o.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB` },
+          { k: '使用率', v: `${pct.toFixed(1)} %` },
+        ],
+        status: pct >= 95 ? '危险' : pct >= 90 ? '警告' : '正常',
+        tone: pct >= 95 ? 'danger' : pct >= 90 ? 'warn' : 'cyan',
+      }
+    }
+    case 'disk': {
+      const totalG = o.disk_total_bytes / 1073741824
+      const usedG = o.disk_used_bytes / 1073741824
+      const tb = totalG >= 1024
+      const du = tb ? 1024 : 1
+      const dUnit = tb ? 'TB' : 'GB'
+      const pct = diskPct.value
+      return {
+        rows: [
+          { k: '已用空间', v: `${(usedG / du).toFixed(1)} ${dUnit}` },
+          { k: '总空间', v: `${(totalG / du).toFixed(1)} ${dUnit}` },
+          { k: '使用率', v: `${pct.toFixed(1)} %` },
+          { k: '磁盘数量', v: `${o.disks}` },
+        ],
+        status: pct >= 95 ? '危险' : pct >= 90 ? '警告' : '正常',
+        tone: pct >= 95 ? 'danger' : pct >= 90 ? 'warn' : 'ok',
+      }
+    }
+    case 'load': {
+      const l = o.load1 ?? 0
+      return {
+        rows: [
+          { k: '1 分钟负载', v: l.toFixed(2) },
+          { k: '偏高阈值', v: '≥ 2' },
+          { k: '高负载阈值', v: '≥ 4' },
+          { k: '说明', v: '反映 CPU / IO 排队强度' },
+        ],
+        status: TONE_LABEL[loadTone.value] ?? '正常',
+        tone: loadTone.value,
+      }
+    }
+    case 'net':
+      return {
+        rows: [
+          { k: '下行速率', v: fmtNet(o.net_in_bps) },
+          { k: '上行速率', v: fmtNet(o.net_out_bps) },
+          { k: '口径', v: '实时吞吐（瞬时）' },
+          { k: '刷新方式', v: auth.pollingMode ? '每 10s 轮询' : 'SSE 实时推送' },
+        ],
+        status: '正常',
+        tone: 'cyan',
+      }
+    default:
+      return null
+  }
+}
+
+function showTip(card: MetricItem, e: MouseEvent) {
+  // 拖拽中或布局弹窗打开时不弹浮层（避免与拖拽排序 / 弹窗焦点冲突）
+  if (dragId.value || layoutOpen.value) return
+  const detail = cardDetail(card.id)
+  if (!detail) return
+  // 顶部进程：仅 CPU / 内存卡，且环境支持进程列表能力时（能力缺失整段不渲染，不造假数据）
+  const sort = card.id === 'cpu' ? 'cpu' : card.id === 'mem' ? 'mem' : null
+  tipProcSort.value = sort
+  tipProcs.value = []
+  tipProcErr.value = ''
+  if (sort && auth.supported(CAP.PROCESS_LIST)) void loadTopProcs(sort)
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const vw = window.innerWidth, vh = window.innerHeight
+  let left = rect.left + rect.width / 2 - TIP_W / 2
+  left = Math.max(8, Math.min(left, vw - TIP_W - 8))
+  const roomAbove = rect.top - TIP_H - 10 > 8
+  const roomBelow = rect.bottom + TIP_H + 10 < vh - 8
+  // 默认优先浮于卡片上方（不挡下方「运行状态」区）；上方不足且下方充裕时翻到下方
+  let top: number, tf: string
+  if (roomAbove || !roomBelow) { top = rect.top; tf = 'translateY(calc(-100% - 10px))' }
+  else { top = rect.bottom; tf = 'translateY(10px)' }
+  tipCard.value = card
+  tipDetail.value = detail
+  tipStyle.value = { left: left + 'px', top: top + 'px', transform: tf }
+  tipVisible.value = true
+}
+function hideTip() {
+  tipVisible.value = false
+  tipProcSort.value = null // 收起时复位，下次 hover 重新判定（缓存仍保留，重复 hover 即时出）
+}
+
+// ── hover 顶部进程（仅 CPU / 内存卡）：后端 /processes 支持 sort+limit 服务端取 Top N ──
+// 懒加载 + 5s TTL 缓存：避免每次悬停都打 /processes（实测单程 ~40ms / 75KB），重复悬停即时出；
+// 过期后下次 hover 再拉。能力缺失时整段不渲染（不造假数据，与仪表盘其余纪律一致）。
+const tipProcSort = ref<'cpu' | 'mem' | null>(null)
+const tipProcs = ref<ProcessInfo[]>([])
+const tipProcLoading = ref(false)
+const tipProcErr = ref('')
+const PROC_TTL = 5000
+const procCache = new Map<'cpu' | 'mem', { ts: number; data: ProcessInfo[] }>()
+
+function fmtMem(kib: number) {
+  const mb = kib / 1024
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(0) + ' MB'
+}
+async function loadTopProcs(sort: 'cpu' | 'mem') {
+  const cached = procCache.get(sort)
+  const now = Date.now()
+  if (cached && now - cached.ts < PROC_TTL) {
+    tipProcs.value = cached.data
+    tipProcLoading.value = false
+    return
+  }
+  tipProcLoading.value = true
+  tipProcErr.value = ''
+  try {
+    const r = await api.get<ProcessInfo[]>(API.processes.list(), { params: { sort, limit: 5 } })
+    const data = (r ?? []).slice(0, 5)
+    procCache.set(sort, { ts: now, data })
+    // 仅在仍展示该 sort 时回填：避免 hover 切卡后旧请求覆盖新卡数据
+    if (tipProcSort.value === sort) tipProcs.value = data
+    tipProcLoading.value = false
+  } catch (e) {
+    if (tipProcSort.value === sort) {
+      tipProcErr.value = isUnsupported(e) ? '当前环境不支持进程管理' : errorText(e)
+      tipProcLoading.value = false
+    }
+  }
+}
 
 // ── 运行状态总览（侧边栏已承担导航职能，这里只呈现真实状态）──
 const svc = ref<{ total: number; active: number; failed: number; ok: boolean }>({ total: 0, active: 0, failed: 0, ok: false })
@@ -431,10 +595,12 @@ onUnmounted(() => { es?.close() })
         <MetricCard v-for="c in shownCards" :key="c.id" v-bind="c"
           :draggable="canLayout"
           :class="[{ 'card-drag': canLayout }, { dragging: dragId === c.id }]"
-          @dragstart="onDragStart(c.id as string, $event)"
+          @dragstart="onDragStart(c.id as string, $event); hideTip()"
           @dragover.prevent
           @drop.prevent="onDropOn(c.id as string)"
-          @dragend="dragId = null" />
+          @dragend="dragId = null"
+          @mouseenter="showTip(c, $event)"
+          @mouseleave="hideTip" />
       </div>
 
       <!-- 高负载时的救火捷径：只在异常时出现，避免常态占视觉位 -->
@@ -536,6 +702,46 @@ onUnmounted(() => { es?.close() })
       </div>
     </template>
 
+    <!-- 指标卡 hover 悬浮详情：单例浮层，Teleport 到 body 避免被祖先裁切；
+          pointer-events:none 保证鼠标移出卡片即隐藏、不抢 hover、无闪烁。 -->
+    <Teleport to="body">
+      <Transition name="mtip">
+        <div v-if="tipVisible && tipCard && tipDetail" class="m-tip" :class="`tone-${tipDetail.tone}`"
+             :style="tipStyle" role="tooltip">
+          <div class="m-tip-head">
+            <span v-if="tipCard.icon" class="ico"><Icon :name="tipCard.icon" :size="16" /></span>
+            <span class="m-tip-label">{{ tipCard.label }}</span>
+            <span class="badge">{{ tipDetail.status }}</span>
+          </div>
+          <div class="m-tip-val">
+            <span class="num">{{ tipCard.value }}</span>
+            <em v-if="tipCard.unit">{{ tipCard.unit }}</em>
+            <span v-if="tipCard.sub" class="sub2">{{ tipCard.sub }}</span>
+          </div>
+          <dl class="m-tip-rows">
+            <div v-for="r in tipDetail.rows" :key="r.k" class="row">
+              <dt>{{ r.k }}</dt><dd>{{ r.v }}</dd>
+            </div>
+          </dl>
+          <div v-if="tipProcSort && auth.supported(CAP.PROCESS_LIST)" class="m-tip-procs">
+            <div class="m-tip-procs-head">
+              <span>Top 5 进程</span>
+              <span class="m-tip-procs-sub">按{{ tipProcSort === 'cpu' ? 'CPU' : '内存' }}</span>
+            </div>
+            <p v-if="tipProcLoading" class="m-tip-procs-msg">加载中…</p>
+            <p v-else-if="tipProcErr" class="m-tip-procs-msg err">{{ tipProcErr }}</p>
+            <ul v-else class="m-tip-procs-list">
+              <li v-for="(p, i) in tipProcs" :key="p.pid" class="m-tip-proc">
+                <span class="rank">{{ i + 1 }}</span>
+                <span class="pname" :title="p.cmdline || p.name">{{ p.name }}</span>
+                <span class="pval">{{ tipProcSort === 'cpu' ? p.cpu_pct.toFixed(1) + ' %' : fmtMem(p.rss_kib) }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <ConfirmDialog :open="!!delNote" danger title="删除便签"
       :detail="delNote ? `将删除便签「${delNote.content.slice(0, 24)}${delNote.content.length > 24 ? '…' : ''}」，且无法恢复。` : ''"
       @confirm="doDeleteNote" @cancel="delNote = null" />
@@ -631,4 +837,60 @@ li:has(.dot.warn) .a-lv { color: var(--c-warn); border-color: transparent; backg
 li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; background: var(--c-ok-soft); }
 .alerts .a-msg { flex: 1; }
 .ok-state { display: flex; align-items: center; gap: 9px; color: var(--c-text-dim); font-size: var(--fs-13-5); }
+
+/* ── 指标卡 hover 悬浮详情 ── */
+.m-tip { position: fixed; z-index: 1000; width: 250px; box-sizing: border-box;
+  padding: 13px 15px 14px; border-radius: 12px; pointer-events: none;
+  background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
+  box-shadow: var(--shadow-lg); opacity: 1; }
+.mtip-enter-from, .mtip-leave-to { opacity: 0; }
+.mtip-enter-active, .mtip-leave-active { transition: opacity .12s ease; }
+.m-tip-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.m-tip .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--c-text-dim) 16%, transparent); color: var(--c-text-dim); }
+.m-tip-label { font-size: var(--fs-13-5); font-weight: 600; color: var(--c-text); }
+.m-tip .badge { margin-left: auto; flex: none; font-size: var(--fs-12); padding: 1px 8px;
+  border-radius: 999px; border: 1px solid var(--c-border); color: var(--c-text-dim); background: transparent; white-space: nowrap; }
+.m-tip-val { display: flex; align-items: baseline; gap: 5px; min-width: 0; margin-bottom: 11px;
+  font-size: var(--fs-18); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.m-tip-val .num { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-tip-val em { font-style: normal; font-size: var(--fs-12); color: var(--c-text-dim); font-weight: 500; white-space: nowrap; }
+.m-tip-val .sub2 { margin-left: auto; font-size: var(--fs-12); color: var(--c-text-dim); font-weight: 500; white-space: nowrap; }
+.m-tip-rows { margin: 0; display: flex; flex-direction: column; }
+.m-tip-rows .row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0;
+  border-top: 1px solid var(--c-border); font-size: var(--fs-12-5); }
+.m-tip-rows .row:first-child { border-top: none; }
+.m-tip-rows dt { color: var(--c-text-dim); white-space: nowrap; }
+.m-tip-rows dd { margin: 0; font-weight: 500; color: var(--c-text); text-align: right; font-variant-numeric: tabular-nums; }
+/* Top 5 进程（仅 CPU / 内存卡；能力缺失不渲染）：分隔 + 紧凑行 */
+.m-tip-procs { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--c-border); }
+.m-tip-procs-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;
+  font-size: var(--fs-12); font-weight: 600; color: var(--c-text-dim); }
+.m-tip-procs-sub { font-size: var(--fs-12); font-weight: 500; color: var(--c-text-mute); }
+.m-tip-procs-msg { margin: 0; font-size: var(--fs-12); color: var(--c-text-mute); }
+.m-tip-procs-msg.err { color: var(--c-danger); }
+.m-tip-procs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.m-tip-proc { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12-5); }
+.m-tip-proc .rank { flex: none; width: 15px; height: 15px; border-radius: 4px; display: grid; place-items: center;
+  font-size: var(--fs-12); font-weight: 700; color: var(--c-text-mute); background: var(--c-hover); }
+.m-tip-proc .pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); }
+.m-tip-proc .pval { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--c-text-dim); }
+/* tone → 图标色 + 状态徽标色（与 MetricCard 同源 token，随主题切换） */
+.m-tip.tone-primary .ico { background: var(--c-primary-soft); color: var(--c-primary); }
+.m-tip.tone-primary .badge { color: var(--c-primary); border-color: var(--c-primary-soft); background: var(--c-primary-soft); }
+.m-tip.tone-cyan .ico { background: rgba(56,189,248,.14); color: var(--c-cyan); }
+.m-tip.tone-cyan .badge { color: var(--c-cyan); border-color: rgba(56,189,248,.3); background: rgba(56,189,248,.12); }
+.m-tip.tone-ok .ico { background: var(--c-ok-soft); color: var(--c-ok); }
+.m-tip.tone-ok .badge { color: var(--c-ok); border-color: var(--c-ok-soft); background: var(--c-ok-soft); }
+.m-tip.tone-warn .ico { background: var(--c-warn-bg); color: var(--c-warn); }
+.m-tip.tone-warn .badge { color: var(--c-warn); border-color: var(--c-warn-bg); background: var(--c-warn-bg); }
+.m-tip.tone-danger .ico { background: var(--c-danger-soft); color: var(--c-danger); }
+.m-tip.tone-danger .badge { color: var(--c-danger); border-color: var(--c-danger-soft); background: var(--c-danger-soft); }
+.m-tip.tone-hot .ico { background: color-mix(in srgb, var(--chart-hot) 18%, transparent); color: var(--chart-hot); }
+.m-tip.tone-hot .badge { color: var(--chart-hot); border-color: color-mix(in srgb, var(--chart-hot) 30%, transparent); background: color-mix(in srgb, var(--chart-hot) 16%, transparent); }
+.m-tip.tone-cpu .ico { background: color-mix(in srgb, var(--chart-cpu) 18%, transparent); color: var(--chart-cpu); }
+.m-tip.tone-cpu .badge { color: var(--chart-cpu); border-color: color-mix(in srgb, var(--chart-cpu) 30%, transparent); background: color-mix(in srgb, var(--chart-cpu) 16%, transparent); }
+.m-tip.tone-load .ico { background: color-mix(in srgb, var(--chart-load) 18%, transparent); color: var(--chart-load); }
+.m-tip.tone-load .badge { color: var(--chart-load); border-color: color-mix(in srgb, var(--chart-load) 30%, transparent); background: color-mix(in srgb, var(--chart-load) 16%, transparent); }
+.m-tip.tone-neutral .ico { background: color-mix(in srgb, var(--c-text-dim) 16%, transparent); color: var(--c-text-dim); }
 </style>
