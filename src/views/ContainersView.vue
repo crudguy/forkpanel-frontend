@@ -11,8 +11,8 @@
  * 重启面板），后端按面板进程真实身份执行，用户无需手敲任何命令。
  *
  * 已开放：创建容器（`docker create`，默认不启动；禁特权/`/`/etc`/proc/sys/var/run/docker.sock
- * 挂载 + 二次确认词「创建容器」）、拉取镜像。刻意不开放：镜像删除（磁盘回收风险）。
- * 已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）、资源用量快照
+ * 挂载 + 二次确认词「创建容器」）、拉取镜像、删除镜像（`docker rmi` **不带 `-f`**，
+ * 被容器引用时须先删除相关容器）。已开放日志查看（`docker logs`，只读最近 N 行，需 container.view）、资源用量快照
  * （`docker stats --no-stream --all`，「资源」Tab，需 container.view；实时感由 3s 轮询近似）、
  * 网络列举（`docker network ls --no-trunc`，「网络」Tab，需 container.view；只读、不自动轮询）、
  * 卷列举（`docker volume ls`，「卷」Tab，需 container.view；只读、不自动轮询）、
@@ -20,6 +20,11 @@
  * container.view；只读、不自动轮询）。
  * 已开放：Compose 生命周期写操作（up / stop / restart / down，见 ComposeTab 的确认流）
  * 与面板编排 stack（GET·PUT `/containers/stacks`，见 StackEditorDialog）。
+ * 已开放：**编辑资源限制**（`docker update`，见 EditContainerDialog）——只含
+ * CPU 配额 / 内存上限 / 重启策略三项，容器行「编辑」入口，需 container.manage。
+ * ⚠ 这三项之外（image / ports / env / volumes / cmd / privileged）`create` 后固化，
+ * Docker 无命令可改，只能删容器重建；且**不能把限制改回"不限制"**
+ * （`docker update` 传 0 会被静默忽略）。
  * **仍不提供**（非安全刻意排除）：`docker exec`、网络的创建/删除与容器接入/断开、
  * 卷的创建/删除、compose 项目级 `logs`（请用 `docker compose logs` CLI）。
  */
@@ -230,12 +235,6 @@ watch(() => route.query.tab, (v) => {
 
 <template>
   <div>
-    <div class="tools-row">
-      <span class="spacer" />
-      <!-- 说明按钮随整簇操作移到右侧（页内标题已移除，见 AppsView 同处注释） -->
-      <HelpBtn title="容器说明" aria-label="容器说明" :expanded="helpOpen" @click="helpOpen = true" />
-    </div>
-
     <!-- 不可用：诊断/引导视图（菜单已常亮，不置灰）。按 reason 分流展示。 -->
     <div v-if="!supported" class="diag">
       <div class="diag-head">
@@ -243,6 +242,9 @@ watch(() => route.query.tab, (v) => {
         <h3 v-if="unavailableReason === 'binary_missing'">本机未安装 Docker</h3>
         <h3 v-else-if="unavailableReason === 'daemon_unreachable'">Docker 守护进程不可达</h3>
         <h3 v-else>当前环境不支持容器管理</h3>
+        <!-- Docker 不可用时没有页签行可挂「?」，帮助入口就近收进这张卡的头 -->
+        <span class="spacer" />
+        <HelpBtn title="容器说明" aria-label="容器说明" :expanded="helpOpen" @click="helpOpen = true" />
       </div>
       <p class="diag-hint">{{ unavailableHint || '该环境暂不满足容器管理的前置条件。' }}</p>
 
@@ -318,8 +320,12 @@ watch(() => route.query.tab, (v) => {
 
     <template v-else>
 
+      <!-- 「?」与页签同排靠右：页签是本页的导航，帮助入口跟着它走，不再单独占一行
+           （原 .tools-row 里只剩这一个按钮，白占一行高度）。 -->
       <div class="tabs-wrap">
-        <TabBar :tabs="tabs" :model-value="tab" @change="switchTab" />
+        <div class="tabs-slot"><TabBar :tabs="tabs" :model-value="tab" @change="switchTab" /></div>
+        <span class="spacer" />
+        <HelpBtn title="容器说明" aria-label="容器说明" :expanded="helpOpen" @click="helpOpen = true" />
       </div>
 
 
@@ -346,14 +352,15 @@ watch(() => route.query.tab, (v) => {
 
     </template>
 
-    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在页面头部 -->
+    <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」与页签同排靠右 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
       <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注 / 网络列举 / 卷列举 / Compose 项目列举</b>等操作。</p>
       <h4>能力边界</h4>
       <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
       <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
+      <p><b>编辑资源限制已开放（仅三项）</b>：容器行「编辑」可改 CPU 配额 / 内存上限 / 重启策略（<code>docker update</code>，<b>不会重启容器</b>；CPU / 内存是热改 cgroup，重启策略只影响下次退出），需 <code>container.manage</code>。弹窗会先读出<b>当前值</b>再让你改，留空表示「这项不动」。<b>镜像 / 端口映射 / 环境变量 / 卷挂载 / 启动命令创建后不可修改</b>——Docker 没有对应命令，要改只能删容器重建；同样地，<b>把限制改回「不限制」也做不到</b>（<code>docker update</code> 传 0 会被静默忽略：rc=0 而值不变），要彻底去掉限制也只能重建容器。</p>
       <p><b>资源用量快照已开放</b>：「资源」Tab 展示每个容器的 CPU / 内存 / 网络 IO / 磁盘 IO / PIDs（<code>docker stats --no-stream</code> 一次性快照，非流式——流式会把请求挂死），默认 3s 自动刷新、可手动关掉或点「立即刷新」，需 <code>container.view</code>。数字是 docker 的原始格式化串，未做二次解析。</p>
-      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。镜像页顶部还有一份<b>常用镜像清单</b>（内置在面板里、<b>不联网校验</b>，只给镜像名不给版本号——写死的 tag 会过时），点「拉取」会预填名字、tag 请在弹窗里确认。<b>仍不提供</b>：删除镜像（磁盘回收风险）。</p>
+      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。镜像页顶部还有一份<b>常用镜像清单</b>（内置在面板里、<b>不联网校验</b>，只给镜像名不给版本号——写死的 tag 会过时），点「拉取」会预填名字、tag 请在弹窗里确认。<b>删除镜像已开放</b>：镜像表每行可「删除」（<code>docker rmi</code>，<b>不带 <code>-f</code></b>）；被容器引用的镜像会被拒绝，请先到「容器」Tab 删除相关容器，删除后如需再用须重新拉取。</p>
       <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
       <p><b>卷列举已开放</b>：「卷」Tab 展示全部 Docker 卷（<code>docker volume ls</code>，只读，需 <code>container.view</code>）。宿主机挂载路径是卷数据在磁盘上的实际位置（<code>/var/lib/docker/volumes/&lt;名称&gt;/_data</code>），可用于排查磁盘占用。该 Tab 与「网络」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除卷（删除卷 = 其内数据一并丢失，请直接用 docker CLI）。</p>
       <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>生命周期写操作已开放</b>：{{ COMPOSE_ACTIONS_TEXT }} / 停止并清理（down，需手输项目名；<b>永不传 <code>-v</code></b>，否则会删除该项目的命名卷）。<b>仍不提供</b>：项目级日志（<code>docker compose logs</code> 未接，请用 CLI）。</p>
@@ -397,7 +404,11 @@ watch(() => route.query.tab, (v) => {
 .diag-hint { color: var(--c-text-dim); font-size: var(--fs-13); line-height: 1.7; margin: 0 0 14px; }
 .diag-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .diag-actions .dim { font-size: var(--fs-12); }
-.tabs-wrap { margin-bottom: 12px; }
+/* 页签与「?」同一行：中间放 .spacer（flex:1）把帮助按钮推到最右。
+   .tabs-slot 是必需的——TabBar 根自带 `align-self: flex-start`，直接当 flex item
+   时它会贴顶而不是与「?」居中对齐；套一层普通 flex 块就绕开了那条内部样式。 */
+.tabs-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 8px; margin-bottom: 12px; }
+.tabs-slot { display: flex; min-width: 0; }
 
 /* ── 安装就地进度卡（2026-10-30）── */
 .install-prog {

@@ -35,6 +35,8 @@ export interface CreateContainerPayload {
 const props = defineProps<{
   open: boolean
   busy?: boolean
+  /** 预填镜像引用（从「镜像」Tab 的「创建容器」入口传入，如 `nginx:1.27-alpine`）。 */
+  presetImage?: string
 }>()
 const emit = defineEmits<{
   (e: 'confirm', payload: CreateContainerPayload): void
@@ -71,10 +73,11 @@ watch(
   { immediate: true },
 )
 
-// 打开时重置——避免上一次的输入残留（尤其是确认词）。
+// 打开时重置——避免上一次的输入残留（尤其是确认词）；
+// 从「镜像」Tab 进入时用 presetImage 预填镜像（其余字段仍清空）。
 watch(() => props.open, (v) => {
   if (v) {
-    name.value = ''; image.value = ''; restart.value = 'no'
+    name.value = ''; image.value = props.presetImage ?? ''; restart.value = 'no'
     portsText.value = ''; envText.value = ''; volumesText.value = ''
     cmdText.value = ''; cpuQuota.value = ''; memLimit.value = ''
     confirmToken.value = ''; confirmOk.value = false; canSubmit.value = false
@@ -170,15 +173,21 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
           <textarea v-model="cmdText" rows="2" placeholder="nginx&#10;-g&#10;daemon off;" spellcheck="false" />
         </label>
 
-        <div class="row2">
-          <label>
-            <span>CPU 配额<small>（核数，留空不限制）</small></span>
-            <input v-model="cpuQuota" type="number" min="0" step="0.1" placeholder="如 1.5" />
-          </label>
-          <label>
-            <span>内存上限<small>（留空不限制）</small></span>
-            <input v-model="memLimit" type="text" placeholder="如 512m / 2g" autocomplete="off" />
-          </label>
+        <!-- 资源限制：两列并排（列宽用 minmax(0,1fr)，否则 1fr 的 auto 下限在窄弹窗里会把列撑宽）。
+             字段说明一律下移到共用 hint：写进 <span> 会在 ~190px 的列里折成两行，
+             两列标签高度不等 → 输入框错位，看着就是「挤到一块」。 -->
+        <div class="row2-wrap">
+          <div class="row2">
+            <label>
+              <span>CPU 配额</span>
+              <input v-model="cpuQuota" type="number" min="0" step="0.1" placeholder="如 1.5" />
+            </label>
+            <label>
+              <span>内存上限</span>
+              <input v-model="memLimit" type="text" placeholder="如 512m" autocomplete="off" />
+            </label>
+          </div>
+          <p class="hint">CPU 为核数，可带小数（1.5 = 一个半核）；内存支持 k / m / g 后缀。留空 = 不限制。</p>
         </div>
 
         <label class="req confirm">
@@ -210,7 +219,11 @@ label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-te
 label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-11-5); }
 .req > span::after { content: ' *'; color: var(--c-danger); }
 .fields { display: flex; flex-direction: column; gap: 14px; }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* 窄弹窗（.modal 内容宽 392px）里两列各约 190px：列宽必须写 minmax(0,1fr)，
+   裸 1fr 的下限是 auto，输入框的固有宽度会把列撑出容器；align-items:start
+   让两列各自按内容高度排列，标签行数不同时输入框也不互相推挤。 */
+.row2-wrap { display: flex; flex-direction: column; gap: 6px; }
+.row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 small { line-height: 1.2; }
 input, textarea, select {
   width: 100%; padding: 9px 11px; font-size: var(--fs-13); color: var(--c-text);

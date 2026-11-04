@@ -39,6 +39,9 @@ export const API = {
     /** 重启面板（owner + system.manage）。202 = job 已交给 PID 1；
      *  前端把请求失败也视作已发起，轮询 /version 判定恢复。 */
     restart: () => '/api/v1/system/restart',
+    /** 重启整台服务器（owner + system.manage）。极度危险，前端须强制二次确认。
+     *  202 = 已向 init 请求重启；机器重启会切断连接，前端轮询 /version 判定恢复。 */
+    reboot: () => '/api/v1/system/reboot',
     /** 检查更新（只读，不下载/不写盘）。system.manage + 只读限流；
      *  网络失败仍是 200，由 data.error 说明原因。 */
     upgradeCheck: () => '/api/v1/system/upgrade/check',
@@ -249,6 +252,9 @@ export const API = {
     images: () => '/api/v1/containers/images',
     /** 拉取 / 更新镜像（等价 `docker pull`；写操作，需 container.manage + 镜像引用安全校验）。 */
     pull: () => '/api/v1/containers/images/pull',
+    /** 删除镜像（等价 `docker rmi`，**不带 -f**；被容器引用时会失败，需先删容器）。
+     *  ref 为 `repo:tag` 或镜像 ID（悬空镜像只能按 ID）。写操作，需 container.manage。 */
+    removeImage: (ref: string) => `/api/v1/containers/images?image=${enc(ref)}`,
     install: () => '/api/v1/containers/install',
     // 把面板运行用户加入 docker 组（修复 daemon_unreachable 的高危操作）
     joinDockerGroup: () => '/api/v1/containers/join-docker-group',
@@ -257,6 +263,14 @@ export const API = {
     stop: (id: string) => `/api/v1/containers/${id}/stop`,
     restart: (id: string) => `/api/v1/containers/${id}/restart`,
     remove: (id: string, force = false) => `/api/v1/containers/${id}${force ? '?force=true' : ''}`,
+    /** 读取容器当前资源限制（`docker inspect` 的 HostConfig 子集），供编辑弹窗预填。
+     *  GET 读，需 container.view；`null` 表示未设上限（不是 0）。 */
+    limits: (id: string) => `/api/v1/containers/${enc(id)}/limits`,
+    /** 修改容器资源限制（`docker update`，**不重启容器**；PATCH 同一路径）。
+     *  写操作，需 container.manage。容器创建后**只有这三项**能改：
+     *  CPU 配额 / 内存上限 / 重启策略；image/ports/env/volumes/cmd 已固化，
+     *  且**无法取消限制**（docker 会静默忽略 --cpus 0 / --memory 0）。 */
+    updateLimits: (id: string) => `/api/v1/containers/${enc(id)}`,
     /** 容器备注（022）：GET 读 / PATCH 写（container.manage）。容器不入库，存引用表 */
     remark: (id: string) => `/api/v1/containers/${enc(id)}/remark`,
     /** 容器日志查看（`docker logs`，只读最近 N 行快照，不带 --follow）。GET 读，需 container.view；

@@ -1,8 +1,8 @@
 /**
  * 容器页「刻意不提供的操作」**在上下文里的引导**守卫（源码级）。
  *
- * 为什么需要它：容器页有 5 项能力是**刻意排除**的（docker exec / 网络增删与接入 /
- * 卷增删 / 镜像删除 / compose 项目级日志）。这些能力没有按钮，用户的第一反应是
+ * 为什么需要它：容器页有 4 项能力是**刻意排除**的（docker exec / 网络增删与接入 /
+ * 卷增删 / compose 项目级日志）。这些能力没有按钮，用户的第一反应是
  * "功能坏了"，而不是"面板故意不做"。帮助抽屉里虽写了「仍不提供」，但用户停在某个
  * Tab 上不会去翻抽屉——**引导必须出现在那个 Tab 里**。
  *
@@ -43,7 +43,6 @@ describe('容器页：刻意不提供的操作必须在对应 Tab 内有上下�
   // [文件, 必须是 banner 文本里出现的点名词, 人类可读的"那一项"]
   const cases: Array<[string, string, string]> = [
     ['components/containers/ContainersTab.vue', 'docker exec', '进入容器执行命令（docker exec）'],
-    ['components/containers/ImagesTab.vue', '删除镜像', '删除镜像'],
     ['components/containers/NetworksTab.vue', '创建 / 删除网络', '网络创建 / 删除与容器接入 / 断开'],
     ['components/containers/VolumesTab.vue', '创建 / 删除卷', '卷创建 / 删除'],
     ['components/containers/ComposeTab.vue', '项目级日志', 'compose 项目级日志'],

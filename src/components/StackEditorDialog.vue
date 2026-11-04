@@ -165,9 +165,11 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 
       <p v-if="localErr" class="err" role="alert">{{ localErr }}</p>
 
+      <!-- ⚠️ .hint-note 是 flex 容器：整段文字必须包进**一个** span，
+           否则 <b>/裸文本/<code> 各自成为 flex item，被 gap 拆成多列并逐字折行。 -->
       <p class="hint-note">
-        <b>具名卷会带项目名前缀</b>：这里写 <code>data:/data</code>，实际卷名是
-        <code>&lt;项目名&gt;_data</code>（compose 的默认行为）。
+        <Icon name="info" :size="14" class="ic" />
+        <span><b>具名卷会带项目名前缀</b>：这里写 <code>data:/data</code>，实际卷名是 <code>&lt;项目名&gt;_data</code>（compose 的默认行为）。</span>
       </p>
 
       <div class="modal-actions">
@@ -182,6 +184,26 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 </template>
 
 <style scoped>
+/* 表单标签布局：让「标签文字」与「输入框」上下排开，而非挤在同一行。
+   同款骨架的 CreateContainerDialog 在 scoped 里定义了这套规则，本弹窗漏掉后
+   label 作为 .modal.stack 的 flex item 被 blockify，内部 span/input 仍按行内流挤一起。 */
+label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
+label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
+label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-11-5); }
+.req > span::after { content: ' *'; color: var(--c-danger); }
+small { line-height: 1.2; }
+input, textarea, select {
+  width: 100%; padding: 9px 11px; font-size: var(--fs-13); color: var(--c-text);
+  background-color: var(--c-bg);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-xs);
+  transition: border-color .14s ease, box-shadow .14s ease;
+  font-family: inherit;
+}
+textarea { resize: vertical; line-height: 1.5; }
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft);
+}
 .fields.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .svc-list { display: flex; flex-direction: column; gap: 12px; margin: 10px 0; }
 .svc-card {

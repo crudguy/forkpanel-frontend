@@ -3,7 +3,7 @@
  * 容器 Tab（ContainersView 拆分的最后一块）。
  *
  * 自持：容器列表、5s 轮询、行级 busy、搜索/状态筛选、备注内联保存、
- * 创建/删除/日志三个弹窗、增删改后的刷新。
+ * 创建/编辑资源限制/删除/日志四个弹窗、增删改后的刷新。
  *
  * 父级不再认识「容器」这个 Tab 的任何状态——它只剩页头、TabBar、诊断分支与帮助抽屉。
  */
@@ -13,6 +13,7 @@ import { API } from '@/api/endpoints'
 import { containerStateBadge, containerStateLabel } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
+import EditContainerDialog from '@/components/EditContainerDialog.vue'
 import ContainerLogsDialog from '@/components/ContainerLogsDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
@@ -135,8 +136,27 @@ async function onCreated(p: CreateContainerPayload) {
   finally { createBusy.value = false }
 }
 
-/** 短 ID（12 位，与 `docker ps` 默认展示一致）；完整值放 title 供核对。 */
-function shortId(id: string) {
+// ── 编辑资源限制（docker update）──
+//
+// 只开 CPU / 内存 / 重启策略——其余属性 create 后固化，Docker 没有命令能改。
+// 弹窗自己拉现值（`GET /containers/{id}/limits`），这里只负责提交与刷新。
+const editTarget = ref<Container | null>(null)
+const editBusy = ref(false)
+async function onEditLimits(payload: { cpu_quota?: number; mem_limit?: string; restart?: string }) {
+  const c = editTarget.value
+  if (!c) return
+  editBusy.value = true
+  try {
+    await api.patch(API.containers.updateLimits(c.id), payload)
+    toast(`已更新容器 ${c.name} 的资源限制（未重启容器）`)
+    editTarget.value = null
+    await load()
+  } catch (e) { toast(errorText(e), 'err') }
+  finally { editBusy.value = false }
+}
+function onEditCancel() { editTarget.value = null }
+
+/** 短 ID（12 位，与 `docker ps` 默认展示一致）；完整值放 title 供核对。 */function shortId(id: string) {
   if (id.startsWith('sha256:')) return id.slice(7, 19)
   return id.length > 12 ? id.slice(0, 12) : id
 }
@@ -206,7 +226,8 @@ async function saveRemark(c: Container, v: string) {
       <div class="t-scroll" v-if="filtered.length">
         <table class="fixed" v-table-nav>
           <colgroup>
-            <!-- 镜像为唯一弹性列（width:auto）吸收余量；操作列 392px 按四个带文字按钮实测；
+            <!-- 镜像为唯一弹性列（width:auto）吸收余量；操作列 470px 按六个带文字按钮
+                 实测（启动/停止/重启/编辑/日志/删除，各含 13px 图标）；
                  备注列固定 170px，ellipsis + title 兜长文。ID 列次要，窄屏隐藏。 -->
             <col class="w-name" /><col class="w-cremark" /><col class="w-img" /><col class="w-state" /><col class="w-ports" /><col class="w-id" /><col class="w-acts" />
           </colgroup>
@@ -240,6 +261,11 @@ async function saveRemark(c: Container, v: string) {
                   :title="restartable(c) ? '' : '仅运行中可重启'" @click="act(c, 'restart')">
                   <Icon name="restart" :size="13" /> 重启
                 </button>
+                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id)"
+                  :title="canManage ? '编辑资源限制（CPU / 内存 / 重启策略；其余属性需重建容器）' : '需要 container.manage 权限'"
+                  @click="editTarget = c">
+                  <Icon name="edit" :size="13" /> 编辑
+                </button>
                 <button class="btn-ghost btn-sm" :disabled="!canViewLogs || isActing(c.id)"
                   :title="canViewLogs ? '查看容器日志（docker logs，只读最近 N 行）' : '需要 container.view 权限'"
                   @click="logsTarget = c; logsOpen = true">
@@ -271,6 +297,11 @@ async function saveRemark(c: Container, v: string) {
     <CreateContainerDialog :open="createOpen" :busy="createBusy"
       @confirm="onCreated" @cancel="createOpen = false" />
 
+    <EditContainerDialog :open="!!editTarget" :busy="editBusy"
+      :container-id="editTarget?.id ?? ''" :container-name="editTarget?.name ?? ''"
+      :container-image="editTarget?.image ?? ''"
+      @confirm="onEditLimits" @cancel="onEditCancel" />
+
     <ContainerLogsDialog :open="logsOpen" :container-id="logsTarget?.id ?? ''" :container-name="logsTarget?.name ?? ''"
       @close="logsOpen = false" />
   </div>
@@ -284,7 +315,7 @@ col.w-img { width: auto; }
 col.w-state { width: 13%; }
 col.w-ports { width: 11%; }
 col.w-id { width: 9%; }
-col.w-acts { width: 392px; }
+col.w-acts { width: 470px; }
 td.remark-cell { padding: 4px 10px; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-text { margin-left: 8px; font-size: var(--fs-12); }
