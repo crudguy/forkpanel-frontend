@@ -33,6 +33,8 @@ export const UI_GUARDS = [
   'check-tab-load.mjs',
   // 2026-11-05 Q-09 新增：弹窗表单骨架只能有一份，变体集合钉住防止再复制
   'check-dialog-form.mjs',
+  // 2026-11-05 P2 修复新增：模板里的 PascalCase 组件必须真绑定（漏 import 会静默渲染空元素）
+  'check-component-imports.mjs',
 ]
 
 let failed = 0
