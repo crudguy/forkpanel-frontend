@@ -9,6 +9,7 @@ import '@/styles/main.css'
 import '@/styles/dialog-form.css'
 import { applyTheme } from '@/composables/theme'
 import { tableNav } from '@/composables/tableNav'
+import { loginRedirect } from '@/composables/sessionRedirect'
 
 applyTheme()
 
@@ -37,7 +38,9 @@ app.config.errorHandler = (err, _instance, info) => {
 window.addEventListener('panel:unauthorized', () => {
   const auth = useAuthStore()
   auth.clearSession()
-  router.push({ name: 'login' })
+  // 会话过期后重新登录要回到刚才那页（含 query / hash），与 router.beforeEach 的
+  // 深链回跳同口径；一律落概览会丢掉编辑态与过滤条件。
+  router.push(loginRedirect(router.currentRoute.value.fullPath))
 })
 window.addEventListener('panel:csrf-expired', () => {
   window.location.reload()
