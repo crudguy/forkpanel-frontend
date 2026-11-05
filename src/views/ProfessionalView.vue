@@ -294,7 +294,6 @@ onMounted(tick)
 .temp-val b { font-size: var(--fs-26); font-weight: 650; line-height: 1; }
 .temp-val .unit { font-size: var(--fs-13); opacity: .75; }
 .temp-warn { margin-top: 6px; font-size: var(--fs-12); color: var(--c-danger); }
-.badge { font-size: var(--fs-12); padding: 2px 7px; border-radius: 999px; }
 .badge.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
 
 /* 进程表 */

@@ -185,7 +185,7 @@ function onNavClick(it: NavItem, e: MouseEvent) {
 .item {
   position: relative;
   display: flex; align-items: center; gap: 11px;
-  padding: 7px 11px; border-radius: 10px;
+  padding: 7px 11px; border-radius: var(--radius-sm);
   color: var(--c-text-dim); text-decoration: none; font-size: var(--fs-14);
   transition: background .14s ease, color .14s ease;
 }
@@ -217,7 +217,7 @@ function onNavClick(it: NavItem, e: MouseEvent) {
 .toggle {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border: none; background: transparent; cursor: pointer;
-  color: var(--c-text-dim); border-radius: 10px; font-size: var(--fs-13); font-family: inherit;
+  color: var(--c-text-dim); border-radius: var(--radius-sm); font-size: var(--fs-13); font-family: inherit;
   transition: background .14s ease, color .14s ease;
 }
 .toggle:hover { background: var(--c-hover); color: var(--c-text); }

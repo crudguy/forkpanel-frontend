@@ -54,7 +54,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 .spacer { flex: 1; }
 .hd-x {
   width: 32px; height: 32px; border: none; background: transparent;
-  color: var(--c-text-dim); border-radius: 8px; cursor: pointer;
+  color: var(--c-text-dim); border-radius: var(--radius-xs); cursor: pointer;
   display: grid; place-items: center;
 }
 .hd-x:hover { background: var(--c-hover); color: var(--c-text); }

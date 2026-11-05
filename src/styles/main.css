@@ -205,6 +205,10 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--c-border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--c-text-mute); background-clip: content-box; }
+/* 标准属性：Firefox（以及关掉 webkit 前缀兼容的新 Edge）不认上面三条，
+   不写这两行它们就是系统默认的浅色粗滚动条，在暗色面板上非常扎眼。
+   scrollbar-width/color 均可继承，写在 html 上即可覆盖全站。 */
+html { scrollbar-width: thin; scrollbar-color: var(--c-border-strong) transparent; }
 
 a { color: var(--c-primary); text-decoration: none; }
 
@@ -380,6 +384,12 @@ td button { vertical-align: middle; }
    工具条（含按钮）会跟着滚出视野（与 ProcessesView 同一处置）。
    选择器 (0,3,0) 压过 .card.flush 的 (0,2,0)。 */
 .card.flush.toolbar-card { overflow: hidden; }
+/* 卡片里已经有 .t-scroll 时，卡片自身也要收掉滚动：两层都是 auto 会出现两条
+   滚动条，且 thead 的 sticky 参照物变成外层卡片（滚动时表头不吸顶）。
+   用 :has() 一次覆盖全部 .card.flush——此前只有带 .toolbar-card 的 20 处收口，
+   其余（FirewallView / ComposeTab 等）仍是双滚动。:has() 不支持的旧浏览器
+   退回原行为（卡片可滚），不会更糟。 */
+.card.flush:has(> .t-scroll) { overflow: hidden; }
 .card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .card-toolbar .icon { color: var(--c-primary); }
 .card-toolbar .count { font-weight: 600; font-size: var(--fs-14); }

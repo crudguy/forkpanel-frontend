@@ -134,7 +134,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
+.ssl-opt { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--c-border); border-radius: var(--radius-xs); margin-bottom: 8px; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
 .ssl-opt:has(input:checked) { border-color: var(--c-primary); background: var(--c-primary-soft); }
 .ssl-opt input { width: auto; margin-top: 2px; }
 </style>

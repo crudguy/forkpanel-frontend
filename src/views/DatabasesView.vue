@@ -735,5 +735,5 @@ col.w-dbacts { width: 390px; }
    注意 .nowrap 已在单元格 class 上提供不换行，这里只补下限宽度。 */
 .acts { white-space: nowrap; min-width: 390px; }
 /* 备注单元格：内联编辑组件自带内边距，单元格再收紧一点保持行高紧凑 */
-td.remark-cell { padding: 4px 10px; }
+td.remark-cell { padding: var(--row-py) 10px; }
 </style>

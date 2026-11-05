@@ -548,7 +548,7 @@ onMounted(async () => {
   margin-top: 10px; padding: 12px 14px;
   background: color-mix(in srgb, var(--c-warn) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--c-warn) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.75;
 }
 .rh-head {
@@ -565,7 +565,7 @@ onMounted(async () => {
 .field { display: flex; flex-direction: column; gap: 5px; }
 .lbl { font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .inp {
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-sm);
   padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5); font-family: var(--mono);
 }
 .inp:focus { outline: none; border-color: var(--c-primary); }
@@ -576,7 +576,7 @@ onMounted(async () => {
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 /* C10 测试连接结果：紧贴按钮下方（出错处），成功/失败两态，不占用 toast */
 .test-out { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0 0;
-  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface-2); }
+  padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--c-border); background: var(--c-surface-2); }
 .test-out.is-ok { border-color: color-mix(in srgb, var(--c-ok) 42%, transparent); background: var(--c-ok-soft); }
 .test-out.is-bad { border-color: color-mix(in srgb, var(--c-danger) 42%, transparent); background: var(--c-danger-soft); }
 .test-out :deep(.icon) { flex: none; margin-top: 2px; }

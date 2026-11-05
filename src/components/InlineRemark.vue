@@ -115,7 +115,7 @@ async function save() {
 <style scoped>
 .iremark { font-size: var(--fs-13); max-width: 100%; }
 .iremark-show { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 8px;
-  border: 1px dashed transparent; border-radius: 8px; background: none; color: var(--c-text);
+  border: 1px dashed transparent; border-radius: var(--radius-xs); background: none; color: var(--c-text);
   font: inherit; cursor: pointer; text-align: left; }
 .iremark-show:hover:not(:disabled) { border-color: var(--c-border-strong); background: var(--c-surface-2); }
 .iremark-show:disabled { cursor: default; }
@@ -127,7 +127,7 @@ async function save() {
 /* 高度由 auto-grow（script grow()）接管，故去掉 resize: vertical——手动拖出的高度
    会在下一次 input 时被重算冲掉，保留只会造成「拖了又弹回」的割裂感 */
 .iremark-input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 6px 9px;
-  border: 1px solid var(--c-border-strong); border-radius: 8px; background: var(--c-surface);
+  border: 1px solid var(--c-border-strong); border-radius: var(--radius-xs); background: var(--c-surface);
   color: var(--c-text); font: inherit; font-size: var(--fs-13); line-height: 1.5; }
 .iremark-input:focus { outline: none; border-color: var(--c-primary); }
 .iremark-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 3px;

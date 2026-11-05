@@ -789,7 +789,7 @@ onUnmounted(() => { es?.close() })
 .note-del:hover { opacity: 1; color: var(--c-danger); background: var(--c-danger-soft); }
 
 .hot-tip { display: flex; align-items: center; gap: 9px; padding: 9px 14px;
-           border: 1px solid var(--c-danger); border-radius: 10px;
+           border: 1px solid var(--c-danger); border-radius: var(--radius-sm);
            background: var(--c-danger-soft); color: var(--c-danger); font-size: var(--fs-13-5); }
 .hot-tip span { flex: 1; }
 
@@ -818,7 +818,7 @@ onUnmounted(() => { es?.close() })
 .st-dot.warn { background: var(--c-warn); }
 .st-dot.danger { background: var(--c-danger); }
 .st-dot.muted { background: var(--c-border-strong); }
-.st-ico { grid-row: 1 / span 2; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+.st-ico { grid-row: 1 / span 2; width: 40px; height: 40px; border-radius: var(--radius-sm); display: grid; place-items: center;
           background: var(--c-primary-soft); color: var(--c-primary); }
 .st-main { font-size: var(--fs-14); font-weight: 600; }
 .st-sub { font-size: var(--fs-12-5); color: var(--c-text-dim); }
@@ -846,7 +846,7 @@ li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; backgroun
 .mtip-enter-from, .mtip-leave-to { opacity: 0; }
 .mtip-enter-active, .mtip-leave-active { transition: opacity .12s ease; }
 .m-tip-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-.m-tip .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none;
+.m-tip .ico { width: 28px; height: 28px; border-radius: var(--radius-xs); display: grid; place-items: center; flex: none;
   background: color-mix(in srgb, var(--c-text-dim) 16%, transparent); color: var(--c-text-dim); }
 .m-tip-label { font-size: var(--fs-13-5); font-weight: 600; color: var(--c-text); }
 .m-tip .badge { margin-left: auto; flex: none; font-size: var(--fs-12); padding: 1px 8px;

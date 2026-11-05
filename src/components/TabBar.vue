@@ -43,7 +43,7 @@ const route = useRoute()
 
 <style scoped>
 .tabs { display: inline-flex; gap: 4px; padding: 4px; align-self: flex-start;
-        border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface-2); }
+        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-surface-2); }
 /* RouterLink 与 button 两种元素都要同样的视觉：button 必须显式重置默认边框/背景/字体 */
 .tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px;
        border: none; background: none; font-family: inherit; font-size: var(--fs-13-5);

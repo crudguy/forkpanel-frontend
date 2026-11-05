@@ -41,7 +41,7 @@ const level = props.level ?? 'info'
 <style scoped>
 .risk {
   display: flex; gap: 10px; align-items: flex-start;
-  padding: 11px 13px; border-radius: 10px;
+  padding: 11px 13px; border-radius: var(--radius-sm);
   border: 1px solid var(--c-border);
   margin: 0 0 14px;
   font-size: var(--fs-13); line-height: 1.55;

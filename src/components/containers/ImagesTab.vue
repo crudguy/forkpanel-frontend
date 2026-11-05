@@ -300,7 +300,7 @@ col.w-iacts { width: 260px; }
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--c-surface-2);
 }
 .pop-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }

@@ -219,7 +219,7 @@ textarea:focus-visible, input:focus-visible {
 .actions-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .err { color: var(--c-danger); font-size: var(--fs-12); }
 .hint { color: var(--c-warn); font-size: var(--fs-12); margin: 8px 0 0; line-height: 1.5; }
-.preview-block { margin-top: 14px; padding: 12px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface-2); }
+.preview-block { margin-top: 14px; padding: 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-surface-2); }
 .preview-block h4 { margin: 0 0 8px; font-size: var(--fs-13); color: var(--c-text); }
 .preview-block.warn { border-color: var(--c-warn-bg); }
 .preview-block.warn h4 { color: var(--c-warn); }

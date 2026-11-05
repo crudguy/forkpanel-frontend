@@ -240,7 +240,7 @@ defineExpose({ applySsl })
 .ssl-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
 .ssl-list { display: flex; flex-direction: column; gap: 8px; }
 .ssl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px;
-  border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-hover); }
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs); background: var(--c-hover); }
 .ssl-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ssl-meta .mono { font-family: var(--mono); font-size: var(--fs-13); }
 .ssl-ops { display: flex; align-items: center; gap: 6px; flex: none; }

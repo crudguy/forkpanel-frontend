@@ -187,11 +187,11 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 <style scoped>
 /* 表单骨架（label / 输入框 / 必填星号 / 焦点态）统一取 styles/dialog-form.css，
    根节点已挂 .dlg-form；以下只补本弹窗特有的服务卡片布局。 */
-.fields.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fields.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .svc-list { display: flex; flex-direction: column; gap: 12px; margin: 10px 0; }
 .svc-card {
   border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 12px;
   background: var(--c-surface-2);
   display: flex;

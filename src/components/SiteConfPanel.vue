@@ -546,9 +546,9 @@ watch(() => props.site?.id ?? null, (id) => {
 .vers-toggle { align-self: flex-start; }
 
 .vers-panel { display: flex; flex-direction: column; gap: 6px;
-  border: 1px solid var(--c-border); border-radius: 8px; padding: 4px 10px 8px; background: var(--c-hover); }
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs); padding: 4px 10px 8px; background: var(--c-hover); }
 
-.vers-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+.vers-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center;
   padding: 5px 0; border-bottom: 1px dashed var(--c-border); }
 
 .vers-row:last-child { border-bottom: 0; }

@@ -159,7 +159,7 @@ function onKey(e: KeyboardEvent) {
   width: min(560px, 92vw);
   background: var(--c-surface);
   border: 1px solid var(--c-border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }

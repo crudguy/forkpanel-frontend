@@ -401,7 +401,7 @@ col.w-fwacts { width: 100px; }
 
 /* ── fail2ban 入侵防御 ── */
 .f2b-list { display: flex; flex-direction: column; gap: 10px; }
-.f2b-jail { border: 1px solid var(--c-border); border-radius: 10px; padding: 10px 12px; background: var(--c-surface-2); }
+.f2b-jail { border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--c-surface-2); }
 .f2b-jail-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .f2b-name { font-weight: 600; font-size: var(--fs-13); }
 .f2b-stats { font-size: var(--fs-12); }

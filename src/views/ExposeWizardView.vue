@@ -337,7 +337,7 @@ textarea { font-family: var(--mono); resize: vertical; }
 
 .output {
   margin: 0 0 10px; padding: 12px; max-height: 340px; overflow: auto;
-  background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 8px;
+  background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--radius-xs);
   font-family: var(--mono); font-size: var(--fs-12); line-height: 1.6;
   color: var(--c-text); white-space: pre-wrap; word-break: break-word;
 }

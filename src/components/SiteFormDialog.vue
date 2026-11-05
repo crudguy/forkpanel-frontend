@@ -1236,7 +1236,7 @@ function confSpecChanged(): boolean {
 .nav-item {
   display: block; width: 100%; text-align: left;
   border: 0; background: none; cursor: pointer;
-  padding: 8px 10px; border-radius: 8px;
+  padding: 8px 10px; border-radius: var(--radius-xs);
   font: inherit; font-size: var(--fs-13); color: var(--c-text);
 }
 .nav-item:hover { background: var(--c-hover); }
@@ -1251,7 +1251,7 @@ function confSpecChanged(): boolean {
 /* 全屏后横向空间充足：分区内简单输入框双列排布，宽块（路由表 / 代码编辑器 /
    证书列表 / 提示）整宽跨两列。整列块用 1fr 1fr，列间距 18、行距 14。 */
 .modal-body .sector { max-width: 980px; margin: 0 auto 22px;
-  display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 14px; align-items: start; }
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; row-gap: 14px; align-items: start; }
 /* 分区之间补一条分隔线：滚动长表单时边界只靠标题文字可辨，与左侧 rail 的「分段」感对不上 */
 .modal-body .sector + .sector { border-top: 1px solid var(--c-border); padding-top: 20px; }
 /* ⚠️ 必须写 margin:0 而不是只写 margin-bottom：main.css 的 `.modal .blk { margin: 12px 0 }`
@@ -1292,7 +1292,7 @@ function confSpecChanged(): boolean {
    内部是纵向堆叠的几个字段：选项多、且 HSTS 勾开后还会长出附加项，
    做成两列网格反而会让跟随出现的输入框跳位。 */
 .adv { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px;
-  display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 11px; align-items: start; }
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; row-gap: 11px; align-items: start; }
 /* 卡片内简单输入框双列；标题 / 整宽文本域 / 提示 / 日志操作条跨两列 */
 /* 同 .sector：必须整条 margin 归零，否则 .modal .blk 的 margin-top:12px 与 row-gap 叠加 */
 .modal-body .adv > .blk { margin: 0; }
@@ -1318,7 +1318,7 @@ function confSpecChanged(): boolean {
 .log-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 .log-confirm {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--c-danger) 35%, transparent);
   font-size: var(--fs-12); color: var(--c-text);

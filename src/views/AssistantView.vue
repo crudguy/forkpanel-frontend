@@ -175,7 +175,7 @@ function fmtUp(sec: number): string {
 .row { display: flex; gap: 8px; }
 .inp {
   flex: 1; background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: 10px; padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5);
+  border-radius: var(--radius-sm); padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5);
 }
 .inp:focus { outline: none; border-color: var(--c-primary); }
 .empty-hint { color: var(--c-text-mute); font-size: var(--fs-13); }
@@ -191,7 +191,7 @@ function fmtUp(sec: number): string {
 .report.warn .summary { color: var(--c-warn); }
 .narrative {
   display: flex; align-items: flex-start; gap: 7px; font-size: var(--fs-13-5);
-  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; line-height: 1.55;
+  margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-sm); line-height: 1.55;
   background: var(--c-primary-soft);
   border: 1px solid var(--c-primary-soft);
   color: var(--c-text);
@@ -206,14 +206,13 @@ function fmtUp(sec: number): string {
 .scope-tag { margin-left: auto; }
 
 .finding {
-  border: 1px solid var(--c-border); border-left-width: 3px; border-radius: 10px;
+  border: 1px solid var(--c-border); border-left-width: 3px; border-radius: var(--radius-sm);
   padding: 10px 12px; margin-bottom: 8px; background: var(--c-surface);
 }
 .finding.crit { border-left-color: var(--c-danger); }
 .finding.warn { border-left-color: var(--c-warn); }
 .finding.info { border-left-color: var(--c-ok); }
 .finding header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.badge { font-size: var(--fs-12); padding: 2px 8px; border-radius: 999px; }
 .badge.crit { background: var(--c-danger-soft); color: var(--c-danger); }
 .badge.warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .badge.info { background: var(--c-ok-soft); color: var(--c-ok); }

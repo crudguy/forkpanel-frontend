@@ -381,7 +381,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
   margin: 0;
   padding: 12px 14px;
   border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--c-surface-2);
   font-size: var(--fs-12);
   line-height: 1.55;
@@ -406,7 +406,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .ctl.chk.on { color: var(--c-text); }
 .ctl.chk input { width: auto; }
 .live { display: flex; align-items: center; gap: 7px; color: var(--c-ok); font-size: var(--fs-12-5); margin: 0 0 8px; }
-.stats { border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; }
+.stats { border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 12px 14px; margin: 0 0 10px; }
 .stats .muted { color: var(--c-text-mute); font-size: var(--fs-12-5); }
 .stats-head { display: flex; justify-content: space-between; font-size: var(--fs-12-5); margin-bottom: 10px; }
 .lv-rows { display: grid; gap: 5px; margin-bottom: 12px; }

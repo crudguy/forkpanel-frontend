@@ -106,6 +106,6 @@ sudo update-ca-certificates</pre>
 .ca-steps { display: flex; flex-direction: column; gap: 14px; }
 .ca-step-h { font-weight: 600; font-size: var(--fs-13); margin-bottom: 6px; color: var(--c-primary); }
 .ca-step p { margin: 0 0 6px; font-size: var(--fs-12-5); line-height: 1.65; }
-.ca-code { margin: 6px 0; padding: 9px 11px; border-radius: 8px; font-size: var(--fs-12); line-height: 1.6;
+.ca-code { margin: 6px 0; padding: 9px 11px; border-radius: var(--radius-xs); font-size: var(--fs-12); line-height: 1.6;
   overflow-x: auto; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); }
 </style>

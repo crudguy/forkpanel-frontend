@@ -307,7 +307,7 @@ col.w-state { width: 13%; }
 col.w-ports { width: 11%; }
 col.w-id { width: 9%; }
 col.w-acts { width: 470px; }
-td.remark-cell { padding: 4px 10px; }
+td.remark-cell { padding: var(--row-py) 10px; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-text { margin-left: 8px; font-size: var(--fs-12); }
 .seg { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); overflow: hidden; }

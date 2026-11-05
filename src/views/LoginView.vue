@@ -269,7 +269,7 @@ async function submitBootstrap() {
 <style scoped>
 .login { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; min-height: 100vh; padding: 24px; }
 .brand-logo {
-  width: 64px; height: 64px; border-radius: 16px;
+  width: 64px; height: 64px; border-radius: var(--radius-lg);
   display: grid; place-items: center;
   background: var(--gradient); box-shadow: var(--glow);
 }
@@ -279,7 +279,7 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13)
 .error { color: var(--c-danger); font-size: var(--fs-13); margin: 0; }
 .warn {
   color: var(--c-warn); background: var(--c-warn-bg);
-  border-radius: 8px; padding: 10px 12px; font-size: var(--fs-13); margin: 0;
+  border-radius: var(--radius-xs); padding: 10px 12px; font-size: var(--fs-13); margin: 0;
 }
 .warn code { font-size: var(--fs-12); }
 .hint { color: var(--c-text-dim); font-size: var(--fs-12); margin: -6px 0 0; }

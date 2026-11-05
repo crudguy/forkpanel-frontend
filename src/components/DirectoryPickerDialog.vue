@@ -264,7 +264,7 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条 / 错误条统一取 main.css 公共类
    （此前整套私有复制：遮罩 .55、宽 540、圆角 12、padding 18/20、z-index 60）。 */
 .tree { flex: 1; overflow-y: auto; min-height: 160px; max-height: 44vh;
-  border: 1px solid var(--c-border); border-radius: 8px; padding: 4px; background: var(--c-surface); }
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs); padding: 4px; background: var(--c-surface); }
 .tree .empty { padding: 18px; text-align: center; }
 .tree .row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
   background: none; border: none; color: var(--c-text); padding: 7px 10px 7px 8px; border-radius: 6px;

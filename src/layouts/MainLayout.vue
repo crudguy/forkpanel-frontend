@@ -377,7 +377,7 @@ async function logout() {
 /* 汉堡按钮：默认隐藏，仅窄屏抽屉模式可见（审计 R1） */
 .hamburger {
   display: none; width: 38px; height: 38px; padding: 0; flex: none;
-  border: 1px solid var(--c-border); border-radius: 10px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-sm);
   background: var(--c-surface-2); color: var(--c-text);
 }
 .hamburger:hover { background: var(--c-hover); }
@@ -445,14 +445,14 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .m-sub { font-size: var(--fs-12); color: var(--c-text-dim); }
 .mi {
   display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
-  padding: 9px 10px; border-radius: 8px; color: var(--c-text);
+  padding: 9px 10px; border-radius: var(--radius-xs); color: var(--c-text);
   background: transparent; border: none; font-size: var(--fs-13-5); cursor: pointer;
 }
 .mi:hover { background: var(--c-hover); }
 /* 表格密度（B8）：与菜单项之间加一条上分隔线，表明它是"偏好"而非"操作" */
 .mi-group { padding: 8px 10px; margin-top: 4px; border-top: 1px solid var(--c-border); }
 .mi-label { display: block; font-size: var(--fs-12); color: var(--c-text-dim); margin-bottom: 6px; }
-.seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--c-border); }
+.seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--radius-xs); background: var(--bg-inset); border: 1px solid var(--c-border); }
 .seg-b { flex: 1; padding: 5px 0; border: none; border-radius: 6px; background: transparent;
   color: var(--c-text-dim); font-size: var(--fs-12); cursor: pointer; transition: background .12s ease, color .12s ease; }
 .seg-b:hover { color: var(--c-text); }

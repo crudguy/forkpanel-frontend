@@ -128,7 +128,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
 }
 .quick {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 13px; border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 12px 13px; border: 1px solid var(--c-border); border-radius: var(--radius-sm);
   background: var(--c-surface-2); color: inherit; text-decoration: none;
   transition: border-color .15s, background .15s;
 }
@@ -147,7 +147,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
 }
 .mod {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 11px 12px; border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 11px 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm);
   background: var(--c-surface-2);
 }
 .mod-ico { color: var(--c-primary); margin-top: 1px; flex: none; }

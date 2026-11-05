@@ -331,7 +331,7 @@ table.fixed { table-layout: fixed; width: 100%; }
    不再私有重定义（审计 V1：证书页自造按钮样式曾与全局漂移）。
    状态色 .ok/.warn/.bad 取公共工具类；.skeleton 取公共基础，仅补高度。 */
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-.radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: 10px; cursor: pointer; font-size: var(--fs-13); }
+.radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--fs-13); }
 .radios label.on { border-color: var(--c-primary); background: var(--c-active); }
 .skeleton.box { height: 160px; }
 </style>
