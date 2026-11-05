@@ -96,9 +96,15 @@ const applySummary = computed(() => {
   const tlsLabel = tlsMode.value === 'self_signed' ? '自签证书（浏览器会告警）'
     : tlsMode.value === 'custom' ? '已有证书'
     : '不启用 HTTPS'
-  return `将把面板通过 https://${domain.value || '（未填域名）'} 对外提供访问`
+  // 协议必须跟着 TLS 选项走：选了「不启用」却仍写 https://，会让用户误以为
+  // 传输已加密，而实际是把面板以明文 HTTP 挂到公网。明文档再补显式风险提示。
+  const scheme = tlsMode.value === 'none' ? 'http' : 'https'
+  const plainRisk = tlsMode.value === 'none'
+    ? '⚠ 未启用 HTTPS：账号口令与会话 Cookie 将明文传输，请只在可信网络使用。'
+    : ''
+  return `将把面板通过 ${scheme}://${domain.value || '（未填域名）'} 对外提供访问`
     + `（TLS：${tlsLabel}），只允许来源：${list.join('、') || '（未填）'}。`
-    + `名单之外的请求一律拒绝；面板将不再只监听回环地址。`
+    + `名单之外的请求一律拒绝；面板将不再只监听回环地址。${plainRisk}`
 })
 
 function prepareApply() {

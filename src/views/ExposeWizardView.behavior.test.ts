@@ -120,6 +120,48 @@ describe('二次确认：按钮只开确认框，确认才提交', () => {
     expect(m.fake.count(API.system.expose.apply(), 'POST'), '点按钮本身绝不许提交').toBe(0)
   })
 
+  // F-18：摘要的协议必须跟着 TLS 选项走。此前恒写 https://，与「不启用 HTTPS」
+  // 自相矛盾——用户会以为传输已加密，实际是明文 HTTP 挂公网。
+  it('不启用 HTTPS：摘要写 http:// 并给出明文风险提示', async () => {
+    m = await mountView({ component: ExposeWizardView, routes: routesFor() })
+    applyForm(m)
+    button(m, '开启公网访问').click()
+    await m.flush()
+
+    const detail = dialog('确认开启公网访问')!.querySelector('.modal-lead')?.textContent ?? ''
+    expect(detail).toContain('http://panel.example.com')
+    expect(detail, '不启用 TLS 时不许再宣称 https').not.toContain('https://')
+    expect(detail).toContain('未启用 HTTPS：账号口令与会话 Cookie 将明文传输')
+  })
+
+  it('自签证书：摘要写 https:// 且不带明文警告', async () => {
+    m = await mountView({ component: ExposeWizardView, routes: routesFor() })
+    applyForm(m)
+    chooseTls(m, 'self_signed')
+    button(m, '开启公网访问').click()
+    await m.flush()
+
+    const detail = dialog('确认开启公网访问')!.querySelector('.modal-lead')?.textContent ?? ''
+    expect(detail).toContain('https://panel.example.com')
+    expect(detail).not.toContain('http://')
+    expect(detail).not.toContain('明文传输')
+  })
+
+  it('已有证书：摘要同样写 https://（不是只有自签档才加密）', async () => {
+    m = await mountView({ component: ExposeWizardView, routes: routesFor() })
+    applyForm(m)
+    chooseTls(m, 'custom')
+    await m.flush()
+    setNative(certInput(m, '/etc/ssl/certs/panel.fullchain.pem'), '/etc/ssl/certs/panel.fullchain.pem')
+    setNative(certInput(m, '/etc/ssl/private/panel.key'), '/etc/ssl/private/panel.key')
+    button(m, '开启公网访问').click()
+    await m.flush()
+
+    const detail = dialog('确认开启公网访问')!.querySelector('.modal-lead')?.textContent ?? ''
+    expect(detail).toContain('https://panel.example.com')
+    expect(detail).not.toContain('http://')
+  })
+
   it('点确认框的「确认执行」才 POST apply，请求体与表单一致，成功输出落进 <pre>', async () => {
     m = await mountView({
       component: ExposeWizardView,
