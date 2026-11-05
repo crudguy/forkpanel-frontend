@@ -130,11 +130,16 @@ const confirmOff = ref(false)
 // 同时「启用」分支的 body 写死 enabled:false，点启用实际是下发关闭。
 // 现拆成：按钮只决定「要不要先确认」，实际下发统一走 setActive(on)。
 function toggleActive() {
+  // 状态未知时 active 是首屏默认 false，照旧切换会把「读失败」当成「未启用」，
+  // 一次点击可能反向关掉正在运行的防火墙。按钮已禁用，这里再兜一道程序化触发。
+  if (!loaded.value) return
   if (active.value) { confirmOff.value = true; return }
   void setActive(true)
 }
 
 async function setActive(on: boolean) {
+  // 确认框回调也会走这里：等待确认期间若状态读取失败，同样不许下发。
+  if (!loaded.value) return
   busy.value = true
   try { await api.put(API.firewall.setEnabled(), { enabled: on }); load() }
   catch (e) { error.value = errorText(e) }
@@ -230,8 +235,9 @@ onMounted(() => { load(); loadFail2ban() })
         <span v-else class="badge">不可用</span>
       </div>
       <span class="spacer" />
-      <button class="btn-ghost" :disabled="busy || !canManage"
-        :title="canManage ? '' : '无 firewall.manage 权限'" @click="toggleActive">{{ active ? '关闭' : '启用' }}</button>
+      <button class="btn-ghost" :disabled="busy || !canManage || !loaded"
+        :title="!loaded ? '状态未知，请点刷新重试' : (canManage ? '' : '无 firewall.manage 权限')"
+        @click="toggleActive">{{ !loaded ? '状态未知' : (active ? '关闭' : '启用') }}</button>
       <RefreshBtn :disabled="busy" @click="load" />
     </div>
 
