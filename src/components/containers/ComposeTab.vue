@@ -28,6 +28,7 @@ import {
   containersOfProject, drillEmptyHint, projectCountMismatch,
 } from '@/composables/composeDrill'
 import type { StackServicePayload } from '@/composables/stackForm'
+import { useAsync } from '@/composables/useAsync'
 import { toast } from '@/composables/useToast'
 
 /** compose 行（`docker compose ls --all --format json`）。status 是组合语义串
@@ -61,8 +62,8 @@ const props = defineProps<{
 const composeProjects = ref<ComposeProjectLine[]>([])
 /** 本 Tab 自己拉的一份容器列表（下钻用，见文件头说明） */
 const containers = ref<DrillContainer[]>([])
-const loading = ref(false)
-const error = ref('')
+// 状态机（loading/error/失败分支）统一走 useAsync；本 Tab 一次拉两份数据，故不用 useRowLoad
+const { loading, error, run } = useAsync()
 
 /** 当前展开下钻的 Compose 项目名（null = 未展开） */
 const drillProject = ref<string | null>(null)
@@ -131,22 +132,22 @@ async function onStackSubmit(project: string, services: StackServicePayload[]) {
 }
 
 async function load() {
+  // 能力位关着：不发请求，也不点亮骨架（否则会永远卡在加载中）
   if (!props.supported) return
-  loading.value = true
-  try {
-    const [projects, list] = await Promise.all([
-      api.get<ComposeProjectLine[]>(API.containers.composeProjects()),
-      api.get<DrillContainer[]>(API.containers.list()),
-    ])
-    composeProjects.value = projects
-    containers.value = list
-    error.value = ''
-  } catch (e) {
-    composeProjects.value = []; containers.value = []
-    error.value = errorText(e)
-  } finally {
-    loading.value = false
-  }
+  await run(
+    async () => {
+      const [projects, list] = await Promise.all([
+        api.get<ComposeProjectLine[]>(API.containers.composeProjects()),
+        api.get<DrillContainer[]>(API.containers.list()),
+      ])
+      composeProjects.value = projects
+      containers.value = list
+    },
+    (e) => {
+      composeProjects.value = []; containers.value = []
+      error.value = errorText(e)
+    },
+  )
   await loadStacks()
 }
 

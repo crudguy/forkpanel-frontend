@@ -12,11 +12,12 @@
  * `load()` 不再认识 stats，本组件自己在激活时拉、切走即停。
  */
 import { ref, watch } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { usePolling } from '@/composables/usePolling'
+import { useRowLoad } from '@/composables/useRowLoad'
 
 /** 资源用量快照行（docker stats --no-stream --all 的一行）。百分比/用量一律按
  *  docker 原始格式化串展示（如 "1.52%"、"12.5MiB / 2GiB"）——后端不二次解析，
@@ -32,22 +33,12 @@ const props = defineProps<{
 }>()
 
 const stats = ref<StatLine[]>([])
-const loading = ref(false)
-const error = ref('')
+// 状态机与列表策略（失败清列表 / 轮询成功自愈清错）统一走 useRowLoad
+const { loading, error, load } = useRowLoad(
+  () => api.get<StatLine[]>(API.containers.stats()), stats,
+)
 /** 自动刷新开关（默认开：用量数据不刷新就失去意义）。 */
 const auto = ref(true)
-
-async function load(silent = false) {
-  if (!silent) loading.value = true
-  try {
-    stats.value = await api.get<StatLine[]>(API.containers.stats())
-    if (silent) error.value = '' // 自愈：轮询成功清旧错
-  } catch (e) {
-    if (!silent) { stats.value = []; error.value = errorText(e) }
-  } finally {
-    if (!silent) loading.value = false
-  }
-}
 
 // 切到本 Tab 时拉一次（挂载即激活）
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })

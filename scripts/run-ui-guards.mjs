@@ -29,6 +29,8 @@ export const UI_GUARDS = [
   'check-bulk-scope.mjs',
   // 2026-11-05 Q-09 新增：升级/重装/重启的等待逻辑必须走 serviceResume，判据形态不得降级
   'check-maintenance-wait.mjs',
+  // 2026-11-05 Q-09 新增：容器 6 个 Tab 的加载动作必须走 useRowLoad/useAsync
+  'check-tab-load.mjs',
 ]
 
 let failed = 0

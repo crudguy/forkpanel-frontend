@@ -21,6 +21,7 @@ import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { usePolling } from '@/composables/usePolling'
+import { useRowLoad } from '@/composables/useRowLoad'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -51,20 +52,10 @@ const props = defineProps<{
 }>()
 
 const containers = ref<Container[]>([])
-const loading = ref(false)
-const error = ref('')
-
-async function load(silent = false) {
-  if (!silent) loading.value = true
-  try {
-    containers.value = await api.get<Container[]>(API.containers.list())
-    if (silent) error.value = '' // 自愈：轮询成功清旧错
-  } catch (e) {
-    if (!silent) { containers.value = []; error.value = errorText(e) }
-  } finally {
-    if (!silent) loading.value = false
-  }
-}
+// 状态机与列表策略（失败清列表 / 轮询成功自愈清错）统一走 useRowLoad
+const { loading, error, load } = useRowLoad(
+  () => api.get<Container[]>(API.containers.list()), containers,
+)
 
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
 

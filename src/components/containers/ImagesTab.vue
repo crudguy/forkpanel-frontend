@@ -24,6 +24,7 @@ import Icon from '@/components/Icon.vue'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import { usePolling } from '@/composables/usePolling'
+import { useRowLoad } from '@/composables/useRowLoad'
 import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
 import { toast } from '@/composables/useToast'
 
@@ -39,20 +40,10 @@ const props = defineProps<{
 }>()
 
 const images = ref<Image[]>([])
-const loading = ref(false)
-const error = ref('')
-
-async function load(silent = false) {
-  if (!silent) loading.value = true
-  try {
-    images.value = await api.get<Image[]>(API.containers.images())
-    if (silent) error.value = '' // 自愈：轮询成功清旧错
-  } catch (e) {
-    if (!silent) { images.value = []; error.value = errorText(e) }
-  } finally {
-    if (!silent) loading.value = false
-  }
-}
+// 状态机与列表策略（失败清列表 / 轮询成功自愈清错）统一走 useRowLoad
+const { loading, error, load } = useRowLoad(
+  () => api.get<Image[]>(API.containers.images()), images,
+)
 
 // 切到本 Tab 时拉一次（挂载即激活，`immediate` 让首次进入也有数据）
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })

@@ -6,11 +6,12 @@
  * 或手动 `docker volume create` 产生，比网络还罕见，没有实时字段；工具栏「刷新」即可。
  */
 import { ref, watch } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
+import { useRowLoad } from '@/composables/useRowLoad'
 
 /** Docker 卷行。driver 为 docker 原始串（local / nfs / cifs…），同口径不翻译；
  *  mountpoint 是卷数据在宿主机上的实际路径（排查磁盘占用用）。 */
@@ -21,21 +22,10 @@ interface VolumeLine {
 const props = defineProps<{ active: boolean }>()
 
 const volumes = ref<VolumeLine[]>([])
-const loading = ref(false)
-const error = ref('')
-
-async function load() {
-  loading.value = true
-  try {
-    volumes.value = await api.get<VolumeLine[]>(API.containers.volumes())
-    error.value = ''
-  } catch (e) {
-    volumes.value = []
-    error.value = errorText(e)
-  } finally {
-    loading.value = false
-  }
-}
+// 状态机与列表策略统一走 useRowLoad（本 Tab 不轮询，但失败清列表的口径一致）
+const { loading, error, load } = useRowLoad(
+  () => api.get<VolumeLine[]>(API.containers.volumes()), volumes,
+)
 
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
 </script>
@@ -43,7 +33,7 @@ watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
 <template>
   <div>
     <p v-if="error" class="err" role="alert">
-      {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button>
+      {{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
     </p>
 
     <RiskBanner level="info"
@@ -54,7 +44,7 @@ watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
       <div class="card-toolbar">
         <span class="count">共 {{ volumes.length }} 个卷</span>
         <span class="spacer" />
-        <RefreshBtn sm title="立即刷新一次卷清单" @click="load" />
+        <RefreshBtn sm title="立即刷新一次卷清单" @click="load()" />
       </div>
       <div class="t-scroll">
         <table class="fixed" v-table-nav>
