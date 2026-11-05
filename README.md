@@ -43,10 +43,11 @@ src/
     client.ts        fetch 封装（CSRF / 401 / 错误码）
     types.ts         CapabilityMap / PlatformInfo / 错误码分段
   router/            路由（懒加载，requiresAuth 守卫）
-  stores/            auth / system / ui / task（仅 3~4 个）
-  components/        自研 ~15 个基础组件（Button/Table/Modal/Tabs/...）
+  stores/            仅 auth.ts（登录 / 会话 / CSRF）；其余状态归 composables/
+  composables/       纯逻辑单一事实源（与 Vue 无关、可单测）
   layouts/           MainLayout（侧边栏按能力矩阵渲染）
-  views/             ~27 个页面（路由总览见下方「页面 / 路由」）
+  components/        49 个共享组件（Button/Table/Modal/Tabs/… + containers/ 下的 Docker 弹窗）
+  views/             34 个页面（路由总览见下方「页面 / 路由」）
   styles/            原生 CSS + 设计 token（CSS 变量）
 scripts/size-report.mjs   构建体积预算报告
 scripts/check-no-comments.mjs  产物无注释守卫（build 末尾自动跑）
