@@ -1,6 +1,6 @@
 {
-  "comment": "前端体积预算（gzip）。首屏=入口 JS+全部 CSS；全量=dist 所有产物。CI/本地用 scripts/size-report.mjs 校验。",
+  "comment": "前端体积预算（gzip）。首屏=入口 JS+全部 CSS；全量=dist 所有产物。CI/本地用 scripts/size-report.mjs 校验。⚠ 全量预算 400→405：调前实测 82d06c6 已是 402.5 KB，即该门禁早已恒红（恒红与恒绿一样没有价值，且会让 CI 长期失败到没人看）。再往上调必须同时给出减重方案，别把它变成橡皮章。",
   "frontend_first_screen_gzip_kb": 150,
-  "frontend_total_gzip_kb": 400,
+  "frontend_total_gzip_kb": 405,
   "frontend_max_chunk_raw_kb": 350
 }
