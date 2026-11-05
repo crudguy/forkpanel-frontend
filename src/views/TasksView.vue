@@ -30,15 +30,33 @@ const sel = ref<Task | null>(null)
 const output = ref('')
 const outLoading = ref(false)
 
-function load() {
-  return run(async () => {
-    const r = await api.get<Task[]>(API.tasks.list())
-    tasks.value = Array.isArray(r) ? r : []
-  })
+async function fetchTasks(): Promise<void> {
+  const r = await api.get<Task[]>(API.tasks.list())
+  tasks.value = Array.isArray(r) ? r : []
 }
+/** 用户触发的加载（重试按钮 / 刷新按钮 / 首屏）：失败要落错误条。 */
+function load() { return run(fetchTasks) }
+/** 后台静默刷新：轮询专用，不闪骨架、不落错误条。
+ *  ⚠ 不能给 load 加 `silent = false` 形参后继续把它绑在 `@click="load"` 上：
+ *    Vue 会把 PointerEvent 当第一个实参传进来，silent 变成 truthy，
+ *    用户点的「重试」会静默吞掉错误（vue-tsc 也能抓到这个类型错）。 */
+function loadSilent() { return run(fetchTasks, undefined, { silent: true }) }
 onMounted(() => { if (canView.value) load() })
 
 function isLive(t: Task | null) { return !!t && (t.state === 'running' || t.state === 'queued') }
+
+/** 列表轮询（F-06）。
+ *
+ *  副标题承诺「运行中每 2 秒自动刷新」，但此前唯一的 usePolling 只在**打开详情**
+ *  时拉单体进度（enabled 依赖 sel）；停在列表页时进度永远停在首屏，文案是假的。
+ *  enabled 每 tick 求值：列表里出现 running/queued 就自动补拉，全部结束即空转，
+ *  不需要 watcher，也不需要手动 stop/restart。silent 让后台刷新不闪骨架、
+ *  不落错误条（瞬时失败交给下一轮自愈，与详情轮询同口径）。 */
+usePolling({
+  ms: 2000,
+  enabled: () => canView.value && tasks.value.some(isLive),
+  fn: () => { void loadSilent() },
+})
 
 /** 运行中任务每 2s 轮询单体详情刷新进度。
  *
