@@ -30,6 +30,14 @@ describe('isRecovered —— 三种恢复判据的决策表', () => {
     [{ kind: 'version-changed', from: '1.0.0' }, '1.0.0', true, true, '升级：断连过之后应答 ⇒ 恢复（哪怕版本号还没读出来）'],
     [{ kind: 'version-changed', from: '1.0.0' }, '1.0.1', false, true, '升级：版本号变了 ⇒ 恢复（没抓到断连也算）'],
     [{ kind: 'version-changed', from: '1.0.0' }, '1.0.1', true, true, '升级：两个条件同时成立'],
+    // 单位归一与「基线未知」——这两类曾让判据**恒真**（升级后 2 秒就刷新，
+    // 页面回到旧二进制上）。顶栏显示用 `v0.1.0`，而 /version 返回 `0.1.0`。
+    [{ kind: 'version-changed', from: 'v1.0.0' }, '1.0.0', false, false, '基线带 v、接口不带 v ⇒ 同一版本，不能刷新'],
+    [{ kind: 'version-changed', from: '1.0.0' }, 'v1.0.0', false, false, '反向：接口带 v、基线不带 ⇒ 同一版本'],
+    [{ kind: 'version-changed', from: ' V1.0.0 ' }, '1.0.0', false, false, '大小写与首尾空白同样归一'],
+    [{ kind: 'version-changed', from: 'v1.0.0' }, '1.0.1', false, true, '归一之后仍认得出新版本'],
+    [{ kind: 'version-changed', from: '' }, '0.1.0', false, false, '基线未知时不能拿版本号当判据（否则恒真）'],
+    [{ kind: 'version-changed', from: '' }, '0.1.0', true, true, '基线未知时仍可靠断连判定恢复'],
   ]
   for (const [rule, app, sawDown, want, why] of rows) {
     it(`${rule.kind} sawDown=${sawDown} app=${app} → ${want}（${why}）`, () => {
@@ -63,6 +71,22 @@ describe('waitForRecovery —— 轮询、刷新、超时', () => {
     expect(onTimeout).toHaveBeenCalledTimes(1)
     // 3 分钟 / 2 秒 = 90 次探测：间隔没被写错（写成 0 会打出成千上万次）
     expect(probe).toHaveBeenCalledTimes(90)
+  })
+
+  it('顶栏传显示值 v1.0.0、接口返回 1.0.0：版本没变 ⇒ 不许 2 秒就刷新（曾恒真的回归）', async () => {
+    // 真实调用点就是这样：waitForUpgrade(appVersion.value)，而 appVersion 带 v 前缀。
+    // 修复前 `'1.0.0' !== 'v1.0.0'` 恒真 ⇒ 第一次探测（t=2s）就 reload，
+    // 3 分钟兜底与 sawDown 两支形同虚设，用户看到的是"点了没反应"。
+    const probe = vi.fn(() => Promise.resolve('1.0.0'))
+    const { opts, onReload, onTimeout } = harness({
+      probe,
+      rule: { kind: 'version-changed', from: 'v1.0.0' },
+    })
+    void waitForRecovery(opts)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(onReload).not.toHaveBeenCalled()
+    expect(probe).toHaveBeenCalledTimes(3)
+    expect(onTimeout).not.toHaveBeenCalled()
   })
 
   it('先断连、之后同版本应答 ⇒ 立刻刷新（升级不能等版本号变才刷新）', async () => {

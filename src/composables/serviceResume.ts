@@ -27,14 +27,30 @@ import { API } from '@/api/endpoints'
 export type ResumeRule =
   | { kind: 'any-response' }
   | { kind: 'after-down' }
-  /** `from` 必须与 `GET /version` 返回的 `app` 同格式（不带 `v` 前缀，见 fetchAppVersion）。 */
+  /** `from` 为升级前的版本号；`''` 表示基线未知（见 normVersion 与 isRecovered）。 */
   | { kind: 'version-changed'; from: string }
+
+/**
+ * 版本号归一化：去掉首尾空白与可选的 `v` / `V` 前缀，比较的两侧都要过一遍。
+ *
+ * 为什么必须有：`/version` 返回的是 `env!("CARGO_PKG_VERSION")`（形如 `0.1.0`，
+ * 不带前缀），而顶栏版本胶囊显示的是 `v0.1.0`。此前直接用显示值当基线做比较
+ * （`waitForUpgrade(appVersion.value)`），于是 `'0.1.0' !== 'v0.1.0'` **恒真**——
+ * 升级后第一次探测（2 秒）就 reload，页面回到旧二进制上，看起来像"点了没反应"，
+ * 正是这段等待逻辑想避免的假象（3 分钟兜底与 sawDown 两支形同虚设）。
+ */
+function normVersion(s: string): string {
+  return s.trim().replace(/^v/i, '')
+}
 
 /** 探测结果够不够格刷新页面。纯函数：不碰 DOM、不看时间，决策表可直接穷举断言。 */
 export function isRecovered(rule: ResumeRule, app: string, sawDown: boolean): boolean {
   if (rule.kind === 'any-response') return true
   if (rule.kind === 'after-down') return sawDown
-  return sawDown || app !== rule.from
+  // 基线未知（`/version` 还没取到 / 取失败时用户就点了升级）不能拿版本号当判据：
+  // `'' !== '0.1.0'` 同样恒真，会把"等升级"退化成"立刻刷新"。此时只认断连。
+  if (normVersion(rule.from) === '') return sawDown
+  return sawDown || normVersion(app) !== normVersion(rule.from)
 }
 
 /**
