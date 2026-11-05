@@ -24,10 +24,17 @@
   --c-text-mute: #646a75;
   --c-hover: rgba(255, 255, 255, 0.05);
   --c-active: rgba(255, 106, 61, 0.14);
+  /* 弹窗/抽屉遮罩：两套主题同值（遮罩本身不吃主题色，只是把底层压暗）。
+     原先 4 个组件各写一份 rgba(0,0,0,.45)，其中一处是 .4，肉眼无差但没法统一调。 */
+  --c-scrim: rgba(0, 0, 0, 0.45);
 
   --c-primary: #ff6a3d;
   --c-primary-2: #ff8a4c;
   --c-primary-soft: rgba(255, 106, 61, 0.15);
+  /* 压在品牌色/危险色底上的前景色：两套主题都恒为白。做成 token 是为了让
+     「品牌底上的白」有名字——否则它以十几处裸 #fff 散落全站，棘轮也分不清
+     它到底是主题色还是常量。 */
+  --c-on-accent: #fff;
   --c-cyan: #38bdf8;
   --c-danger: #f87171;
   --c-danger-soft: rgba(248, 113, 113, 0.15);
@@ -49,6 +56,11 @@
   --chart-hot: #ff9a3d;     /* 热区≥60%：橙（状态色，仅临界用） */
   --chart-danger: #ff4d4d;  /* 危险≥85%：红 */
 
+  /* 终端固定深色（不随明暗主题切换，与代码编辑器一致）：.term-pane 的底色与
+     xterm 的 theme 都读这两个 token，避免「容器底色」与「终端画布色」各写一份。 */
+  --term-bg: #0d1117;
+  --term-fg: #e6edf3;
+
   --gradient: linear-gradient(135deg, #ff8a4c, #ff5a36);
   --gradient-soft: linear-gradient(135deg, rgba(255, 138, 76, 0.20), rgba(255, 90, 54, 0.12));
   --shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.55);
@@ -60,6 +72,19 @@
   --radius-lg: 16px;
   --radius-sm: 10px;
   --radius-xs: 8px;
+
+  /* ── 布局骨架尺寸（复盘的 S-03）：顶栏高度与 .content 内边距**只在这里定义一次** ──
+     此前 FilesView 写死 `top:58px` / `margin-top:-22px` / `height:calc(100vh - 120px)`，
+     三个数字分别等于顶栏高、.content 的 padding-top、三者之和，靠注释互相提醒；
+     一旦顶栏改高或窄屏 padding 收窄，吸顶位置与可用高度就静默错位。
+     现在引用方一律 `var(--topbar-h)` / `var(--page-chrome-h)`。
+     ⚠ 窄屏（<=900px）会把 --content-pt/--content-pb 覆盖成 16px，
+       所以 --page-chrome-h 也随之变小——**不要**在别处缓存成常量。 */
+  --topbar-h: 58px;
+  --content-pt: 22px;
+  --content-pb: 40px;
+  /* 页面 chrome 总高：全高布局的可用高度 = 100vh − 它（顶栏 + 上下内边距） */
+  --page-chrome-h: calc(var(--topbar-h) + var(--content-pt) + var(--content-pb));
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC',
           'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -132,6 +157,7 @@
 
   --c-primary: #ff5a36;
   --c-primary-2: #ff7a4c;
+  --c-on-accent: #fff;
   --c-danger: #e23b3b;
   --c-danger-soft: rgba(226, 59, 59, 0.10);
   --c-warn: #c47d00;
@@ -268,7 +294,7 @@ a[class*="btn-"]:active { transform: translateY(0); }
 /* 与 `a[class*="btn-"]` 同为 (0,1,1)，靠「后出现」取胜，把颜色还给各自的变体 */
 a.btn-primary { border-color: transparent; }
 a.btn-danger { border-color: var(--c-danger); }
-.btn-primary { background: var(--gradient); border-color: transparent; color: #fff; font-weight: 600; box-shadow: var(--glow); }
+.btn-primary { background: var(--gradient); border-color: transparent; color: var(--c-on-accent); font-weight: 600; box-shadow: var(--glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-ghost { background: transparent; }
 /* 危险按钮**两级**，别再自造第三级（此前 Databases 有 `.danger-btn{background:#C73E1F}`、
@@ -276,7 +302,7 @@ a.btn-danger { border-color: var(--c-danger); }
      .btn-danger        实心红，**弹窗里的危险主操作**（删除确认 / 覆盖恢复 / 关闭 MFA）
      .btn-ghost.danger  透明底 + 红字，**表格内联**的危险小按钮（避免整片表格红压压）
    判据：这个按钮是不是弹窗的底部主操作？是 →.btn-danger；否则 →.btn-ghost.danger。 */
-.btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: #fff; font-weight: 600; }
+.btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: var(--c-on-accent); font-weight: 600; }
 .btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-sm { padding: 4px 10px; font-size: var(--fs-13); border-radius: var(--radius-xs); }
 .btn-icon { padding: 7px; width: 34px; height: 34px; }
@@ -322,6 +348,15 @@ td button { vertical-align: middle; }
 .tools-row {
   display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
 }
+/* 标签栏与工具条同一行：把 .tabbar 与 .tools-row 包进 .fp-head-row 共用一行，
+   标签在左、操作按钮在右（tools-row 内的 .spacer 把按钮推到右侧）。窄屏时整行可折行。
+   ⚠ 必须带 `fp-` 前缀：这是**全局**样式，裸 `.head-row` 会污染任何同名元素——
+     实际已发生：FilesView 在自己的 scoped 里把它重定义成 sticky，TerminalView
+     则完全没定义（于是只有一个 flex 布局、没有吸顶），同一个类名在三处语义不同。
+     前缀化后「全局只管排版，吸顶由各视图 scoped 自负」，check-page-head.mjs 也认这个名字。 */
+.fp-head-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.fp-head-row .tabbar, .fp-head-row .tools-row { margin-bottom: 0; }
+.fp-head-row > .tools-row { flex: 1; min-width: 0; }
 .page-sub { color: var(--c-text-dim); font-size: var(--fs-13); margin: 2px 0 0; }
 /* 页内标题已移除：页面标题只由顶栏 h1 渲染（MainLayout 读 route.meta.title）。
    此前 13 个视图在页头里各手写一份 <h2 class="page-title">，与顶栏同值、
@@ -373,7 +408,13 @@ td button { vertical-align: middle; }
 .cols-3 { grid-template-columns: repeat(3, 1fr); }
 .cols-4 { grid-template-columns: repeat(4, 1fr); }
 .cols-5 { grid-template-columns: repeat(5, 1fr); }
-@media (max-width: 1180px) { .cols-5 { grid-template-columns: repeat(4, 1fr); } .cols-4 { grid-template-columns: repeat(2, 1fr); } .cols-3 { grid-template-columns: repeat(2, 1fr); } }
+/* 断点统一（复盘的 S-07）：全站只保留 1200 / 900 / 720 / 480 四档 + 一个高度档。
+   此前是 1180/1799/900/760/720/500 + max-height:600 共 6 个宽度断点，760 与 720 仅差
+   40px、1180 与上面要新增的 1200 又差 20px，同一视口下弹窗与页面会走两套降级策略。
+   `1799` 是**故意保留的例外**（见 SitesView 的说明）：它按「表格内容宽度」而非视口档位
+   触发，把 1800 改成 1200 会让 1280~1799 的常见笔记本宽度反而用回 320px 操作列、
+   直接把站点表挤出横向滚动。这类断点须与列宽绑定，不能当视口档位统一。 */
+@media (max-width: 1200px) { .cols-5 { grid-template-columns: repeat(4, 1fr); } .cols-4 { grid-template-columns: repeat(2, 1fr); } .cols-3 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 720px) { .cols-2, .cols-3, .cols-4, .cols-5 { grid-template-columns: 1fr; } }
 
 /* ── 表格 ── */
@@ -462,7 +503,7 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 .bad, .danger { color: var(--c-danger); }
 /* 表格工具栏里的搜索框（容器 / 镜像两处共用）。放全局而不是各视图 scoped：
    拆组件时样式留在父级会静默失效（ImagesTab 就这么裸奔过一轮——输入框没边框没高度）。 */
-.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-input, var(--c-glass)); color: var(--c-text); font-size: var(--fs-13); }
+.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-glass); color: var(--c-text); font-size: var(--fs-13); }
 .filter:focus { outline: none; border-color: var(--c-primary); }
 
 .err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
@@ -490,8 +531,12 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 
    ── 层级总表（改任何 z-index 前先看这里）──
    30 topbar │ 40/41 用户菜单 backdrop / menu │ 50 一级弹窗 .mask
-   59 移动端抽屉遮罩 .nav-backdrop │ 60 二级浮层（目录选择器 / SQL 控制台 / 回收站 / 抽屉本体）
+   59 移动端抽屉遮罩 .nav-backdrop │ 60 二级浮层（目录选择器 / SQL 控制台 / 回收站 / 抽屉本体 /
+      指标卡 hover 详情——它是 Teleport 到 body 的单例浮层，曾经写 z-index:1000 把 toast 压住）
+   70 全屏帮助层（帮助抽屉 / 包帮助弹窗）：用户在某个浮层里点「帮助」也要看得见
+   80 命令面板（全站最高**交互**层，须压过帮助层）
    100 toast（最高：弹窗开着时提示也要看得见）
+   <30 是容器内局部层叠（表头 sticky、编辑器行号），不参与全局弹层竞争。
    此前 Files / Databases / Security 把一级弹窗也设成 60，与二级浮层同级，叠放顺序退化成
    由 DOM 顺序决定（可能被浮层盖住），故统一降到 50。
 
@@ -611,7 +656,7 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 .switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-hover); border: 1px solid var(--c-border); transition: background .15s, border-color .15s; }
 .switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: all .15s; }
 .switch input:checked + i { background: var(--c-primary); border-color: var(--c-primary); }
-.switch input:checked + i::after { left: 21px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:checked + i::after { left: 21px; background: var(--c-on-accent); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
 .switch input:disabled + i { opacity: .5; cursor: not-allowed; }
 .switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--c-primary-soft); }
 
@@ -761,4 +806,20 @@ label.has-err input, label.has-err select { border-color: var(--c-danger); }
      （实测行高 247px）。图标按钮靠 title/aria-label 仍可辨识，点击目标不变。 */
   .btn-label { display: none; }
   .actions .btn-sm { padding: 4px 7px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   窄屏（<=900px，与 SideNav 抽屉化同一档）的骨架尺寸覆盖
+
+   ⚠ **必须放在文件末尾**：这是一条 `:root` 规则，特异性与顶部那份相同（0,1,0），
+   谁在后谁赢。此前 MainLayout.vue 里那条 `@media(max-width:900px){.content{padding:16px}}`
+   写在了基础规则**之前**，同特异性被后者覆盖 —— 于是 900/899/768 各档实测
+   `padding-top` 恒为 22px，那条窄屏收窄**从未生效**（真机量过），而 WIP 还基于
+   这个假象写了「不设分档补偿」的推理。改成变量 + 顺序正确后，引用方零改动自适应。
+
+   为什么连 --content-pb 一起改：--page-chrome-h 是三者之和，只改 padding-top
+   而不改 padding-bottom，全高布局（FilesView/TerminalView）会多算 24px 导致纵向溢出一屏。
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  :root { --content-pt: 16px; --content-pb: 16px; }
 }

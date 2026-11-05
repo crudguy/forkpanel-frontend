@@ -373,33 +373,36 @@ function logout() {
   background: var(--c-surface-2); color: var(--c-text);
 }
 .hamburger:hover { background: var(--c-hover); }
-/* 窄屏：显示汉堡、隐藏侧栏常驻形态（侧栏改由 SideNav 自身媒体查询变抽屉） */
-@media (max-width: 900px) {
-  .hamburger { display: inline-flex; align-items: center; justify-content: center; }
-  .content { padding: 16px; }
-}
+/* 窄屏断点**不写在这里**：`.content` 的内边距覆盖必须排在下方基础规则之后，
+   否则同特异性被后者盖掉（曾因此让 900px 档的 padding 从未生效过）。
+   全部集中在 <style> 末尾的「响应式」小节。 */
 /* 抽屉遮罩：压在顶栏(30)之上、侧栏抽屉(60)之下，点击收起 */
-.nav-backdrop { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.45); }
+.nav-backdrop { position: fixed; inset: 0; z-index: 59; background: var(--c-scrim); }
 
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; gap: 14px;
-  height: 58px; padding: 0 22px;
+  height: var(--topbar-h); padding: 0 22px;
   background: color-mix(in srgb, var(--c-surface) 82%, transparent);
   backdrop-filter: blur(14px) saturate(150%);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   border-bottom: 1px solid var(--c-border);
 }
-.title { font-size: var(--fs-17); font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap; }
-.title-block { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 1px; }
+.title { font-size: var(--fs-17); font-weight: 650; margin: 0; letter-spacing: .2px; white-space: nowrap;
+         overflow: hidden; text-overflow: ellipsis; }
+/* flex:1 1 auto 让标题块吃掉剩余空间：此前是 `0 1 auto` + min-width:0，
+   于是空间不足时它被压到 **0 宽**——实测 1024px（笔记本常见宽）与 768px 下
+   `.title` 的宽度就是 0，页面标题整块消失。顶栏里只有它是「可让」的文本，
+   该让路的是信息性胶囊（见下方 <=1200 收起 .health），不是标题。 */
+.title-block { display: flex; flex-direction: column; justify-content: center; flex: 1 1 auto; min-width: 0; gap: 1px; }
 .subtitle { font-size: var(--fs-12); line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
 
 .bell { position: relative; color: var(--c-text-dim); }
 .bell:hover { color: var(--c-text); }
 .badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
-             padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: #fff;
+             padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: var(--c-on-accent);
              font-size: var(--fs-12); line-height: 17px; text-align: center; font-weight: 500;
              box-shadow: 0 0 0 2px var(--c-surface); }
 .spacer { flex: 1; }
@@ -410,7 +413,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .user:hover { background: var(--c-hover); }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; color: #fff; font-weight: 700; font-size: var(--fs-14);
+  display: grid; place-items: center; color: var(--c-on-accent); font-weight: 700; font-size: var(--fs-14);
   background: var(--gradient); box-shadow: var(--glow);
 }
 .avatar.sm { width: 36px; height: 36px; font-size: var(--fs-15); }
@@ -449,7 +452,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .seg-b.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
 
 /* 内容区随视口填满：左内边距与顶栏保持一致（同为 22px），两者左边缘因此对齐。 */
-.content { flex: 1; padding: 22px 22px 40px; }
+/* 内边距取 --content-pt/--content-pb（main.css 定义）：FilesView / TerminalView 的
+   全高布局要用同一个值算 `calc(100vh - var(--page-chrome-h))`，窄屏由 main.css 的
+   媒体查询统一改小，此处无需再写一条 @media（写了也容易被同特异性覆盖）。 */
+.content { flex: 1; padding: var(--content-pt) 22px var(--content-pb); }
 /* 不设 max-width。原先 `max-width:1360px; margin:0 auto` 会让视口超过 ~1650px 后
    内容停止增长并居中，1920 下左右各空 163px、2560 下各空 483px——宽屏上大片是死的。
    面板以表格/卡片为主，填满比"限制行长"更实用，故直接铺满可用宽度。 */
@@ -503,9 +509,24 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .ai-entry:hover { background: color-mix(in srgb, var(--c-primary) 18%, transparent); border-color: var(--c-primary); }
 
-@media (max-width: 720px) {
+/* ══ 响应式（从宽到窄；宽度断点全站只有 1200 / 900 / 720 / 480 四档）══════════
+   900 = 侧栏「常驻 → 抽屉」的分界，与 SideNav 自身媒体查询同档。 */
+
+/* <=1200：顶栏收起系统徽标胶囊。
+   实测（真机 getBoundingClientRect，1920/1440/1024/1180/768 五档）：顶栏固定项
+   = 徽标 172 + 维护簇 181 + 搜索 34 + AI 89 + 通知 34 + 主题 34 + 用户 113 = 657，
+   加 9 个 14px 间距与 44 左右内边距 ≈ 827；再算上 234px 侧栏，视口低于约 1061 时
+   标题块只能拿到 0 宽（1024 实测 `.title` 宽度 = 0，页面标题整块消失）。
+   徽标是纯信息展示（点它才进能力矩阵），窄屏让位给标题；能力矩阵侧栏仍有入口。 */
+@media (max-width: 1200px) {
   .health { display: none; }
-  /* 顶栏右侧簇在手机宽度下要装下搜索/通知/主题/用户，AI 入口退化为纯图标 */
+}
+
+/* <=900：侧栏转抽屉（汉堡出现），AI 入口退化为纯图标（原先只在 <=720 才收，
+   但顶栏在 768 就已经装不下：固定项 694 + 间距 126 + 内边距 44 = 864 > 758，
+   于是整页横向滚动 843px——断点选 720 是凭感觉，实际分界在 900）。 */
+@media (max-width: 900px) {
+  .hamburger { display: inline-flex; align-items: center; justify-content: center; }
   .ai-label { display: none; }
   .ai-entry { padding: 0 9px; }
 }

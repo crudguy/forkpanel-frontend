@@ -561,7 +561,8 @@ function full(p: string) {
         是为了让绑定点显式可见（透传会让人看不出这些事件挂在哪个元素上）。 -->
    <div class="drop-zone" @dragenter="onDragEnter" @dragover="onDragOver"
      @dragleave="onDragLeave" @drop="onDrop">
-    <!-- 多页签：每个标签是一个独立目录视图；「+ 新标签」以当前目录为起点开分支 -->
+    <!-- 多页签与工具条同一行：标签栏 + 操作按钮共用一行，不单独占一行 -->
+    <div class="fp-head-row">
     <div class="tabbar" role="tablist" aria-label="文件标签">
       <div v-for="t in tabs" :key="t.id" class="tab" :class="{ on: t.id === activeId }"
         role="tab" :aria-selected="t.id === activeId" tabindex="0"
@@ -572,7 +573,7 @@ function full(p: string) {
           @click.stop="closeTab(t.id)"><Icon name="close" :size="12" /></button>
       </div>
       <button class="tab add" type="button" aria-label="新建标签" @click="openTab">
-        <Icon name="plus" :size="14" /> 新标签
+        <Icon name="plus" :size="14" />
       </button>
     </div>
 
@@ -612,6 +613,7 @@ function full(p: string) {
         <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
       </button>
       <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />
+    </div>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.FILE_READ) && !entries.length"
@@ -681,13 +683,21 @@ function full(p: string) {
             <td class="num mono">{{ e.mode ?? '—' }}</td>
             <td class="col-opt">{{ e.owner ?? '—' }}</td>
             <td class="num">{{ fmtDateTime(e.modified) }}</td>
-            <td class="nowrap">
-              <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="download(e)">下载</button>
-              <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm" @click="open(e)">编辑</button>
+            <td class="nowrap acts">
+              <!-- 宽屏：纯文字按钮（.acts-ico 默认 display:none，零视觉变化）。
+                   <=1200：文字换成图标（见 <style> 里的媒体查询）——5 个带文字按钮
+                   要 292px，加上其余固定列共 814px，1024 宽下表格只能横向滚。 -->
+              <button v-if="e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm"
+                title="下载" aria-label="下载" @click="download(e)"><Icon name="download" :size="14" class="acts-ico" /><span class="btn-label">下载</span></button>
+              <button v-if="canWrite && e.kind === 'file' && !e.sensitive" class="btn-ghost btn-sm"
+                title="编辑" aria-label="编辑" @click="open(e)"><Icon name="note" :size="14" class="acts-ico" /><span class="btn-label">编辑</span></button>
               <!-- 重命名 / 权限（审计 F3）：行内直接入口，目录与文件均可 -->
-              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askRename(e)">重命名</button>
-              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm" @click="askChmod(e)">权限</button>
-              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm danger" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }">删除</button>
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm"
+                title="重命名" aria-label="重命名" @click="askRename(e)"><Icon name="edit" :size="14" class="acts-ico" /><span class="btn-label">重命名</span></button>
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm"
+                title="权限" aria-label="权限" @click="askChmod(e)"><Icon name="key" :size="14" class="acts-ico" /><span class="btn-label">权限</span></button>
+              <button v-if="canWrite && !e.sensitive" class="btn-ghost btn-sm danger"
+                title="删除" aria-label="删除" @click="confirmDel = { name: e.name, isDir: e.kind === 'dir' }"><Icon name="trash" :size="14" class="acts-ico" /><span class="btn-label">删除</span></button>
             </td>
           </tr>
         </tbody>
@@ -833,12 +843,12 @@ function full(p: string) {
   border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-glass);
   color: var(--c-text-dim); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
 .tab:hover { background: var(--c-hover); color: var(--c-text); }
-.tab.on { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.tab.on { background: var(--c-primary); color: var(--c-on-accent); border-color: var(--c-primary); }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
-.tab-x:hover { background: rgba(127, 127, 127, 0.28); }
-.tab.on .tab-x:hover { background: rgba(255, 255, 255, 0.28); }
+/* 关闭钮 hover 的浅色覆盖层跟着标签前景色走（与 TerminalView 同源）。 */
+.tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }
 .tab.add { color: var(--c-text-dim); }
 .tab.add:hover { color: var(--c-primary); }
 /* A7 面包屑：替换原整行 cwd 全路径。分段按钮 + 分隔符，当前级加粗纯文本。
@@ -868,9 +878,47 @@ th.sortable.on { color: var(--c-primary); }
 /* 过滤提示条：中性信息，不用 .warn（那是"出了状况"的黄色通道）。 */
 .filter-tip { margin: -4px 0 10px; font-size: var(--fs-12); color: var(--c-text-dim); }
 
-/* 拖拽上传。作用域是整页内容（.drop-zone 本身不画任何东西，纯事件绑定），
-   视觉反馈全在 Teleport 出去的全屏遮罩上——这样表格、页签都不会被重排。 */
-.drop-zone { position: relative; flex: 1; min-height: 0; }
+/* 拖拽上传作用域 + 文件页滚动模型。.drop-zone 定高成 flex column，让表格卡片
+   flex:1 吃满剩余视口、.t-scroll 自身滚动 —— main.css 的 `.t-scroll>thead>th`
+   本就是 `position:sticky; top:0`，但其注释写明「只对自身可滚动的容器生效」：
+   此前 .t-scroll 不限高，实测 clientHeight === scrollHeight === 1285（根本不自滚），
+   表头便随整页滚走。现在三层（顶栏 / 页签工具行 / 列名表头）全固定，只有数据行滚。
+   ⭐高度取 `100vh - var(--page-chrome-h)`：那是「顶栏 + .content 上下内边距」的
+     单一来源（main.css 的 :root），窄屏会自己变小。此前写死 120px，并靠注释
+     提醒「窄屏 padding 其实是 16px 但因顺序 bug 没生效」——顺序 bug 已修，
+     写死的 120 在 <=900px 会多算 24px、把页面顶出一屏纵向滚动。
+   ⚠ .drop-zone 原为 `flex:1`（flex-basis:0%），在 .page-root 里 `height` 会被 flex
+     分配覆盖 ⇒ 必须改 `flex:none`，否则限高完全无效（实测 dzHeight 仍 1347px）。
+   ⚠ .card.flush 全局是 `overflow:auto`，这里必须改 hidden，否则与 .t-scroll 形成
+     双层滚动容器；横滚交给内部 .t-scroll 独担。
+   拖拽反馈仍在 Teleport 出去的全屏遮罩上（本元素不画遮罩），故表格、页签不被重排。 */
+.drop-zone {
+  position: relative; flex: none; min-height: 0;
+  display: flex; flex-direction: column;
+  height: calc(100vh - var(--page-chrome-h));
+}
+.drop-zone > .fp-head-row { flex: none; }
+.drop-zone > .card.flush {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.card.flush > .t-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* 页签栏 + 功能按钮完全固定：滚动时零位移，消除「先往上顶一下再吸住」的偏移感。
+   ⭐关键：sticky 的 top 阈值必须等于元素**未滚动时的视口顶边位置**。原先顶边在
+   58px + .content 的 padding-top(22px) = 80px，却吸附到 58px ⇒ 滚动瞬间先跟内容
+   上移 22px 才停住（真机量到 head.top 80→58、控件 104.4→82.4），这就是偏移感来源。
+   修法：负 margin-top 抵消 .content 的 padding-top，把顶边提到 var(--topbar-h)
+   与阈值对齐；再补等量 padding-top 让控件视觉位置不变。两者相抵，
+   故 head-row 总占位高度不变、下方表格位置也不变（实测 table.top 恒 184.8）。
+   背景用页面底色铺满整行遮住下方滚动的表格；padding-bottom 替代 margin-bottom 让
+   底色覆盖原间距，避免钉住后留一条透出表格的窄缝。z-index 20 < 顶栏 30，互不遮挡。
+   ⭐ 三个偏移量全部走 main.css 的布局变量，**不再写死 58/-22**：窄屏（<=900px）
+     --content-pt 会变成 16px，负 margin 自动跟着变成 -16px，不需要「分档补偿」。
+     此前这里写死 -22，并留了一整段「若修好顺序 bug 须同步本行」的警告——
+     那个耦合本身就是缺陷，现在由变量消掉了。 */
+.fp-head-row { position: sticky; top: var(--topbar-h); z-index: 20; background: var(--c-bg);
+  margin-top: calc(-1 * var(--content-pt)); margin-bottom: 0; padding: 24px 2px 14px; }
 .drop-mask {
   position: fixed; inset: 0; z-index: 60;
   display: flex; align-items: center; justify-content: center;
@@ -911,4 +959,21 @@ col.w-fmode { width: 100px; }
 col.w-fowner { width: 96px; }
 col.w-fmtime { width: 160px; }
 col.w-facts { width: 320px; }
+
+/* 操作列随宽度换形态（S-04）：
+   宽屏纯文字（`.acts-ico` 默认不显示 ⇒ 与改动前逐像素一致）；
+   <=1200 换成纯图标：5 个带文字按钮实测要 292px，加上其余固定列共 814px，
+   而 1024 宽下可用宽度只有 734 ⇒ 表格被迫横向滚动，768 更糟（712 可用）。
+   图标态 5×28 + 4×6 间距 = 164，加单元格内边距 26 = 190，取 196 留余量；
+   收窄后固定列合计 690px，1024/768 都不再需要横滚。
+   ⚠ 与 SitesView 的差异是刻意的：那边一直显示「图标+文字」，这里宽屏保持纯文字，
+     避免为了窄屏降级而改动宽屏的列宽分配（名称列是唯一弹性列，改它会牵动整表）。
+   ⚠ 可辨识性由 title + aria-label 保留，点击目标不变。 */
+.acts-ico { display: none; }
+@media (max-width: 1200px) {
+  col.w-facts { width: 196px; }
+  .acts .acts-ico { display: inline-block; vertical-align: -2px; }
+  .acts .btn-label { display: none; }
+  .acts .btn-sm { padding: 4px 7px; }
+}
 </style>

@@ -168,6 +168,42 @@ if (!TITLE_RE.test('<h2 class="page-title">探针</h2>')) {
   pass('3', `扫过 ${files.length} 个视图，页内无 page-title 标题残留（正则自校验通过）`)
 }
 
+// [4] 头部行的类名必须带 fp- 前缀（S-02）。FilesView / TerminalView 的「页签 + 工具条」
+// 行原本叫裸类名 .head-row，且被写进 main.css 的全局作用域——同名元素互相污染，三个文件
+// 必须同批提交，漏提交 main.css 就只剩半个布局（连 display:flex 都没有）。改名后钉两条：
+//   4a）裸 head-row 不得再出现（按 class 切词比对；.fp-head-row 是子串，不能用包含判断）
+//   4b）fp-head-row 必须真的还在用，否则再改一次名这条就空转了
+const BARE_HEAD_SEL = /\.head-row\b/
+// CSS 注释里写 `.head-row` 是在**解释**这条规则（本文件 main.css 的注释就是这么写的），
+// 不该算违规；注释里的选择器本来就是死代码。只在扫 CSS 时剔，不动模板扫描。
+const stripCss = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ')
+const bareHead = []
+let fpHeadClasses = 0
+for (const f of files) {
+  const raw = readFileSync(join(DIR, f), 'utf8')
+  const src = blankComments(raw)
+  for (const m of src.matchAll(/class="([^"]*)"/g)) {
+    const toks = m[1].split(/\s+/).filter(Boolean)
+    if (toks.includes('head-row')) bareHead.push(`${f}（class="${m[1].trim()}"）`)
+    if (toks.includes('fp-head-row')) fpHeadClasses += 1
+  }
+  for (const b of src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
+    if (BARE_HEAD_SEL.test(stripCss(b[1]))) bareHead.push(`${f}（style 里的 .head-row 选择器）`)
+  }
+}
+const globalCss = stripCss(readFileSync(join(root, 'src/styles/main.css'), 'utf8'))
+if (BARE_HEAD_SEL.test(globalCss)) bareHead.push('src/styles/main.css（全局裸类名）')
+
+if (!BARE_HEAD_SEL.test('.head-row {')) {
+  fail('4a-a', '「禁止裸 .head-row」的正则自身已失效——这条会恒绿，必须修')
+} else if (bareHead.length) {
+  fail('4a', `头部行类名必须带 fp- 前缀，裸 .head-row 残留 ${bareHead.length} 处：${bareHead.join('、')}`)
+} else if (fpHeadClasses < 2) {
+  fail('4b', `只找到 ${fpHeadClasses} 处 class="fp-head-row"（期望 ≥2：文件页签行 / 终端页签行）——约定可能又被改名了`)
+} else {
+  pass('4', `裸 .head-row 为 0，fp-head-row 在 ${fpHeadClasses} 处使用（正则自校验通过）`)
+}
+
 if (failures.length) {
   console.log(`\nFAIL：页面头部不变量有 ${failures.length} 条违规（${failures.join(', ')}）`)
   process.exit(1)

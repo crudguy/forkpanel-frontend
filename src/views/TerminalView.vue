@@ -102,6 +102,18 @@ function wsUrl(): string {
   return `${proto}//${window.location.host}/api/v1/terminal`
 }
 
+/** xterm 的配色取自 main.css 的 --term-* token（终端恒深色，不随明暗主题切换）。
+    读不到 token 时退回同一组值，保证「容器底色」与「终端画布色」不会错位。 */
+function termTheme() {
+  const cs = getComputedStyle(document.documentElement)
+  const pick = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback
+  return {
+    background: pick('--term-bg', '#0d1117'),
+    foreground: pick('--term-fg', '#e6edf3'),
+    cursor: pick('--term-fg', '#e6edf3'),
+  }
+}
+
 /** 为该标签建好 xterm 实例并挂进它自己的容器（幂等）。容器必须在 DOM 里——故新标签须先 nextTick。 */
 function ensureTerm(id: string): TermSession | null {
   const s = sessionFor(id)
@@ -112,7 +124,7 @@ function ensureTerm(id: string): TermSession | null {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     fontSize: 13,
     cursorBlink: true,
-    theme: { background: '#0d1117', foreground: '#e6edf3', cursor: '#e6edf3' },
+    theme: termTheme(),
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
@@ -273,7 +285,8 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <!-- 多页签：每个标签一个独立会话（一条 WS / 一个 PTY），互不干扰 -->
+    <!-- 多页签与工具条同一行：标签栏 + 操作按钮共用一行，不单独占一行 -->
+    <div class="fp-head-row">
     <div class="tabbar" role="tablist" aria-label="终端会话">
       <div v-for="t in tabs" :key="t.id" class="tab" :class="{ on: t.id === activeId }"
         role="tab" :aria-selected="t.id === activeId" tabindex="0"
@@ -288,7 +301,7 @@ onUnmounted(() => {
         :disabled="tabs.length >= auth.terminalMax"
         :title="tabs.length >= auth.terminalMax ? `已达上限：后端最多同时 ${auth.terminalMax} 个终端会话` : '新建一个终端会话'"
         @click="openTab">
-        <Icon name="plus" :size="14" /> 新标签
+        <Icon name="plus" :size="14" />
       </button>
     </div>
 
@@ -309,6 +322,7 @@ onUnmounted(() => {
       <button class="btn-ghost" :disabled="!enabled" @click="clearScreen()">
         <Icon name="trash" :size="15" /> 清屏
       </button>
+    </div>
     </div>
 
     <EmptyState v-if="!enabled"
@@ -331,31 +345,32 @@ onUnmounted(() => {
    「+ 新标签」一律中性色，不抢 tools-row 里唯一的 btn-primary（连接）。 */
 .tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .tab { display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 6px 10px;
-  border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-glass);
+  border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass);
   color: var(--c-text-dim); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
 .tab:hover { background: var(--c-hover); color: var(--c-text); }
-.tab.on { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.tab.on { background: var(--c-primary); color: var(--c-on-accent); border-color: var(--c-primary); }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tdot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-text-mute); flex: none; }
-.tdot.on { background: var(--c-ok, #3fb950); box-shadow: 0 0 6px var(--c-ok, #3fb950); }
-.tab.on .tdot.on { background: #fff; box-shadow: none; }
+.tdot.on { background: var(--c-ok); box-shadow: 0 0 6px var(--c-ok); }
+.tab.on .tdot.on { background: var(--c-on-accent); box-shadow: none; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
-.tab-x:hover { background: rgba(127, 127, 127, 0.28); }
-.tab.on .tab-x:hover { background: rgba(255, 255, 255, 0.28); }
+/* 关闭钮 hover 的浅色覆盖层：跟着标签自身的前景色走，激活态（白字）与非激活态
+   （次要文字色）共用一条规则，不再为两种状态各写一份 rgba。 */
+.tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }
 .tab.add { color: var(--c-text-dim); }
 .tab.add:hover:not(:disabled) { color: var(--c-primary); }
 .tab.add:disabled { opacity: .45; cursor: not-allowed; }
 
 .stat { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-12-5); color: var(--c-text-mute); }
-.stat.on { color: var(--c-ok, #3fb950); }
+.stat.on { color: var(--c-ok); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-mute); }
-.stat.on .dot { background: var(--c-ok, #3fb950); box-shadow: 0 0 8px var(--c-ok, #3fb950); }
+.stat.on .dot { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
 
 /* 终端容器：所有标签共用一套尺寸；非激活的隐藏（保活）而非销毁。 */
 .term-pane {
   height: calc(100vh - 258px); min-height: 360px;
-  background: #0d1117; border: 1px solid var(--c-border); border-radius: 12px;
+  background: var(--term-bg); border: 1px solid var(--c-border); border-radius: 12px;
   padding: 10px;
 }
 .term-pane:not(.active) { display: none; }

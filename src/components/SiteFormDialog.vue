@@ -1135,7 +1135,7 @@ function confSpecChanged(): boolean {
 .waf label.inline { flex-direction: row; align-items: center; }
 .waf label.inline input { width: auto; }
 /* 窄窗（弹窗退到 94vw 后内容区不足 ~470px）：字段行退回单列堆叠，防止数值列挤没「档位」 */
-@media (max-width: 500px) {
+@media (max-width: 480px) {
   .waf { grid-template-columns: minmax(0, 1fr); }
 }
 .blk { display: block; margin-bottom: 12px; font-size: var(--fs-13); color: var(--c-text-dim); }
@@ -1319,14 +1319,14 @@ function confSpecChanged(): boolean {
 .log-confirm {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
-  background: color-mix(in srgb, var(--c-danger, #e5484d) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--c-danger, #e5484d) 35%, transparent);
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-danger) 35%, transparent);
   font-size: var(--fs-12); color: var(--c-text);
 }
 .log-confirm > span { flex: 1 1 auto; min-width: 180px; }
 /* 窄视口（弹窗 ≈ 96vw 已不足 ~760px）回退单列：双列会被输入框宽度挤爆，
    且全宽项保持跨两列也无害（单列下本就整宽）。 */
-@media (max-width: 760px) {
+@media (max-width: 720px) {
   .modal.wide.site-modal .modal-body .sector,
   .modal.wide.site-modal .modal-body .adv { grid-template-columns: 1fr; }
   .modal.wide.site-modal .modal-body .sector > .blk,
