@@ -13,6 +13,12 @@
  *   - 卡片级 `card-toolbar` 等   → `sm`（高 31，图标 14）
  * 空态 CTA 里的刷新跟随所在列表的档位，不另起第三档。
  */
+// ⚠ 漏掉这条 import 时 Vue 不会报错：`<Icon>` 被当成未知自定义元素渲染成空
+// `<icon>`，只有 console warning，tsc / build / 源码断言全绿而按钮没有图标。
+// 由 RefreshBtn.behavior.test.ts（真挂载查 svg.icon）与
+// scripts/check-component-imports.mjs（全仓接线守卫）双向钉住。
+import Icon from '@/components/Icon.vue'
+
 defineProps<{
   /** 加载中 / 无权限 / 实时跟随中等场景禁用 */
   disabled?: boolean
