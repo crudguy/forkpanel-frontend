@@ -1,6 +1,6 @@
 # ForkPanel 前端门禁——一条命令跑完全部门禁。
 #
-# 背景：此前 6 个 UI 守卫 + 类型检查 + 构建 + 单测全靠人记得逐个跑，
+# 背景：此前 UI 守卫 + 类型检查 + 构建 + 单测全靠人记得逐个跑，
 # 没有任何东西把它们串起来（审计 P1-3）。本 Makefile 与
 # .github/workflows/ci.yml 共用同一份目标，本地提交前与 CI 跑的是同一套。
 #
@@ -24,13 +24,10 @@ build:
 	./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build && \
 		node scripts/check-no-comments.mjs
 
+# 清单只在 scripts/run-ui-guards.mjs 里维护一份：Makefile 与 package.json
+# 都转发到它，避免"本地跑一套、CI 跑另一套"的静默缺口（守卫条数以该文件为准）。
 ui:
-	node scripts/check-sidenav.mjs && \
-	node scripts/check-page-head.mjs && \
-	node scripts/check-modal.mjs && \
-	node scripts/check-icon-names.mjs && \
-	node scripts/check-overlay-teleport.mjs && \
-	node scripts/check-subtitles.mjs
+	node scripts/run-ui-guards.mjs
 
 # 产物体积门禁（审计 P2-2）：对照 ci/budgets.json 判首屏 / 全量 / 单 chunk 三项，
 # 任一项超预算即 exit 1。此前这条目标只有报告、没有门禁，体积只能靠人眼看。

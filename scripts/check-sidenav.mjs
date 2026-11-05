@@ -132,6 +132,19 @@ must(
   '6b',
   '折叠态不得有「分组→子项」drill：模板不得出现 isCollapsedDirect / openGroups / gicon / class="grp" 组按钮，样式不得有 .sub 嵌套块',
 )
+// 6c/6d 是「取证伪」断言：选择器被改名、或 style 解析整体失效时，ruleBody 返回
+// null，断言会**恒绿**（本项目「空集恒真」的同类坑）。先证明解析链路活着——两条
+// 已知存在的规则必须取到——再断言"不存在"。
+must(
+  ruleBody('.item .ico') !== null,
+  '6c-probe',
+  'CSS 解析自检失败：取不到 `.item .ico`，说明解析链路失效，6c/6d 的"不存在"断言不可信',
+)
+must(
+  ruleBody('.collapsed .item') !== null,
+  '6d-probe',
+  'CSS 解析自检失败：取不到 `.collapsed .item`，说明解析链路失效，6c/6d 的"不存在"断言不可信',
+)
 const subCollapsed = ruleBody('.collapsed .sub')
 must(
   subCollapsed === null,
@@ -139,7 +152,7 @@ must(
   '一级菜单：折叠态不得存在嵌套子项块 `.collapsed .sub`（无缩进+引导线的上下级层级）',
 )
 must(
-  ruleBody('.collapsed .sub .item .ico') === null,
+  !style.includes('.collapsed .sub .item .ico') && ruleBody('.collapsed .sub .item .ico') === null,
   '6d',
   '折叠态不得存在「上级/下级图标差一档」设定（`.collapsed .sub .item .ico` 应消失）',
 )

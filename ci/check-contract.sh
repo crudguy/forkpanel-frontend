@@ -23,8 +23,21 @@ fi
 # ── 后端契约中声明的全部路径 ──
 CONTRACT=$(grep -oE '^  /api/v1/[a-zA-Z0-9/_{}-]+:' src/api/openapi.yaml | sed -E 's/^  //; s/:$//' | sort -u)
 
-# ── 前端调用的静态路径（单引号字符串字面量）──
-FRONTEND=$(grep -rhoE "'/api/v1/[a-zA-Z0-9/_-]+'" src --include="*.ts" --include="*.vue" 2>/dev/null | tr -d "'" | sort -u)
+# ── 前端调用的静态路径（单/双引号字符串字面量都认）──
+FRONTEND=$(grep -rhoE "['\"]/api/v1/[a-zA-Z0-9/_-]+['\"]" src --include="*.ts" --include="*.vue" 2>/dev/null | tr -d "'\"" | sort -u)
+
+# ⭐ 扫描自检（本项目「空集恒真」的头号坑）：openapi 缩进变化、endpoints.ts 换引号
+# 风格、或路径前缀调整，都会让两个集合同时塌成 0——下面的 for 空转、A/B 双 PASS。
+# 先钉住"确实扫到了东西"，且数量在合理量级（当前 180 / 100，取下限留余量）。
+contract_n=$(printf '%s\n' "$CONTRACT" | grep -c . || true)
+frontend_n=$(printf '%s\n' "$FRONTEND" | grep -c . || true)
+if [ "$contract_n" -lt 100 ]; then
+  echo "  ✗ 契约路径扫描只得到 $contract_n 条（期望 ≥100）：openapi.yaml 缩进或正则失效？"; exit 1
+fi
+if [ "$frontend_n" -lt 50 ]; then
+  echo "  ✗ 前端调用扫描只得到 $frontend_n 条（期望 ≥50）：endpoints.ts 引号风格或正则失效？"; exit 1
+fi
+echo "  · 扫描自检：契约 $contract_n 条 / 前端 $frontend_n 条"
 
 echo "== [A] 前端静态调用路径必须已在契约声明 =="
 MISSING=""
