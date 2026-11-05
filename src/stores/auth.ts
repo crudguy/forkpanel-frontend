@@ -95,10 +95,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    // 必须等后端确认登出成功再清前端状态：请求失败时服务端会话仍然有效，
+    // 若先清状态并跳登录页，刷新后又直接进面板——用户以为退了，其实没退。
+    // 失败向上抛，由调用方给可见反馈（MainLayout 的 toast）。
     await api.post(API.auth.logout())
-    me.value = null
-    capabilities.value = {}
-    limits.value = null
+    clearSession()
   }
 
   /** 仅清前端会话状态（不请求后端）：会话已失效（如收到 401）时用，避免对已失效会话再发请求 */

@@ -11,8 +11,9 @@ import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
 import { sysBadgeTip } from '@/composables/sysBadge'
+import { toast } from '@/composables/useToast'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
-import { api } from '@/api/client'
+import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { roleLabel, CAP } from '@/api/types'
 import { navDrawerOpen, closeNav } from '@/composables/nav'
@@ -206,10 +207,16 @@ function onPaletteKey(e: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onPaletteKey))
 onUnmounted(() => window.removeEventListener('keydown', onPaletteKey))
 
-function logout() {
+async function logout() {
   userMenu.value = false
-  auth.logout()
-  router.push({ name: 'login' })
+  try {
+    // 等后端真的把会话作废：失败时停在原页并提示，不要再抛一个未处理的
+    // Promise rejection，也不要在会话仍有效时把人送到登录页。
+    await auth.logout()
+    await router.replace({ name: 'login' })
+  } catch (e) {
+    toast(`退出登录失败：${errorText(e)}`, 'err')
+  }
 }
 </script>
 
