@@ -29,7 +29,10 @@ build:
 ui:
 	node scripts/run-ui-guards.mjs
 
-# 产物体积门禁（审计 P2-2）：对照 ci/budgets.json 判首屏 / 全量 / 单 chunk 三项，
-# 任一项超预算即 exit 1。此前这条目标只有报告、没有门禁，体积只能靠人眼看。
+# 产物体积门禁（审计 P2-2）：对照 ci/budgets.json 判三项，**两硬一软**——
+#   首屏（硬，dist/index.html 实际引用的 js/css）/ 单 chunk（硬，raw 体积）超预算即 exit 1；
+#   全量（软）过 420 只警告、过 460 才失败（贴近现状的硬门禁只会逼人抬额度，见 budgets.json 注释）。
+# 缺预算键或解析不出首屏资源 ⇒ exit 2，不允许"没预算/没解析到"变成静默通过。
+# 此前这条目标只有报告、没有门禁，体积只能靠人眼看。
 size:
 	node scripts/size-report.mjs

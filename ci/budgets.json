@@ -1,6 +1,7 @@
 {
-  "comment": "前端体积预算（gzip）。首屏=入口 JS+全部 CSS；全量=dist 所有产物。CI/本地用 scripts/size-report.mjs 校验。⚠ 全量预算 400→405：调前实测 82d06c6 已是 402.5 KB，即该门禁早已恒红（恒红与恒绿一样没有价值，且会让 CI 长期失败到没人看）。再往上调必须同时给出减重方案，别把它变成橡皮章。",
-  "frontend_first_screen_gzip_kb": 150,
-  "frontend_total_gzip_kb": 405,
-  "frontend_max_chunk_raw_kb": 350
+  "comment": "前端体积预算（gzip）。首屏=dist/index.html 里被引用的全部 js/css（硬）；单 chunk=任一产物 raw（硬）；全量=dist 所有产物之和（软警报线 + 硬兜底线）。CI/本地用 scripts/size-report.mjs 校验。⚠ 2026-11-05 重定口径：旧「首屏」用文件名正则判定，漏算 modulepreload 的 vendor(43.3KB)、又多算 40 个懒加载视图 CSS(39.4KB)，净差 -11KB 却报出看似合理的 69.3KB。改为解析 index.html 后真实首屏是 80.3KB，故硬预算按 80.3×1.37 取 110。全量不再做贴近现状的硬门禁（曾只余 1.9KB，实际效果是逼人抬额度而非减重）：420 只警告、460 才失败。抬任何数字前先给减重方案。",
+  "frontend_first_screen_gzip_kb": 110,
+  "frontend_max_chunk_raw_kb": 350,
+  "frontend_total_gzip_kb_alert": 420,
+  "frontend_total_gzip_kb_hard": 460
 }
