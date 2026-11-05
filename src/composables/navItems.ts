@@ -12,6 +12,17 @@
  */
 import { CAP } from '@/api/types'
 
+/**
+ * 「恒显」能力位：用于**不依赖任何宿主 OS 能力**的面板内建页面
+ * （概览 / 网站 / WAF / 证书 / AI 助手 / 设置 / 帮助 / 主机监控）。
+ *
+ * 这些页面此前直接写 `CAP.METRICS_READ`，读起来像「要指标能力才能进设置」，
+ * 实则是把后端恒 supported 的能力位当占位符用。收成一个常量，语义就固定了。
+ * ⚠ 不要换成一个前端自造的字符串：`auth.supported()` 查不到会返回 false，
+ *   这 8 个入口会集体变灰（「配置项假控制」的典型形态）。
+ */
+export const ALWAYS_CAP: string = CAP.METRICS_READ
+
 export interface NavDef {
   to: string
   label: string
@@ -27,16 +38,16 @@ export interface NavDef {
 // 故仅改此处的 group 字段 + 顺序即可，无需动 SideNav。
 export const NAV_ITEMS: NavDef[] = [
   // —— 监控：看盒子 ——
-  { to: '/', label: '概览', icon: 'dashboard', cap: CAP.METRICS_READ, perm: 'system.view', group: '监控' },
-  { to: '/system', label: '主机监控', icon: 'cpu', cap: CAP.METRICS_READ, perm: 'system.view', group: '监控' },
+  { to: '/', label: '概览', icon: 'dashboard', cap: ALWAYS_CAP, perm: 'system.view', group: '监控' },
+  { to: '/system', label: '主机监控', icon: 'cpu', cap: ALWAYS_CAP, perm: 'system.view', group: '监控' },
   // —— 服务：跑业务（软件包 + systemd 单元 / 托管应用 / 站点）——
   // 「软件与服务」保留原名：其页内默认页签即「软件」，改名「服务」反而与页签错位；
   // 它（系统包 + systemd 单元）与「应用」（面板托管进程 + 自动反代）是两个不同概念，不合并。
   { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view', group: '服务' },
   { to: '/apps', label: '应用', icon: 'bolt', cap: CAP.SERVICE_MANAGE, perm: 'service.view', group: '服务' },
-  { to: '/sites', label: '网站', icon: 'globe', cap: CAP.METRICS_READ, perm: 'site.view', group: '服务' },
-  { to: '/waf', label: 'WAF', icon: 'firewall', cap: CAP.METRICS_READ, perm: 'site.view', group: '服务' },
-  { to: '/certs', label: '证书', icon: 'lock', cap: CAP.METRICS_READ, perm: 'site.view', group: '服务' },
+  { to: '/sites', label: '网站', icon: 'globe', cap: ALWAYS_CAP, perm: 'site.view', group: '服务' },
+  { to: '/waf', label: 'WAF', icon: 'firewall', cap: ALWAYS_CAP, perm: 'site.view', group: '服务' },
+  { to: '/certs', label: '证书', icon: 'lock', cap: ALWAYS_CAP, perm: 'site.view', group: '服务' },
   // —— 数据：存数据 ——
   { to: '/databases', label: '数据库', icon: 'database', cap: CAP.DBMS_MANAGE, perm: 'db.view', group: '数据' },
   { to: '/containers', label: '容器', icon: 'docker', cap: CAP.CONTAINER_VIEW, perm: 'container.view', group: '数据' },
@@ -53,13 +64,13 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '运维' },
   // —— 系统：低频管理区（顶栏另有常驻 AI 助手按钮，侧栏保留兜底入口）——
-  { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
+  { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: ALWAYS_CAP, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
-  { to: '/settings', label: '设置', icon: 'gear', cap: CAP.METRICS_READ, perm: 'settings.manage', group: '系统' },
+  { to: '/settings', label: '设置', icon: 'gear', cap: ALWAYS_CAP, perm: 'settings.manage', group: '系统' },
   // —— 帮助：常驻入口，与概览/设置同用「恒显」能力位（system.view），
   //   不绑定任何业务模块能力，确保任意环境都能打开。
   //   ⚠ 不要为它单开一个「帮助」分组：SideNav 会给每个新分组渲染组标题，
   //   单条目分组就会显示成「帮助 / 帮助」两行重复文字。它本身已在全列表末尾，
   //   放进「系统」组同样落在侧边栏最下方。
-  { to: '/help', label: '帮助', icon: 'help', cap: CAP.METRICS_READ, perm: 'system.view', group: '系统' },
+  { to: '/help', label: '帮助', icon: 'help', cap: ALWAYS_CAP, perm: 'system.view', group: '系统' },
 ]

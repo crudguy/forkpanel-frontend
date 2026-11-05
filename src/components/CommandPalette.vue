@@ -15,6 +15,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_ITEMS, type NavDef } from '@/composables/navItems'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -37,7 +38,7 @@ interface Cmd {
 
 const pages = computed<Cmd[]>(() =>
   NAV_ITEMS
-    .filter((n: NavDef) => auth.whyDisabled(n.cap, n.perm) === null)
+    .filter((n: NavDef) => whyDisabledForPath(auth, n.to) === null)
     .map((n) => ({
       key: 'nav:' + n.to,
       label: n.label,
@@ -48,13 +49,10 @@ const pages = computed<Cmd[]>(() =>
     })),
 )
 
-// 快捷操作也要过**同一套**可达性判定，与菜单置灰口径一致：目标若是某个导航页（有
-// cap/perm），就不该搜得到却点过去 501；非导航页（如 /notifications 本身不卡能力位）
-// 则天然可达，直接放行。
-const reachable = (to: string): boolean => {
-  const n = NAV_ITEMS.find((x) => x.to === to)
-  return n ? auth.whyDisabled(n.cap, n.perm) === null : true
-}
+// 快捷操作也要过**同一套**可达性判定。此前非导航路径（/notifications）一律
+// `return true`，没 system.view 的用户能搜到并点进去看无权限空态；现在统一走
+// navPolicy，那里已为 /notifications 显式声明了 system.view。
+const reachable = (to: string): boolean => whyDisabledForPath(auth, to) === null
 
 const extras = computed<Cmd[]>(() =>
   ([

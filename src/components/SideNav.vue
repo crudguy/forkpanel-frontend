@@ -27,6 +27,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_ITEMS } from '@/composables/navItems'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import { navCollapsed, toggleNav, navDrawerOpen } from '@/composables/nav'
 import Icon from '@/components/Icon.vue'
 
@@ -46,7 +47,7 @@ const auth = useAuthStore()
 // 可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，**禁止** isLinux / navigator.platform
 // 之类平台判断。新模块 cap 复用既有常量兜底（明细类用 METRICS_READ），仅 perm 区分可见性。
 const items = computed<NavItem[]>(() =>
-  NAV_ITEMS.map((it) => ({ ...it, off: auth.whyDisabled(it.cap, it.perm) })),
+  NAV_ITEMS.map((it) => ({ ...it, off: whyDisabledForPath(auth, it.to) })),
 )
 
 const route = useRoute()

@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import TabBar from '@/components/TabBar.vue'
 
 const auth = useAuthStore()
@@ -18,7 +18,7 @@ const auth = useAuthStore()
 const tabs = computed(() => {
   const list = [{ to: '/firewall', label: '防火墙规则' }]
   // whyDisabled 返回 null 表示当前账号可用
-  if (auth.whyDisabled(CAP.FIREWALL_MANAGE, 'security.manage') === null) {
+  if (whyDisabledForPath(auth, '/firewall/baseline') === null) {
     list.push({ to: '/firewall/baseline', label: '安全基线' })
   }
   return list

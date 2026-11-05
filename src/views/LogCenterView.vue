@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import TabBar from '@/components/TabBar.vue'
 
 const auth = useAuthStore()
@@ -18,7 +18,7 @@ const auth = useAuthStore()
 const tabs = computed(() => {
   const list = [{ to: '/logs', label: '系统日志' }]
   // whyDisabled 返回 null 表示当前账号可用
-  if (auth.whyDisabled(CAP.METRICS_READ, 'audit.view') === null) {
+  if (whyDisabledForPath(auth, '/logs/audit') === null) {
     list.push({ to: '/logs/audit', label: '审计日志' })
   }
   return list

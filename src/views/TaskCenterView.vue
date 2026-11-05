@@ -11,7 +11,7 @@
  */
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { CAP } from '@/api/types'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import TabBar from '@/components/TabBar.vue'
 import PageLayout from '@/components/PageLayout.vue'
 
@@ -20,10 +20,10 @@ const auth = useAuthStore()
 const tabs = computed(() => {
   const list: { to: string; label: string }[] = []
   // whyDisabled 返回 null 表示当前账号可用
-  if (auth.whyDisabled(CAP.SCHEDULER_MANAGE, 'cron.view') === null) {
+  if (whyDisabledForPath(auth, '/cron') === null) {
     list.push({ to: '/cron', label: '计划任务' })
   }
-  if (auth.whyDisabled(CAP.METRICS_READ, 'task.view') === null) {
+  if (whyDisabledForPath(auth, '/cron/tasks') === null) {
     list.push({ to: '/cron/tasks', label: '任务中心' })
   }
   return list

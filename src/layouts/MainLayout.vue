@@ -10,6 +10,7 @@ import Icon from '@/components/Icon.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 import { sysBadgeTip } from '@/composables/sysBadge'
 import { toast } from '@/composables/useToast'
 import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
@@ -27,7 +28,7 @@ const router = useRouter()
 
 // AI 助手顶栏入口（C9）：门控与侧边栏同口径（METRICS_READ 能力位 + system.view 权限点），
 // 不可用即隐藏整钮——避免"点过去才发现 501"。
-const assistOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'system.view') === null)
+const assistOk = computed(() => whyDisabledForPath(auth, '/assistant') === null)
 
 // 表格密度（B8）：全站共享偏好，放用户菜单里与主题切换同级——它是"看的方式"，
 // 不是某一页的功能，塞进某个视图的工具条会让用户以为只影响那一页。
@@ -155,7 +156,7 @@ onMounted(loadUnread)
 const health = ref<{ cpu: number; mem: number; disk: number; uptime: number } | null>(null)
 const runningTasks = ref(0)
 const healthOk = computed(() => auth.supported(CAP.METRICS_READ))
-const tasksOk = computed(() => auth.whyDisabled(CAP.METRICS_READ, 'task.view') === null)
+const tasksOk = computed(() => whyDisabledForPath(auth, '/cron/tasks') === null)
 
 async function loadHealth() {
   try {

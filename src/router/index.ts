@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { whyDisabledForPath, navGuardDecision } from '@/composables/navPolicy'
+import { toast } from '@/composables/useToast'
 import LoginView from '@/views/LoginView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 
@@ -119,6 +121,18 @@ router.beforeEach(async (to) => {
     // 带 redirect：登录后回到原本要去的页面（深链 / 会话过期不再一律落概览）
     try { await auth.loadMe() } catch { return { name: 'login', query: { redirect: to.fullPath } } }
     if (!auth.loggedIn) return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  // F-09：深链 / 命令面板进来的页面也过同一套 cap+perm 判据。
+  // 决策本身是纯函数（navGuardDecision），这里只负责取状态 + 给可见反馈。
+  const why = whyDisabledForPath(auth, to.path)
+  const decision = navGuardDecision({
+    capsLoaded: Object.keys(auth.capabilities).length > 0,
+    toName: typeof to.name === 'string' ? to.name : undefined,
+    why,
+  })
+  if (decision !== true) {
+    toast(`无法打开该页面：${why}`, 'err')
+    return decision
   }
   return true
 })

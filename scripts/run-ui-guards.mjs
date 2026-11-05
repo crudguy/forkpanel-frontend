@@ -35,6 +35,8 @@ export const UI_GUARDS = [
   'check-dialog-form.mjs',
   // 2026-11-05 P2 修复新增：模板里的 PascalCase 组件必须真绑定（漏 import 会静默渲染空元素）
   'check-component-imports.mjs',
+  // 2026-11-05 F-05/F-09：侧栏/Tab/顶栏/命令面板/路由守卫必须共用同一份可达性判据
+  'check-nav-policy.mjs',
 ]
 
 let failed = 0
