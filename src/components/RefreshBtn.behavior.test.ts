@@ -34,7 +34,7 @@ function icon(mounted: Mounted): SVGSVGElement {
 }
 
 describe('RefreshBtn：图标真的渲染（不是空自定义元素）', () => {
-  it('默认档有 svg.icon、尺寸 15、v-html 里有 refresh 的 path', async () => {
+  it('默认档有 svg.icon、尺寸 15、图标里真的注入了 refresh 的 path', async () => {
     m = await mountView({ component: RefreshBtn })
     const svg = icon(m)
     expect(svg.getAttribute('width')).toBe('15')
