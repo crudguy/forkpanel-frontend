@@ -5,7 +5,16 @@
 // `package.json` 的 `check:ui` 串了 8 个 ⇒ `check-hint-note` 与
 // `check-load-binding` 从未在 CI 执行。两处各写一份清单，漏一个不会有任何提示。
 //
-// 新增守卫时**只改这里**：Makefile 与 package.json 都转发到本文件。
+// 新增守卫时**只改这里**：前端 `package.json` 的 `check:ui`，与后端 `make check`
+// （经 `forkpanel-backend/ci/check-ui-guards.sh`）都转发到本文件。
+//
+// ⚠ 2026-11-05 实测发现上面这句话当时是**提前写下的**：Makefile 从来没有转发过，
+//   18 个守卫（含为修 F/P 级问题专门加的 check-nav-policy / check-bulk-scope /
+//   check-component-imports）在 `make check` 里一次都没执行过——它们只在有人手动
+//   跑 `npm run check:ui` 时生效。现已在后端补 `ci/check-ui-guards.sh` 并挂进
+//   `make guards`（前端仓缺失时**判红**，不是跳过）。
+//   「守卫存在」被当成「守卫在跑」是本项目反复出现的坑：改门禁时务必跑一次看输出，
+//   不要只看文件在不在。
 import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
