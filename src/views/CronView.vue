@@ -10,6 +10,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
+import { focusCreateCard } from '@/composables/emptyStateCta'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -182,7 +183,7 @@ async function triggerWebhook(j: Job) {
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
       <p v-if="note" class="note" role="status">{{ note }}</p>
 
-      <section class="card">
+      <section class="card" id="cron-create-card">
         <div class="sec-head"><Icon name="clock" :size="16" /> 新建任务</div>
         <div class="row">
           <label>名称<input v-model="form.name" placeholder="backup-db" /></label>
@@ -255,7 +256,15 @@ async function triggerWebhook(j: Job) {
         </table>
         </div>
       </div>
-      <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务" />
+      <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务"
+        hint="用上方的「新建任务」卡片添加第一个定时任务，例如每天凌晨备份数据库。">
+        <template #cta>
+          <button class="btn-primary btn-sm" type="button" :disabled="!canManage"
+            @click="focusCreateCard('cron-create-card')">
+            <Icon name="plus" :size="13" /> 去新建任务
+          </button>
+        </template>
+      </EmptyState>
 
       <ConfirmDialog :open="!!del" danger title="删除计划任务"
         :detail="`将删除 ${del?.id}，该任务的后续执行会一并取消。`"

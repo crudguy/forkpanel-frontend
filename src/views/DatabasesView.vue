@@ -22,6 +22,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
+import { focusCreateCard } from '@/composables/emptyStateCta'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -363,7 +364,7 @@ async function exportCsv() {
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
-      <section class="card">
+      <section class="card" id="db-create-card">
         <!-- 说明按钮挂在常驻的新增卡上：列表卡在零连接时不渲染，挂上去会随空列表消失 -->
         <div class="sec-head">
           <Icon name="database" :size="16" /> 新增连接
@@ -466,7 +467,15 @@ async function exportCsv() {
         </table>
         </div>
       </div>
-      <EmptyState v-else title="暂无连接" />
+      <EmptyState v-else title="暂无连接"
+        hint="用上方的「新增连接」卡片登记第一个数据库；SQLite 为内建引擎，无需额外安装。">
+        <template #cta>
+          <button class="btn-primary btn-sm" type="button" :disabled="!canManage"
+            @click="focusCreateCard('db-create-card')">
+            <Icon name="plus" :size="13" /> 去新增连接
+          </button>
+        </template>
+      </EmptyState>
 
       <!-- 只读浏览面板 -->
       <section class="card" v-if="browse">
