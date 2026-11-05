@@ -1,0 +1,20 @@
+/* 弹窗表单骨架：CreateContainerDialog / StackEditorDialog 共用（Q-09）。
+   用 .dlg-form 命名空间而非裸 label/input，避免样式泄漏到全站；调用方须把
+   dlg-form 加在弹窗根节点上。以下声明与两份原 scoped 副本逐字一致。 */
+.dlg-form label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
+.dlg-form label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
+.dlg-form label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-12); }
+.dlg-form .req > span::after { content: ' *'; color: var(--c-danger); }
+.dlg-form small { line-height: 1.2; }
+.dlg-form input, .dlg-form textarea, .dlg-form select {
+  width: 100%; padding: 9px 11px; font-size: var(--fs-13); color: var(--c-text);
+  background-color: var(--c-bg);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-xs);
+  transition: border-color .14s ease, box-shadow .14s ease;
+  font-family: inherit;
+}
+.dlg-form textarea { resize: vertical; line-height: 1.5; }
+.dlg-form input:focus-visible, .dlg-form textarea:focus-visible, .dlg-form select:focus-visible {
+  outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft);
+}

@@ -117,7 +117,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 <template>
   <Teleport to="body">
   <div v-if="open" class="mask" @click.self="modalClose">
-    <div ref="box" class="modal stack" role="dialog" aria-modal="true" aria-label="创建容器">
+    <div ref="box" class="modal stack dlg-form" role="dialog" aria-modal="true" aria-label="创建容器">
       <div class="modal-head">
         <h3 class="modal-title">创建容器</h3>
         <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
@@ -215,31 +215,14 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 </template>
 
 <style scoped>
-/* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条统一取 main.css 公共类。
-   以下只补本弹窗特有的表单布局：单列 .fields + 两列 .row2。 */
-label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
-label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
-label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-12); }
-.req > span::after { content: ' *'; color: var(--c-danger); }
+/* 表单骨架（label / 输入框 / 必填星号 / 焦点态）统一取 styles/dialog-form.css，
+   根节点已挂 .dlg-form；以下只补本弹窗特有的表单布局。 */
 .fields { display: flex; flex-direction: column; gap: 14px; }
 /* 窄弹窗（.modal 内容宽 392px）里两列各约 190px：列宽必须写 minmax(0,1fr)，
    裸 1fr 的下限是 auto，输入框的固有宽度会把列撑出容器；align-items:start
    让两列各自按内容高度排列，标签行数不同时输入框也不互相推挤。 */
 .row2-wrap { display: flex; flex-direction: column; gap: 6px; }
 .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-small { line-height: 1.2; }
-input, textarea, select {
-  width: 100%; padding: 9px 11px; font-size: var(--fs-13); color: var(--c-text);
-  background-color: var(--c-bg);
-  border: 1px solid var(--c-border-strong);
-  border-radius: var(--radius-xs);
-  transition: border-color .14s ease, box-shadow .14s ease;
-  font-family: inherit;
-}
-textarea { resize: vertical; line-height: 1.5; }
-input:focus-visible, textarea:focus-visible, select:focus-visible {
-  outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft);
-}
 .confirm input.ok { border-color: var(--c-ok); box-shadow: 0 0 0 3px var(--c-ok-soft); }
 .code, code { font-family: var(--mono); font-size: var(--fs-12); }
 .hint { margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); }

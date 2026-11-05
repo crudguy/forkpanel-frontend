@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import '@/styles/main.css'
+import '@/styles/dialog-form.css'
 import { applyTheme } from '@/composables/theme'
 import { tableNav } from '@/composables/tableNav'
 

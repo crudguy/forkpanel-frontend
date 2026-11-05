@@ -31,6 +31,8 @@ export const UI_GUARDS = [
   'check-maintenance-wait.mjs',
   // 2026-11-05 Q-09 新增：容器 6 个 Tab 的加载动作必须走 useRowLoad/useAsync
   'check-tab-load.mjs',
+  // 2026-11-05 Q-09 新增：弹窗表单骨架只能有一份，变体集合钉住防止再复制
+  'check-dialog-form.mjs',
 ]
 
 let failed = 0
