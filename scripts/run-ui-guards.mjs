@@ -27,6 +27,8 @@ export const UI_GUARDS = [
   'check-zindex.mjs',
   // 2026-11-05 A7 审计新增：批量作用域（筛选后"全选/已选/批量入参"必须同源于可见集合）
   'check-bulk-scope.mjs',
+  // 2026-11-05 Q-09 新增：升级/重装/重启的等待逻辑必须走 serviceResume，判据形态不得降级
+  'check-maintenance-wait.mjs',
 ]
 
 let failed = 0

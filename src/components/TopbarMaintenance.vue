@@ -23,6 +23,7 @@ import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/composables/useToast'
 import { usePolling } from '@/composables/usePolling'
+import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 import type { UpgradeCheck } from '@/api/types'
 
 const auth = useAuthStore()
@@ -38,8 +39,8 @@ const canRestart = computed(() => installation.value?.can_restart ?? true)
 const appVersion = ref('')
 async function loadVersion() {
   try {
-    const v = await api.get<{ app: string }>(API.version())
-    appVersion.value = v?.app ? `v${v.app}` : ''
+    const a = await fetchAppVersion()
+    appVersion.value = a ? `v${a}` : ''
   } catch { /* 静默：取不到不影响任何操作 */ }
 }
 
@@ -143,19 +144,19 @@ async function doReinstall() {
 }
 
 /** 升级/重装期间服务先退再起：等「见过断连」或「版本号变了」再刷新，避免旧进程
- *  刚一应答就 reload、看起来像没生效。3 分钟兜底。 */
+ *  刚一应答就 reload、看起来像没生效。3 分钟兜底。
+ *  轮询骨架与判据在 `composables/serviceResume.ts`（设置页同一份，别在这里改循环）。 */
 async function waitForUpgrade(from: string) {
-  let sawDown = false
-  const deadline = Date.now() + 180_000
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000))
-    try {
-      const v = await api.get<{ app: string }>(API.version())
-      if (sawDown || v.app !== from) { location.reload(); return }
-    } catch { sawDown = true }
-  }
-  upgrading.value = false
-  toast('操作 3 分钟内未完成：请 SSH 执行 journalctl -u panel-upgrade -n 50 查看', 'err')
+  await waitForRecovery({
+    probe: fetchAppVersion,
+    rule: { kind: 'version-changed', from },
+    intervalMs: 2000,
+    timeoutMs: 180_000,
+    onTimeout: () => {
+      upgrading.value = false
+      toast('操作 3 分钟内未完成：请 SSH 执行 journalctl -u panel-upgrade -n 50 查看', 'err')
+    },
+  })
 }
 
 // ── 重启（面板 / 系统）下拉 ──
@@ -197,16 +198,16 @@ async function doRestart() {
   await waitForRestart()
 }
 async function waitForRestart() {
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 1000))
-    try {
-      await api.get(API.version())
-      location.reload()
-      return
-    } catch { /* 还没起来，继续等 */ }
-  }
-  restarting.value = false
-  toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
+  await waitForRecovery({
+    probe: fetchAppVersion,
+    rule: { kind: 'any-response' },
+    intervalMs: 1000,
+    timeoutMs: 40_000,
+    onTimeout: () => {
+      restarting.value = false
+      toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
+    },
+  })
 }
 async function doReboot() {
   rebootOpen.value = false
@@ -223,17 +224,16 @@ async function doReboot() {
 /** 重启系统：机器起来后面板随之恢复。先等「见过断连」再等恢复；若始终没断连
  *  （reboot 未真正生效），超时提示手动检查。4 分钟兜底。 */
 async function waitForReboot() {
-  let sawDown = false
-  const deadline = Date.now() + 240_000
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000))
-    try {
-      await api.get(API.version())
-      if (sawDown) { location.reload(); return }
-    } catch { sawDown = true }
-  }
-  restarting.value = false
-  toast('重启指令已发送但未生效：请 SSH 执行 systemctl reboot 检查', 'err')
+  await waitForRecovery({
+    probe: fetchAppVersion,
+    rule: { kind: 'after-down' },
+    intervalMs: 2000,
+    timeoutMs: 240_000,
+    onTimeout: () => {
+      restarting.value = false
+      toast('重启指令已发送但未生效：请 SSH 执行 systemctl reboot 检查', 'err')
+    },
+  })
 }
 
 // 任意浮层打开时监听 Esc 关闭

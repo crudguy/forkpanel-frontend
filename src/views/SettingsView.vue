@@ -27,6 +27,7 @@ import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -203,16 +204,16 @@ async function clearKey() {
  * 40 秒上限：Type=simple 单元通常 1~3 秒起来；超过说明没起来，必须让用户去查。
  */
 async function waitForRestart() {
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 1000))
-    try {
-      await api.get(API.version())
-      location.reload()
-      return
-    } catch { /* 还没起来，继续等 */ }
-  }
-  restarting.value = false
-  toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
+  await waitForRecovery({
+    probe: fetchAppVersion,
+    rule: { kind: 'any-response' },
+    intervalMs: 1000,
+    timeoutMs: 40_000,
+    onTimeout: () => {
+      restarting.value = false
+      toast('面板 40 秒内未恢复：请用 SSH 执行 systemctl status panel 查看', 'err')
+    },
+  })
 }
 
 async function checkUpgrade() {
@@ -232,19 +233,19 @@ async function checkUpgrade() {
 }
 
 /** 升级期间服务会先退出再回来：等「见过断连」或「版本号变了」再刷新，避免旧进程
- *  刚一应答就 reload、页面看起来像没升级。3 分钟兜底。 */
+ *  刚一应答就 reload、页面看起来像没升级。3 分钟兜底。
+ *  轮询骨架与判据在 `composables/serviceResume.ts`（顶栏同一份，别在这里改循环）。 */
 async function waitForUpgrade(from: string) {
-  let sawDown = false
-  const deadline = Date.now() + 180_000
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000))
-    try {
-      const v = await api.get<{ app: string }>(API.version())
-      if (sawDown || v.app !== from) { location.reload(); return }
-    } catch { sawDown = true }
-  }
-  upgrading.value = false
-  toast('升级 3 分钟内未完成：请 SSH 执行 journalctl -u panel-upgrade -n 50 查看', 'err')
+  await waitForRecovery({
+    probe: fetchAppVersion,
+    rule: { kind: 'version-changed', from },
+    intervalMs: 2000,
+    timeoutMs: 180_000,
+    onTimeout: () => {
+      upgrading.value = false
+      toast('升级 3 分钟内未完成：请 SSH 执行 journalctl -u panel-upgrade -n 50 查看', 'err')
+    },
+  })
 }
 
 async function doUpgrade() {
