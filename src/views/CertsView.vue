@@ -8,7 +8,7 @@
  *
  * 能力门控（与 SitesView 一致，请求前判定）：
  * - 菜单可见用 `site.view`（证书归属站点，恒可达）；页内动作按 `ssl.manage` 置灰。
- * - SSL 真正可用需 ① 底座 nginx ② 签发渠道(openssl/ACME) ③ ssl.manage 权限。
+ * - SSL 真正可用的判据在 `composables/sslGate.ts`（与站点表单同一份），本页不重写规则。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
@@ -24,6 +24,7 @@ import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
+import { sslGate } from '@/composables/sslGate'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 
@@ -40,14 +41,15 @@ const canSsl = computed(() => auth.can('ssl.manage'))
 const webSupported = computed(() => auth.supported(CAP.WEBSERVER_MANAGE))
 const sslSupported = computed(() => auth.supported(CAP.SSL_ACME))
 const selfSignedSupported = computed(() => auth.supported(CAP.SSL_SELFSIGNED))
-// SSL 真正可用需 底座 nginx + 签发渠道(openssl/ACME) + ssl.manage 权限
-const sslReady = computed(() =>
-  webSupported.value && (sslSupported.value || selfSignedSupported.value) && canSsl.value)
-const sslHint = computed(() => {
-  if (!canSsl.value) return '无 ssl.manage 权限'
-  if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx / caddy）——证书没有进程可加载'
-  return '需 openssl 或 ACME'
-})
+// SSL 判据与站点表单同源（composables/sslGate.ts）：此处只做 store → 事实 的接线。
+const sslState = computed(() => sslGate({
+  webSupported: webSupported.value,
+  sslSupported: sslSupported.value,
+  selfSignedSupported: selfSignedSupported.value,
+  canSsl: canSsl.value,
+}))
+const sslReady = computed(() => sslState.value.ready)
+const sslHint = computed(() => sslState.value.hint)
 
 async function load(silent = false) {
   await run(async () => {

@@ -16,6 +16,7 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
+import { sslGate } from '@/composables/sslGate'
 
 export function useSiteCaps() {
   const auth = useAuthStore()
@@ -37,13 +38,16 @@ export function useSiteCaps() {
 
   const sslSupported = computed(() => auth.supported(CAP.SSL_ACME))
   const selfSignedSupported = computed(() => auth.supported(CAP.SSL_SELFSIGNED))
-  // SSL 需基础设施齐备：① 底座（nginx）能加载证书 ② 签发渠道（自签/ACME）③ 权限
-  const sslReady = computed(() => webSupported.value && (sslSupported.value || selfSignedSupported.value) && canSsl.value)
-  const sslHint = computed(() => {
-    if (!canSsl.value) return '无 ssl.manage 权限'
-    if (!webSupported.value) return '需先安装并启动 Web 服务器（nginx / caddy）——证书没有进程可加载'
-    return '需 openssl 或 ACME'
-  })
+  // SSL 判据与证书页同源（composables/sslGate.ts）：两处各写一份 computed，改口径时
+  // 会静默分叉（一处说能签、另一处灰着）。这里只做 store → 事实 的接线。
+  const sslState = computed(() => sslGate({
+    webSupported: webSupported.value,
+    sslSupported: sslSupported.value,
+    selfSignedSupported: selfSignedSupported.value,
+    canSsl: canSsl.value,
+  }))
+  const sslReady = computed(() => sslState.value.ready)
+  const sslHint = computed(() => sslState.value.hint)
   const canReload = computed(() => webSupported.value && canManage.value)
   // 建站与配置下发同源：没有底座就不许建（后端 create 亦 501，前端只是提前挡住并说明原因）
   const canCreate = computed(() => webSupported.value && canManage.value)
