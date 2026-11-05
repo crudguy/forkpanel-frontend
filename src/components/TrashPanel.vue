@@ -167,7 +167,7 @@ onMounted(load)
 .tp-acts { display: flex; gap: 6px; flex: 0 0 auto; }
 .tp-acts .danger { color: var(--c-danger); }
 .tp-confirm {
-  margin-top: 12px; border: 1px solid #6b3a3a; background: rgba(255, 107, 107, .07);
+  margin-top: 12px; border: 1px solid color-mix(in srgb, var(--c-danger) 45%, transparent); background: color-mix(in srgb, var(--c-danger) 7%, transparent);
   border-radius: 9px; padding: 11px 13px;
 }
 .tp-confirm p { margin: 0 0 9px; font-size: var(--fs-13); }

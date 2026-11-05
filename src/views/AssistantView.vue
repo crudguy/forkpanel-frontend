@@ -192,8 +192,8 @@ function fmtUp(sec: number): string {
 .narrative {
   display: flex; align-items: flex-start; gap: 7px; font-size: var(--fs-13-5);
   margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; line-height: 1.55;
-  background: var(--c-primary-soft, rgba(255, 90, 54, .10));
-  border: 1px solid var(--c-primary-soft, rgba(255, 90, 54, .28));
+  background: var(--c-primary-soft);
+  border: 1px solid var(--c-primary-soft);
   color: var(--c-text);
 }
 .narrative :deep(svg) { color: var(--c-primary); flex: 0 0 auto; margin-top: 2px; }
@@ -214,9 +214,9 @@ function fmtUp(sec: number): string {
 .finding.info { border-left-color: var(--c-ok); }
 .finding header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .badge { font-size: var(--fs-12); padding: 2px 8px; border-radius: 999px; }
-.badge.crit { background: var(--c-danger-soft, rgba(248,81,73,.15)); color: var(--c-danger); }
+.badge.crit { background: var(--c-danger-soft); color: var(--c-danger); }
 .badge.warn { background: var(--c-warn-bg); color: var(--c-warn); }
-.badge.info { background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok); }
+.badge.info { background: var(--c-ok-soft); color: var(--c-ok); }
 
 .evidence { margin: 0 0 6px; padding-left: 18px; color: var(--c-text-dim); font-family: var(--mono); font-size: var(--fs-12); }
 .evidence li { margin: 2px 0; word-break: break-all; }

@@ -162,7 +162,7 @@ function onNavClick(it: NavItem, e: MouseEvent) {
 }
 .logo {
   width: 32px; height: 32px; border-radius: 9px; flex: none;
-  display: grid; place-items: center; color: #fff;
+  display: grid; place-items: center; color: var(--c-on-accent);
   background: var(--gradient); box-shadow: var(--glow);
 }
 .brand-name { font-weight: 700; font-size: var(--fs-16); letter-spacing: .3px; }

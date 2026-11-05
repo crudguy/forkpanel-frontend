@@ -271,7 +271,7 @@ onMounted(() => { if (canManage.value) load() })
 .muted { color: var(--c-text-dim); }
 .badge-ok { color: var(--c-ok); }
 .badge-danger { color: var(--c-danger); }
-.badge-soft { color: var(--c-text-dim); background: rgba(139,148,158,.15); border-color: transparent; }
+.badge-soft { color: var(--c-text-dim); background: color-mix(in srgb, var(--c-text-dim) 15%, transparent); border-color: transparent; }
 
 /* 标题行（.modal-head）/ 关闭按钮（.modal-close）/ 操作条（.modal-actions）统一取 main.css，
    本页不再保留 .m-head / .m-acts 私有副本（与全站弹窗漂移） */
@@ -290,7 +290,7 @@ onMounted(() => { if (canManage.value) load() })
 .switch { width: 38px; height: 20px; border-radius: 20px; background: var(--c-border); position: relative; transition: .15s; }
 .switch-row input:checked + .switch { background: var(--c-primary); }
 .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-                 border-radius: 50%; background: #fff; transition: .15s; }
+                 border-radius: 50%; background: var(--c-on-accent); transition: .15s; }
 .switch-row input:checked + .switch::after { left: 20px; }
 /* 用户表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    权限范围为唯一弹性列（目录白名单可能很长），ellipsis 截断、完整值走 title。 */

@@ -43,7 +43,7 @@ defineProps<{
 .ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
       background: color-mix(in srgb, var(--c-text-dim) 16%, transparent); color: var(--c-text-dim); }
 .ico.primary { background: var(--c-primary-soft); color: var(--c-primary); }
-.ico.cyan { background: rgba(56, 189, 248, .14); color: var(--c-cyan); }
+.ico.cyan { background: color-mix(in srgb, var(--c-cyan) 14%, transparent); color: var(--c-cyan); }
 .ico.ok { background: var(--c-ok-soft); color: var(--c-ok); }
 .ico.warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .ico.danger { background: var(--c-danger-soft); color: var(--c-danger); }

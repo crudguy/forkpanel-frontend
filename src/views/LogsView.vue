@@ -405,7 +405,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .ctl.chk { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12); color: var(--c-text-dim); user-select: none; }
 .ctl.chk.on { color: var(--c-text); }
 .ctl.chk input { width: auto; }
-.live { display: flex; align-items: center; gap: 7px; color: var(--c-ok, #3fb950); font-size: var(--fs-12-5); margin: 0 0 8px; }
+.live { display: flex; align-items: center; gap: 7px; color: var(--c-ok); font-size: var(--fs-12-5); margin: 0 0 8px; }
 .stats { border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; }
 .stats .muted { color: var(--c-text-mute); font-size: var(--fs-12-5); }
 .stats-head { display: flex; justify-content: space-between; font-size: var(--fs-12-5); margin-bottom: 10px; }
@@ -413,19 +413,23 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .lv-row { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; font-size: var(--fs-12); }
 .lv-name { text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-mute); }
 .lv-bar { height: 6px; border-radius: 999px; background: var(--c-border); overflow: hidden; }
-.lv-bar > i { display: block; height: 100%; border-radius: 999px; background: #4cd07d; }
+/* 级别色一律走 token。此前 info/debug 直接抄了暗色图表色板的字面量
+   （#4ea1ff / #b48cff），默认档抄了 #4cd07d —— 而 main.css 的亮色主题会把
+   --chart-* 换成另一组值，于是亮色主题下日志级别与全站语义脱节（且这几处
+   永远不会跟着主题变）。error/warn 本来就走 --c-danger/--c-warn，这里补齐。 */
+.lv-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--c-ok); }
 .lv-row.error .lv-name { color: var(--c-danger); }
 .lv-row.error .lv-bar > i { background: var(--c-danger); }
 .lv-row.warn .lv-name { color: var(--c-warn); }
 .lv-row.warn .lv-bar > i { background: var(--c-warn); }
-.lv-row.info .lv-name { color: #4ea1ff; }
-.lv-row.info .lv-bar > i { background: #4ea1ff; }
-.lv-row.debug .lv-name { color: #b48cff; }
-.lv-row.debug .lv-bar > i { background: #b48cff; }
+.lv-row.info .lv-name { color: var(--chart-net-in); }
+.lv-row.info .lv-bar > i { background: var(--chart-net-in); }
+.lv-row.debug .lv-name { color: var(--chart-load); }
+.lv-row.debug .lv-bar > i { background: var(--chart-load); }
 .lv-n { text-align: right; font-variant-numeric: tabular-nums; }
 .hist { display: flex; align-items: flex-end; gap: 3px; height: 64px; margin-bottom: 12px; }
 .hist-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; }
-.hist-bar > i { display: block; width: 100%; background: linear-gradient(180deg, #4ea1ff, #36c5d6); border-radius: 2px 2px 0 0; }
+.hist-bar > i { display: block; width: 100%; background: linear-gradient(180deg, var(--chart-net-in), var(--chart-mem)); border-radius: 2px 2px 0 0; }
 .pats-title { font-size: var(--fs-12); color: var(--c-text-mute); margin-bottom: 6px; }
 .pat { display: flex; gap: 8px; align-items: baseline; font-size: var(--fs-12); padding: 3px 0; }
 .pat-n { flex: 0 0 38px; text-align: right; color: var(--c-warn); font-variant-numeric: tabular-nums; }

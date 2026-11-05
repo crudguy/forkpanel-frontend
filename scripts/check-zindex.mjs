@@ -14,11 +14,11 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 // main.css 层级总表：30 topbar / 40·41 菜单 / 50 一级弹窗 / 59 抽屉遮罩 /
-// 60 二级浮层 / 100 toast。70·80·1000 是尚未收编的既存值（见 2026-11-05 复盘），
-// 列在这里是为了让它们**可见**；清理一个就删一个，不要新增。
+// 60 二级浮层 / 70 全屏帮助层 / 80 命令面板 / 100 toast。
+// 1000 已于 2026-11-05 收编（DashboardView 的指标卡悬浮详情原本用它，会把 toast 压住）。
 // <30 是容器内局部层叠（表头 sticky、编辑器行号），不参与全局弹层竞争；
 // 30 以上才是跨组件层级，必须语义明确。
-const ALLOWED = new Set([0, 1, 2, 3, 20, 30, 40, 41, 50, 59, 60, 70, 80, 100, 1000])
+const ALLOWED = new Set([0, 1, 2, 3, 20, 30, 40, 41, 50, 59, 60, 70, 80, 100])
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -29,6 +29,12 @@ function walk(dir, out = []) {
   return out
 }
 
+// 注释里的 z-index **不算**：层级总表本身就要写「曾经写 z-index:1000」这类说明，
+// 把说明当违规会让守卫在「刚把问题写清楚」的那一刻变红。注释里的声明也是死代码。
+function stripCssComments(s) {
+  return s.replace(/\/\*[\s\S]*?\*\//g, ' ')
+}
+
 let hits = 0
 let styleBlocks = 0
 const bad = []
@@ -37,8 +43,8 @@ const seen = new Map()
 for (const f of walk(join(ROOT, 'src'))) {
   const src = readFileSync(f, 'utf8')
   const blocks = f.endsWith('.css')
-    ? [[src, 0]]
-    : [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => [m[1], m.index])
+    ? [[stripCssComments(src), 0]]
+    : [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => [stripCssComments(m[1]), m.index])
   styleBlocks += blocks.length
   for (const [body] of blocks) {
     for (const m of body.matchAll(/z-index\s*:\s*(-?\d+)/g)) {

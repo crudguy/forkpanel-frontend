@@ -397,7 +397,7 @@ col.w-fwacts { width: 100px; }
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-border-strong); transition: background .15s; pointer-events: none; }
-.switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-on-accent); transition: transform .15s; }
 .switch input:checked + i { background: var(--c-primary); }
 .switch input:checked + i::after { transform: translateX(18px); }
 .switch input:disabled { cursor: not-allowed; }

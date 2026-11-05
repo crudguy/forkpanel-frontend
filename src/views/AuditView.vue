@@ -266,7 +266,7 @@ onMounted(load)
 /* 表格。⚠️ 行类名不得用 .row：main.css 的 .row 是表单行布局（display:flex），
    会把 tr 变成 flex 容器——整行内容叠挤、不按列对齐（实测 trDisp=flex）。 */
 .data-row { cursor: pointer; }
-.data-row:hover { background: var(--c-hover, rgba(255,255,255,.04)); }
+.data-row:hover { background: var(--c-hover); }
 /* chev 列宽由 colgroup（w-achev 40px）决定；此前 scoped 的 width:1% 叠加在
    fixed 布局上把该列压到 26px，icon 溢出（scrollWidth 40 > clientWidth 26）。 */
 .chev-cell { color: var(--c-text-dim); }

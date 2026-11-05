@@ -193,7 +193,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
   width: 100%; min-height: 118px; resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-12-5);
   line-height: 1.5; padding: 9px 11px;
-  background: var(--c-surface-2, rgba(255, 255, 255, .03));
+  background: var(--c-surface-2);
   border: 1px solid var(--c-border); border-radius: 9px; color: var(--c-text);
 }
 .sp-actions { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
@@ -204,7 +204,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
   text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--c-border);
   white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis;
 }
-.sp-scroll th { position: sticky; top: 0; background: var(--c-surface-2, #22242a); font-weight: 600; }
+.sp-scroll th { position: sticky; top: 0; background: var(--c-surface-2); font-weight: 600; }
 .sp-scroll td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .null { color: var(--c-text-mute); font-style: italic; }
 </style>

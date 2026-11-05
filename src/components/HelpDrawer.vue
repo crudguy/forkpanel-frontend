@@ -34,7 +34,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 <style scoped>
 .mask {
   position: fixed; inset: 0; z-index: 70;
-  background: rgba(0, 0, 0, .4);
+  background: var(--c-scrim);
   display: flex; justify-content: flex-end;
 }
 .hd {

@@ -282,5 +282,5 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 .chip { font: inherit; font-size: var(--fs-12); padding: 3px 11px; border-radius: 999px; cursor: pointer;
   color: var(--c-text-dim); background: transparent; border: 1px solid var(--c-border); transition: all .15s; }
 .chip:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-primary) 50%, var(--c-border)); }
-  .chip.on { color: #fff; background: var(--gradient); border-color: transparent; }
+  .chip.on { color: var(--c-on-accent); background: var(--gradient); border-color: transparent; }
 </style>

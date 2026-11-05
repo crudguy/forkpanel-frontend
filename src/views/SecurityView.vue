@@ -377,20 +377,24 @@ async function doDisable() {
 .c-name { font-weight: 500; }
 .c-detail { margin-left: auto; font-size: var(--fs-12-5); text-align: right; }
 .summary { font-size: var(--fs-12-5); }
-.s-ok { color: var(--c-ok, #3fb950); }
-.s-risk { color: var(--c-danger, #f85149); }
-.dot.na { background: var(--c-text-dim, #8b949e); opacity: .55; }
-.cur-badge { margin-left: 6px; font-size: var(--fs-12); padding: 1px 7px; border-radius: 999px; background: var(--c-ok-soft, rgba(63,185,80,.15)); color: var(--c-ok, #3fb950); }
+/* 语义色一律只用 token，不给 var() 写第二参数兜底：这些 token 在 main.css 里
+   全都已定义，兜底永远不生效，只是把一屏之外的旧色值抄进本文件——
+   亮色主题切换时它们不会跟着变，还会被「硬编码色值」棘轮误计。 */
+.s-ok { color: var(--c-ok); }
+.s-risk { color: var(--c-danger); }
+.dot.na { background: var(--c-text-dim); opacity: .55; }
+.cur-badge { margin-left: 6px; font-size: var(--fs-12); padding: 1px 7px; border-radius: 999px; background: var(--c-ok-soft); color: var(--c-ok); }
 .muted { color: var(--c-text-mute); }
 .mono { font-family: var(--mono); }
 .nowrap { white-space: nowrap; }
 .ops-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .small { font-size: var(--fs-12); }
 .mfa-box { margin-top: 8px; }
-.secret { font-size: var(--fs-13); padding: 6px 8px; border-radius: var(--radius, 6px); background: rgba(127,127,127,.12); user-select: all; }
+.secret { font-size: var(--fs-13); padding: 6px 8px; border-radius: var(--radius); user-select: all;
+  background: color-mix(in srgb, var(--c-text-dim) 12%, transparent); }
 .codes { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: var(--fs-12-5); }
-.warn-tip { margin: 8px 0 4px; font-size: var(--fs-12-5); color: var(--c-warn, #d29922); }
-.inp { padding: 4px 8px; border: 1px solid var(--c-border, #444); border-radius: var(--radius, 6px); background: transparent; color: inherit; font-family: var(--mono); }
+.warn-tip { margin: 8px 0 4px; font-size: var(--fs-12-5); color: var(--c-warn); }
+.inp { padding: 4px 8px; border: 1px solid var(--c-border); border-radius: var(--radius); background: transparent; color: inherit; font-family: var(--mono); }
 .break { word-break: break-all; }
 /* 关闭 MFA 输入弹窗（与其他视图同形态）：遮罩 / 弹窗框 / 标题行 / 关闭按钮 /
    字段 / 操作条一律取 main.css 的公共式样（.muted 也是公共工具类，不再私抄） */

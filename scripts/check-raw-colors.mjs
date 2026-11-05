@@ -12,8 +12,11 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-// 2026-11-05 实测 67 处（含当前未提交 WIP 的 TerminalView）。清理后请同步下调。
-const BASELINE = 67
+// 2026-11-05 清到 0 处后，这条棘轮正式变成**硬规则**：style 块内不再允许任何
+// hex/rgba 字面量。要加新颜色，先在 main.css 的 token 表里给它一个名字
+// （主题色、品牌底上的白、遮罩、图表色都有对应 token）；确实不能命名的，
+// 用 color-mix() 从既有 token 派生，而不是把某个主题的取值抄进组件。
+const BASELINE = 0
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -31,7 +34,11 @@ const perFile = []
 
 for (const f of walk(join(ROOT, 'src'))) {
   const src = readFileSync(f, 'utf8')
-  const blocks = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1])
+  const blocks = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(
+    // 注释里的色值不计：源码里大量「原先这里写死 #xxxxxx」的说明文字会把计数虚高，
+    // 而注释里的整条声明本来就是死代码，同样不该计入。
+    (m) => m[1].replace(/\/\*[\s\S]*?\*\//g, ' '),
+  )
   styleBlocks += blocks.length
   let n = 0
   for (const b of blocks) n += (b.match(COLOR) || []).length
@@ -43,7 +50,14 @@ for (const f of walk(join(ROOT, 'src'))) {
 
 let failed = false
 console.log('== 样式硬编码色值棘轮 ==')
-// 扫描自检：抽不出 style 块时 total 恒为 0，棘轮会无条件通过
+// 活性自检：剔除注释后若正则也跟着失效（例如写成不匹配任何东西），total 恒为 0，
+// 基线 0 会让守卫无条件通过。先拿样本证明「它确实能抓到字面量、且不抓 token」。
+const PROBE = 'color: #abc; background: rgba(1, 2, 3, .5); border-color: var(--c-border);'
+const probeHits = (PROBE.match(COLOR) || []).length
+if (probeHits !== 2) {
+  console.error(`  ✗ 正则自检失败：样本应命中 2 处字面量、0 处 token，实得 ${probeHits} 处`)
+  failed = true
+}
 if (styleBlocks < 80) {
   console.error(`  ✗ 只抽到 ${styleBlocks} 个 style 块（期望 ≥80）：扫描失效`)
   failed = true

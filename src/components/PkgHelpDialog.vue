@@ -93,7 +93,7 @@ const rows = computed(() => {
 <style scoped>
 .mask {
   position: fixed; inset: 0; z-index: 70;
-  background: rgba(0, 0, 0, .45);
+  background: var(--c-scrim);
   display: grid; place-items: center;
   padding: 16px;
 }

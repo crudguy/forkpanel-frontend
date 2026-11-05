@@ -396,7 +396,7 @@ watch(() => route.query.tab, (v) => {
 /* 拆完 6 个 Tab 后，本视图只剩「页头 + TabBar + 诊断分支 + 帮助抽屉」。
    表格列宽、筛选控件、备注单元格等样式已随模板进入各自子组件
    （scoped 不跨组件——留在父级会静默失效）。 */
-.ok-note { color: var(--c-ok, #3fb950); font-size: var(--fs-13); margin: 0 0 12px; }
+.ok-note { color: var(--c-ok); font-size: var(--fs-13); margin: 0 0 12px; }
 .diag { max-width: 720px; margin: 8px 0 16px; padding: 20px; border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-glass); }
 .diag-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .diag-head h3 { margin: 0; font-size: var(--fs-16); }

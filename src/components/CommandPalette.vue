@@ -146,7 +146,7 @@ function onKey(e: KeyboardEvent) {
 <style scoped>
 .mask {
   position: fixed; inset: 0; z-index: 80;
-  background: rgba(0, 0, 0, .45);
+  background: var(--c-scrim);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
   backdrop-filter: blur(2px);

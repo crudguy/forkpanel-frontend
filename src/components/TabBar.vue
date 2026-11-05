@@ -50,5 +50,5 @@ const route = useRoute()
        color: var(--c-text-dim); text-decoration: none; cursor: pointer;
        transition: color .15s ease, background .15s ease; }
 .tab:hover { color: var(--c-text); }
-.tab.on { background: var(--gradient); color: #fff; font-weight: 500; }
+.tab.on { background: var(--gradient); color: var(--c-on-accent); font-weight: 500; }
 </style>

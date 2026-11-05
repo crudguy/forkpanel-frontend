@@ -269,17 +269,17 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
 .tree .row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
   background: none; border: none; color: var(--c-text); padding: 7px 10px 7px 8px; border-radius: 6px;
   cursor: pointer; font-size: var(--fs-13); }
-.tree .row:hover { background: rgba(255, 138, 76, .1); }
-.tree .row.sel { background: rgba(255, 138, 76, .18); outline: 1px solid var(--c-primary); }
+.tree .row:hover { background: color-mix(in srgb, var(--c-primary-2) 10%, transparent); }
+.tree .row.sel { background: color-mix(in srgb, var(--c-primary-2) 18%, transparent); outline: 1px solid var(--c-primary); }
 .tree .row .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tree .row .tw { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   flex: 0 0 18px; background: none; border: none; color: var(--c-text-dim); cursor: pointer; border-radius: 4px; }
-.tree .row .tw:hover { background: rgba(255, 138, 76, .15); color: var(--c-text); }
+.tree .row .tw:hover { background: color-mix(in srgb, var(--c-primary-2) 15%, transparent); color: var(--c-text); }
 .tree .row .tw.ph { visibility: hidden; }
 .tree .row .tw.open { transform: rotate(90deg); transition: transform .12s ease; }
 .tree .row .link { margin-left: 2px; }
 .tree .row .check { color: var(--c-primary); margin-left: 4px; flex: 0 0 auto; }
-.tree .err { color: var(--c-danger, #f85149); font-size: var(--fs-12); margin: 2px 0 4px; }
+.tree .err { color: var(--c-danger); font-size: var(--fs-12); margin: 2px 0 4px; }
 
 .newdir { display: flex; gap: 8px; margin: 10px 0 4px; }
 .newdir input { flex: 1; }

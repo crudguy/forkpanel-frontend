@@ -839,7 +839,7 @@ li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; backgroun
 .ok-state { display: flex; align-items: center; gap: 9px; color: var(--c-text-dim); font-size: var(--fs-13-5); }
 
 /* ── 指标卡 hover 悬浮详情 ── */
-.m-tip { position: fixed; z-index: 1000; width: 250px; box-sizing: border-box;
+.m-tip { position: fixed; z-index: 60; width: 250px; box-sizing: border-box;
   padding: 13px 15px 14px; border-radius: 12px; pointer-events: none;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   box-shadow: var(--shadow-lg); opacity: 1; }
@@ -878,8 +878,8 @@ li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; backgroun
 /* tone → 图标色 + 状态徽标色（与 MetricCard 同源 token，随主题切换） */
 .m-tip.tone-primary .ico { background: var(--c-primary-soft); color: var(--c-primary); }
 .m-tip.tone-primary .badge { color: var(--c-primary); border-color: var(--c-primary-soft); background: var(--c-primary-soft); }
-.m-tip.tone-cyan .ico { background: rgba(56,189,248,.14); color: var(--c-cyan); }
-.m-tip.tone-cyan .badge { color: var(--c-cyan); border-color: rgba(56,189,248,.3); background: rgba(56,189,248,.12); }
+.m-tip.tone-cyan .ico { background: color-mix(in srgb, var(--c-cyan) 14%, transparent); color: var(--c-cyan); }
+.m-tip.tone-cyan .badge { color: var(--c-cyan); border-color: color-mix(in srgb, var(--c-cyan) 30%, transparent); background: color-mix(in srgb, var(--c-cyan) 12%, transparent); }
 .m-tip.tone-ok .ico { background: var(--c-ok-soft); color: var(--c-ok); }
 .m-tip.tone-ok .badge { color: var(--c-ok); border-color: var(--c-ok-soft); background: var(--c-ok-soft); }
 .m-tip.tone-warn .ico { background: var(--c-warn-bg); color: var(--c-warn); }

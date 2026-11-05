@@ -322,10 +322,10 @@ td.remark-cell { padding: 4px 10px; }
 .seg { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); overflow: hidden; }
 .seg button { border: 0; background: transparent; color: var(--c-text-dim); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--c-border); }
-.seg button.on { background: var(--c-primary); color: #fff; }
+.seg button.on { background: var(--c-primary); color: var(--c-on-accent); }
 .seg button:not(.on):hover { background: var(--c-hover); }
 .force-row { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
 .force-row input { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--c-primary); }
-.force-row b { color: var(--c-danger, #e5484d); }
+.force-row b { color: var(--c-danger); }
 .box { height: 260px; }
 </style>

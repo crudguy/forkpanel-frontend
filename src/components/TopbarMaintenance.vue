@@ -419,7 +419,7 @@ usePolling({ fn: () => { if (canSys.value) void checkUpgrade() }, ms: 12 * 60 * 
 .vp-upgrade {
   display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;
   height: 34px; margin-top: 10px; border: none; border-radius: 8px;
-  background: var(--c-primary); color: #fff; font-size: var(--fs-13); font-weight: 600; cursor: pointer;
+  background: var(--c-primary); color: var(--c-on-accent); font-size: var(--fs-13); font-weight: 600; cursor: pointer;
   transition: filter .15s ease;
 }
 .vp-upgrade:hover:not(:disabled) { filter: brightness(1.08); }
