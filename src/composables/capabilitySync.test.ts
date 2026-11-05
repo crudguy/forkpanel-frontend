@@ -44,8 +44,18 @@ describe('useSiteCaps 置灰点（P1-22：webSupported / sslSupported / canReloa
     exactly(p, 'auth.supported(CAP.SSL_SELFSIGNED)', 1, 'useSiteCaps.selfSignedSupported')
   })
 
-  it('sslReady 三条前提缺一不可（底座 + 签发渠道 + 权限）', () => {
-    exactly(p, 'webSupported.value && (sslSupported.value || selfSignedSupported.value)', 1, 'useSiteCaps.sslReady')
+  it('sslReady 三条前提经 sslGate 判定，四项事实一个不少', () => {
+    // 判据已下沉到 composables/sslGate.ts（证书页复用同一份），本文件只钉**接线**：
+    // 四项事实必须都从本文件的 computed 传进去——少传一项等于把某个前提静默丢弃，
+    // 而判据本身（底座 && (ACME||自签) && 权限）由 sslGate.test.ts 的 6 条行为测试
+    // 覆盖，含「改坏判据必须变红」的负向对照，无需再抄一份表达式文本。
+    exactly(p, 'sslGate({', 1, 'useSiteCaps.sslGate 调用')
+    for (const fact of ['webSupported', 'sslSupported', 'selfSignedSupported', 'canSsl']) {
+      exactly(p, `${fact}: ${fact}.value,`, 1, `useSiteCaps 传给 sslGate 的 ${fact}`)
+    }
+    // ready / hint 必须取判据结果，不能在本文件另写一份
+    exactly(p, 'sslState.value.ready', 1, 'useSiteCaps.sslReady')
+    exactly(p, 'sslState.value.hint', 1, 'useSiteCaps.sslHint')
   })
 
   it('canReload 与 canCreate 都要求底座在位（后端同口径 501）', () => {
