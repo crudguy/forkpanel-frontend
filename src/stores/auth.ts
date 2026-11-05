@@ -72,7 +72,13 @@ export const useAuthStore = defineStore('auth', () => {
       capabilities.value = r.capabilities ?? {}
       // platform（distro/kernel/arch/init）由 /system/capabilities 下发，与 capabilities 同源；
       // 一并加载，供概览/设置/导航展示平台信息。缺失非致命（UI 降级为 —）。
-      try { await loadCapabilities() } catch { /* platform 缺失不阻断登录 */ }
+      // ⚠ 这里失败**不会**让功能置灰：能力矩阵在上面已由 /auth/me 的 capabilities 填好
+      //   （openapi 里 MeResponse.capabilities 与 /system/capabilities 的 features 同源）。
+      //   丢的是 platform（显示「—」）与 limits（终端会话上限等配额提示）。
+      //   两者都非致命、登录也不该因此失败，但它说明这个端点本身异常 —— 留一条 warn
+      //   才能把「后端这个端点坏了」与「前端压根没写这块」区分开。
+      try { await loadCapabilities() }
+      catch (e) { console.warn('[panel] /system/capabilities 加载失败，platform/limits 缺失：', e) }
     } finally {
       loading.value = false
     }

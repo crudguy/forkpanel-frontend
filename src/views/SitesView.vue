@@ -241,7 +241,12 @@ async function batchSetEnabled(on: boolean) {
     toast(fail ? `已${on ? '启用' : '停用'} ${ok} 个站点，${fail} 个失败` : `已${on ? '启用' : '停用'} ${ok} 个站点`)
     selected.value = []
     await load()
-  } catch { /* Promise.allSettled 不抛，仅作兜底层 */ }
+  } catch (e) {
+    // allSettled 不抛，逐条失败也已被上面的汇总 toast 覆盖 ⇒ 走到这里只可能是
+    // toast/load 自身异常。不弹 UI（避免与汇总 toast 打架），但必须留痕：
+    // 否则现象是「批量按钮点了没反应」，而控制台一片安静。
+    console.error('[panel] 批量启用/停用意外失败：', e)
+  }
   finally { batchBusy.value = false }
 }
 
@@ -259,7 +264,10 @@ async function batchDelete() {
     batchDelOpen.value = false
     selected.value = []
     await load()
-  } catch { /* 同上 */ }
+  } catch (e) {
+    // 同上：逐条失败已汇总成 toast，这里的兜底只负责留痕
+    console.error('[panel] 批量删除意外失败：', e)
+  }
   finally { batchBusy.value = false }
 }
 </script>

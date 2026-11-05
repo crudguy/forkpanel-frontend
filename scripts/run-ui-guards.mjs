@@ -37,6 +37,8 @@ export const UI_GUARDS = [
   'check-component-imports.mjs',
   // 2026-11-05 F-05/F-09：侧栏/Tab/顶栏/命令面板/路由守卫必须共用同一份可达性判据
   'check-nav-policy.mjs',
+  // 2026-11-05 Q-11：静默 catch 必须自证理由（吞掉根因的代价是「界面正常但功能全关」）
+  'check-silent-catch.mjs',
 ]
 
 let failed = 0

@@ -323,7 +323,13 @@ export function useSiteForm(opts: { onFieldChanged?: (key: string) => void } = {
       const r = await api.get<{ packages: PackageInfo[] }>(API.packages.list())
       runtimeInstalled.value = new Set((r.packages ?? []).map(x => x.name))
       runtimeDetectable.value = true
-    } catch { runtimeDetectable.value = false }
+    } catch (e) {
+      // 降级保留：探测失败只是不显示「系统包 xxx 未装」，不影响站点编辑。
+      // 但「模板没有任何未装提示」有两种原因（探测失败 / 系统包真装齐了），
+      // 用户与排查者从界面分不出，所以留一条 warn —— 否则只能读源码。
+      runtimeDetectable.value = false
+      console.warn('[panel] 运行时探测失败，模板将不显示「系统包未装」：', e)
+    }
   }
 
   /**

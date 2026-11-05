@@ -4,7 +4,7 @@
 // 是接线事实，用源码守卫钉住（布局真挂载要拉一堆子组件，成本远超收益）。
 // ⚠ 必须 jsdom：`client.ts` 的 readCookie 读 document.cookie；纯 node 下会抛
 //   「document is not defined」，而「登出失败」用例只要 reject 就通过 ⇒ 恒绿。
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createPinia, setActivePinia } from 'pinia'
@@ -89,5 +89,41 @@ describe('接线守卫：MainLayout 的退出入口', () => {
     const body = clean(LAYOUT)
     expect((body.match(/import \{ api, errorText \} from '@\/api\/client'/g) ?? []).length).toBe(1)
     expect((body.match(/import \{ toast \} from '@\/composables\/useToast'/g) ?? []).length).toBe(1)
+  })
+})
+
+// Q-11：`loadMe` 里那句 `catch { }` 原先只有一个理由注释，改成了 console.warn。
+// 这条测试同时钉住两件事——①失败真的不阻断登录；②**能力矩阵不依赖这个端点**
+// （它由 /auth/me 一并下发）。第二点是「这里能不能静默」的判据：若能力矩阵只能
+// 从这个端点拿到，失败就等于全站置灰，那就不是「静默」而是「掩盖故障」。
+describe('Q-11 /system/capabilities 失败时的降级边界', () => {
+  it('不抛错；platform/limits 缺失，但能力矩阵仍是 /auth/me 下发的那份', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    fake = installApiFake({
+      [API.auth.me()]: {
+        user: 'admin', role: 'admin', permissions: ['system.view'],
+        allowed_roots: ['/'], tier: 'standard',
+        capabilities: { 'metrics.read': { supported: true, backend: null, reason: null } },
+      },
+      [API.system.capabilities()]: fakeError(500, 10001, '能力探测失败'),
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // ① 登录流程不能被这一步拖垮（原来也是这个语义，改的是"要不要留痕"）
+      await expect(auth.loadMe()).resolves.toBeUndefined()
+      expect(auth.me?.user).toBe('admin')
+      // ② 降级的真实范围：只有 platform / limits
+      expect(auth.platform).toBeNull()
+      expect(auth.limits).toBeNull()
+      // ③ 关键判据：功能没有整体置灰——能力矩阵来自 /auth/me
+      expect(auth.capabilities['metrics.read']?.supported).toBe(true)
+      // ④ 但必须留痕，且理由说得清是哪个端点
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain('/system/capabilities')
+    } finally {
+      warn.mockRestore()
+    }
+    fake!.assertClean()
   })
 })
