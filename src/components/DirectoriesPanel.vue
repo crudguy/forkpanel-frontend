@@ -76,5 +76,5 @@ onMounted(load)
 .dir-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-12);
   color: var(--c-primary); background: color-mix(in srgb, var(--c-border) 55%, transparent);
   padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; word-break: break-all; }
-.dir-desc { font-size: var(--fs-11-5); color: var(--c-text-dim); line-height: 1.5; }
+.dir-desc { font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
 </style>

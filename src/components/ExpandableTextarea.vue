@@ -180,7 +180,7 @@ function open() {
   font-size: var(--fs-13);
   line-height: 1.6;
   color: var(--c-text);
-  background: var(--c-background, var(--c-bg));
+  background: var(--c-bg);
   border: 0;
   outline: none;
   resize: none;

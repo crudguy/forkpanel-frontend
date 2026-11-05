@@ -219,7 +219,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
    以下只补本弹窗特有的表单布局：单列 .fields + 两列 .row2。 */
 label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
 label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
-label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-11-5); }
+label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-12); }
 .req > span::after { content: ' *'; color: var(--c-danger); }
 .fields { display: flex; flex-direction: column; gap: 14px; }
 /* 窄弹窗（.modal 内容宽 392px）里两列各约 190px：列宽必须写 minmax(0,1fr)，
@@ -241,7 +241,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft);
 }
 .confirm input.ok { border-color: var(--c-ok); box-shadow: 0 0 0 3px var(--c-ok-soft); }
-.code, code { font-family: var(--font-mono); font-size: var(--fs-12); }
+.code, code { font-family: var(--mono); font-size: var(--fs-12); }
 .hint { margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); }
 .err-tip { color: var(--c-danger); }
 .hint-note { margin: 2px 0 0; }

@@ -218,9 +218,9 @@ input.bad { border-color: var(--c-danger); }
 .hint-note { margin: 0; }
 .modal-lead code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
 .target { margin: -4px 0 10px; font-size: var(--fs-13); }
-.target code, .target .mono { font-family: var(--font-mono); }
+.target code, .target .mono { font-family: var(--mono); }
 .cur-line { margin: 0 0 12px; font-size: var(--fs-12); color: var(--c-text-dim); }
-.cur-line .mono { font-family: var(--font-mono); color: var(--c-text); }
+.cur-line .mono { font-family: var(--mono); color: var(--c-text); }
 .dim { color: var(--c-text-dim); }
 .loading-line { margin: 0 0 12px; }
 </style>

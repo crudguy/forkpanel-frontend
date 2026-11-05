@@ -152,12 +152,12 @@ label > span { color: var(--c-text); font-weight: 500; }
 .logs-wrap { min-height: 200px; }
 .logs {
   margin: 0; max-height: 56vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
-  font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.6;
+  font-family: var(--mono); font-size: var(--fs-12); line-height: 1.6;
   color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border-strong);
   border-radius: var(--radius-xs); padding: 12px 14px;
 }
 .logs.busy { opacity: 0.6; }
 .pad { padding: 14px; }
 .dim { color: var(--c-text-dim); }
-.code, code { font-family: var(--font-mono); font-size: var(--fs-12); background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
+.code, code { font-family: var(--mono); font-size: var(--fs-12); background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
 </style>

@@ -190,7 +190,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
    label 作为 .modal.stack 的 flex item 被 blockify，内部 span/input 仍按行内流挤一起。 */
 label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); }
 label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
-label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-11-5); }
+label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-12); }
 .req > span::after { content: ' *'; color: var(--c-danger); }
 small { line-height: 1.2; }
 input, textarea, select {

@@ -202,7 +202,7 @@ function cancel() { emit('cancel') }
 <style scoped>
 label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13); margin-top: 10px; }
 label > span { display: flex; align-items: baseline; gap: 6px; color: var(--c-text); font-weight: 500; }
-label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-11-5); }
+label > span small { color: var(--c-text-dim); font-weight: 400; font-size: var(--fs-12); }
 .req > span::after { content: ' *'; color: var(--c-danger); }
 textarea, input {
   width: 100%; padding: 9px 11px; font-size: var(--fs-13); color: var(--c-text);
@@ -228,7 +228,7 @@ textarea:focus-visible, input:focus-visible {
 .svc-mini .dim { font-size: var(--fs-12); color: var(--c-text-dim); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  font-family: var(--mono); font-size: var(--fs-11-5); padding: 2px 7px; border-radius: 5px;
+  font-family: var(--mono); font-size: var(--fs-12); padding: 2px 7px; border-radius: 5px;
   background: var(--bg-inset); color: var(--c-text-dim); border: 1px solid var(--c-border);
 }
 .chip.vol { color: var(--c-primary); }
