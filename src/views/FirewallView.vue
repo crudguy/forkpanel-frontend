@@ -64,14 +64,19 @@ const loaded = ref(false)
 
 async function apply() {
   busy.value = true; error.value = ''; confirmAllow.value = false
+  // 清空前留一份：提示文案要说清「放行了哪些端口」，下面几行就把 ports 清掉了
+  const applied = ports.value
   try {
     const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[] }>(
       API.firewall.rules(),
-      { rules: [{ ports: ports.value, protocol: 'tcp', action: 'allow',
+      { rules: [{ ports: applied, protocol: 'tcp', action: 'allow',
                   source: source.value || undefined, comment: comment.value || undefined }] })
     warn.value = r.warnings?.length ? r.warnings.join('；') : ''
     ports.value = ''; source.value = ''; comment.value = ''
-    load()
+    // 后端幂等：同一端口重复提交计 unchanged、added 为 0。不区分的话用户会以为"又加了一条"。
+    toast(r.added > 0 ? `已放行端口 ${applied}` : `端口 ${applied} 已在放行列表中`)
+    // await：重载完成前 busy 保持 true，否则这段窗口里用户能再点一次
+    await load()
   } catch (e) { error.value = errorText(e) }
   finally { busy.value = false }
 }
@@ -141,7 +146,12 @@ async function setActive(on: boolean) {
   // 确认框回调也会走这里：等待确认期间若状态读取失败，同样不许下发。
   if (!loaded.value) return
   busy.value = true
-  try { await api.put(API.firewall.setEnabled(), { enabled: on }); load() }
+  try {
+    await api.put(API.firewall.setEnabled(), { enabled: on })
+    toast(on ? '已启用防火墙' : '已关闭防火墙')
+    // await：重载完成前 busy 保持 true，避免这段窗口里重复切换
+    await load()
+  }
   catch (e) { error.value = errorText(e) }
   finally { busy.value = false; confirmOff.value = false }
 }
@@ -155,10 +165,13 @@ function askDelete(r: Rule) { if (r.panel_managed) delTarget.value = r }
 async function doDelete() {
   const r = delTarget.value
   if (!r) return
+  // 关框后 delTarget 就清空了，提示文案必须先从规则上取下来（规则无 name，用方向+端口/协议）
+  const label = `${r.direction === 'in' ? '入站' : '出站'} ${r.ports}/${r.protocol}`
   busy.value = true
   try {
     await api.del(API.firewall.removeRule(r.id))
     delTarget.value = null
+    toast(`已删除规则 ${label}`)
     await load()
   // 失败也关框：否则确认框继续盖着、错误在遮罩后，用户只看到「点了没反应」
   } catch (e) { delTarget.value = null; toast(`删除规则失败：${errorText(e)}`, 'err') }

@@ -97,14 +97,22 @@ async function setAutoRenew(c: Cert, val: boolean) {
   } catch (e) {
     if (isUnsupported(e)) error.value = '当前环境未接入 ACME，无法自动续期'
     else error.value = errorText(e)
-  } finally { busy.value = false }
+  // 写后一律静默重载：列表以服务端为准，而不是靠在本地改对象维持一致。
+  // silent 不清 error，上面写的失败原因不会被这次刷新抹掉。
+  } finally { busy.value = false; await load(true) }
 }
 async function doDeleteCert() {
   if (!delCert.value) return
+  // 关框后 delCert 就清空了，提示文案必须先从证书上取下来
+  const dom = delCert.value.domain
   busy.value = true; error.value = ''
-  try { await api.del(API.certs.remove(delCert.value.id)); delCert.value = null; await load() }
+  try {
+    await api.del(API.certs.remove(delCert.value.id))
+    delCert.value = null
+    toast(`已删除证书 ${dom}`)
+    await load()
   // 失败也要关框：否则确认框继续盖着、错误在遮罩后面，用户只看到「点了没反应」
-  catch (e) { delCert.value = null; toast(`删除失败：${errorText(e)}`, 'err') }
+  } catch (e) { delCert.value = null; toast(`删除失败：${errorText(e)}`, 'err') }
   finally { busy.value = false }
 }
 
@@ -132,7 +140,9 @@ async function execSsl() {
       ? `已为 ${site.name} 签发面板自签证书`
       : `已提交 ${site.name} 的 ACME 签发任务`)
     sslModal.value = null
-    if (m.method === 'self-signed') await load()
+    // 一律重载（原先是「只有自签才刷」）：写操作后列表要反映服务端真值。
+    // 按 method 分叉的刷新规则没人解释得清，新增方式时也必然被漏掉。
+    await load(true)
   } catch (e) {
     if (isUnsupported(e)) toast('当前环境未接入证书签发能力（需 openssl 或 ACME）', 'warn')
     else error.value = errorText(e)

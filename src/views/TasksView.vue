@@ -9,6 +9,7 @@ import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { useAsync } from '@/composables/useAsync'
 import { usePolling } from '@/composables/usePolling'
+import { toast } from '@/composables/useToast'
 
 /** 与后端 task_runs 实态对齐（契约 Task schema） */
 interface Task {
@@ -94,9 +95,13 @@ async function cancel(t: Task) {
   if (!canCancel.value) return
   try {
     await api.post(API.tasks.cancel(t.id))
-    load()
-    if (sel.value?.id === t.id) open(t)
-  } catch (e) { error.value = errorText(e) }
+    toast(`已请求取消任务 #${t.id}`)
+    // await：重载完成前列表还是旧状态；后面的 open 也要等它自己那两路请求回来
+    await load()
+    if (sel.value?.id === t.id) await open(t)
+  // 行级动作的失败走 toast，不占列表级 error 条：那条错误挂在页面顶部、还带一个
+  // 只会「重新拉列表」的重试按钮——用户点它并不会重试取消，会重试的是别的事。
+  } catch (e) { toast(`取消任务失败：${errorText(e)}`, 'err') }
 }
 
 // 状态徽标/文案统一走共享词表（src/api/types.ts）：此前只认 'ok'，
