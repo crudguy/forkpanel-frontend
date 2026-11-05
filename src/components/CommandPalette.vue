@@ -16,6 +16,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_ITEMS, type NavDef } from '@/composables/navItems'
 import { whyDisabledForPath } from '@/composables/navPolicy'
+import { useModal } from '@/composables/useModal'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -26,6 +27,10 @@ const router = useRouter()
 const q = ref('')
 const active = ref(0)
 const inputEl = ref<HTMLInputElement | null>(null)
+const palEl = ref<HTMLElement | null>(null)
+// Esc / Tab 焦点陷阱 / 关闭后焦点返还统一走 useModal。此前 Esc 只挂在 input 的
+// @keydown 上：焦点一旦移到结果列表或页面别处，键盘用户就关不掉这个浮层。
+const { close } = useModal(() => props.open, palEl, () => emit('close'))
 
 interface Cmd {
   key: string
@@ -87,21 +92,22 @@ function move(d: number) {
 function choose(c?: Cmd) {
   const cmd = c ?? results.value[active.value]
   if (!cmd) return
-  emit('close')
+  close()
   cmd.run()
 }
 function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowDown') { e.preventDefault(); move(1) }
   else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
   else if (e.key === 'Enter') { e.preventDefault(); choose() }
-  else if (e.key === 'Escape') { e.preventDefault(); emit('close') }
+  // Esc 由 useModal 在 document 捕获阶段统一接管；这里再处理会关两遍，
+  // 而且焦点不在 input 时这一层压根收不到按键。
 }
 </script>
 
 <template>
   <Teleport to="body">
-  <div v-if="open" class="mask" @click.self="emit('close')">
-    <div class="pal" role="dialog" aria-label="命令面板">
+  <div v-if="open" class="mask" @click.self="close">
+    <div ref="palEl" class="pal" role="dialog" aria-label="命令面板">
       <div class="box">
         <Icon name="search" :size="16" class="si" />
         <input
