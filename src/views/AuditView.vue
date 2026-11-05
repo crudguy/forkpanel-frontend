@@ -130,7 +130,6 @@ function goto(p: number) {
 function changeSize() { page.value = 1; load() }
 function toggle(i: number) { expanded.value = expanded.value === i ? null : i }
 
-function fmt(ts?: number) { return fmtDateTime(ts) }
 function resClass(r: string) {
   if (r === 'ok' || r === 'changed') return 'b-ok'
   if (r === 'queued') return 'b-wait'
@@ -198,7 +197,7 @@ onMounted(load)
             <tbody>
               <template v-for="(a, i) in rows" :key="a.id ?? i">
                 <tr class="data-row" @click="toggle(i)">
-                  <td class="muted nowrap">{{ fmt(a.ts) }}</td>
+                  <td class="muted nowrap">{{ fmtDateTime(a.ts) }}</td>
                   <td class="ellipsis" :title="a.actor">{{ a.actor }}</td>
                   <td class="mono">{{ a.action }}</td>
                   <td class="muted ellipsis" :title="a.target || ''">{{ a.target || '—' }}</td>

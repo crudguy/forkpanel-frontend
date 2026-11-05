@@ -10,7 +10,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { CAP, type SystemSnapshot } from '@/api/types'
+import { CAP, fmtSize, type SystemSnapshot } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
 import { usePolling } from '@/composables/usePolling'
@@ -57,20 +57,13 @@ const tempRows = computed(() => (snap.value?.temps ?? []).map(t => ({
 })))
 
 // 内存明细（字节格式化后下发，避免模板算术）
-const memUsedStr = computed(() => fmtBytes((snap.value?.mem.used_kib ?? 0) * 1024))
-const memAvailStr = computed(() => fmtBytes((snap.value?.mem.available_kib ?? 0) * 1024))
-const memBufStr = computed(() => fmtBytes((snap.value?.mem.buffers_kib ?? 0) * 1024))
-const memCacheStr = computed(() => fmtBytes((snap.value?.mem.cached_kib ?? 0) * 1024))
-const swapUsedStr = computed(() => fmtBytes(swapUsedKib.value * 1024))
-const swapTotalStr = computed(() => fmtBytes(swapTotalKib.value * 1024))
+const memUsedStr = computed(() => fmtSize((snap.value?.mem.used_kib ?? 0) * 1024))
+const memAvailStr = computed(() => fmtSize((snap.value?.mem.available_kib ?? 0) * 1024))
+const memBufStr = computed(() => fmtSize((snap.value?.mem.buffers_kib ?? 0) * 1024))
+const memCacheStr = computed(() => fmtSize((snap.value?.mem.cached_kib ?? 0) * 1024))
+const swapUsedStr = computed(() => fmtSize(swapUsedKib.value * 1024))
+const swapTotalStr = computed(() => fmtSize(swapTotalKib.value * 1024))
 
-function fmtBytes(b: number): string {
-  if (!b) return '0 B'
-  const u = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0, n = b
-  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
-  return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i]
-}
 function fmtMbps(bps: number): string { return (bps / 1e6).toFixed(2) }
 function fmtPct(x: number): string { return x.toFixed(1) }
 function coreColor(p: number): string { return p >= 85 ? C.danger : p >= 60 ? C.hot : C.cpu }
@@ -201,7 +194,7 @@ onMounted(tick)
           </div>
           <div class="disk-sub">{{ d.device }} · {{ d.fs }}</div>
           <div class="prog"><div class="fill" :style="{ width: d.pct + '%', background: d.net ? C.hot : C.disk }" /></div>
-          <div class="disk-foot"><b>{{ fmtPct(d.pct) }}%</b><span class="dim">{{ fmtBytes(d.used) }} / {{ fmtBytes(d.total) }}</span></div>
+          <div class="disk-foot"><b>{{ fmtPct(d.pct) }}%</b><span class="dim">{{ fmtSize(d.used) }} / {{ fmtSize(d.total) }}</span></div>
         </div>
       </div>
       <!-- 空态放 grid 外（审计 U13）：作为 grid 子元素只占一列，排版破碎 -->

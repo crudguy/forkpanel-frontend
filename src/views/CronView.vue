@@ -145,7 +145,6 @@ async function saveEdit() {
   finally { editBusy.value = false }
 }
 
-function fmt(ts: number | null) { return fmtDateTime(ts) }
 
 // ── Webhook 测试 / 触发（cron.webhook/test + cron/jobs/{id}/webhook）──
 const webhookUrl = ref('')
@@ -207,7 +206,7 @@ async function triggerWebhook(j: Job) {
           </button>
         </div>
         <p v-if="previewExpr === form.expr" class="tip">
-          下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmt).join('　') : '一年内无命中（检查日期字段）' }}</span>
+          下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
         </p>
         <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
       </section>
@@ -237,9 +236,9 @@ async function triggerWebhook(j: Job) {
               <td class="mono">{{ j.expr }}</td>
               <td class="mono dim ellipsis" :title="j.command">{{ j.command }}</td>
               <td class="col-opt">{{ j.user }}</td>
-              <td class="nowrap">{{ fmt(j.last_run_at) }}</td>
+              <td class="nowrap">{{ fmtDateTime(j.last_run_at) }}</td>
               <td class="dim">
-                <span v-for="(t, i) in j.next.slice(0, 2)" :key="i">{{ fmt(t) }}<br /></span>
+                <span v-for="(t, i) in j.next.slice(0, 2)" :key="i">{{ fmtDateTime(t) }}<br /></span>
               </td>
               <td class="nowrap">
                 <button class="btn-ghost btn-sm" :disabled="!canManage || runBusy === j.id"
@@ -293,7 +292,7 @@ async function triggerWebhook(j: Job) {
           </label>
           <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
           <p v-if="previewExpr === editForm.expr" class="tip">
-            下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmt).join('　') : '一年内无命中（检查日期字段）' }}</span>
+            下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
           </p>
 
           <div class="modal-foot">

@@ -34,10 +34,6 @@ const items = ref<NotificationItem[]>([])
 const unread = ref(0)
 const { loading, error, run } = useAsync()
 
-function fmt(ts: number): string {
-  return fmtDateTime(ts)
-}
-
 async function load() {
   await run(async () => {
     items.value = (await api.get<NotificationItem[]>(API.notifications.list(), {
@@ -114,7 +110,7 @@ onMounted(() => { if (canView.value) load() })
           <!-- 级别文案走共享词表：后端返回英文枚举，直接渲染会中英混杂。
                此前 notifLevelLabel 已导入却从未使用，级别完全没有展示。 -->
           <span class="lvl">{{ notifLevelLabel(n.level) }}</span>
-          <span class="time">{{ fmt(n.ts) }}</span>
+          <span class="time">{{ fmtDateTime(n.ts) }}</span>
         </div>
         <p v-if="n.body" class="body">{{ n.body }}</p>
         <div class="row-actions">
