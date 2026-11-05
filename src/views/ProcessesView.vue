@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -8,6 +8,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import { usePolling } from '@/composables/usePolling'
+import { PROC_PAGE_SIZE, clampPage, filterProcs, pageCountOf, pageSlice } from '@/composables/procPaging'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PageLayout from '@/components/PageLayout.vue'
 
@@ -82,7 +83,52 @@ function toggleSort(k: SortKey) {
     // 数值列默认降序（高占用在前），文本列默认升序（A→Z）
     sortDir.value = (k === 'pid' || k === 'cpu' || k === 'mem') ? 'desc' : 'asc'
   }
+  // 换序后停在第 5 页没有意义（那一页的内容全变了），统一回第一页
+  page.value = 1
 }
+
+// ── 搜索 + 分页（Q-10）──
+//
+// ## 为什么要限 DOM 规模（实测，不是"应该会卡"）
+// 本机 Firefox 133 跑与下面模板同构的表格（6 列 + 3 个图标按钮/行），
+// 每档 6 轮取中位数，`patch` = 换数据 + 重算排序 + nextTick，`+layout` = 再加
+// 一次读 scrollHeight 强制排版：
+//
+// | 进程数 | DOM 节点 | patch | patch+layout |
+// |-------:|---------:|------:|-------------:|
+// |    391 |    6,664 |  27ms |       104ms |
+// |  1,000 |   17,017 |  71ms |       276ms |
+// |  3,000 |   51,017 | 205ms |       709ms |
+// |  8,192 |  139,281 | 656ms |     2,256ms |
+//
+// 391 是典型值，8192 正是后端 `top_processes` 的兜底上限——跑容器的宿主机
+// 上千进程很常见。3s 一轮、每轮整页卡 0.7~2.3s，等于进程页在高负载机器上
+// 不可用（而高负载恰恰是最需要看进程的时候）。
+//
+// ## 为什么选分页而不是虚拟滚动
+// 本页表格挂了 `v-table-nav`（roving tabindex 键盘导航），它的 `End` 依赖
+// 「tbody 里就是全部行」——虚拟滚动后 `End` 只能跳到可见区末行、方向键到边界
+// 也走不下去，是**静默的键盘可访问性回归**（构建/单测/肉眼全绿）。分页让
+// 「当前页的行全在 DOM 里」，导航语义天然成立，且用户对翻页的预期是清晰的。
+// 代价（Ctrl+F 只能搜当前页）用搜索框补上，而且更快：找 nginx 不必在
+// 391 行里肉眼扫。
+//
+// 全量数据仍在前端：排序与搜索都作用在完整集合上，翻页只是换一屏，不回源。
+const q = ref('')
+const page = ref(1)
+
+const filtered = computed(() => filterProcs(sorted.value, q.value))
+const pageCount = computed(() => pageCountOf(filtered.value.length, PROC_PAGE_SIZE))
+const pageRows = computed(() => pageSlice(filtered.value, page.value, PROC_PAGE_SIZE))
+
+/** 页码夹回合法区间：进程退出导致总数变少、或搜索把结果缩到一页时，
+ *  停在旧页码会渲染一个空表——用户会以为「进程都没了」。 */
+watch([() => filtered.value.length, pageCount], () => {
+  if (page.value > pageCount.value) page.value = pageCount.value
+})
+/** 改搜索词必须回第一页：否则「搜到 3 条但停在第 4 页」先空一屏再被上面夹回来 */
+watch(q, () => { page.value = 1 })
+function gotoPage(p: number) { page.value = clampPage(p, pageCount.value) }
 function sortInd(k: SortKey): string {
   if (sortKey.value !== k) return ''
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
@@ -190,20 +236,26 @@ async function doKill() {
              有这张表，故把工具条收进卡片顶栏更紧凑，也保留"刷新贴着表"的直觉） -->
         <div class="procs-toolbar">
           <Icon name="process" :size="16" />
-          <span class="count">共 {{ sorted.length }} 个进程</span>
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filtered.length }} / 共 {{ procs.length }} 个进程</template>
+            <template v-else>共 {{ sorted.length }} 个进程</template>
+          </span>
           <span class="spacer" />
+          <!-- 搜索：分页后 Ctrl+F 只能搜当前页，用这里补上；比肉眼扫 391 行快得多 -->
+          <input v-model="q" class="find" type="search" placeholder="筛选名称 / 用户 / PID"
+            aria-label="筛选进程" :disabled="loading" />
           <RefreshBtn :disabled="loading" sm @click="load()" />
         </div>
         <!-- B8：容器自己滚 + 表头吸顶（.t-scroll）。进程常有数百行，滚动时看不见列头
              就只能靠记住列序——这是"信息密度"之外同样致命的可读性问题。 -->
         <div class="procs-scroll t-scroll">
-        <!-- ⚡ 性能：**不做虚拟滚动，也不加 v-memo**（2026-10-21 实测，本机 382 进程）
-             · 整表全量 patch ≈ 14ms（点表头强制换序，microtask flush 计时）；
-             · 纯排序 0.12ms（可忽略）；
-             · v-memo A/B：DOM 变更 1636 vs 1685、patch 15.1 vs 14.0ms
-               —— Vue 的插值 diff 本就跳过未变值，v-memo 只多一层比较，故不加。
-             结论：每 3s 一次的 tick 远低于一帧预算，加虚拟化的收益是负的（复杂度+回归面）。
-             ⚠ 若进程数上到数千，先按上面三条重测再决定——别凭"应该会卡"动手。 -->
+        <!-- ⚡ 性能（2026-11-05 重测，接 2026-10-21「若上到数千再重测」的约定）：
+             391 行 patch 27ms / 含 layout 104ms；3000 行 205 / 709ms；
+             8192 行 656 / 2256ms（四档数据与测法见 <script setup> 里 PAGE_SIZE 上方）。
+             ⇒ 每 3s 一次的 tick 在千级进程时已经吃掉整页半秒以上，结论从
+             「不做虚拟化」改为「必须限 DOM 规模」。选分页不选虚拟滚动的原因
+             （`v-table-nav` 的 End/方向键语义依赖「当前页行全在 DOM」）同样记在那边。
+             v-memo 依旧不加：上一轮 A/B 已证明它只是多一层比较（15.1 vs 14.0ms）。 -->
         <table v-table-nav>
           <colgroup>
             <col class="w-pid" /><col /><col class="w-user" /><col class="w-cpu" /><col class="w-mem" /><col class="w-acts" />
@@ -219,7 +271,7 @@ async function doKill() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in sorted" :key="p.pid">
+            <tr v-for="p in pageRows" :key="p.pid">
               <td class="pid mono num">{{ p.pid }}</td>
               <td class="proc-name" :title="p.name">{{ p.name }}</td>
               <td>{{ p.user ?? '-' }}</td>
@@ -244,9 +296,18 @@ async function doKill() {
                 </button>
               </td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="6"><EmptyState title="无进程数据" /></td></tr>
+            <tr v-if="!pageRows.length"><td colspan="6">
+              <EmptyState :title="q.trim() ? '没有匹配的进程' : '无进程数据'" />
+            </td></tr>
           </tbody>
         </table>
+        </div>
+        <!-- 只有超过一页才出现：几十个进程时多一条分页栏是纯噪音 -->
+        <div v-if="filtered.length > PROC_PAGE_SIZE" class="pager">
+          <span class="muted">共 {{ filtered.length }} 个进程 · 第 {{ page }} / {{ pageCount }} 页</span>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" type="button" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+          <button class="btn-ghost btn-sm" type="button" :disabled="page >= pageCount" @click="gotoPage(page + 1)">下一页</button>
         </div>
       </div>
     </template>
@@ -268,6 +329,20 @@ async function doKill() {
 .procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .procs-toolbar .icon { color: var(--c-primary); }
 .procs-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
+/* 搜索框：flex 允许收缩，窄屏时先让输入框变窄而不是把刷新按钮挤出去 */
+.procs-toolbar .find {
+  flex: 0 1 220px; min-width: 120px;
+  background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
+  border-radius: var(--radius-sm); padding: 6px 9px;
+  font-family: inherit; font-size: var(--fs-13);
+}
+.procs-toolbar .find:focus { outline: none; border-color: var(--c-primary); }
+/* 分页条：与 AuditView / DatabasesView 的 .pager 同构（各页 scoped，样式不跨组件） */
+.pager {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; font-size: var(--fs-13);
+  border-top: 1px solid var(--c-border);
+}
 /* 限高 = 容器真的会滚 = 吸顶表头才有意义（不限高时滚动发生在页面上，
    sticky 贴的是容器顶边，滚动时它跟着一起走，等于没加）。
    260px ≈ 顶栏 58 + 内容区上下内边距 62 + 卡片工具条 45 + 页头与留白 ~95。
