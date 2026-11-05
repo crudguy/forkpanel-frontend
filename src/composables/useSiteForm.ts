@@ -257,6 +257,20 @@ export function confSpecNow(f: SiteForm): string {
     f.hstsPreload,
     f.rewritePreset,
     f.rewriteCustom,
+    // 访问控制 / 反代增强 / 站点日志（021）：同样改变 render 输出。
+    // 漏一个字段 ⇒ 手动维护站点只改它时保存不弹二选一、磁盘配置静默不动；
+    // 字段集与后端 `advanced_json_of`（panel-api/routes/sites/model.rs）逐项对齐。
+    normIp(f.ipAllow),
+    normIp(f.ipDeny),
+    f.authBasic,
+    f.authUser.trim(),
+    f.lbPolicy,
+    f.proxyConnectTimeout,
+    f.proxySendTimeout,
+    f.proxyReadTimeout,
+    f.logAccess,
+    f.logError,
+    f.logErrorLevel,
   ])
 }
 

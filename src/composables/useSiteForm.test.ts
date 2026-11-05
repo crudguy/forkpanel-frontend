@@ -146,6 +146,27 @@ describe('confSpecNow（「哪些字段影响配置」的指纹）', () => {
     },
   )
 
+  // 021 的 11 个字段逐个钉住：漏任何一个，手动维护站点只改它时都不会弹
+  // 「未同步」二选一，磁盘上的 nginx 配置保持旧值（访问控制字段即"假生效"）。
+  it.each([
+    ['ipAllow', '10.0.0.1'],
+    ['ipDeny', '10.0.0.2'],
+    ['authBasic', true],
+    ['authUser', 'alice'],
+    ['lbPolicy', 'ip_hash'],
+    ['proxyConnectTimeout', 61],
+    ['proxySendTimeout', 62],
+    ['proxyReadTimeout', 63],
+    ['logAccess', true],
+    ['logError', true],
+    ['logErrorLevel', 'warn'],
+  ])('改 021 字段 %s 会变指纹（否则手动站点的磁盘配置不会更新）', (field, value) => {
+    const a = form()
+    const b = form()
+    ;(b as unknown as Record<string, unknown>)[field] = value
+    expect(confSpecNow(b)).not.toBe(confSpecNow(a))
+  })
+
   it('改 remark 不变指纹——备注是大表单之外的便签，不该触发「未同步」二选一', () => {
     const a = form()
     const b = form()
