@@ -466,12 +466,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 /* 表格密度（B8）：与菜单项之间加一条上分隔线，表明它是"偏好"而非"操作" */
 .mi-group { padding: 8px 10px; margin-top: 4px; border-top: 1px solid var(--c-border); }
 .mi-label { display: block; font-size: var(--fs-12); color: var(--c-text-dim); margin-bottom: 6px; }
-.seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--radius-xs); background: var(--bg-inset); border: 1px solid var(--c-border); }
-.seg-b { flex: 1; padding: 5px 0; border: none; border-radius: 6px; background: transparent;
-  color: var(--c-text-dim); font-size: var(--fs-12); cursor: pointer; transition: background .12s ease, color .12s ease; }
+.seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--seg-radius); background: var(--seg-bg); border: 1px solid var(--seg-border); }
+.seg-b { flex: 1; padding: 5px 0; border: none; border-radius: var(--seg-item-radius); background: transparent;
+  color: var(--seg-fg); font-size: var(--fs-12); cursor: pointer; transition: background .12s ease, color .12s ease; }
 .seg-b:hover { color: var(--c-text); }
 /* 选中态 = 品牌色底 + 加粗：不只靠颜色，色觉障碍/灰阶下仍可分辨 */
-.seg-b.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+.seg-b.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 
 /* 内容区随视口填满：左内边距与顶栏保持一致（同为 22px），两者左边缘因此对齐。 */
 /* 内边距取 --content-pt/--content-pb（main.css 定义）：FilesView / TerminalView 的

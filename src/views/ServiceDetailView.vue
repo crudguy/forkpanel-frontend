@@ -561,7 +561,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 .tab { background: none; border: none; padding: 8px 14px; font-size: var(--fs-13-5); color: var(--c-text-dim);
       cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover:not(:disabled) { color: var(--c-text); }
-.tab.active { color: var(--c-text); border-bottom-color: var(--c-primary); font-weight: 600; }
+.tab.active { color: var(--seg-on-fg); border-bottom-color: var(--c-primary); font-weight: 600; }
 .tab:disabled { opacity: .5; cursor: not-allowed; }
 
 .m-log { padding-top: 14px; }
@@ -571,10 +571,10 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 .m-config { padding-top: 14px; }
 .cfg-target { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .seg-label { font-size: var(--fs-13); color: var(--c-text-dim); }
-.seg { display: inline-flex; border: 1px solid var(--c-border-strong); border-radius: var(--radius-xs); overflow: hidden; }
-.seg-btn { border: none; border-radius: 0; background: transparent; padding: 5px 12px; font-size: var(--fs-13); color: var(--c-text-dim); }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--seg-bg); }
+.seg-btn { border: none; border-radius: var(--seg-item-radius); background: transparent; padding: 5px 12px; font-size: var(--fs-13); color: var(--seg-fg); }
 .seg-btn:hover:not(.active) { background: var(--c-hover); transform: none; }
-.seg-btn.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+.seg-btn.active { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 .rec { font-size: var(--fs-12); color: var(--c-ok); margin-left: 4px; }
 .cfg-path { font-family: var(--mono); word-break: break-all; margin: 0 0 8px; }
 .cfg-edit { width: 100%; min-height: 320px; resize: vertical; box-sizing: border-box;

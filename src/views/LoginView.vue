@@ -309,13 +309,13 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13)
 .pw-actions { display: flex; gap: 8px; margin: -2px 0 2px; }
 /* 主题三态：与用户菜单的 .seg 同语义（品牌色底 + 加粗表达选中，不只靠颜色）。
    ⚠ 全局 button 规则带 padding/border/background，这里逐项覆盖，别只用 color。 */
-.theme-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--c-border); border-radius: 999px; background: var(--c-glass); }
+.theme-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--c-glass); }
 .theme-seg button {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px; border: none; border-radius: 999px;
-  background: transparent; color: var(--c-text-dim);
+  padding: 5px 12px; border: none; border-radius: var(--seg-item-radius);
+  background: transparent; color: var(--seg-fg);
   font-size: var(--fs-12); cursor: pointer;
 }
 .theme-seg button:hover { color: var(--c-text); }
-.theme-seg button.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+.theme-seg button.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 </style>

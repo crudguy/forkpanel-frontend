@@ -43,12 +43,13 @@ const route = useRoute()
 
 <style scoped>
 .tabs { display: inline-flex; gap: 4px; padding: 4px; align-self: flex-start;
-        border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-surface-2); }
+        border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--seg-bg); }
 /* RouterLink 与 button 两种元素都要同样的视觉：button 必须显式重置默认边框/背景/字体 */
 .tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px;
-       border: none; background: none; font-family: inherit; font-size: var(--fs-13-5);
-       color: var(--c-text-dim); text-decoration: none; cursor: pointer;
+       border: none; border-radius: var(--seg-item-radius); background: none;
+       font-family: inherit; font-size: var(--fs-13-5);
+       color: var(--seg-fg); text-decoration: none; cursor: pointer;
        transition: color .15s ease, background .15s ease; }
 .tab:hover { color: var(--c-text); }
-.tab.on { background: var(--gradient); color: var(--c-on-accent); font-weight: 500; }
+.tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 </style>

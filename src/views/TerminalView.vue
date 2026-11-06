@@ -341,18 +341,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* 标签栏：与文件管理的 .tabbar 同源（玻璃胶囊 + 激活主色），复用现有设计 token。
+/* 标签栏：与文件管理的 .tabbar 同源（玻璃标签 + 激活浅底），共享 --seg-* token。
    「+ 新标签」一律中性色，不抢 tools-row 里唯一的 btn-primary（连接）。 */
 .tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .tab { display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 6px 10px;
-  border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass);
-  color: var(--c-text-dim); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
+  border: 1px solid var(--c-border); border-radius: var(--seg-radius); background: var(--c-glass);
+  color: var(--seg-fg); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
 .tab:hover { background: var(--c-hover); color: var(--c-text); }
-.tab.on { background: var(--c-primary); color: var(--c-on-accent); border-color: var(--c-primary); }
+.tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); border-color: transparent; font-weight: 600; }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tdot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-text-mute); flex: none; }
 .tdot.on { background: var(--c-ok); box-shadow: 0 0 6px var(--c-ok); }
-.tab.on .tdot.on { background: var(--c-on-accent); box-shadow: none; }
+.tab.on .tdot.on { background: var(--seg-on-fg); box-shadow: none; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
 /* 关闭钮 hover 的浅色覆盖层：跟着标签自身的前景色走，激活态（白字）与非激活态

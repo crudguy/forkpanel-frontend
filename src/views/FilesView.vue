@@ -835,15 +835,16 @@ function full(p: string) {
 </template>
 
 <style scoped>
-/* 多页签标签栏（2026-10-16）：与容器页「容器/镜像」TabBar 风格错位但同源——同用
-   玻璃底 + 激活主色。标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，
-   不抢走 tools-row 里唯一的 btn-primary（上传）。 */
+/* 多页签标签栏（2026-10-16）：与容器页 TabBar 同源但形态不同——可关闭标签条
+   vs 导航分段。两者共享 --seg-* token，激活态一律浅底 + 品牌色文字 + 加粗。
+   标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，不抢走 tools-row
+   里唯一的 btn-primary（上传）。 */
 .tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .tab { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 6px 10px;
-  border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); background: var(--c-glass);
-  color: var(--c-text-dim); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
+  border: 1px solid var(--c-border); border-radius: var(--seg-radius); background: var(--c-glass);
+  color: var(--seg-fg); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
 .tab:hover { background: var(--c-hover); color: var(--c-text); }
-.tab.on { background: var(--c-primary); color: var(--c-on-accent); border-color: var(--c-primary); }
+.tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); border-color: transparent; font-weight: 600; }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }

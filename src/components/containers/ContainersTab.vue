@@ -310,10 +310,9 @@ col.w-acts { width: 470px; }
 td.remark-cell { padding: var(--row-py) 10px; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-text { margin-left: 8px; font-size: var(--fs-12); }
-.seg { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-sm, 7px); overflow: hidden; }
-.seg button { border: 0; background: transparent; color: var(--c-text-dim); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
-.seg button + button { border-left: 1px solid var(--c-border); }
-.seg button.on { background: var(--c-primary); color: var(--c-on-accent); }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--seg-bg); }
+.seg button { border: 0; border-radius: var(--seg-item-radius); background: transparent; color: var(--seg-fg); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
+.seg button.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 .seg button:not(.on):hover { background: var(--c-hover); }
 .force-row { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: var(--fs-13); line-height: 1.5; }
 .force-row input { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--c-primary); }

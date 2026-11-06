@@ -82,6 +82,17 @@
   --radius-sm: var(--radius-md);
   --radius-xs: 8px;
 
+  /* 分段控件单一事实源（C 阶段）：导航 TabBar / 用户菜单偏好 / 登录页主题 /
+     容器页 / 服务详情的私有 .seg 全引用这一组，不再各写一份圆角与选中色。
+     激活态一律「浅底 + 品牌色文字 + 加粗」——第二通道保证灰阶下仍可分辨。 */
+  --seg-radius: var(--radius-md);
+  --seg-item-radius: var(--radius-xs);
+  --seg-bg: var(--bg-inset);
+  --seg-border: var(--c-border);
+  --seg-fg: var(--c-text-dim);
+  --seg-on-bg: var(--c-primary-soft);
+  --seg-on-fg: var(--c-primary);
+
   /* ── 布局骨架尺寸（复盘的 S-03）：顶栏高度与 .content 内边距**只在这里定义一次** ──
      此前 FilesView 写死 `top:58px` / `margin-top:-22px` / `height:calc(100vh - 120px)`，
      三个数字分别等于顶栏高、.content 的 padding-top、三者之和，靠注释互相提醒；
