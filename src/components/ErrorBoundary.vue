@@ -91,7 +91,7 @@ async function copy() {
   margin: 16px;
   padding: 18px 20px;
   border: 1px solid var(--c-danger);
-  border-radius: var(--radius, 10px);
+  border-radius: var(--radius);
   background: var(--c-surface);
 }
 .eb-head { display: flex; align-items: center; gap: 8px; color: var(--c-danger); }

@@ -271,7 +271,7 @@ onMounted(load)
 .chev-cell { color: var(--c-text-dim); }
 /* chevron 默认朝右；展开时转 90° 朝下（ICONS 无 chevron-down，复用同一个） */
 .rot { transform: rotate(90deg); transition: transform .15s ease; }
-.detail-row td { background: var(--c-surface-2, transparent); }
+.detail-row td { background: var(--c-surface-2); }
 .detail { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
 .detail > div { display: flex; gap: 10px; align-items: flex-start; }
 .k { color: var(--c-text-dim); font-size: var(--fs-12-5); min-width: 64px; }

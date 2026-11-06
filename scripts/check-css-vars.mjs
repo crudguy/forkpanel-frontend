@@ -7,6 +7,10 @@
 //
 // 判据：src 下所有 `var(--x)` 的 x 必须在 main.css 有 `--x:` 定义（或在模板的
 // `:style` / 内联 style 里动态定义）。
+// 反向判据（T-03 清死兜底后补）：**已定义的变量不许再带兜底值**——兜底分支永远
+// 走不到，只会让读代码的人把真实取值误判成另一个数。曾清掉 4 处：
+// `var(--radius-sm, 7px)` ×2、`var(--radius, 10px)`、`var(--c-surface-2, transparent)`。
+// 未定义变量的兜底仍合法（可能是模板动态注入），只走 soft 提示，不判红。
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,6 +35,7 @@ let refs = 0
 let styleBlocks = 0
 const missing = []
 const soft = []
+const deadFallbacks = []
 let fileCount = 0
 
 for (const f of walk(join(ROOT, 'src'))) {
@@ -44,6 +49,10 @@ for (const f of walk(join(ROOT, 'src'))) {
     // 捕获 var() 的其余参数：含逗号 = 自带兜底值（未定义时不致静默失效）。
     for (const m of line.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)([^)]*)\)/g)) {
       refs += 1
+      // --x 已有全局定义时兜底分支永远走不到：这类死兜底是误导，不是防御
+      if (defined.has(m[1]) && m[2].includes(',')) {
+        deadFallbacks.push(`${relative(ROOT, f)}:${i + 1}  ${m[1]}`)
+      }
       if (!defined.has(m[1]) && !local.has(m[1])) {
         const rec = `${relative(ROOT, f)}:${i + 1}  ${m[1]}`
         if (m[2].includes(',')) soft.push(rec)
@@ -68,10 +77,25 @@ if (refs < 1000) {
 } else {
   console.log(`  ✓ [2] 扫过 ${fileCount} 个文件、${refs} 处 var() 引用、${styleBlocks} 个 style 块`)
 }
+// 反向判据自检：用样本证明「已定义变量 + 逗号」确实能被 m[2] 抓到，
+// 否则下面 deadFallbacks 恒为空，判据会静默退化成恒绿。
+const PROBE = 'x { padding: var(--radius-sm, 7px); }'
+const probe = /var\(\s*(--[a-zA-Z0-9-]+)([^)]*)\)/.exec(PROBE)
+if (!probe || probe[1] !== '--radius-sm' || !probe[2].includes(',')) {
+  console.error('  ✗ 死兜底正则自检失败：样本应解析出 --radius-sm 且带逗号')
+  failed = true
+}
 if (soft.length) {
   // 带兜底值的未定义变量不会静默失效（只是兜底成为唯一来源），不阻断但必须可见。
-  console.log(`  · [3a] ${soft.length} 处未定义但有兜底（建议顺手删掉死兜底）：`)
+  console.log(`  · [3a] ${soft.length} 处未定义但有兜底（合法，但优先给 token 一个定义）：`)
   for (const m of soft.slice(0, 10)) console.log(`      ${m}`)
+}
+if (deadFallbacks.length) {
+  console.error(`  ✗ ${deadFallbacks.length} 处死兜底（变量已定义，兜底值永不生效）：`)
+  for (const d of deadFallbacks.slice(0, 20)) console.error(`      ${d}`)
+  failed = true
+} else {
+  console.log('  ✓ [3c] 已定义变量的 var() 均未带死兜底')
 }
 if (missing.length) {
   console.error(`  ✗ ${missing.length} 处引用了未定义变量且无兜底（声明会静默失效）：`)
@@ -82,4 +106,4 @@ if (missing.length) {
 }
 
 if (failed) process.exit(1)
-console.log('PASS：CSS 变量引用全部有定义')
+console.log('PASS：CSS 变量引用全部有定义、无死兜底')
