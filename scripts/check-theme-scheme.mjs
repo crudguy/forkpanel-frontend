@@ -10,7 +10,7 @@
  *   ① index.html 的 <html> 不得写死 data-theme（静态首屏与运行时默认必须同向）
  *   ② main.css 的 :root / [data-theme='light'] 各有一处 color-scheme，且剔注释后
  *      全文件声明恰好 2 处 —— 先钉住「扫描抓到了」，再钉住「别处为 0」
- *   ③ theme.ts 的 getTheme 默认值仍是 'dark'（静态 :root 是暗色，两者不能分叉）
+ *   ③ theme.ts 的 getTheme 走白名单校验且默认 'dark'（静态 :root 是暗色，不能分叉）
  *   ④ 自动填充兜底规则含三条关键声明，且不含 box-shadow（会顶掉 :focus-visible
  *      的 3px 焦点环）；焦点环本身也必须还在
  *
@@ -104,8 +104,8 @@ if (schemeDecls.length !== 2) {
 
 // ③ 静态首屏是 :root 的暗色，运行时默认必须同向
 const getThemeBlock = blockAt(themeTs, 'function getTheme')
-if (!getThemeBlock || !/\|\|\s*'dark'/.test(getThemeBlock)) {
-  errors.push('theme.ts 的 getTheme 默认值不是 dark：会与静态 :root 的暗色首屏分叉')
+if (!getThemeBlock || !/isThemeMode/.test(getThemeBlock) || !/:\s*'dark'/.test(getThemeBlock)) {
+  errors.push('theme.ts 的 getTheme 缺「白名单校验 + dark 兜底」：会与静态 :root 的暗色首屏分叉')
 }
 
 // ④ 自动填充兜底 + 焦点环保全
@@ -144,6 +144,6 @@ if (errors.length) {
 console.log('== 主题声明 / 自动填充兜底守卫 ==')
 console.log('  ✓ [1] index.html 未写死 data-theme（静态首屏与运行时默认同向）')
 console.log('  ✓ [2] :root=dark / light=light，全文件 color-scheme 恰好 2 处')
-console.log('  ✓ [3] theme.ts 的 getTheme 默认值仍为 dark')
+console.log('  ✓ [3] theme.ts 的 getTheme 有白名单校验且默认 dark')
 console.log('  ✓ [4] 自动填充兜底三条声明齐备、无 box-shadow，焦点环仍在')
 console.log('PASS：主题声明与自动填充兜底完整')

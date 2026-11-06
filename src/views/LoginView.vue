@@ -15,6 +15,7 @@ import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
 import { generateStrongPassword, passwordPolicyOk } from '@/utils/password'
+import { themeMode, setTheme, THEME_OPTIONS } from '@/composables/theme'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -263,6 +264,17 @@ async function submitBootstrap() {
         忘记口令？在服务器执行 <code>panel passwd &lt;用户名&gt;</code>
       </p>
     </form>
+
+    <!-- 登录页没有顶栏/用户菜单，这里给独立三态入口。必须留在 .login 根层、
+         所有 v-if 表单之外，否则只有某一种 mode 才看得到。与用户菜单共用
+         THEME_OPTIONS + setTheme + themeMode，选中态同源。 -->
+    <div class="theme-seg" role="group" aria-label="界面主题">
+      <button v-for="o in THEME_OPTIONS" :key="o.value" type="button"
+        :class="{ on: themeMode === o.value }" :title="o.hint"
+        :aria-pressed="themeMode === o.value" @click="setTheme(o.value)">
+        <Icon :name="o.icon" :size="14" /> {{ o.label }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -295,4 +307,15 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13)
 }
 .pw-toggle:hover:not(:disabled) { color: var(--c-text); }
 .pw-actions { display: flex; gap: 8px; margin: -2px 0 2px; }
+/* 主题三态：与用户菜单的 .seg 同语义（品牌色底 + 加粗表达选中，不只靠颜色）。
+   ⚠ 全局 button 规则带 padding/border/background，这里逐项覆盖，别只用 color。 */
+.theme-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--c-border); border-radius: 999px; background: var(--c-glass); }
+.theme-seg button {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border: none; border-radius: 999px;
+  background: transparent; color: var(--c-text-dim);
+  font-size: var(--fs-12); cursor: pointer;
+}
+.theme-seg button:hover { color: var(--c-text); }
+.theme-seg button.on { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
 </style>

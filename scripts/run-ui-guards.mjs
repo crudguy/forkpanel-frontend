@@ -52,6 +52,8 @@ export const UI_GUARDS = [
   'check-unit-format.mjs',
   // 2026-11-06 登录页主题：静态 HTML 默认值、color-scheme、自动填充兜底（删了构建全绿）
   'check-theme-scheme.mjs',
+  // 2026-11-06 主题控制：三态接线与单一状态源（system 曾是 UI 到不了的假控制）
+  'check-theme-control.mjs',
 ]
 
 let failed = 0

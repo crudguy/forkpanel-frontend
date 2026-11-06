@@ -13,7 +13,7 @@ import { usePolling } from '@/composables/usePolling'
 import { whyDisabledForPath } from '@/composables/navPolicy'
 import { sysBadgeTip } from '@/composables/sysBadge'
 import { toast } from '@/composables/useToast'
-import { getTheme, setTheme, type ThemeMode } from '@/composables/theme'
+import { themeMode, setTheme, cycleTheme, THEME_OPTIONS } from '@/composables/theme'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { roleLabel, CAP } from '@/api/types'
@@ -30,8 +30,8 @@ const router = useRouter()
 // 不可用即隐藏整钮——避免"点过去才发现 501"。
 const assistOk = computed(() => whyDisabledForPath(auth, '/assistant') === null)
 
-// 表格密度（B8）：全站共享偏好，放用户菜单里与主题切换同级——它是"看的方式"，
-// 不是某一页的功能，塞进某个视图的工具条会让用户以为只影响那一页。
+// 表格密度（B8）：全站共享偏好，放用户菜单里——它是"看的方式"，不是某一页的
+// 功能，塞进某个视图的工具条会让用户以为只影响那一页。主题与时区同处此菜单。
 const { density, setDensity } = useTableDensity()
 
 // 时区（C4）：绝对时间按本地/UTC 显示，全站共享偏好，与密度同处用户菜单。
@@ -95,11 +95,11 @@ const SUBTITLES: Record<string, string> = {
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 
-const theme = ref<ThemeMode>(getTheme())
-function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  setTheme(theme.value)
-}
+// 主题：选中态来自 composables/theme 的模块级单例，顶栏快捷钮与用户菜单的
+// 三态分段控件共用它——不再各持一份 ref（各持一份会互相覆盖选中态）。
+const currentTheme = computed(() =>
+  THEME_OPTIONS.find((o) => o.value === themeMode.value) ?? THEME_OPTIONS[0],
+)
 
 const userMenu = ref(false)
 const pwdOpen = ref(false)
@@ -285,8 +285,12 @@ async function logout() {
           <span v-if="unread" class="badge-dot">{{ unread > 99 ? '99+' : unread }}</span>
         </RouterLink>
 
-        <button class="btn-icon ghost" :title="theme === 'dark' ? '切换到亮色' : '切换到暗色'" @click="toggleTheme">
-          <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
+        <!-- 快捷钮按 THEME_OPTIONS 顺序循环三态；精确选择在下方用户菜单里。
+             两处都只经 setTheme / cycleTheme 写同一份 themeMode，不会不同步。 -->
+        <button class="btn-icon ghost" type="button"
+          :title="`主题：${currentTheme.label}（点击切换到下一档）`"
+          :aria-label="`切换主题，当前${currentTheme.label}`" @click="cycleTheme">
+          <Icon :name="currentTheme.icon" :size="18" />
         </button>
 
         <!-- 真实 button + aria-expanded（审计 U12）：此前 div+click 不可键盘聚焦，
@@ -321,6 +325,16 @@ async function logout() {
                 <div>
                   <div class="m-name">{{ auth.me?.user }}</div>
                   <div class="m-sub">{{ roleLabel(auth.me?.role) }}</div>
+                </div>
+              </div>
+              <!-- 主题三态：与密度/时区同款 seg。system 此前只存在于类型里、
+                   二态 toggle 永远到不了（假控制），这里让它真正可选。 -->
+              <div class="mi-group">
+                <span class="mi-label" id="theme-mode-label">主题</span>
+                <div class="seg" role="group" aria-labelledby="theme-mode-label">
+                  <button v-for="o in THEME_OPTIONS" :key="o.value" type="button" class="seg-b"
+                    :class="{ on: themeMode === o.value }" :title="o.hint"
+                    :aria-pressed="themeMode === o.value" @click="setTheme(o.value)">{{ o.label }}</button>
                 </div>
               </div>
               <!-- 表格密度（B8）：三档切换后整页表格立刻跟着变，刷新后仍保持。
