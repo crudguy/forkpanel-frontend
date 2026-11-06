@@ -279,7 +279,9 @@ onMounted(() => { load(); loadFail2ban() })
             :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填要放行的端口')" @click="prepareApply">应用</button>
         </div>
         <p v-if="allowErr" class="err">{{ allowErr }}</p>
-        <RiskBanner level="warn" title="仅支持放行（allow）"
+        <!-- 说明条是本卡片最后一个元素：传 last 让间距翻到上方，否则会紧贴端口输入行、
+             同时把 14px 下边距叠在卡片 padding 上（看上去黏在编辑区底下）。 -->
+        <RiskBanner last level="warn" title="仅支持放行（allow）"
           text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
       </section>
 

@@ -21,6 +21,15 @@ const props = defineProps<{
   title?: string
   /** 提示正文（面向用户的完整句子） */
   text: string
+  /**
+   * 位于容器（卡片）内最后一个元素时置 true。
+   *
+   * 默认外边距 `0 0 14px` 是按「下方还有内容」设计的前置提示条：上间距交给上游、
+   * 下间距与后文分开。放在末尾时这个模型正好反了——上间距 0 会紧贴上方表单，
+   * 下间距 14px 又与容器 padding 叠成双倍留白，看上去像粘在操作区底部。
+   * 置 true 后间距整体翻到上方，底部留白交回容器 padding。
+   */
+  last?: boolean
 }>()
 
 const ICONS: Record<Level, string> = { info: 'info', warn: 'alert', danger: 'alert-circle' }
@@ -28,7 +37,7 @@ const level = props.level ?? 'info'
 </script>
 
 <template>
-  <div class="risk" :class="`is-${level}`" role="note">
+  <div class="risk" :class="[`is-${level}`, { 'is-last': props.last }]" role="note">
     <Icon :name="ICONS[level]" :size="18" class="ico" />
     <div class="body">
       <p v-if="title" class="t">{{ title }}</p>
@@ -48,6 +57,8 @@ const level = props.level ?? 'info'
   color: var(--c-text-dim);
 }
 .ico { flex: none; margin-top: 1px; color: var(--c-primary); }
+/* 末尾提示条：把间距从上-下（0 / 14）翻成上-下（14 / 0），与卡片 padding 不叠加。 */
+.risk.is-last { margin: 14px 0 0; }
 .body { min-width: 0; }
 .t { margin: 0 0 2px; font-weight: 600; font-size: var(--fs-13); color: var(--c-text); }
 .x { margin: 0; }
