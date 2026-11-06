@@ -9,7 +9,7 @@
 // （经 `forkpanel-backend/ci/check-ui-guards.sh`）都转发到本文件。
 //
 // ⚠ 2026-11-05 实测发现上面这句话当时是**提前写下的**：Makefile 从来没有转发过，
-//   18 个守卫（含为修 F/P 级问题专门加的 check-nav-policy / check-bulk-scope /
+//   当时 18 个守卫（含为修 F/P 级问题专门加的 check-nav-policy / check-bulk-scope /
 //   check-component-imports）在 `make check` 里一次都没执行过——它们只在有人手动
 //   跑 `npm run check:ui` 时生效。现已在后端补 `ci/check-ui-guards.sh` 并挂进
 //   `make guards`（前端仓缺失时**判红**，不是跳过）。
