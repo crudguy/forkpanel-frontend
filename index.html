@@ -2,8 +2,11 @@
 <!--
   CSP 由后端下发（nonce 化，无 inline script）。
   语言先给 zh-CN；面板支持中英双语，实际文案由前端 i18n 渲染。
+  ⚠ 不在此写死 data-theme：静态首屏用 main.css :root 的暗色默认值，运行时由
+    main.ts 的 applyTheme() 写入真实主题。两者必须同向，否则 CSS 先按浅色画一帧、
+    JS 再改深，登录页会闪一下浅色。CSP 禁 inline script，无法在 head 提前设置。
 -->
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

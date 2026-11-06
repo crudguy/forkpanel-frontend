@@ -50,6 +50,8 @@ export const UI_GUARDS = [
   'check-silent-catch.mjs',
   // 2026-11-06 F-21：单位标签 / 运行时长的单一事实源与两页接线（行为测试挡不住各写一份）
   'check-unit-format.mjs',
+  // 2026-11-06 登录页主题：静态 HTML 默认值、color-scheme、自动填充兜底（删了构建全绿）
+  'check-theme-scheme.mjs',
 ]
 
 let failed = 0
