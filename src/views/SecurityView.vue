@@ -281,7 +281,16 @@ async function doDisable() {
 
             <div v-else-if="mfaEnrolling" class="mfa-box">
               <div class="mfa-enroll">
-                <QrCode :text="mfaEnrolling.otpauth_uri" :size="168" />
+                <!-- 扫码卡片带品牌头：验证器 App 内的条目标徽由 App 自己按 issuer
+                     首字母生成（Microsoft Authenticator 取 "Fo"），协议层无法替换成
+                     面板 logo，所以品牌露出放在面板侧这张卡片上。 -->
+                <div class="qr-tile">
+                  <div class="qr-tile-head">
+                    <span class="qr-tile-logo"><Icon name="dog" :size="18" /></span>
+                    <span class="qr-tile-name">ForkPanel</span>
+                  </div>
+                  <QrCode :text="mfaEnrolling.otpauth_uri" :size="168" />
+                </div>
                 <div class="mfa-enroll-side">
                   <p class="muted">用验证器 App 扫左边的二维码；扫不了就在 App 里手动录入密钥：</p>
                   <p class="mono secret">{{ mfaEnrolling.secret }}</p>
@@ -395,6 +404,20 @@ async function doDisable() {
    不用 fixed 宽度，避免 320px 下把密钥挤出可视区 */
 .mfa-enroll { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 12px; }
 .mfa-enroll-side { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* 扫码卡片：底色取二维码静区同款 --qr-bg（两主题同值恒白），文字只能配
+   --qr-fg——正文色在亮色主题下是深灰、在这张白卡上会与暗色主题的白字互相打架。 */
+.qr-tile {
+  flex: none; padding: 7px 7px 4px; border-radius: var(--radius-md);
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--qr-bg); border: 1px solid var(--c-border);
+}
+.qr-tile-head { display: flex; align-items: center; gap: 7px; }
+.qr-tile-logo {
+  width: 24px; height: 24px; border-radius: 7px; flex: none;
+  display: grid; place-items: center; color: var(--c-on-accent);
+  background: var(--gradient);
+}
+.qr-tile-name { font-size: var(--fs-13); font-weight: 700; color: var(--qr-fg); letter-spacing: .2px; }
 .mfa-enroll-side p { margin: 0; }
 .secret { font-size: var(--fs-13); padding: 6px 8px; border-radius: var(--radius); user-select: all;
   background: color-mix(in srgb, var(--c-text-dim) 12%, transparent); }
