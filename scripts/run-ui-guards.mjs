@@ -54,6 +54,8 @@ export const UI_GUARDS = [
   'check-theme-scheme.mjs',
   // 2026-11-06 主题控制：三态接线与单一状态源（system 曾是 UI 到不了的假控制）
   'check-theme-control.mjs',
+  // 2026-11-06 视觉系统 A→C→B：圆角收敛 / 分段控件统一 / 次级按钮中性化
+  'check-visual-system.mjs',
 ]
 
 let failed = 0

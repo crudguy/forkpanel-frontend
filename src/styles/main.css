@@ -71,10 +71,15 @@
   --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.7);
   --glow: 0 0 0 1px rgba(255, 106, 61, 0.35), 0 10px 30px -10px rgba(255, 106, 61, 0.35);
 
-  --radius: 14px;
+  /* 圆角三档（A 阶段收敛）：此前 8 / 10 / 14 / 16 四档里 10 与 14 语义重叠，
+     都是「中等容器」却各写一份，同类卡片与页签容器的圆角因此对不上。
+     现在只留 xs=8（控件）/ md=12（容器）/ lg=16（浮层）三档，--radius 与
+     --radius-sm 作为语义别名指向 md，引用方零改动即可收敛。 */
+  --radius-md: 12px;
+  --radius: var(--radius-md);
   /* 弹窗专用：比卡片大一级，视觉上"浮起来"（.modal 使用它，勿再写死 12px） */
   --radius-lg: 16px;
-  --radius-sm: 10px;
+  --radius-sm: var(--radius-md);
   --radius-xs: 8px;
 
   /* ── 布局骨架尺寸（复盘的 S-03）：顶栏高度与 .content 内边距**只在这里定义一次** ──
@@ -329,7 +334,9 @@ a.btn-danger { border-color: var(--c-danger); }
 .btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: var(--c-on-accent); font-weight: 600; }
 .btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-sm { padding: 4px 10px; font-size: var(--fs-13); border-radius: var(--radius-xs); }
-.btn-icon { padding: 7px; width: 34px; height: 34px; }
+/* 34×34 图标钮改正圆：只承载一个图标，正方形带 8px 圆角在顶栏一串按钮里
+   最像「没画完的方块」，而正圆是这类控件唯一不会与输入框撞形的形态。 */
+.btn-icon { padding: 7px; width: 34px; height: 34px; border-radius: 999px; }
 /* 表格操作列：带 icon 与纯文字按钮混排时，inline-block 默认 baseline 对齐会让
    两者 top 相差 3px（实测数据库表「浏览/SQL」与「备份/恢复」），统一 middle 消除。 */
 td button { vertical-align: middle; }
