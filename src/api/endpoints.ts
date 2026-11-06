@@ -2,8 +2,8 @@
  * 接口契约表面（Interface Contract Surface）。
  *
  * ⚠️ 这是前端调用后端的**唯一路径来源**：组件禁止硬编码 /api/v1/* 字面量，
- * 一律从这里取。与后端 `docs/api/openapi.yaml` 一一对应；CI `ci/check-contract.sh`
- * 会校验本文件里的静态字面量都已在契约中声明。
+ * 一律从这里取。与后端 `docs/api/openapi.yaml` 一一对应；`ci/check-contract.sh`
+ * 校验本文件里的静态字面量都已在契约中声明（运行：`pnpm check:contract`）。
  *
  * 设计约定：
  * - 无路径参数的端点用单引号字面量（CI 可静态校验）。

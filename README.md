@@ -28,7 +28,7 @@
    一切平台差异读后端下发的 `capabilities` 位（见 `src/api/types.ts` 的 `CAP` 与 `unsupportedReason`）。
 2. **禁止 `v-html`**：后端内容一律用文本插值，杜绝 XSS。
 3. **统一 HTTP 客户端**：所有请求走 `src/api/client.ts`（自动附加 `X-CSRF-Token`、处理 401/CSRF 失效、错误码映射）。
-   禁止绕过 client 直接 `fetch`（门禁 `ci/check-contract.sh` 校验）。
+   禁止绕过 client 直接 `fetch`（门禁 `pnpm check:contract`，实现见 `ci/check-contract.sh`）。
 4. **能力矩阵驱动 UI**：能力位 `supported=false` 时，对应菜单/按钮置灰（tooltip 显示原因），而非渲染成 0 或假数据。
 
 ## 目录
