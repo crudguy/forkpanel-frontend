@@ -560,6 +560,12 @@ table.fixed tbody td:last-child { white-space: nowrap; }
 .filter:focus { outline: none; border-color: var(--c-primary); }
 
 .err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
+/* 紧跟表单行（`.row`：输入框 + 提交按钮）的校验错误补上方间距。
+   ⚠️ 不能把 margin-top 直接加进 `.err`：全站 36 处 `.err` 绝大多数是页面级错误
+   （紧跟 .tools-row / 区块标题），统一加间距会让整片内容无故下沉。
+   用相邻兄弟选择器只命中「表单行 → 错误」这一种结构（全站实测仅 2 处：
+   FirewallView 的端口校验、AssistantView 的问答提交），其余零影响。 */
+.row + .err { margin-top: 12px; }
 /* C8：错误态内联「重试」按钮（与 .err 同行，danger 描边）。点击调页面 load()，
    仅用于通用加载失败（网络/5xx）；isUnsupported 确定性错误与表单错误不加。 */
 .err-retry { color: var(--c-danger); border-color: var(--c-danger); background: transparent; margin-left: 8px; }
