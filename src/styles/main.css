@@ -234,18 +234,23 @@ html { scrollbar-width: thin; scrollbar-color: var(--c-border-strong) transparen
 a { color: var(--c-primary); text-decoration: none; }
 
 /* ── 基础控件 ── */
+/* 次级按钮中性化（B 阶段）：此前每个 button 都带 1px 描边 + --c-surface-2 底，
+   一屏里几十个次级按钮连成一片灰盒子，主操作反而被淹没。现在只让
+   「主操作 / 危险 / 激活 / 状态」上色，次级按钮靠 hover 出底与焦点环表达可点。
+   ⚠ 刻意不缩 padding、不动输入框描边：透明底已经削弱了轮廓，再收热区或
+     淡化输入框边框，会牺牲上一轮评估里最担心的「哪里能点、哪里能填」。 */
 button {
   font: inherit;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid transparent;
   border-radius: var(--radius-xs);
-  background: var(--c-surface-2);
+  background: transparent;
   color: var(--c-text);
   cursor: pointer;
   transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
 }
-button:hover:not(:disabled) { background: var(--c-hover); transform: translateY(-1px); border-color: var(--c-border-strong); }
+button:hover:not(:disabled) { background: var(--c-hover); transform: translateY(-1px); }
 button:active:not(:disabled) { transform: translateY(0); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
@@ -321,9 +326,9 @@ a[class*="btn-"] {
   font: inherit;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 7px 14px;
-  border-style: solid; border-width: 1px; border-color: var(--c-border-strong);
+  border-style: solid; border-width: 1px; border-color: transparent;
   border-radius: var(--radius-xs);
-  background: var(--c-surface-2);
+  background: transparent;
   color: var(--c-text);
   cursor: pointer;
   transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
