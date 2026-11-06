@@ -48,6 +48,8 @@ export const UI_GUARDS = [
   'check-nav-policy.mjs',
   // 2026-11-05 Q-11：静默 catch 必须自证理由（吞掉根因的代价是「界面正常但功能全关」）
   'check-silent-catch.mjs',
+  // 2026-11-06 F-21：单位标签 / 运行时长的单一事实源与两页接线（行为测试挡不住各写一份）
+  'check-unit-format.mjs',
 ]
 
 let failed = 0

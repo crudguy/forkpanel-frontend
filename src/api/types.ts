@@ -1036,14 +1036,46 @@ export function fmtTime(ts: number | null | undefined): string {
   return `${p(h)}:${p(mi)}`
 }
 
-/** 字节数格式化，如 `1.5 GB`。此前 FilesView/BackupsView/TrashPanel 各写一份，
- *  且 BackupsView 那份只到 MB（100GB 显示成 "102400.0 MB"）。 */
+/**
+ * 字节数格式化，如 `1.5 GiB`。此前 FilesView/BackupsView/TrashPanel 各写一份，
+ * 且 BackupsView 那份只到 MB（100GB 显示成 "102400.0 MB"）。
+ *
+ * ⚠ 单位标签一律用 IEC（KiB/MiB/GiB…）：本函数按 **1024** 递进，`1024³` 是 1 GiB
+ *   而不是 1 GB（=10⁹ B，差 7.4%）。F-21 之前全站用「十进制标签 + 二进制换算」，
+ *   同一个 `mem_used_kib` 在体检报告里叫 8.0 GiB、在概览里叫 8.0 GB；一并收口。
+ *   只改标签字符串，换算与数值都不变。
+ */
 export function fmtSize(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n) || n < 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
   let v = n, i = 0
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
   return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`
+}
+
+/**
+ * KiB 输入的系统指标格式化（体检报告的随页上下文）。
+ *
+ * 后端字段一律 `*_kib`（来源 /proc/meminfo 的 kB，内核语义 = KiB = 1024 B）。
+ * 从 AssistantView **等价搬来**（分档与小数位逐字未动），目的是让它进 .ts 可单测。
+ * ⚠ 概览进程列表的 fmtMem 分档不同（整数 MiB、无 KiB 档），不合并：Q-12 已裁决
+ *   「不同单位体系不为了去重而合并」，强行合并会把显示数值一起改掉。
+ */
+export function fmtKib(kib: number): string {
+  if (kib >= 1024 * 1024) return (kib / 1024 / 1024).toFixed(1) + ' GiB'
+  if (kib >= 1024) return (kib / 1024).toFixed(1) + ' MiB'
+  return kib + ' KiB'
+}
+
+/**
+ * 运行时长。三级精度（天/小时/分）——此前概览用这份、体检报告只到「天/小时」，
+ * 同一台机器两页差一个「12 分」。F-21 收口成一份，两页共用。
+ */
+export function fmtUptime(sec: number): string {
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60)
+  if (d > 0) return `${d} 天 ${h} 小时`
+  if (h > 0) return `${h} 小时 ${m} 分`
+  return `${m} 分`
 }
 
 /** 相对时间，如 `3 天前` / `2 小时前`。入参 Unix 秒。 */

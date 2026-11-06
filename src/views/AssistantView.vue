@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import type { AssistantReport, AssistantFinding } from '@/api/types'
+import { fmtKib, fmtUptime, type AssistantReport, type AssistantFinding } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -66,16 +66,6 @@ function worst(r: AssistantReport): 'crit' | 'warn' | 'ok' {
 
 const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重', warn: '风险', info: '提醒' }
 
-function fmtKib(kib: number): string {
-  if (kib >= 1024 * 1024) return (kib / 1024 / 1024).toFixed(1) + ' GiB'
-  if (kib >= 1024) return (kib / 1024).toFixed(1) + ' MiB'
-  return kib + ' KiB'
-}
-function fmtUp(sec: number): string {
-  const d = Math.floor(sec / 86400)
-  const h = Math.floor((sec % 86400) / 3600)
-  return d > 0 ? `${d} 天 ${h} 小时` : `${h} 小时`
-}
 </script>
 
 <template>
@@ -136,7 +126,7 @@ function fmtUp(sec: number): string {
               <span>内存 {{ fmtKib(t.report.ctx.mem_used_kib) }} / {{ fmtKib(t.report.ctx.mem_total_kib) }}</span>
               <span v-if="t.report.ctx.top_disk">磁盘 {{ t.report.ctx.top_disk.mount }} {{ t.report.ctx.top_disk.used_pct.toFixed(0) }}%</span>
               <span>进程 {{ t.report.ctx.proc_count }}</span>
-              <span>运行 {{ fmtUp(t.report.ctx.uptime_sec) }}</span>
+              <span>运行 {{ fmtUptime(t.report.ctx.uptime_sec) }}</span>
               <span class="scope-tag">域：{{ t.report.scope }}</span>
             </div>
 

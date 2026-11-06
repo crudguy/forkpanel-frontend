@@ -609,7 +609,7 @@ function full(p: string) {
         <Icon name="trash" :size="15" /> 回收站
       </button>
       <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload"
-        :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MB 的文件自动走分片上传（中断后可续传）`">
+        :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MiB 的文件自动走分片上传（中断后可续传）`">
         <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
       </button>
       <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />

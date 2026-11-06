@@ -10,7 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
-import { CAP, fmtDateTime, type ServerNote, type ProcessInfo } from '@/api/types'
+import { CAP, fmtDateTime, fmtUptime, type ServerNote, type ProcessInfo } from '@/api/types'
 import MetricCard from '@/components/MetricCard.vue'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
@@ -145,18 +145,19 @@ async function poll() {
 }
 
 /** 顶端指标卡（B7）：数值与单位分行呈现，长复合值走「副行」——
-    此前整串塞进 value，在 5 列窄卡里折行、基线参差（实测「45.7 GB / 102.1 GB」折行）。
+    此前整串塞进 value，在 5 列窄卡里折行、基线参差（实测「45.7 GiB / 102.1 GiB」折行）。
     注：computed 内引用下方声明的 cpu/memPct 等——惰性求值，运行时均已就绪。 */
 const ovCards = computed<MetricItem[]>(() => {
+  // 1073741824 = 1024³，所以单位是 GiB / TiB，不能标 GB / TB
   const totalG = (ov.value?.disk_total_bytes ?? 0) / 1073741824
   const usedG = (ov.value?.disk_used_bytes ?? 0) / 1073741824
   const tb = totalG >= 1024
   const du = tb ? 1024 : 1
-  const dUnit = tb ? 'TB' : 'GB'
+  const dUnit = tb ? 'TiB' : 'GiB'
   return [
     { id: 'cpu', label: 'CPU', value: cpu.value, unit: '%', icon: 'cpu', tone: cpuTone(Number(cpu.value)), progress: Number(cpu.value) },
-    { id: 'mem', label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GB',
-      sub: `总量 ${((ov.value?.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB`,
+    { id: 'mem', label: '内存', value: ((ov.value?.mem_used_kib ?? 0) / 1048576).toFixed(1), unit: 'GiB',
+      sub: `总量 ${((ov.value?.mem_total_kib ?? 0) / 1048576).toFixed(1)} GiB`,
       icon: 'server', tone: 'cyan', progress: memPct.value },
     { id: 'disk', label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
       sub: `总量 ${(totalG / du).toFixed(1)} ${dUnit}`,
@@ -185,12 +186,6 @@ const shownCards = computed<MetricItem[]>(() => {
 function fmtNet(bps?: number) {
   const m = (bps ?? 0) / 1e6
   return m >= 1 ? m.toFixed(1) + ' Mbps' : ((bps ?? 0) / 1e3).toFixed(0) + ' Kbps'
-}
-function fmtUptime(s: number) {
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
-  if (d > 0) return `${d} 天 ${h} 小时`
-  if (h > 0) return `${h} 小时 ${m} 分`
-  return `${m} 分`
 }
 
 const cpu = computed(() => (ov.value ? (ov.value.cpu_pct ?? 0).toFixed(1) : '0'))
@@ -241,8 +236,8 @@ function cardDetail(id?: string): { rows: { k: string; v: string }[]; status: st
       const pct = memPct.value
       return {
         rows: [
-          { k: '已用内存', v: `${((o.mem_used_kib ?? 0) / 1048576).toFixed(1)} GB` },
-          { k: '总内存', v: `${((o.mem_total_kib ?? 0) / 1048576).toFixed(1)} GB` },
+          { k: '已用内存', v: `${((o.mem_used_kib ?? 0) / 1048576).toFixed(1)} GiB` },
+          { k: '总内存', v: `${((o.mem_total_kib ?? 0) / 1048576).toFixed(1)} GiB` },
           { k: '使用率', v: `${pct.toFixed(1)} %` },
         ],
         status: pct >= 95 ? '危险' : pct >= 90 ? '警告' : '正常',
@@ -254,7 +249,7 @@ function cardDetail(id?: string): { rows: { k: string; v: string }[]; status: st
       const usedG = o.disk_used_bytes / 1073741824
       const tb = totalG >= 1024
       const du = tb ? 1024 : 1
-      const dUnit = tb ? 'TB' : 'GB'
+      const dUnit = tb ? 'TiB' : 'GiB'
       const pct = diskPct.value
       return {
         rows: [
@@ -338,9 +333,11 @@ const tipProcErr = ref('')
 const PROC_TTL = 5000
 const procCache = new Map<'cpu' | 'mem', { ts: number; data: ProcessInfo[] }>()
 
+// 进程 RSS 专用：整数 MiB 分档，与 api/types.ts 的 fmtKib（三档、保留一位小数）
+// 口径不同，Q-12 已裁决不为了去重硬合并——只把十进制标签换成 IEC。
 function fmtMem(kib: number) {
   const mb = kib / 1024
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(0) + ' MB'
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GiB' : mb.toFixed(0) + ' MiB'
 }
 async function loadTopProcs(sort: 'cpu' | 'mem') {
   const cached = procCache.get(sort)

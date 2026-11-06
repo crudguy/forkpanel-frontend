@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  fmtSize, fmtDateTime, fmtDate, fmtTime, fmtAgo, certLevel,
+  fmtSize, fmtKib, fmtUptime, fmtDateTime, fmtDate, fmtTime, fmtAgo, certLevel,
 } from './types'
 
 afterEach(() => { vi.useRealTimers() })
 
 /**
  * 这些格式化函数被 20+ 个视图共用，且历史上出过「各写一份、档位不一致」的问题
- * （BackupsView 那份只到 MB，100GB 显示成 "102400.0 MB"）。收口到 types.ts 后，
- * 用边界值把档位与空值行为钉死。
+ * （BackupsView 那份只到 MB，100GiB 显示成 "102400.0 MB"——旧标签）。收口到
+ * types.ts 后用边界值把档位与空值行为钉死。F-21 起标签一律 IEC：1024 递进不能标 KB/MB/GB。
  */
 describe('fmtSize', () => {
   it('空值与非法值一律 —（不抛异常、不显示 NaN）', () => {
@@ -19,18 +19,56 @@ describe('fmtSize', () => {
     expect(fmtSize(Infinity)).toBe('—')
   })
 
-  it('按 1024 分档；字节级不补小数，KB 起保留一位', () => {
+  it('按 1024 分档；字节级不补小数，KiB 起保留一位；标签必须 IEC', () => {
     expect(fmtSize(0)).toBe('0 B')
     expect(fmtSize(1023)).toBe('1023 B')
-    expect(fmtSize(1024)).toBe('1.0 KB')
-    expect(fmtSize(1536)).toBe('1.5 KB')
-    expect(fmtSize(1024 ** 3)).toBe('1.0 GB')
-    expect(fmtSize(1024 ** 4)).toBe('1.0 TB')
-    expect(fmtSize(1024 ** 5)).toBe('1.0 PB')
+    expect(fmtSize(1024)).toBe('1.0 KiB')
+    expect(fmtSize(1536)).toBe('1.5 KiB')
+    expect(fmtSize(1024 ** 3)).toBe('1.0 GiB')
+    expect(fmtSize(1024 ** 4)).toBe('1.0 TiB')
+    expect(fmtSize(1024 ** 5)).toBe('1.0 PiB')
   })
 
-  it('超过最高档不再进位（PB 封顶，而不是溢出成 PBPB）', () => {
-    expect(fmtSize(1024 ** 6)).toBe('1024.0 PB')
+  it('超过最高档不再进位（PiB 封顶，而不是溢出成 PiBPiB）', () => {
+    expect(fmtSize(1024 ** 6)).toBe('1024.0 PiB')
+  })
+})
+
+
+/** F-21：从 AssistantView 等价搬来的 KiB 格式化。数值/小数位与旧版逐字一致，
+ *  这里钉的是「8 GiB 字段在体检报告与文件大小口径下同串」。
+ *  ⚠ 视图是否真的调它，行为测试挡不住，由 scripts/check-unit-format.mjs 钉接线。 */
+describe('fmtKib（F-21）', () => {
+  it('三档边界：KiB / MiB / GiB，标签一律 IEC', () => {
+    expect(fmtKib(0)).toBe('0 KiB')
+    expect(fmtKib(512)).toBe('512 KiB')
+    expect(fmtKib(1023)).toBe('1023 KiB')
+    expect(fmtKib(1024)).toBe('1.0 MiB')
+    expect(fmtKib(1536)).toBe('1.5 MiB')
+    expect(fmtKib(1024 * 1024)).toBe('1.0 GiB')
+    expect(fmtKib(8 * 1024 * 1024)).toBe('8.0 GiB')
+  })
+
+  it('同一个 8 GiB 的数据，KiB 口径与字节口径给出同串单位', () => {
+    expect(fmtKib(8 * 1024 * 1024)).toBe('8.0 GiB')
+    expect(fmtSize(8 * 1024 ** 3)).toBe('8.0 GiB')
+  })
+})
+
+/** F-21：两页共用三级精度。概览原实现等价搬来，体检报告旧 fmtUp 只到「天/小时」。 */
+describe('fmtUptime（F-21）', () => {
+  it('三级分档与概览原实现逐字一致', () => {
+    expect(fmtUptime(0)).toBe('0 分')
+    expect(fmtUptime(60)).toBe('1 分')
+    expect(fmtUptime(3600)).toBe('1 小时 0 分')
+    expect(fmtUptime(3 * 3600 + 12 * 60)).toBe('3 小时 12 分')
+    expect(fmtUptime(5 * 86400 + 3 * 3600 + 12 * 60)).toBe('5 天 3 小时')
+  })
+
+  it('体检报告的修复落在「不足一天」：旧 fmtUp 会丢掉 12 分', () => {
+    const sec = 3 * 3600 + 12 * 60
+    expect(fmtUptime(sec)).toBe('3 小时 12 分')
+    expect(fmtUptime(sec)).not.toBe('3 小时')
   })
 })
 

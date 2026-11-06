@@ -261,9 +261,9 @@ function versSourceLabel(s: string) {
   return s
 }
 
-/** 字节数的紧凑展示（版本行空间小，不做 KB/MB 自适应堆叠）。 */
+/** 字节数的紧凑展示（版本行空间小，不做 KiB/MiB 自适应堆叠）。 */
 function fmtBytes(n: number): string {
-  return n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`
+  return n >= 1024 ? `${(n / 1024).toFixed(1)} KiB` : `${n} B`
 }
 
 async function toggleVersions() {
