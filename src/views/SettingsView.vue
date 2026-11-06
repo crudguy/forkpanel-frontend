@@ -28,6 +28,7 @@ import Icon from '@/components/Icon.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
+import { llmTestBlockReason } from '@/utils/llmTestGate'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -81,12 +82,20 @@ const llmNarrative = ref(false)
 const showKey = ref(false)
 
 // ── C10 测试连接：真实探测 OpenAI 兼容 /v1/models ──
-// 带上当前输入（未填的字段后端回落到库里已存值），所以**不必先保存**就能验证
-// ——报告点名的问题正是"保存后才知道配置是否可用"。
+// F-02①：Endpoint 锁定已保存值（改动须先保存）、已存密钥绝不参与；Model 与本次
+// 输入的 Key 仍可先测后存——避免"保存后才知道配置是否可用"。
+// savedLlmEndpoint 是「后端已保存的 Endpoint」快照，比较基准不能取输入框自身。
+const savedLlmEndpoint = ref('')
 const testing = ref(false)
 const testResult = ref<LlmTestResult | null>(null)
 async function testConn() {
   if (testing.value) return
+  // F-02①：后端会硬拒绝「临时改 Endpoint」，这里提前给出可操作的提示。
+  const block = llmTestBlockReason(savedLlmEndpoint.value, llmEndpoint.value)
+  if (block) {
+    formError.value = block
+    return
+  }
   testing.value = true
   formError.value = ''
   testResult.value = null
@@ -158,6 +167,7 @@ async function load() {
   await run(async () => {
     report.value = await api.get<SettingsReport>(API.settings.get())
     llmEndpoint.value = report.value.runtime.endpoint ?? ''
+    savedLlmEndpoint.value = report.value.runtime.endpoint ?? ''
     llmModel.value = report.value.runtime.model ?? ''
     llmNarrative.value = report.value.runtime.narrative ?? false
   }, onError)
@@ -176,6 +186,8 @@ async function save() {
     }
     if (llmKey.value.trim()) patch['assistant.llm_api_key'] = llmKey.value.trim()
     report.value = await api.patch<SettingsReport>(API.settings.patch(), { settings: patch })
+    // 保存后基准要跟着更新，否则刚保存完点测试会被自己的前端误拦
+    savedLlmEndpoint.value = report.value.runtime.endpoint ?? ''
     llmKey.value = ''
     toast('设置已保存并即时生效')
   } catch (e) {
@@ -349,12 +361,14 @@ onMounted(async () => {
             <button class="btn-primary" :disabled="saving" @click="save">
               <Icon name="check" :size="15" /> {{ saving ? '保存中…' : '保存' }}
             </button>
-            <button class="btn-ghost" :disabled="testing || saving" title="用当前输入（未填字段取已存配置）真实请求 /v1/models，不改动任何配置" @click="testConn">
+            <button class="btn-ghost" :disabled="testing || saving" title="只请求已保存的 API Endpoint；不会使用已保存的 API Key" @click="testConn">
               <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
             </button>
           </div>
-          <p class="sec-note">「测试连接」用当前输入真实请求 <code class="mono">/v1/models</code>（未填的字段取已保存配置），
-            所以<strong>不必先保存</strong>就能知道配得对不对。</p>
+          <p class="sec-note">「测试连接」只请求<strong>已保存的 API Endpoint</strong> 的
+            <code class="mono">/v1/models</code>；改动 Endpoint 后请先保存。
+            <strong>不会使用已保存的 API Key</strong>——要验证密钥请在上方重新输入后再测试。
+            Model 与本次输入的 Key 仍可先测后存。</p>
         </template>
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>
