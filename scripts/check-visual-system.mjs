@@ -169,6 +169,19 @@ if (!ruleBody(css, '.btn-sm')?.includes('padding: 4px 10px')) {
   errors.push('.btn-sm 热区被缩小：中性化不许以牺牲点击目标为代价')
 }
 
+// B 阶段回归防护：登录页三个 submit 是裸 button，中性化后若不显式标主操作，
+// 会变成无底色无边框的文字，主操作彻底失去焦点（真机实测过一次）。
+const loginHtml = read('src/views/LoginView.vue').replace(/<!--[\s\S]*?-->/g, ' ')
+const submits = loginHtml.match(/<button\b[^>]*type="submit"[^>]*>/g) ?? []
+if (submits.length !== 3) {
+  errors.push(`登录页 submit 按钮 ${submits.length} 个（应为 3）：模板结构或扫描失效`)
+}
+for (const t of submits) {
+  if (!/class="btn-primary"/.test(t)) {
+    errors.push('登录页主操作按钮没带 .btn-primary：中性化后会变成透明裸按钮')
+  }
+}
+
 if (errors.length) {
   for (const e of errors) console.error(`  ✗ ${e}`)
   console.error(`FAIL：视觉系统守卫 ${errors.length} 项未通过`)
@@ -185,4 +198,5 @@ console.log('  ✓ [C3] 标签条状态点与下划线子页签同步')
 console.log('  ✓ [B1] 次级按钮/链接按钮透明底无描边，hover 不画回边框')
 console.log('  ✓ [B2] 主操作与危险仍实心，输入框描边与按钮热区保留')
 console.log('  ✓ [B3] 焦点环与 3px 光晕补偿仍在')
+console.log('  ✓ [B4] 登录页 3 个主操作都带 .btn-primary，未被中性化')
 console.log('PASS：圆角梯度 / 分段控件 / 次级按钮三阶段规范完整')

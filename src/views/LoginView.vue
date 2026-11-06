@@ -223,7 +223,7 @@ async function submitBootstrap() {
 
       <p v-if="bError" class="error" role="alert">{{ bError }}</p>
 
-      <button type="submit" :disabled="bBusy">
+      <button type="submit" class="btn-primary" :disabled="bBusy">
         {{ bBusy ? '创建中…' : '创建管理员账号' }}
       </button>
     </form>
@@ -231,7 +231,7 @@ async function submitBootstrap() {
     <!-- 首启：成功 -->
     <form v-else-if="mode === 'done'" class="card" @submit.prevent>
       <h1>初始化完成</h1>
-      <button type="submit" @click="mode = 'login'">去登录</button>
+      <button type="submit" class="btn-primary" @click="mode = 'login'">去登录</button>
     </form>
 
     <!-- 常规登录 -->
@@ -255,7 +255,7 @@ async function submitBootstrap() {
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
 
-      <button type="submit" :disabled="busy">
+      <button type="submit" class="btn-primary" :disabled="busy">
         {{ busy ? '登录中…' : '登录' }}
       </button>
 
