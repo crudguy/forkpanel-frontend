@@ -15,6 +15,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
 import Icon from '@/components/Icon.vue'
+import QrCode from '@/components/QrCode.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MetricCard from '@/components/MetricCard.vue'
@@ -279,12 +280,17 @@ async function doDisable() {
             </div>
 
             <div v-else-if="mfaEnrolling" class="mfa-box">
-              <p class="muted">用验证器 App 扫码，或手动录入下面的密钥：</p>
-              <p class="mono secret">{{ mfaEnrolling.secret }}</p>
-              <details>
-                <summary class="muted small">otpauth 地址（扫码用）</summary>
-                <p class="mono small break">{{ mfaEnrolling.otpauth_uri }}</p>
-              </details>
+              <div class="mfa-enroll">
+                <QrCode :text="mfaEnrolling.otpauth_uri" :size="168" />
+                <div class="mfa-enroll-side">
+                  <p class="muted">用验证器 App 扫左边的二维码；扫不了就在 App 里手动录入密钥：</p>
+                  <p class="mono secret">{{ mfaEnrolling.secret }}</p>
+                  <details>
+                    <summary class="muted small">otpauth 地址（手动导入用）</summary>
+                    <p class="mono small break">{{ mfaEnrolling.otpauth_uri }}</p>
+                  </details>
+                </div>
+              </div>
               <p class="warn-tip">
                 以下恢复码<b>只显示这一次</b>，请立即保存——手机丢失时它们是唯一的登录途径。
               </p>
@@ -385,6 +391,11 @@ async function doDisable() {
 .ops-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .small { font-size: var(--fs-12); }
 .mfa-box { margin-top: 8px; }
+/* 二维码与「密钥/URI 备选路径」并排；容器太窄时（手机）自动折成上下，
+   不用 fixed 宽度，避免 320px 下把密钥挤出可视区 */
+.mfa-enroll { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 12px; }
+.mfa-enroll-side { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.mfa-enroll-side p { margin: 0; }
 .secret { font-size: var(--fs-13); padding: 6px 8px; border-radius: var(--radius); user-select: all;
   background: color-mix(in srgb, var(--c-text-dim) 12%, transparent); }
 .codes { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: var(--fs-12-5); }
