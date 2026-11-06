@@ -75,8 +75,11 @@ describe('状态机', () => {
   })
   it('停滞检测：超过 STALL_MS 无事件 → stalled；来一条日志即恢复', () => {
     const p = createInstallProgress()
-    const t0 = Date.now()
     p.start(); p.taskAccepted(); p.onProgress(10, 'Get:1')
+    // ⚠ t0 必须在事件之后取值：onProgress 内部用 Date.now() 记 lastEventAt，
+    //   两次真实时钟采样只要间隔 ≥1ms，`t0 + STALL_MS + 1 - lastEventAt` 就不再
+    //   大于 STALL_MS ⇒ 55 worker 并发下偶发翻红（2026-11-06 全量实测到一次）。
+    const t0 = Date.now()
     p.tick(t0 + STALL_MS + 1)
     expect(p.stalled.value).toBe(true)
     p.onLog('Get:2 ...')
