@@ -231,12 +231,21 @@ async function save() {
     return
   }
   try {
-    await api.post(API.files.write(), {
+    // ⚠ 必须是 PUT：契约 `/files/write` 只注册了 PUT（后端 `route(..., put(files::write))`）。
+    // 此前写成 api.post，浏览器发 POST ⇒ 405 Method Not Allowed ⇒ 保存永远失败，
+    // 而文案只显示「请求失败，请稍后重试」。后端 e2e-files.sh 用 `put /files/write`
+    // 直接打接口，所以后端侧全绿、前端这条接线错了整整一版无人发现。
+    // 判据：`ci/check-api-method.py` 比对前端调用方法与 openapi 契约。
+    await api.put(API.files.write(), {
       path: joinPath(editing.value.dir, editing.value.name),
       content: editing.value.content,
       // 乐观锁：带上读到的 mtime，被别人改过则拒绝覆盖
       expect_mtime: editing.value.mtime,
     })
+    // 成功反馈走 toast（与建目录/重命名/改权限/删除/恢复一致）。此前保存成功只是
+    // 让编辑器消失，没有任何确认 —— 在「保存会改磁盘上的真实文件」这个场景下，
+    // 用户无法区分「存上了」和「面板出错了但没报」。
+    toast(`已保存 ${editing.value.name}`)
     editing.value = null
     load()
   } catch (e) { error.value = errorText(e) }
@@ -835,6 +844,36 @@ function full(p: string) {
 </template>
 
 <style scoped>
+/* ── 工具行必须单行：路径一变长，整行折行会把「上传」挤成孤零零的第二行 ──
+   实测（1440 视口、路径 /tmp/fp-a7-test）：面包屑 154 + 筛选框 260 + 六个按钮 445
+   + 九个 gap 108 = 1099px，超出可用 1008px ⇒ 全局 `.tools-row{flex-wrap:wrap}` 把
+   最后一个 btn-primary（上传）单独甩到第二行，左侧留一大片空白，观感像「上传浮在
+   表格上方」而不是工具行的一部分。根目录路径短时不触发，所以只在进二级目录后才出现。
+   改为 nowrap：空间不足时先压筛选框（260 → min-width 140），再让面包屑内部折行；
+   窄屏仍由下面 <=1200 的图标化媒体查询兜底。
+   ⚠ 只覆盖文件页，不动全局 `.tools-row`（其它视图没有面包屑，折行语义不同）。 */
+/* 除筛选框外**一律不收缩**：按钮一旦被压窄，「新建文件夹」这类四字标签会折成两行，
+   整行高度从 44px 涨到 61px —— 比原来「上传单独掉一行」更难看（实测）。
+   唯一允许收缩的是筛选框：变窄仍能输入、仍能看全已输入的词，是这里唯一「缩了不丢信息」的元素。
+   间距同步从全局 12px 收到 8px：六个按钮 + 搜索框 + 面包屑在 1200–1400 区间
+   每 1px 都吃紧，12px 时 1366 视口仍会横向溢出 35px（实测 scrollWidth 959 / clientWidth 924）。 */
+.fp-head-row > .tools-row { flex-wrap: nowrap; gap: 8px; }
+/* 除筛选框外**一律不收缩**：按钮一旦被压窄，「新建文件夹」这类四字标签会折成两行，
+   整行高度从 44px 涨到 61px —— 比原来「上传单独掉一行」更难看（实测）。
+   唯一允许收缩的是筛选框：变窄仍能输入、仍能看全已输入的词，是这里唯一「缩了不丢信息」的元素。 */
+.fp-head-row > .tools-row > *:not(.fsearch) { flex-shrink: 0; }
+.fp-head-row > .tools-row > .spacer { flex-shrink: 1; }
+/* ≤1300 回到可换行：工具行的六个按钮**没有「文字换图标」的降级**（只有表格行内的
+   .acts-ico 有），1280 及以下硬撑 nowrap 会横向溢出 65–144px（实测）。换行是这些档位
+   的既有行为，保持不变。
+   ⚠ 已知残留：1280 视口下「上传」仍会单独掉到第二行。要根治得给工具行按钮补
+   「≤1400 只留图标」的降级（模板里给文字包 <span class="btn-label"> 并补 aria-label），
+   属独立一件事，未在本批次做。 */
+@media (max-width: 1350px) {
+  .fp-head-row > .tools-row { flex-wrap: wrap; gap: 12px; }
+}
+/* 面包屑不参与收缩：被压窄会内部折行（3 段路径也折成两行）。 */
+.fp-head-row > .tools-row > .crumbs { flex: 0 0 auto; }
 /* 多页签标签栏（2026-10-16）：与容器页 TabBar 同源但形态不同——可关闭标签条
    vs 导航分段。两者共享 --seg-* token，激活态一律浅底 + 品牌色文字 + 加粗。
    标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，不抢走 tools-row
@@ -868,7 +907,7 @@ th.sortable.on { color: var(--c-primary); }
    第三份边框/高度/背景的副本）——这里只做布局与尺寸，外观全部继承 main.css 的
    `input` 基础规则（含 :focus-visible 的主色环与 placeholder 色）。
    搜索图标绝对定位在框内左侧，输入框给 padding-left 让位。 */
-.fsearch { position: relative; display: flex; align-items: center; flex: 0 1 260px; min-width: 140px; }
+.fsearch { position: relative; display: flex; align-items: center; flex: 0 1 260px; min-width: 120px; }
 .fsearch > .icon { position: absolute; left: 9px; color: var(--c-text-dim); pointer-events: none; }
 .fsearch-in { padding: 7px 26px 7px 29px; font-size: var(--fs-13); }
 /* 清除按钮：有内容才出现（v-if），压住原生 type=search 的取消叉（宽度给它留出）。 */

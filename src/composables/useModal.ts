@@ -119,7 +119,17 @@ export function useModal(
       if (v) {
         push()
         opener = document.activeElement as HTMLElement | null
-        nextTick(() => focusables()[0]?.focus())
+        nextTick(() => {
+          // 优先聚焦**第一个可编辑字段**，而不是 DOM 顺序第一个可聚焦元素。
+          // 模板里首个可聚焦元素几乎总是右上角的 X（关闭）——于是「新建文件夹」
+          // 「重命名」「确认删除（要输确认词）」这些弹窗打开后，用户得先按两次
+          // Tab 才能开始打字。实测（2026-11-09 真机）：FilesView 的通用输入弹窗
+          // 打开后 document.activeElement 是 `<button aria-label="关闭">`。
+          // 无输入字段的浮层（回收站 / 日志 / 帮助）行为不变，仍落到首个按钮。
+          const list = focusables()
+          const field = list.find((el) => el.matches('input:not([type="hidden"]), textarea, select'))
+          ;(field ?? list[0])?.focus()
+        })
       } else {
         pop()
         closing = false
