@@ -28,7 +28,7 @@ describe('errorText', () => {
     expect(errorText(new ApiError(10008, 403, 'csrf'))).toBe('页面已过期，请刷新后重试')
     expect(errorText(new ApiError(10009, 501, 'firewall.manage'))).toBe('当前环境未接入该能力（缺少依赖或后端未实装）')
     expect(errorText(new ApiError(10005, 409, 'conflict: site name exists'))).toBe('已有同名资源，请换一个名称')
-    expect(errorText(new ApiError(40002, 400, 'validate failed'))).toBe('配置校验未通过，已自动回滚')
+    expect(errorText(new ApiError(40002, 400, 'validate failed'))).toBe('配置校验未通过，未写入磁盘')
     expect(errorText(new ApiError(50001, 400, 'path escape'))).toBe('路径超出允许范围')
     expect(errorText(new ApiError(80003, 0, 'timeout'))).toBe('操作超时')
   })

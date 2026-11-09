@@ -259,7 +259,7 @@ export function errorText(e: unknown): string {
     // 10005 = 冲突（重名等）。后端 message 是内部英文串（如 "conflict: site name exists"），
     // 直接透出等于把内部报错甩给用户——给一句中文，别让用户去猜英文。
     case 10005: return '已有同名资源，请换一个名称'
-    case 40002: return '配置校验未通过，已自动回滚'
+    case 40002: return '配置校验未通过，未写入磁盘'
     case 50001: return '路径超出允许范围'
     case 80003: return '操作超时'
     default:
