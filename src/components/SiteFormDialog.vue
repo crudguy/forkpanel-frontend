@@ -1193,7 +1193,8 @@ function confSpecChanged(): boolean {
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 操作条基础式样统一取 main.css 公共类 */
 
 /* 根证书引导与站点编辑都用宽版（宽度与滚动见公共 .modal.wide）；此处只补
-   sticky 操作条需要的「下内边距归零」——底部留白改由操作条自己承担。 */
+   「下内边距归零」——底部留白改由操作条自己承担（站点弹窗是 grid 行，
+   操作条自带 padding；公共 .modal-foot 吸底时同理）。 */
 .modal.wide { padding-bottom: 0; }
 /* 站点编辑弹窗：全屏面板 + 左侧分段导航（2026-10-11，B 方案）。
    结构：.modal(网格 标题 / 中部 / 操作条) > .modal-mid(导航 rail + .modal-body 滚动区)。
@@ -1267,9 +1268,10 @@ function confSpecChanged(): boolean {
 .modal-body .sector > .adv,
 .modal-body .sector > .hint-note { grid-column: 1 / -1; }
 .modal-body .sector-h { grid-column: 1 / -1; font-size: var(--fs-14); font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
-/* 通用宽版弹窗（CA 指引等）操作条吸底：站点弹窗已在上方用 grid 行固定，不受影响 */
-.modal.wide .modal-actions { position: sticky; bottom: 0; margin: 14px -20px 0;
-  padding: 12px 20px; background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
+/* 这里原先有一条「通用宽版弹窗操作条吸底」的本地规则（.modal.wide .modal-actions
+   自带 sticky + 硬编码 20px 负边距）。它是 scoped 的，只可能命中本组件自己渲染的元素，
+   而本组件唯一的 .modal-actions 就在 .modal-foot 里，已被上一条 `position: static;
+   margin: 0` 压掉——等于从未生效的死代码。吸底已收归 main.css 的公共 .modal-foot。 */
 
 /* ── 弹窗内的报错：标题行内的通用条（吸顶）+ 字段级红字，两者分工明确 ── */
 /* 通用消息条跟着公共 .modal-head **整体吸顶**（不再自己做第二个 sticky）：

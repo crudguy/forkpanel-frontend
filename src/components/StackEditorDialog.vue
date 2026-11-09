@@ -173,11 +173,16 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
         <span><b>具名卷会带项目名前缀</b>：这里写 <code>data:/data</code>，实际卷名是 <code>&lt;项目名&gt;_data</code>（compose 的默认行为）。</span>
       </p>
 
-      <div class="modal-actions">
-        <button class="btn-ghost" type="button" @click="modalClose">取消</button>
-        <button class="btn-primary" type="button" :disabled="busy" @click="submit">
-          {{ busy ? '保存中…' : '保存' }}
-        </button>
+      <!-- 服务数量可增，内容必然超过 88vh：操作条必须包进 .modal-foot 才会吸底
+           （公共 .modal-foot 是 sticky，见 main.css）。直接写 .modal-actions 时
+           实测「新建编排」单服务就溢出 139px、按钮在 y=926 / 视口底 846，看不见。 -->
+      <div class="modal-foot">
+        <div class="modal-actions">
+          <button class="btn-ghost" type="button" @click="modalClose">取消</button>
+          <button class="btn-primary" type="button" :disabled="busy" @click="submit">
+            {{ busy ? '保存中…' : '保存' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

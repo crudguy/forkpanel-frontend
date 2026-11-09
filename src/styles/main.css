@@ -686,8 +686,27 @@ table.fixed tbody td:last-child { white-space: nowrap; }
    危险动作一律用实心 .btn-danger（不再各处混用 .btn-primary.danger / .danger-btn /
    .btn-ghost.danger——三者在删客体页面上长得各不相同）。 */
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-/* 高内容弹窗：操作条吸底（内容比视口高时按钮不随内容滚走），依赖 .modal 的 flex column */
-.modal-foot { margin-top: auto; }
+/* 底部操作条：内容比视口高时**真吸底**，标题与关闭按钮同理吸顶。
+   ⚠️ 这里原先只有 `margin-top: auto`，却被注释写成「操作条吸底」——auto 只在内容不足
+      一屏时把操作条推到弹窗底部；内容一溢出它就照样跟着滚走（实测「创建容器」弹窗内容
+      1262px / 视口 790px，取消与创建按钮在 y=1258，必须滚到底才看得见）。注释与行为不符，
+      与 MEMORY 里「配置项假控制」同类：写着做了、其实没做。
+   做法与 .modal-head 完全对称：负 margin 把背景补到弹窗内边距之外（全走变量，改 padding
+   不必再动这里），sticky 的 bottom 取 --modal-py 的负值——否则操作条会浮在内边距上方
+   20px、下面漏一条正文穿出来。z-index 与 head 同级，压住滚过来的内容。
+   ⚠️ .modal.wide.site-modal 是 grid 三行布局，会把它覆写回 position:static（由 grid 行
+      天然吸底），那边不需要 sticky。 */
+.modal-foot {
+  position: sticky; bottom: calc(-1 * var(--modal-py)); z-index: 3;
+  /* 上 auto：内容不足一屏时操作条仍沉到弹窗底部。两者并存，不是两套逻辑。 */
+  margin: auto calc(-1 * var(--modal-px)) calc(-1 * var(--modal-py));
+  padding: 12px var(--modal-px) var(--modal-py);
+  background: var(--c-surface-2);
+  border-top: 1px solid var(--c-border);
+}
+/* 吸底容器自己给了 12px 上内边距 + 分隔线，内部操作条不再要那 16px（会叠成 28px）。
+   与 site-modal 里 `position: static; margin: 0` 同口径。 */
+.modal-foot .modal-actions { margin-top: 0; }
 /* 宽弹窗变体：多字段表单（站点编辑）与分步说明（根证书指引）用 */
 .modal.wide { width: min(620px, 94vw); }
 /* 纵向流式派生：内部子元素依次竖排并留缝。用于**没有 .blk 字段块**的弹窗
