@@ -26,14 +26,35 @@ defineProps<{
   title?: string
   /** 卡片级顶栏用小档；页级工具行省略此 prop */
   sm?: boolean
+  /**
+   * 横向空间紧张处（文件页工具行）：≤1400 视口把「刷新」二字收起，只留图标。
+   *
+   * ⚠ 必须是**显式开关**而不是全局行为：其余 23 处（大多在卡片顶栏）空间宽松，
+   *   「刷新」二字就是按钮的主要含义，不能被连带收起。
+   * ⚠ 文字被 CSS 收起后，唯一的可访问名称是 aria-label —— 模板里恒给
+   *   （有 title 用 title，否则「刷新」），否则读屏用户面对一个无名图标。
+   *   判据只能是**真机量宽度 + 读 aria-label**：jsdom 不求值媒体查询。
+   */
+  collapsible?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'click'): void }>()
 </script>
 
 <template>
-  <button class="btn-ghost" :class="{ 'btn-sm': sm }" :disabled="disabled" :title="title"
-    @click="emit('click')">
-    <Icon name="refresh" :size="sm ? 14 : 15" /> 刷新
+  <!-- 图标与文字之间不再靠模板空格分隔（`.btn-*` 是 inline-flex + gap:6px，
+       空格作为 flex 容器的文本节点会被丢掉），文字包进 <span> 才能被 CSS 收起。 -->
+  <button class="btn-ghost" :class="{ 'btn-sm': sm, collapsible }" :disabled="disabled"
+    :title="title" :aria-label="title || '刷新'" @click="emit('click')">
+    <Icon name="refresh" :size="sm ? 14 : 15" /><span class="tool-label">刷新</span>
   </button>
 </template>
+
+<style scoped>
+/* 只在显式声明 collapsible 的调用点收起文字（79 → 34px）。断点与文件页工具行的
+   「只留图标」降级同档（≤1400），两边必须一致，否则同一行里有的按钮收了字、
+   有的没收，宽度算不准。 */
+@media (max-width: 1400px) {
+  .collapsible .tool-label { display: none; }
+}
+</style>

@@ -56,3 +56,34 @@ describe('RefreshBtn：图标真的渲染（不是空自定义元素）', () => 
     expect(icon(m).querySelectorAll('path').length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * ≤1400 的「只留图标」降级只发生在**显式声明 collapsible 的调用点**（文件页工具行）。
+ * 字被 CSS 收起后，按钮的可访问名称只剩 aria-label —— 读屏用户唯一的信息来源。
+ * ⚠ jsdom 不求值媒体查询，所以「文字真的收起了没」只能在真机量（getComputedStyle
+ * 的 display + 按钮宽度）；这里钉住的是**文字是否可被 CSS 命中**与**名称是否还在**。
+ */
+describe('RefreshBtn：≤1400 只留图标（collapsible）不丢可访问名称', () => {
+  it('collapsible：文字包在 .tool-label 里（类名对不上则 CSS 收不到），且 aria-label 兜底为「刷新」', async () => {
+    m = await mountView({ component: RefreshBtn, props: { collapsible: true } })
+    const btn = m.host.querySelector('button')!
+    expect(btn.classList.contains('collapsible'), '缺这个类，媒体查询就收不起文字').toBe(true)
+    const label = btn.querySelector('.tool-label')
+    expect(label?.textContent?.trim(), '.tool-label 是隐藏文字的钩子，文字必须在里面').toBe('刷新')
+    expect(btn.getAttribute('aria-label'), '文字被收起后这是唯一的可访问名称').toBe('刷新')
+  })
+
+  it('collapsible + title：aria-label 用 title（更具体），不退回笼统的「刷新」', async () => {
+    m = await mountView({ component: RefreshBtn, props: { collapsible: true, title: '立即刷新一次文件列表' } })
+    const btn = m.host.querySelector('button')!
+    expect(btn.getAttribute('aria-label')).toBe('立即刷新一次文件列表')
+    expect(btn.getAttribute('title')).toBe('立即刷新一次文件列表')
+  })
+
+  it('未声明 collapsible：不带收字钩子（卡片顶栏那 20 处空间宽松，不能被连带收起）', async () => {
+    m = await mountView({ component: RefreshBtn, props: { sm: true } })
+    const btn = m.host.querySelector('button')!
+    expect(btn.classList.contains('collapsible')).toBe(false)
+    expect(btn.querySelector('.tool-label')?.textContent?.trim()).toBe('刷新')
+  })
+})

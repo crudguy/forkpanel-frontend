@@ -597,31 +597,47 @@ function full(p: string) {
         </template>
       </nav>
       <span class="spacer" />
-      <!-- 目录内过滤：只筛**当前目录已拉回的条目**（纯前端，不发请求）。
-           不提供「递归搜索」是刻意的——那需要后端新接口与遍历预算控制，
-           半成品的全文搜索会让用户以为「找不到 = 文件不存在」。
-           type=search 自带 Esc 清空提示；清除按钮另给，兼容不显示原生叉的浏览器。 -->
-      <div class="fsearch">
-        <Icon name="search" :size="14" />
-        <input v-model="filterQuery" class="fsearch-in" type="search"
-          :placeholder="entries.length ? `在 ${entries.length} 项中筛选…` : '筛选当前目录…'"
-          aria-label="筛选当前目录的文件名" autocomplete="off" spellcheck="false" />
-        <button v-if="filterQuery" class="fsearch-x" type="button" aria-label="清除筛选"
-          title="清除筛选" @click="filterQuery = ''"><Icon name="close" :size="12" /></button>
+      <!-- 动作组：搜索框 + 帮助 + 显示隐藏 + 五个按钮。合成**一个** flex 项，
+           换行时整组一起下去——这样既不会出现「上传」单独掉在第二行的孤儿，
+           也不需要靠视口断点猜「这一行还放不放得下」（能不能放下取决于路径长度）。 -->
+      <div class="tools-actions">
+        <!-- 目录内过滤：只筛**当前目录已拉回的条目**（纯前端，不发请求）。
+             不提供「递归搜索」是刻意的——那需要后端新接口与遍历预算控制，
+             半成品的全文搜索会让用户以为「找不到 = 文件不存在」。
+             type=search 自带 Esc 清空提示；清除按钮另给，兼容不显示原生叉的浏览器。 -->
+        <div class="fsearch">
+          <Icon name="search" :size="14" />
+          <input v-model="filterQuery" class="fsearch-in" type="search"
+            :placeholder="entries.length ? `在 ${entries.length} 项中筛选…` : '筛选当前目录…'"
+            aria-label="筛选当前目录的文件名" autocomplete="off" spellcheck="false" />
+          <button v-if="filterQuery" class="fsearch-x" type="button" aria-label="清除筛选"
+            title="清除筛选" @click="filterQuery = ''"><Icon name="close" :size="12" /></button>
+        </div>
+        <HelpBtn title="文件管理说明" aria-label="文件管理说明" :expanded="helpOpen" @click="helpOpen = true" />
+        <label class="hid"><input type="checkbox" :checked="showHidden" @change="setShowHidden(($event.target as HTMLInputElement).checked)" /> 显示隐藏</label>
+        <!-- 工具行按钮的「文字 → 图标」降级（≤1400）。四个纯导航/辅助动作
+             （上级 / 刷新 / 新建文件夹 / 回收站）收成图标，合计省 192px。
+             「上传」是主操作且要显示分片进度文案（如 `big.iso（3/12 片）`），
+             隐藏文字会丢掉唯一的进度反馈，故保留文字。
+             ⚠ 文字被 CSS 隐藏后，可访问名称只剩 aria-label —— 每个降级按钮都必须带
+               （刷新按钮由 RefreshBtn 的 collapsible 分支自带），否则读屏用户面对
+               一排无名图标。判据只能在真机读 accessibility name，jsdom 不求值媒体查询。 -->
+        <button class="btn-ghost" :disabled="path === '/'" title="上一级目录" aria-label="上一级目录" @click="up">
+          <Icon name="chevron-left" :size="14" /><span class="tool-label">上级</span>
+        </button>
+        <RefreshBtn :disabled="loading" collapsible @click="() => load()" />
+        <button v-if="canWrite" class="btn-ghost" :disabled="loading" title="新建文件夹" aria-label="新建文件夹" @click="askMkdir">
+          <Icon name="plus" :size="15" /><span class="tool-label">新建文件夹</span>
+        </button>
+        <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" aria-label="回收站" @click="showTrash = true">
+          <Icon name="trash" :size="15" /><span class="tool-label">回收站</span>
+        </button>
+        <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload"
+          :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MiB 的文件自动走分片上传（中断后可续传）`">
+          <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
+        </button>
+        <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />
       </div>
-      <HelpBtn title="文件管理说明" aria-label="文件管理说明" :expanded="helpOpen" @click="helpOpen = true" />
-      <label class="hid"><input type="checkbox" :checked="showHidden" @change="setShowHidden(($event.target as HTMLInputElement).checked)" /> 显示隐藏</label>
-      <button class="btn-ghost" :disabled="path === '/'" @click="up"><Icon name="chevron-left" :size="14" /> 上级</button>
-      <RefreshBtn :disabled="loading" @click="() => load()" />
-      <button v-if="canWrite" class="btn-ghost" :disabled="loading" @click="askMkdir"><Icon name="plus" :size="15" /> 新建文件夹</button>
-      <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" @click="showTrash = true">
-        <Icon name="trash" :size="15" /> 回收站
-      </button>
-      <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload"
-        :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MiB 的文件自动走分片上传（中断后可续传）`">
-        <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
-      </button>
-      <input ref="fileInput" type="file" multiple hidden @change="onUploadFiles" />
     </div>
     </div>
 
@@ -844,36 +860,52 @@ function full(p: string) {
 </template>
 
 <style scoped>
-/* ── 工具行必须单行：路径一变长，整行折行会把「上传」挤成孤零零的第二行 ──
-   实测（1440 视口、路径 /tmp/fp-a7-test）：面包屑 154 + 筛选框 260 + 六个按钮 445
-   + 九个 gap 108 = 1099px，超出可用 1008px ⇒ 全局 `.tools-row{flex-wrap:wrap}` 把
-   最后一个 btn-primary（上传）单独甩到第二行，左侧留一大片空白，观感像「上传浮在
-   表格上方」而不是工具行的一部分。根目录路径短时不触发，所以只在进二级目录后才出现。
-   改为 nowrap：空间不足时先压筛选框（260 → min-width 140），再让面包屑内部折行；
-   窄屏仍由下面 <=1200 的图标化媒体查询兜底。
+/* ── 工具行 = 面包屑 + 动作组两段；放不放得下由**内容**决定，不靠视口断点 ──
+   历史（前两版都没治好的原因，别再走回去）：
+   ① 硬撑单行（flex-wrap:nowrap）：1440 视口下面包屑 154 + 筛选框 260 + 六个文字
+      按钮 445 + 九个间距 108 = 1099 > 可用 1008，全局 `.tools-row{wrap}` 于是把最后
+      一个 btn-primary（上传）单独甩到第二行，左侧留一大片空白。
+   ② 再补「≤某宽度就换行」的断点：**同一断点下放不放得下其实取决于路径有多长**
+      （5 段路径的面包屑 205px，比根目录多 145px），断点写在哪里都会留一段「已经溢出
+      但还没换行」的窗口（实测 1151 视口深路径溢出 60px）。
+   现在按内容布局：动作全部合成一个 `.tools-actions` flex 项，放不下就**整组**换行——
+   既没有「上传」孤儿，也不再有断点窗口。
    ⚠ 只覆盖文件页，不动全局 `.tools-row`（其它视图没有面包屑，折行语义不同）。 */
-/* 除筛选框外**一律不收缩**：按钮一旦被压窄，「新建文件夹」这类四字标签会折成两行，
-   整行高度从 44px 涨到 61px —— 比原来「上传单独掉一行」更难看（实测）。
-   唯一允许收缩的是筛选框：变窄仍能输入、仍能看全已输入的词，是这里唯一「缩了不丢信息」的元素。
-   间距同步从全局 12px 收到 8px：六个按钮 + 搜索框 + 面包屑在 1200–1400 区间
-   每 1px 都吃紧，12px 时 1366 视口仍会横向溢出 35px（实测 scrollWidth 959 / clientWidth 924）。 */
-.fp-head-row > .tools-row { flex-wrap: nowrap; gap: 8px; }
-/* 除筛选框外**一律不收缩**：按钮一旦被压窄，「新建文件夹」这类四字标签会折成两行，
-   整行高度从 44px 涨到 61px —— 比原来「上传单独掉一行」更难看（实测）。
-   唯一允许收缩的是筛选框：变窄仍能输入、仍能看全已输入的词，是这里唯一「缩了不丢信息」的元素。 */
-.fp-head-row > .tools-row > *:not(.fsearch) { flex-shrink: 0; }
-.fp-head-row > .tools-row > .spacer { flex-shrink: 1; }
-/* ≤1300 回到可换行：工具行的六个按钮**没有「文字换图标」的降级**（只有表格行内的
-   .acts-ico 有），1280 及以下硬撑 nowrap 会横向溢出 65–144px（实测）。换行是这些档位
-   的既有行为，保持不变。
-   ⚠ 已知残留：1280 视口下「上传」仍会单独掉到第二行。要根治得给工具行按钮补
-   「≤1400 只留图标」的降级（模板里给文字包 <span class="btn-label"> 并补 aria-label），
-   属独立一件事，未在本批次做。 */
-@media (max-width: 1350px) {
-  .fp-head-row > .tools-row { flex-wrap: wrap; gap: 12px; }
+.fp-head-row > .tools-row { gap: 12px; align-items: center; }
+/* 动作组：搜索框 + 帮助 + 显示隐藏 + 五个按钮。`flex-shrink:1` 只在「已经单独占一行
+   且仍放不下」时才生效（极窄视口），此时组内再按 flex-wrap 折行。 */
+.fp-head-row > .tools-row > .tools-actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  flex: 0 1 auto; min-width: 0;
 }
+/* 组内除筛选框外**一律不收缩**：按钮一旦被压窄，「新建文件夹」这类四字标签会折成
+   两行，整行高度 38 → 61px —— 比换行更难看（实测）。唯一允许收缩的是筛选框：
+   变窄仍能输入、仍能看全已输入的词，是这里唯一「缩了不丢信息」的元素。 */
+.fp-head-row > .tools-row > .tools-actions > *:not(.fsearch) { flex-shrink: 0; }
 /* 面包屑不参与收缩：被压窄会内部折行（3 段路径也折成两行）。 */
 .fp-head-row > .tools-row > .crumbs { flex: 0 0 auto; }
+/* ≥1401（文字态）：动作组**不参与盒模型**（display:contents），子项直接成为工具行的
+   flex 项 —— 几何与拆组前逐像素一致，只是多了一个可收缩的筛选框（260 → 120）来吸收
+   1440 视口那 90px 缺口。
+   ⚠ 这里必须 contents，不能留成 flex 项：wrap 容器的 max-content 在 Chrome 里**不等于**
+     子项之和（实测文字态内容 873px，容器 max-content 只报 846px），于是 1600 视口明明
+     放得下，动作组也会被压窄并把自己的「上传」挤到第二行。 */
+@media (min-width: 1401px) {
+  .fp-head-row > .tools-row { flex-wrap: nowrap; gap: 8px; }
+  .fp-head-row > .tools-row > .tools-actions { display: contents; }
+}
+/* 工具行文字的「只留图标」降级（≤1400）。与表格行内的 `.btn-label` 刻意分开：
+   那个类由全局 main.css 在 ≤1200 隐藏，而工具行需要更早（≤1400）降级，共用一个类
+   会互相牵制。实测（真机 getBoundingClientRect）：上级 78→44、刷新 79→45、
+   新建文件夹 121→45、回收站 93→45，合计省 192px。
+   ⚠ 文字收起后按钮的可访问名称只剩 aria-label（见模板注释），别删。 */
+@media (max-width: 1400px) {
+  .fp-head-row > .tools-row .tool-label { display: none; }
+  /* 筛选框基准宽度同步收到 140：换行判据取的是**基准宽度**，仍按 260 算会让这一行
+     更早整组换行（深路径：205 + 12 + 681 = 898 > 1200 视口的 786；收到 140 后
+     205 + 12 + 561 = 778，刚好还是一行）。 */
+  .fp-head-row > .tools-row > .tools-actions > .fsearch { flex: 0 1 140px; min-width: 110px; }
+}
 /* 多页签标签栏（2026-10-16）：与容器页 TabBar 同源但形态不同——可关闭标签条
    vs 导航分段。两者共享 --seg-* token，激活态一律浅底 + 品牌色文字 + 加粗。
    标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，不抢走 tools-row
