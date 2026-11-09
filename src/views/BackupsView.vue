@@ -101,7 +101,10 @@ function scrollToCreate() {
 const helpOpen = ref(false)
 const form = ref({
   kind: 'panel', target: 'panel', dest_dir: 'plans',
-  cron_expr: '', keep_count: 7, encrypt: false,
+  // 默认开启（G12）：产物一旦离机（U 盘 / 对象存储 / 换机器），未加密等于交出
+  // 整站配置与审计明细。代价是「主密钥丢失 = 备份全废」，由风险横幅 + 文档 §4.1
+  // 的异地离线副本兜住。真要明文必须自己取消勾选。
+  cron_expr: '', keep_count: 7, encrypt: true,
   remote: emptyRemote(),
 })
 
@@ -222,7 +225,7 @@ async function create() {
     })
     form.value = {
       kind: 'panel', target: 'panel', dest_dir: 'plans',
-      cron_expr: '', keep_count: 7, encrypt: false, remote: emptyRemote(),
+      cron_expr: '', keep_count: 7, encrypt: true, remote: emptyRemote(),
     }
     await load()
   } catch (e) { error.value = errorText(e) }
@@ -679,7 +682,7 @@ const selName = ref('')
     <HelpDrawer :open="helpOpen" title="备份说明" @close="helpOpen = false">
       <p>备份计划把面板数据或站点文件定期落盘，可选远端副本（WebDAV / S3 兼容）做异地容灾。</p>
       <h4>加密与主密钥</h4>
-      <p>开启<code>静态加密</code>后产物用 AES-256-GCM 加密。<b>主密钥不落库</b>——一旦丢失，备份将永远无法解密，请先单独把主密钥备份到安全的地方。</p>
+      <p><code>静态加密</code><b>默认开启</b>：产物用 AES-256-GCM 加密，拷贝离机也不会直接泄露整站配置与审计明细。<b>主密钥不落库</b>——一旦丢失，备份将永远无法解密，所以开启的同时必须把主密钥导出到<b>异地离线介质</b>（<code>panel key export</code> + <code>panel key check</code> 验证）。确实要明文产物时，在新建计划里取消勾选即可。</p>
       <h4>远端副本</h4>
       <p>凭据加密存储且<b>永不回显</b>。远端上传失败<b>不会</b>让本地备份判为失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。</p>
       <h4>恢复</h4>
