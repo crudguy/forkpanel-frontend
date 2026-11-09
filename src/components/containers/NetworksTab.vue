@@ -12,6 +12,9 @@ import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
+// 驱动列的展示规则（docker 对内置 none 网络输出字面串 `null`，`|| '—'` 兜不住）：
+// 判据在 containerStatus.ts 有单测，这里只接线。
+import { driverText } from '@/components/containers/containerStatus'
 import { useRowLoad } from '@/composables/useRowLoad'
 
 /** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
@@ -30,13 +33,6 @@ const { loading, error, load } = useRowLoad(
 )
 
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
-
-/**
- * docker 对内置 `none` 网络的 DRIVER 输出的是**字面串** `null`（不是 JSON null），
- * 所以 `n.driver || '—'` 兜不住，界面直接显示一个像 bug 的 "null"。
- * 只在它确实是那个哨兵值时换成破折号，其余原样透传（bridge / host / overlay / macvlan）。
- */
-function driverText(d: string) { return !d || d === 'null' ? '—' : d }
 
 /** 短 ID（12 位，与 `docker network ls` 默认展示一致）；完整值放 title 供核对。 */
 function shortId(id: string) {

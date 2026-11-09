@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { statusDetail } from './containerStatus'
+import { statusDetail, driverText } from './containerStatus'
 
 /**
  * 判据是「界面会不会出现中英重复」与「有用信息会不会被吞掉」两件事，
@@ -35,5 +35,24 @@ describe('statusDetail：状态列要不要显示 docker 原始串', () => {
   it('status 为空（后端字段缺失）时不渲染空 span', () => {
     expect(statusDetail('created', '')).toBe('')
     expect(statusDetail('running', '   ')).toBe('')
+  })
+})
+
+/**
+ * 网络表的驱动列：docker 对内置 `none` 网络返回的是**字面串** `null`。
+ * 判据是「界面上不会出现一个像 bug 的 null」，同时真实驱动不被误伤。
+ */
+describe('driverText：网络驱动列的展示', () => {
+  it.each(['bridge', 'host', 'overlay', 'macvlan'])('真实驱动原样透传：%s', (d) => {
+    expect(driverText(d)).toBe(d)
+  })
+
+  it('docker 的字面串 null（内置 none 网络）显示破折号，而不是 null', () => {
+    expect(driverText('null')).toBe('—')
+  })
+
+  it('字段缺失 / 空白同样显示破折号', () => {
+    expect(driverText('')).toBe('—')
+    expect(driverText('   ')).toBe('—')
   })
 })
