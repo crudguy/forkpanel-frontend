@@ -20,5 +20,26 @@ export default defineConfig({
     // 不用 globals：显式 import，与项目「不靠魔法全局注入」的一贯偏好一致，
     // 也让 TS 无需额外引入 vitest/globals 类型。
     globals: false,
+    // 行覆盖率基线（报告 §3.9 / G10）：`vitest run --coverage` 复现。
+    // ⚠ `include` 必须显式钉住 src 全域。缺省时 v8 provider 只统计「被测试
+    //   import 到的文件」，一个从未被任何测试引用的模块会**完全不进分母**——
+    //   覆盖率因此虚高，而数字看起来还挺像回事（本项目「空集恒真」的同族）。
+    //   反向也要小心：`include` 若写错成匹配不到任何文件，分母塌成 0、
+    //   百分比回到 100%，必须靠「看不出文件数」这一点来识别。
+    coverage: {
+      provider: 'v8',
+      // text-summary 给人看；json-summary 给脚本取 total（coverage/coverage-summary.json）
+      reporter: ['text-summary', 'json-summary'],
+      include: ['src/**/*.{ts,vue}'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/**/*.d.ts',
+        // 测试基建：mount 辅助与 apiFake 只在测试里被用，计入分母没有意义
+        'src/test/**',
+        // 由 openapi.yaml 生成的契约类型，行数随接口增长，不代表手写复杂度
+        // （与 ci/check-frontend-loc.sh 的豁免清单同一理由）
+        'src/api/types.ts',
+      ],
+    },
   },
 })
