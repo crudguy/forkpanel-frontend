@@ -31,6 +31,13 @@ const { loading, error, load } = useRowLoad(
 
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
 
+/**
+ * docker 对内置 `none` 网络的 DRIVER 输出的是**字面串** `null`（不是 JSON null），
+ * 所以 `n.driver || '—'` 兜不住，界面直接显示一个像 bug 的 "null"。
+ * 只在它确实是那个哨兵值时换成破折号，其余原样透传（bridge / host / overlay / macvlan）。
+ */
+function driverText(d: string) { return !d || d === 'null' ? '—' : d }
+
 /** 短 ID（12 位，与 `docker network ls` 默认展示一致）；完整值放 title 供核对。 */
 function shortId(id: string) {
   if (id.startsWith('sha256:')) return id.slice(7, 19)
@@ -67,7 +74,7 @@ function shortId(id: string) {
           <tbody>
             <tr v-for="n in networks" :key="n.id">
               <td class="mono ellipsis" :title="n.name">{{ n.name }}</td>
-              <td class="mono dim">{{ n.driver || '—' }}</td>
+              <td class="mono dim">{{ driverText(n.driver) }}</td>
               <td class="mono dim">{{ n.scope || '—' }}</td>
               <td class="mono dim" :title="n.id">{{ shortId(n.id) }}</td>
             </tr>

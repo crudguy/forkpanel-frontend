@@ -20,6 +20,7 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import { statusDetail } from '@/components/containers/containerStatus'
 import { usePolling } from '@/composables/usePolling'
 import { useRowLoad } from '@/composables/useRowLoad'
 import { toast } from '@/composables/useToast'
@@ -233,38 +234,45 @@ async function saveRemark(c: Container, v: string) {
                   :saver="(v: string) => saveRemark(c, v)" />
               </td>
               <td class="mono dim ellipsis" :title="c.image">{{ c.image }}</td>
-              <td>
-                <span class="badge" :class="containerStateBadge(c.state)">{{ containerStateLabel(c.state) }}</span>
-                <span class="dim status-text ellipsis" :title="c.status">{{ c.status }}</span>
+              <!-- 状态单元格：中文徽章（归一化）+ docker 原始串（运行时长 / 退出码）。
+                   ⚠ 原始串不是恒显示的：created / dead / removing 下 docker 的 Status
+                   就是个与 State 同义的单词（`Created`），与徽章重复，拼起来是
+                   「已创建Created」。取舍逻辑在 containerStatus.ts（有单测）。
+                   原始串单行 ellipsis：`Restarting (0) 7 seconds ago` 换行会把行高从
+                   52 撑到 67，整张表高度随状态抖动；完整值在 title 里。 -->
+              <td class="state-cell">
+                <span class="badge" :class="containerStateBadge(c.state)" :title="c.status">{{ containerStateLabel(c.state) }}</span>
+                <span v-if="statusDetail(c.state, c.status)" class="dim status-text"
+                  :title="c.status">{{ statusDetail(c.state, c.status) }}</span>
               </td>
               <td class="mono dim ellipsis" :title="c.ports">{{ c.ports || '—' }}</td>
               <td class="mono dim col-opt" :title="c.id">{{ shortId(c.id) }}</td>
-              <td class="nowrap">
-                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !startable(c)"
+              <td class="nowrap acts">
+                <button class="btn-ghost btn-sm" aria-label="启动" :disabled="!canManage || isActing(c.id) || !startable(c)"
                   :title="startable(c) ? '' : '当前状态不可启动'" @click="act(c, 'start')">
-                  <Icon name="play" :size="13" /> 启动
+                  <Icon name="play" :size="13" /><span class="btn-label">启动</span>
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !stoppable(c)"
+                <button class="btn-ghost btn-sm" aria-label="停止" :disabled="!canManage || isActing(c.id) || !stoppable(c)"
                   :title="stoppable(c) ? '' : '未在运行'" @click="act(c, 'stop')">
-                  <Icon name="stop" :size="13" /> 停止
+                  <Icon name="stop" :size="13" /><span class="btn-label">停止</span>
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id) || !restartable(c)"
+                <button class="btn-ghost btn-sm" aria-label="重启" :disabled="!canManage || isActing(c.id) || !restartable(c)"
                   :title="restartable(c) ? '' : '仅运行中可重启'" @click="act(c, 'restart')">
-                  <Icon name="restart" :size="13" /> 重启
+                  <Icon name="restart" :size="13" /><span class="btn-label">重启</span>
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || isActing(c.id)"
+                <button class="btn-ghost btn-sm" aria-label="编辑" :disabled="!canManage || isActing(c.id)"
                   :title="canManage ? '编辑资源限制（CPU / 内存 / 重启策略；其余属性需重建容器）' : '需要 container.manage 权限'"
                   @click="editTarget = c">
-                  <Icon name="edit" :size="13" /> 编辑
+                  <Icon name="edit" :size="13" /><span class="btn-label">编辑</span>
                 </button>
-                <button class="btn-ghost btn-sm" :disabled="!canViewLogs || isActing(c.id)"
+                <button class="btn-ghost btn-sm" aria-label="日志" :disabled="!canViewLogs || isActing(c.id)"
                   :title="canViewLogs ? '查看容器日志（docker logs，只读最近 N 行）' : '需要 container.view 权限'"
                   @click="logsTarget = c; logsOpen = true">
-                  <Icon name="file" :size="13" /> 日志
+                  <Icon name="file" :size="13" /><span class="btn-label">日志</span>
                 </button>
-                <button class="btn-ghost btn-sm danger" :disabled="!canManage || isActing(c.id) || !removable(c)"
+                <button class="btn-ghost btn-sm danger" aria-label="删除" :disabled="!canManage || isActing(c.id) || !removable(c)"
                   :title="removable(c) ? '' : '正在重启中'" @click="delTarget = c; delForce = false">
-                  <Icon name="trash" :size="13" /> 删除
+                  <Icon name="trash" :size="13" /><span class="btn-label">删除</span>
                 </button>
               </td>
             </tr>
@@ -309,7 +317,60 @@ col.w-id { width: 9%; }
 col.w-acts { width: 470px; }
 td.remark-cell { padding: var(--row-py) 10px; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-text { margin-left: 8px; font-size: var(--fs-12); }
+/* 状态单元格：徽章 + 原始串一行，原始串吃满剩余宽度并 ellipsis。
+   td 用 flex 只为「徽章不缩、原始串可缩」；行高仍由表格行决定。 */
+td.state-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+td.state-cell > .badge { flex: 0 0 auto; }
+.status-text { flex: 1 1 auto; min-width: 0; font-size: var(--fs-12);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 窄列下原始串只剩 40px（1280 视口实测，显示成 `Exi…`），既没信息量又把徽章挤到左边。
+   1200 档起只留徽章，完整 status 挂在徽章的 title 上（含运行时长 / 退出码）。
+   ≥1401 状态列有 172px，`Exited (0) 6 minutes ago` 能显示大半，仍保留单行 ellipsis。 */
+@media (max-width: 1400px) {
+  td.state-cell > .status-text { display: none; }
+}
+/* ── 操作列默认只留图标 ──────────────────────────────────────────────
+   六个**带文字**的按钮要 470px，而这张表有 7 列。实测（真机 getBoundingClientRect）：
+   表格宽 = 视口 − 280，弹性列（镜像）只剩  0.53 × 表格宽 − 640：
+     1440 视口 → 镜像 0px（名称列同时掉到 107px）
+     1280 视口 → 镜像 0px
+     1600 视口 → 镜像 60px（`hello-world:latest` 要 148px，只显示出 `he...`）
+   即镜像名在 1767 以下视口全部读不全 —— 文字态在常见分辨率下没有可用空间。
+   故默认图标化（按钮 67→29、列宽 470→230），镜像列回到 1600:230 / 1440:239 / 1280:130。
+   ⚠ 可访问名称靠 aria-label（模板里恒给）：按钮 title 是「可操作时为空」的条件
+     表达式，图标化后只靠 title 会出现无名按钮。
+   ⚠ 超宽屏（≥1767）才恢复文字，那里镜像列还有 ≥148px。 */
+col.w-acts { width: 230px; }
+.acts .btn-label { display: none; }
+.acts .btn-sm { padding: 4px 7px; }
+/* 图标化后按钮之间没有任何间距（实测相邻按钮 gap 全为 0）：模板里按钮间的换行空白
+   被 Vue 的 whitespace 压缩丢掉了，而 `td` 不是 flex 容器、没有 gap 可用。
+   靠相邻兄弟选择器补 6px，不加在 td 上（td 改 flex 会脱离表格布局）。 */
+.acts .btn-sm + .btn-sm { margin-left: 6px; }
+@media (min-width: 1767px) {
+  col.w-acts { width: 470px; }
+  .acts .btn-label { display: inline; }
+  .acts .btn-sm { padding: 4px 10px; }
+}
+/* ── 窄屏紧凑档（≤1140）─────────────────────────────────────────────
+   图标化之后镜像列在 1200 还有 88px，但再窄就归零：实测 1024 视口
+   表格宽 744 = 170(备注) + 230(操作) + 47%(名称/状态/端口/ID)，
+   弹性的镜像列拿到 **0px**（表头 `th` 宽 0、scrollWidth 51 被 overflow 裁掉，
+   整列连表头都看不见）。800 视口同样为 0。
+   这里不隐藏任何一列（备注是用户数据、ID 是对 docker 命令的唯一线索），
+   而是把四个定宽/百分比列各让一点：备注 170→140、状态 13→12%、
+   端口 11→10%、ID 9→7%，操作列 230→216（按钮内容 174 + 5×6 间距 +
+   2×8 内边距 = 210，留 6px 余量）。合计让出 ~66px，1024 下镜像回到 ~66px。
+   ⚠ 按钮内容宽度是实测值（6 个 29px 图标按钮），改按钮尺寸时要同步改这里。 */
+@media (max-width: 1140px) {
+  col.w-cremark { width: 140px; }
+  col.w-state { width: 12%; }
+  col.w-ports { width: 10%; }
+  col.w-id { width: 7%; }
+  col.w-acts { width: 216px; }
+  .acts { padding-left: 8px; padding-right: 8px; }
+  .acts .btn-sm + .btn-sm { margin-left: 4px; }
+}
 .seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--seg-bg); }
 .seg button { border: 0; border-radius: var(--seg-item-radius); background: transparent; color: var(--seg-fg); font-size: var(--fs-13); padding: 6px 12px; cursor: pointer; }
 .seg button.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }

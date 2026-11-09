@@ -138,7 +138,9 @@ label > span { color: var(--c-text); font-weight: 500; }
 /* 工具条：行数选择 + 两个开关 + 刷新/复制；整体随弹窗宽度换行。 */
 .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
 .bar-item { flex-direction: row; align-items: center; gap: 6px; }
-.bar-item > span { font-weight: 400; color: var(--c-text-dim); }
+/* 标签不换行：工具条是 flex，「行数」这种两字标签曾被压成 18px 宽、
+   竖排折成两行（实测 labelW 18 / labelH 42），选中框左侧看着像排版坏了。 */
+.bar-item > span { font-weight: 400; color: var(--c-text-dim); white-space: nowrap; }
 .bar-item.check { cursor: pointer; user-select: none; }
 .bar-item.check input { width: 15px; height: 15px; accent-color: var(--c-primary); }
 .bar select {
