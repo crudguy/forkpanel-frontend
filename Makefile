@@ -6,7 +6,7 @@
 #
 # 一律走 node_modules/.bin 下的二进制，不依赖 npm/pnpm/yarn 哪一种包管理器。
 
-.PHONY: check typecheck test coverage contract build ui size
+.PHONY: check typecheck test coverage contract build ui size audit
 
 # 提交前 / CI 跑这个。
 # 注意 build 自身已含 vue-tsc --noEmit，故不另跑 typecheck（省一次全量类型检查）；
@@ -52,3 +52,15 @@ ui:
 # 此前这条目标只有报告、没有门禁，体积只能靠人眼看。
 size:
 	node scripts/size-report.mjs
+
+# 依赖安全审计：pnpm audit 读 pnpm-lock.yaml 查已知漏洞。与后端 `make audit`
+# 同款——**刻意不进 check**（要访问 registry 的 audit 端点，网络抖动不该连带
+# 拖红主门禁），由 .github/workflows/ci.yml 的独立 audit job 调用。
+# ⚠ 这条不走 node_modules/.bin：audit 是包管理器自身的命令，没有二进制入口。
+#   CI 里 pnpm/action-setup 已装好 pnpm；本机 pnpm 不在 PATH ⇒ 由 corepack
+#   （Node 22 自带）提供 pnpm 10。if/else 的退出码就是被选中命令的退出码，
+#   漏洞导致 audit 非零时不会被兜底吞掉。
+#   禁止加 --ignore / --audit-level / -D / --prod / --ignore-registry-errors
+#   （缩小范围或把失败吞掉 ⇒ 恒绿），由后端仓 ci/check_audit_wired.py 钉死。
+audit:
+	@if command -v pnpm >/dev/null 2>&1; then pnpm audit; else corepack pnpm@10 audit; fi

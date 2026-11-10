@@ -34,3 +34,24 @@ jobs:
       # 「本地绿、CI 红」或「CI 跑的是另一套」
       - name: 门禁（make check）
         run: make check
+
+  audit:
+    name: 依赖安全审计（pnpm audit）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # pnpm audit 是包管理器自身的命令（读 pnpm-lock.yaml），不需要 install；
+      # 少装一次依赖也少跑一次 postinstall 脚本。setup-node 只为提供 node 运行时。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 单独 job：registry 的 audit 端点抖动时只红这一个 job，不连带拖红主门禁。
+      # 与后端仓的 audit job 同口径；接线由后端仓 ci/check_audit_wired.py 钉死。
+      - name: 审计（make audit）
+        run: make audit
