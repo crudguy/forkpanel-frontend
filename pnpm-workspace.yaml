@@ -3,3 +3,6 @@ packages:
 allowBuilds:
   esbuild: true
   vue-demi: true
+overrides:
+  minimatch@>=7.0.0 <11.0.1: '11.0.1'
+  source-map-js@>=1.0.0 <1.2.2: '1.2.2'
