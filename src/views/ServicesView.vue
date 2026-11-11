@@ -16,6 +16,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText, isUnsupported, ApiError } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { toast } from '@/composables/useToast'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls } from '@/composables/useTableControls'
 // ServiceConfig / ServiceJournal / fmtDateTime 随服务弹窗一并移出（现由详情页使用）
 import { CAP, PackageInfo, PackageCatalogEntry, UpgradablePkg, ServiceInfo as Svc, ServiceRef, TaskRun, TASK_FINISHED, serviceStateLabel, serviceStateBadge, taskStateBadge, taskStateLabel } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -141,10 +144,11 @@ function toggleSvcSort(k: SvcSortKey) {
     sortDir.value = 'asc'
   }
 }
-function svcSortInd(k: SvcSortKey): string {
-  if (sortKey.value !== k) return ''
-  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
-}
+// ── 分页（项目规范：共享 useTableControls，仅用它切片；排序仍走上面的 sortSvcRows）──
+// 服务数通常不大，默认每页 100 足够一屏看完，超过才出现分页脚与每页条数选择。
+const { size, page, pageCount, pageRows, total, changeSize, gotoPage } = useTableControls({
+  rows: svcRows, defaultSize: 100, columns: [],
+})
 
 // 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
 // 高亮按 route.path 精确比对）。顺序与侧边栏菜单名「软件与服务」对齐：
@@ -627,14 +631,14 @@ async function doConfirmed() {
               <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
             </colgroup>
             <thead><tr>
-              <th class="sortable" :class="{ active: sortKey === 'name' }" @click="toggleSvcSort('name')">服务{{ svcSortInd('name') }}</th>
-              <th class="sortable" :class="{ active: sortKey === 'state' }" @click="toggleSvcSort('state')">状态{{ svcSortInd('state') }}</th>
-              <th class="num sortable" :class="{ active: sortKey === 'enabled' }" @click="toggleSvcSort('enabled')">开机自启{{ svcSortInd('enabled') }}</th>
-              <th class="sortable" :class="{ active: sortKey === 'desc' }" @click="toggleSvcSort('desc')">说明{{ svcSortInd('desc') }}</th>
+              <SortTh label="服务" :active="sortKey === 'name'" :dir="sortDir" @sort="toggleSvcSort('name')" />
+              <SortTh label="状态" :active="sortKey === 'state'" :dir="sortDir" @sort="toggleSvcSort('state')" />
+              <SortTh class="num" label="开机自启" :active="sortKey === 'enabled'" :dir="sortDir" @sort="toggleSvcSort('enabled')" />
+              <SortTh label="说明" :active="sortKey === 'desc'" :dir="sortDir" @sort="toggleSvcSort('desc')" />
               <th class="acts-col">操作</th>
             </tr></thead>
             <tbody>
-              <tr v-for="s in svcRows" :key="s.name" class="rowlink" @click="goDetail(s)">
+              <tr v-for="s in pageRows" :key="s.name" class="rowlink" @click="goDetail(s)">
                 <td class="svc-name" :title="s.name">
                   {{ s.name }}
                   <span v-if="!s.managed" class="badge"
@@ -651,6 +655,10 @@ async function doConfirmed() {
               </td></tr>
             </tbody>
           </table>
+          <!-- 超过一页才出现分页脚（每页条数 10/20/50/100 可选） -->
+          <TablePager v-if="total > size"
+            :total="total" :page="page" :size="size" :page-count="pageCount"
+            @update:page="gotoPage" @update:size="changeSize" />
         </div>
         </template>
       </div>

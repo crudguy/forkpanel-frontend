@@ -7,6 +7,7 @@ import { CAP, AUDIT_RESULT_KEYS, auditResultLabel, fmtDateTime } from '@/api/typ
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import TablePager from '@/components/TablePager.vue'
 import { useAsync } from '@/composables/useAsync'
 
 /**
@@ -127,7 +128,7 @@ function goto(p: number) {
   const n = Math.min(Math.max(1, p), totalPages.value)
   if (n !== page.value) { page.value = n; load() }
 }
-function changeSize() { page.value = 1; load() }
+function changeSize(n: number) { pageSize.value = n; page.value = 1; load() }
 function toggle(i: number) { expanded.value = expanded.value === i ? null : i }
 
 function resClass(r: string) {
@@ -227,18 +228,9 @@ onMounted(load)
           </div>
         </div>
 
-        <!-- 分页 -->
-        <div class="pager">
-          <span class="muted">共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
-          <span class="spacer" />
-          <select v-model.number="pageSize" @change="changeSize">
-            <option :value="20">20 条/页</option>
-            <option :value="50">50 条/页</option>
-            <option :value="100">100 条/页</option>
-          </select>
-          <button class="btn-ghost btn-sm" :disabled="page <= 1" @click="goto(page - 1)">上一页</button>
-          <button class="btn-ghost btn-sm" :disabled="page >= totalPages" @click="goto(page + 1)">下一页</button>
-        </div>
+        <!-- 分页（共享 TablePager：每页条数 10/20/50/100 回传后端 page_size） -->
+        <TablePager :total="total" :page="page" :size="pageSize" :page-count="totalPages"
+          @update:page="goto" @update:size="changeSize" />
       </template>
     </template>
   </div>

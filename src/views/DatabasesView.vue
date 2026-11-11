@@ -34,6 +34,7 @@ import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import TablePager from '@/components/TablePager.vue'
 import {
   dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, tableOptionLabel,
   type DbLevelInput, type DbSchemaNode,
@@ -60,7 +61,8 @@ interface Conn {
 interface DbTableInfo { name: string; rows: number; engine: string | null; kind?: 'table' | 'view' }
 interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
 
-const PAGE_SIZE = 50
+// 浏览数据表时的每页条数（可切换，回传到后端 page_size）；默认 50 沿用历史值
+const browseSize = ref(50)
 
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
@@ -239,6 +241,10 @@ const browse = ref<{
   data: RowsData | null
 } | null>(null)
 
+/** 浏览分页的总页数（依赖当前表的总行数与每页条数） */
+const browsePageCount = computed(() =>
+  browse.value?.data ? Math.max(1, Math.ceil(browse.value.data.total / browseSize.value)) : 1)
+
 /** 导出进行中：置灰按钮，避免连点产生多个 object URL 与重复下载 */
 const exporting = ref(false)
 
@@ -312,12 +318,16 @@ async function loadTables() {
   finally { if (seq === browseSeq) b.tablesLoading = false }
 }
 
+function changeBrowseSize(n: number) {
+  browseSize.value = n
+  if (browse.value?.table) pickTable(browse.value.table, 1)
+}
 async function pickTable(table: string, page = 1) {
   const b = browse.value; if (!b || !table) { if (b) b.data = null; return }
   const seq = ++browseSeq
   const connId = b.conn.id, db = b.db
   b.table = table
-  const url = `${API.db.rows(connId, db, table)}?page=${page}&page_size=${PAGE_SIZE}`
+  const url = `${API.db.rows(connId, db, table)}?page=${page}&page_size=${browseSize.value}`
   try {
     const data = await api.get<RowsData>(url)
     if (seq !== browseSeq) return   // 已翻到别的页/表，丢弃本次结果
@@ -585,13 +595,11 @@ async function exportCsv() {
               </tbody>
             </table>
           </div>
-          <div class="pager">
-            <button class="btn-ghost btn-sm" :disabled="browse.data.page <= 1" @click="pickTable(browse.table, browse.data.page - 1)">上一页</button>
-            <span class="dim">第 {{ browse.data.page }} 页 · 共 {{ browse.data.total }} 行</span>
-            <button class="btn-ghost btn-sm"
-              :disabled="browse.data.page * PAGE_SIZE >= browse.data.total"
-              @click="pickTable(browse.table, browse.data.page + 1)">下一页</button>
-          </div>
+          <TablePager v-if="browse.data"
+            :total="browse.data.total" :page="browse.data.page" :size="browseSize"
+            :page-count="browsePageCount"
+            @update:page="p => browse && browse.table && pickTable(browse.table, p)"
+            @update:size="changeBrowseSize" />
         </div>
         <!-- 选了表但没取到行：单独说，不占用"这一层没有对象"那句话 -->
         <p v-else-if="browse.table" class="dim">正在读取「{{ browse.table }}」的数据…</p>
