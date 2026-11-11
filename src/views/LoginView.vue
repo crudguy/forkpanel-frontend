@@ -307,15 +307,37 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-13)
 }
 .pw-toggle:hover:not(:disabled) { color: var(--c-text); }
 .pw-actions { display: flex; gap: 8px; margin: -2px 0 2px; }
-/* 主题三态：与用户菜单的 .seg 同语义（品牌色底 + 加粗表达选中，不只靠颜色）。
-   ⚠ 全局 button 规则带 padding/border/background，这里逐项覆盖，别只用 color。 */
-.theme-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius); background: var(--c-glass); }
+/* 主题三态：滑动拨块。选中态交给底层 ::before 滑块表达（品牌色块滑动 +
+   transition），按钮文字浮于其上；只换此处 CSS，THEME_OPTIONS / setTheme /
+   守卫不动。⚠ 三格等宽必须用 grid 1fr 显式均分 + 容器给定宽度：flex:1
+   (basis 0) 下 fit-content 容器会收缩到各项 min-content 之和，「跟随系统」
+   被压到比文字窄而换行（已实测踩坑）。按钮 nowrap 只是不换行的下限，
+   等宽前提是容器宽 ≥ 3×最宽项（360/3=120 > 「跟随系统」≈91，安全）。
+   :has() 不被支持时滑块停首位、文字选中态仍正确（优雅降级）。 */
+.theme-seg {
+  position: relative; display: grid; grid-template-columns: repeat(3, 1fr);
+  width: 100%; max-width: 360px;
+  padding: 3px; border: 1px solid var(--seg-border); border-radius: var(--seg-radius);
+  background: var(--c-glass);
+}
+.theme-seg::before {
+  content: ""; position: absolute; top: 3px; bottom: 3px; left: 3px;
+  width: calc((100% - 6px) / 3);
+  border-radius: var(--seg-item-radius);
+  background: var(--seg-on-bg);
+  transition: transform .22s cubic-bezier(.4, 0, .2, 1);
+  z-index: 0; pointer-events: none;
+}
 .theme-seg button {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px; border: none; border-radius: var(--seg-item-radius);
+  position: relative; z-index: 1; min-width: 0; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 0; border: none; border-radius: var(--seg-item-radius);
   background: transparent; color: var(--seg-fg);
   font-size: var(--fs-12); cursor: pointer;
 }
 .theme-seg button:hover { color: var(--c-text); }
-.theme-seg button.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
+.theme-seg button.on { color: var(--seg-on-fg); font-weight: 600; }
+.theme-seg:has(button:nth-child(1).on)::before { transform: translateX(0); }
+.theme-seg:has(button:nth-child(2).on)::before { transform: translateX(100%); }
+.theme-seg:has(button:nth-child(3).on)::before { transform: translateX(200%); }
 </style>
