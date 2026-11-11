@@ -23,6 +23,7 @@ import {
 } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { serviceAbout } from '@/composables/serviceAbout'
+import { serviceActionDisabled } from '@/composables/serviceActionState'
 import { findPkgByUnit, pkgAboutRows } from '@/composables/pkgUnitLookup'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
@@ -47,8 +48,12 @@ const svc = ref<ServiceInfo | null>(null)
 const loading = ref(true)
 const error = ref('')
 const actError = ref('')
-const busy = ref('')            // `${name}:${action}`
+const busy = ref('')            // `${name}:${action}`（启停/改自启/保存配置；整组操作锁）
 const notFound = ref(false)
+
+/** 整组操作锁：任一启停/改自启操作进行中时为真。
+ *  用于按钮 `:disabled`——操作在跑时不该再叠一次动作。 */
+const anyOp = computed(() => !!busy.value)
 
 /**
  * 「说明」区的展示模型（判定规则在 composables/serviceAbout.ts，有单测）。
@@ -126,6 +131,26 @@ async function loadSvc() {
   finally { if (seq === svcSeq) loading.value = false }
 }
 
+/**
+ * 动作/刷新后回填服务信息：从 status 拿权威 state，从 show 拿 enabled/managed/description。
+ * 修「svcAct 只改 state 留下 stale enabled」——停服务后自启态会跟旧值走；
+ * 外部 systemd 改动同理。集中在此作为单一事实源，避免启停/自启各处再写一遍（重复且易漂）。
+ */
+async function reloadServiceInfo() {
+  if (!svc.value) return
+  const [st, show] = await Promise.all([
+    api.get<{ name: string; state: string }>(API.services.status(svc.value.name)),
+    api.get<{ service: ServiceInfo }>(API.services.show(svc.value.name)),
+  ])
+  if (svc.value) {
+    svc.value.state = st.state
+    const s = show.service
+    svc.value.enabled = s.enabled
+    svc.value.managed = s.managed
+    svc.value.description = s.description
+  }
+}
+
 async function svcAct(action: 'start' | 'stop' | 'restart') {
   if (!svc.value) return
   const name = svc.value.name
@@ -135,8 +160,9 @@ async function svcAct(action: 'start' | 'stop' | 'restart') {
       : action === 'stop' ? API.services.stop(name)
       : API.services.restart(name)
     await api.post(url)
-    const st = await api.get<{ name: string; state: string }>(API.services.status(name))
-    if (svc.value) svc.value.state = st.state
+    // 动作后回填：status 拿权威 state，show 拿 enabled/managed/description
+    // （修 svcAct 只改 state 留下的 stale enabled——停服务后自启态会跟旧值走）。
+    await reloadServiceInfo()
   } catch (e) { actError.value = errorText(e) }
   finally { busy.value = '' }
 }
@@ -152,12 +178,37 @@ async function toggleEnable() {
   finally { busy.value = '' }
 }
 
-/** sshd 不允许 stop：防失联（后端也会拒绝，双保险） */
-function stopDisabled(s: ServiceInfo) { return s.name === 'sshd' || s.name === 'ssh' }
+/** 运行态判定（与 serviceStateLabel / serviceActionDisabled 同一套 systemd 口径）。
+ *  详情页的状态徽标、按钮联动都从这里派生，避免散落各写 `state === 'active'`。 */
+const isRunning = computed(() => svc.value?.state === 'active')
+const isTransitioning = computed(() =>
+  svc.value?.state === 'activating' || svc.value?.state === 'deactivating')
+
+/**
+ * 启停按钮的禁用矩阵（单一事实源在 composables/serviceActionState.ts，有单测）。
+ *  运行中：启动禁用、停止/重启可用；已停止/失败：停止禁用、启动/重启可用；
+ *  过渡态：三者统一禁用；sshd 永不许停止；无权限或正在执行时整组禁用。
+ *  服务加载完成前（svc 为空）一律禁用，避免对未知状态误触。
+ */
+const actionDisabled = computed(() => svc.value
+  ? serviceActionDisabled({
+    name: svc.value.name, state: svc.value.state, managed: svc.value.managed,
+    canManage: canManage.value, busy: anyOp.value,
+  })
+  : { start: true, stop: true, restart: true, ssh: false })
 
 function stateBadge(s: string) {
   return s === 'active' ? 'badge-ok' : s === 'failed' ? 'badge-danger'
     : (s === 'activating' || s === 'deactivating') ? 'badge-warn' : ''
+}
+
+/** 状态徽标前的小圆点配色：运行中绿、失败红、过渡态琥珀、其余（已停止/未知）中性灰。
+ *  让「运行中 / 已停止」在视觉上一眼可辨，而不仅是文字。 */
+function statusDot(s: string): string {
+  return s === 'active' ? 'ok'
+    : s === 'failed' ? 'danger'
+    : (s === 'activating' || s === 'deactivating') ? 'warn'
+    : ''
 }
 
 // ─────────────── 未托管服务停止的二次确认 ───────────────
@@ -258,9 +309,21 @@ function toggleFollow() {
 //  - unit：单元文件本体。位于 /lib、/usr/lib 的发行版文件**会被包升级覆盖**。
 //  - dropin：/etc/systemd/system/<unit>.d/override.conf，与单元文件合并生效、
 //    不被包升级覆盖——systemd 官方推荐做法，界面上标为「推荐」。
+// 防呆：默认写入目标就是 drop-in（最安全，升级不受影响）；单元文件仅在「该单元本就
+// 在 /etc」或用户明确要改本体时才用，且保存非可写（发行版目录）的单元文件会二次确认。
 type CfgTarget = 'unit' | 'dropin'
 
-const cfgTarget = ref<CfgTarget>('unit')
+// 新 drop-in 文件（尚不存在）预填的起步模板：只写要改的键，列表型指令默认追加（替换先空值）。
+const DROPIN_TEMPLATE = `# 在此覆盖/补充厂商单元的配置（文件在 /etc，软件升级不会被覆盖）
+# 只写你要改的键，其余继承主单元文件；需要哪个段就写哪个段头（如 [Service]）。
+# 列表型指令（ExecStart= 等）默认是“追加”，要替换先写一次空值再赋值，例如：
+#   ExecStart=
+#   ExecStart=/your/path
+[Service]
+
+`
+
+const cfgTarget = ref<CfgTarget>('dropin')
 /** 配置请求序号：快速切 unit/drop-in 时丢弃旧响应，避免 A 的配置覆盖 B */
 let cfgSeq = 0
 const cfg = ref<ServiceConfig | null>(null)
@@ -281,7 +344,8 @@ async function loadConfig() {
       API.services.config(unitName), { params: { target } })
     if (seq !== cfgSeq || unit.value !== unitName) return   // 已切目标/单元，丢弃本次结果
     cfg.value = r
-    cfgDraft.value = r.content
+    // 新 drop-in 文件（尚不存在）预填起步模板，降低“空白框 + 忘写段头”的上手门槛
+    cfgDraft.value = (target === 'dropin' && !r.exists) ? DROPIN_TEMPLATE : r.content
   } catch (e) {
     if (seq !== cfgSeq || unit.value !== unitName) return
     if (isUnsupported(e)) cfgError.value = '当前环境不支持在线编辑配置'
@@ -296,7 +360,20 @@ function openConfigTab() {
 
 watch(cfgTarget, () => { if (tab.value === 'config') void loadConfig() })
 
+// 防呆：直接编辑位于 /lib、/usr/lib 的发行版单元文件，软件升级会被覆盖——
+// 保存前二次确认，避免用户把自定义配置塞进单元文件后于升级时悄悄丢失。
+const confirmUnitEdit = ref(false)
+
 async function saveConfig() {
+  if (!cfg.value) return
+  if (cfgTarget.value === 'unit' && !cfg.value.writable) {
+    confirmUnitEdit.value = true
+    return
+  }
+  await doSaveConfig()
+}
+
+async function doSaveConfig() {
   if (!cfg.value) return
   cfgSaving.value = true; cfgError.value = ''; cfgSaved.value = false
   try {
@@ -334,7 +411,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 
 <template>
   <div>
-    <div class="tools-row">
+    <div class="page-head">
       <!-- 返回**上一页面**而非硬编码跳服务页签：本页可从软件页、概览等多处进入，
            写死跳 services-units 会把用户送到一个他从没待过的地方。
            深链直接进入（无历史）时才兜底回服务列表。 -->
@@ -342,8 +419,16 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
               @click="goBack">
         <Icon name="chevron-left" :size="14" />
       </button>
+      <!-- 服务名 + 状态徽标上提至顶栏，与返回按钮同排：标题区一眼可见，
+           不再与卡片内的说明/操作区叠在一起。 -->
+      <h1 v-if="svc" class="page-title mono">{{ svc.name }}</h1>
+      <span v-if="svc" class="badge status-badge" :class="stateBadge(svc.state)">
+        <span class="dot" :class="statusDot(svc.state)" />
+        {{ serviceStateLabel(svc.state) }}
+      </span>
+      <span v-if="svc && !svc.managed" class="badge"
+        title="该服务非面板创建（不代表故障）：启停操作仍可用，停止前需二次确认">未托管</span>
       <span class="spacer" />
-      <RefreshBtn :disabled="loading || !!busy" @click="loadSvc" />
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="loadSvc">重试</button></p>
@@ -360,12 +445,6 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 
       <template v-else>
         <section class="card svc-head">
-          <div class="title-row">
-            <h2 class="mono">{{ svc.name }}</h2>
-            <span class="badge" :class="stateBadge(svc.state)">{{ serviceStateLabel(svc.state) }}</span>
-            <span v-if="!svc.managed" class="badge"
-              title="该服务非面板创建（不代表故障）：启停操作仍可用，停止前需二次确认">未托管</span>
-          </div>
           <!-- 说明：点开一个服务，先看它是做什么的。
                分两层——systemd 单元自带的 Description（软件自己写的元数据，可能是空/英文），
                以及面板侧的用途说明（来自后端 catalog，按单元名反查）。
@@ -393,23 +472,26 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
           <p v-if="actError" class="err">{{ actError }}</p>
 
           <div class="m-acts">
-            <button class="btn-ghost" :disabled="!canManage || !!busy || svc.state === 'active'"
+            <button class="btn-ghost" :disabled="actionDisabled.start"
+              :title="actionDisabled.start && isRunning ? '服务已在运行中'
+                : (actionDisabled.start && isTransitioning ? '服务状态切换中，请稍候' : '')"
               @click="svcAct('start')">
-              {{ busy === svc.name + ':start' ? '执行中…' : '启动' }}
+              {{ anyOp ? '执行中…' : '启动' }}
             </button>
-            <button class="btn-ghost danger" :disabled="!canManage || !!busy || stopDisabled(svc)"
-              :title="stopDisabled(svc) ? '禁止停止 SSH 服务以防失联' : ''" @click="askStop">
-              {{ busy === svc.name + ':stop' ? '执行中…' : '停止' }}
+            <button class="btn-ghost danger" :disabled="actionDisabled.stop"
+              :title="actionDisabled.ssh ? '禁止停止 SSH 服务以防失联'
+                : (actionDisabled.stop && !isRunning ? '服务已停止，无需停止' : '')" @click="askStop">
+              {{ anyOp ? '执行中…' : '停止' }}
             </button>
-            <button class="btn-ghost" :disabled="!canManage || !!busy" @click="svcAct('restart')">
-              {{ busy === svc.name + ':restart' ? '执行中…' : '重启' }}
+            <button class="btn-ghost" :disabled="actionDisabled.restart" @click="svcAct('restart')">
+              {{ anyOp ? '执行中…' : '重启' }}
             </button>
             <span class="spacer" />
             <label class="switch-row" :class="{ on: svc.enabled }">
               <span class="sl-label">开机自启</span>
               <span class="switch">
                 <input type="checkbox" :checked="svc.enabled"
-                  :disabled="!canManage || !!busy" @change="toggleEnable" /><i />
+                  :disabled="!canManage || anyOp" @change="toggleEnable" /><i />
               </span>
               <span class="sl-state">{{ svc.enabled ? '已启用' : '已关闭' }}</span>
             </label>
@@ -451,10 +533,10 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
             <div class="cfg-target">
               <span class="seg-label">写入目标</span>
               <div class="seg">
-                <button class="seg-btn" :class="{ active: cfgTarget === 'unit' }"
-                  @click="cfgTarget = 'unit'">单元文件</button>
                 <button class="seg-btn" :class="{ active: cfgTarget === 'dropin' }"
                   @click="cfgTarget = 'dropin'">drop-in <span class="rec">推荐</span></button>
+                <button class="seg-btn" :class="{ active: cfgTarget === 'unit' }"
+                  @click="cfgTarget = 'unit'">单元文件</button>
               </div>
               <span class="spacer" />
               <button class="btn-ghost btn-sm" :disabled="cfgLoading" @click="loadConfig">重新读取</button>
@@ -494,6 +576,10 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
     <ConfirmDialog :open="confirmStop" danger title="停止服务"
       :detail="`${svc?.name ?? ''} 不受面板托管，停止可能影响依赖它的业务。请确认你了解此操作的后果。`"
       @confirm="() => { confirmStop = false; svcAct('stop') }" @cancel="confirmStop = false" />
+
+    <ConfirmDialog :open="confirmUnitEdit" danger title="直接编辑单元文件"
+      :detail="`${cfg?.path ?? ''} 位于发行版目录，软件包升级时会被覆盖，你在此的自定义配置可能丢失。确定仍要直接编辑单元文件吗？建议改用上方的「drop-in」（位于 /etc，升级不受影响）。`"
+      @confirm="() => { confirmUnitEdit = false; doSaveConfig() }" @cancel="confirmUnitEdit = false" />
   </div>
 </template>
 
@@ -502,8 +588,12 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 /* 返回按钮去掉文字后需保持可点击面积：固定为正方形，图标居中 */
 .icon-only { display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0; }
-.title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.title-row h2 { margin: 0; font-size: var(--fs-17); }
+/* 顶栏：返回按钮 + 服务名 + 状态徽标 + 局部刷新 同排，标题区一眼可见、不叠卡片内说明 */
+.page-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.page-title { margin: 0; font-size: var(--fs-17); font-weight: 600; }
+/* 状态徽标：圆点 + 文字一体化，让「运行中/已停止」一眼可辨（圆点配色见 statusDot） */
+.status-badge { display: inline-flex; align-items: center; gap: 6px; }
+.status-badge .dot { flex: none; }
 /* 说明区：浅底分成一块，与操作按钮群之间有一条视觉分界。
    用左竖线而非整块边框——它属于头部卡片的一部分，不该再套一层盒子。 */
 .about {
