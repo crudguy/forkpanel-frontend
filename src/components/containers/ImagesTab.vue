@@ -23,8 +23,11 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import PullImageDialog from '@/components/PullImageDialog.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { usePolling } from '@/composables/usePolling'
 import { useRowLoad } from '@/composables/useRowLoad'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
 import { toast } from '@/composables/useToast'
 
@@ -50,6 +53,32 @@ watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
 
 // 镜像 5s 一轮（沿用原间隔）：镜像列表会因外部 docker pull/build 变化
 usePolling({ fn: () => load(true), ms: 5000, enabled: () => props.active })
+
+/** docker 的体积串（`55.3MB` / `0B` / `1.2GB`）转字节，仅供「体积」列排序；无法解析按 0。 */
+function sizeBytes(s: string): number {
+  const m = /^([\d.]+)\s*([kmgt]?b)$/i.exec((s ?? '').trim())
+  if (!m) return 0
+  const mul: Record<string, number> = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }
+  return Number(m[1]) * (mul[m[2].toUpperCase()] ?? 1)
+}
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 默认按仓库名升序：列表每 5s 轮询重建快照，按仓库名排让同一 repo 的多个 tag 相邻，
+// 行位置也不随刷新跳动。
+const imageSortCols: SortColumn<Image>[] = [
+  { key: 'repository', dir: 'asc', compare: (a, b) => (a.repository ?? '').localeCompare(b.repository ?? '') },
+  { key: 'tag', dir: 'asc', compare: (a, b) => (a.tag ?? '').localeCompare(b.tag ?? '') },
+  { key: 'id', dir: 'asc', compare: (a, b) => (a.id ?? '').localeCompare(b.id ?? '') },
+  // 指标列：首次点击把大的放前面
+  { key: 'size', dir: 'desc', compare: (a, b) => sizeBytes(a.size) - sizeBytes(b.size) },
+  // createdAt 是 docker 的绝对时间串（`2026-07-11 10:00:00 +0800 CST`），同格式可直接比较
+  { key: 'created', dir: 'desc', compare: (a, b) => (a.created ?? '').localeCompare(b.created ?? '') },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Image>({
+    rows: images, defaultSize: 100, defaultSort: { key: 'repository', dir: 'asc' }, columns: imageSortCols,
+    persistKey: 'containers.images',
+  })
 
 // ── 常用镜像（内置清单，只列镜像名；tag 在拉取弹窗里确认）──
 const popularQ = ref('')
@@ -224,10 +253,17 @@ function shortId(id: string) {
             <col class="w-irepo" /><col class="w-itag" /><col class="w-iid" /><col class="w-isize" /><col class="w-itime" /><col class="w-iacts" />
           </colgroup>
           <thead>
-            <tr><th>仓库</th><th>标签</th><th class="col-opt">镜像 ID</th><th>体积</th><th>创建时间</th><th /></tr>
+            <tr>
+              <SortTh label="仓库" :active="isSorted('repository')" :dir="sortDir" @sort="toggleSort('repository')" />
+              <SortTh label="标签" :active="isSorted('tag')" :dir="sortDir" @sort="toggleSort('tag')" />
+              <SortTh class="col-opt" label="镜像 ID" :active="isSorted('id')" :dir="sortDir" @sort="toggleSort('id')" />
+              <SortTh label="体积" :active="isSorted('size')" :dir="sortDir" @sort="toggleSort('size')" />
+              <SortTh label="创建时间" :active="isSorted('created')" :dir="sortDir" @sort="toggleSort('created')" />
+              <th />
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="i in images" :key="i.id + i.tag">
+            <tr v-for="i in pageRows" :key="i.id + i.tag">
               <td class="mono ellipsis" :title="i.repository">{{ i.repository }}</td>
               <td><span class="badge" :class="i.tag === '<none>' ? 'badge-warn' : 'badge-primary'">{{ i.tag }}</span></td>
               <td class="mono dim col-opt" :title="i.id">{{ shortId(i.id) }}</td>
@@ -254,6 +290,8 @@ function shortId(id: string) {
           </tbody>
         </table>
       </div>
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
     </div>
     <EmptyState v-else-if="!loading" title="没有镜像" hint="该 Docker 守护进程上没有任何镜像。" />
 

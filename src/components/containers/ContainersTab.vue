@@ -20,9 +20,12 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { statusDetail } from '@/components/containers/containerStatus'
 import { usePolling } from '@/composables/usePolling'
 import { useRowLoad } from '@/composables/useRowLoad'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
 interface Container {
@@ -180,6 +183,24 @@ const filtered = computed(() => {
   return list
 })
 
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 默认按名称升序：列表每 5s 轮询重建一份快照，按名称排让行的位置稳定（不会因状态变化
+// 在两次刷新之间跳动），名称也是用户定位容器最常用的键。
+const containerSortCols: SortColumn<Container>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'remark', dir: 'asc', compare: (a, b) => (a.remark ?? '').localeCompare(b.remark ?? '') },
+  { key: 'image', dir: 'asc', compare: (a, b) => (a.image ?? '').localeCompare(b.image ?? '') },
+  { key: 'state', dir: 'asc', compare: (a, b) => (a.state ?? '').localeCompare(b.state ?? '') },
+  // 端口是 docker 原样拼接串（`0.0.0.0:80->80/tcp, …`），按展示文本比较
+  { key: 'ports', dir: 'asc', compare: (a, b) => (a.ports ?? '').localeCompare(b.ports ?? '') },
+  { key: 'id', dir: 'asc', compare: (a, b) => (a.id ?? '').localeCompare(b.id ?? '') },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Container>({
+    rows: filtered, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: containerSortCols,
+    persistKey: 'containers.list',
+  })
+
 /** 对象说明（备注，022）：内联保存。**按容器名称**存——完整 ID 随重建变化，
  *  名称在重建时通常保留，按 ID 存会让重建后备注变孤儿。失败由 InlineRemark
  *  就地展示，不拖累列表其它行。 */
@@ -215,7 +236,7 @@ async function saveRemark(c: Container, v: string) {
           <Icon name="plus" :size="14" /> 新建容器
         </button>
       </div>
-      <div class="t-scroll" v-if="filtered.length">
+      <div class="t-scroll" v-if="total">
         <table class="fixed" v-table-nav>
           <colgroup>
             <!-- 镜像为唯一弹性列（width:auto）吸收余量；操作列 470px 按六个带文字按钮
@@ -224,10 +245,18 @@ async function saveRemark(c: Container, v: string) {
             <col class="w-name" /><col class="w-cremark" /><col class="w-img" /><col class="w-state" /><col class="w-ports" /><col class="w-id" /><col class="w-acts" />
           </colgroup>
           <thead>
-            <tr><th scope="col">名称</th><th scope="col">备注</th><th scope="col">镜像</th><th scope="col">状态</th><th scope="col">端口</th><th scope="col" class="col-opt">ID</th><th /></tr>
+            <tr>
+              <SortTh label="名称" :active="isSorted('name')" :dir="sortDir" @sort="toggleSort('name')" />
+              <SortTh label="备注" :active="isSorted('remark')" :dir="sortDir" @sort="toggleSort('remark')" />
+              <SortTh label="镜像" :active="isSorted('image')" :dir="sortDir" @sort="toggleSort('image')" />
+              <SortTh label="状态" :active="isSorted('state')" :dir="sortDir" @sort="toggleSort('state')" />
+              <SortTh label="端口" :active="isSorted('ports')" :dir="sortDir" @sort="toggleSort('ports')" />
+              <SortTh class="col-opt" label="ID" :active="isSorted('id')" :dir="sortDir" @sort="toggleSort('id')" />
+              <th />
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="c in filtered" :key="c.id">
+            <tr v-for="c in pageRows" :key="c.id">
               <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
               <td class="remark-cell">
                 <InlineRemark :model-value="c.remark" :editable="canManage"
@@ -281,6 +310,8 @@ async function saveRemark(c: Container, v: string) {
       </div>
       <EmptyState v-else title="无匹配容器"
         hint="当前搜索 / 筛选条件下没有容器，试试调整关键词或状态筛选。" />
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
     </div>
     <EmptyState v-else-if="!loading" title="没有容器"
       hint="该 Docker 守护进程上没有任何容器（含已停止）。" />

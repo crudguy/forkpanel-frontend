@@ -28,6 +28,9 @@ import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
 interface Plan {
@@ -50,6 +53,27 @@ interface Artifact { name: string; size: number; mtime: number }
 
 const auth = useAuthStore()
 const plans = ref<Plan[]>([])
+// ── 计划表：分页 + 排序（全站表格约定）──
+// 文本按字段原文比较；保留份数是数值设置项、加密是布尔；上次执行按时间倒序最有用。
+const planSortCols: SortColumn<Plan>[] = [
+  { key: 'id', dir: 'asc', compare: (a, b) => a.id - b.id },
+  { key: 'kind', dir: 'asc', compare: (a, b) => (a.kind ?? '').localeCompare(b.kind ?? '') },
+  { key: 'target', dir: 'asc', compare: (a, b) => (a.target ?? '').localeCompare(b.target ?? '') },
+  { key: 'dest_dir', dir: 'asc', compare: (a, b) => (a.dest_dir ?? '').localeCompare(b.dest_dir ?? '') },
+  { key: 'keep_count', dir: 'desc', compare: (a, b) => (a.keep_count ?? 0) - (b.keep_count ?? 0) },
+  { key: 'encrypt', dir: 'asc', compare: (a, b) => Number(a.encrypt) - Number(b.encrypt) },
+  { key: 'remote_kind', dir: 'asc', compare: (a, b) => (a.remote_kind ?? '').localeCompare(b.remote_kind ?? '') },
+  { key: 'last_run_at', dir: 'desc', compare: (a, b) => (a.last_run_at ?? 0) - (b.last_run_at ?? 0) },
+]
+// 默认按 #（id）升序：计划数量少且以 # 定位，按创建顺序稳定展示，刷新/轮询不会来回跳序。
+const {
+  size: planSize, page: planPage, pageCount: planPageCount, pageRows: planRows,
+  total: planTotal, sortDir: planSortDir, toggleSort: planToggleSort,
+  changeSize: planChangeSize, gotoPage: planGotoPage, isSorted: planIsSorted,
+} = useTableControls<Plan>({
+  rows: plans, defaultSize: 100, defaultSort: { key: 'id', dir: 'asc' }, columns: planSortCols,
+  persistKey: 'backups.plans',
+})
 /** 数据库连接（`kind=db` 的目标下拉）。无 DB 权限/不支持时保持空数组，UI 给提示。 */
 const dbConns = ref<{ id: number; name: string; engine: string }[]>([])
 async function loadDbConns() {
@@ -66,6 +90,20 @@ async function loadDbConns() {
 // 这块此前在页面上**完全不存在**：产物接口只认 `plan<id>-` 前缀，于是面板每天
 // 03:30 在写备份、用户一条都看不到，也不知道它们正在堆积。只读列表，不轮询。
 const sysItems = ref<SystemBackup[]>([])
+// ── 系统自动备份表：分页 + 排序（文件名含时间戳，时间倒序即最新快照在前）──
+const sysSortCols: SortColumn<SystemBackup>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'size', dir: 'desc', compare: (a, b) => (a.size ?? 0) - (b.size ?? 0) },
+  { key: 'mtime', dir: 'desc', compare: (a, b) => (a.mtime ?? 0) - (b.mtime ?? 0) },
+]
+const {
+  size: sysSize, page: sysPage, pageCount: sysPageCount, pageRows: sysRows,
+  total: sysTotal, sortDir: sysSortDir, toggleSort: sysToggleSort,
+  changeSize: sysChangeSize, gotoPage: sysGotoPage, isSorted: sysIsSorted,
+} = useTableControls<SystemBackup>({
+  rows: sysItems, defaultSize: 100, defaultSort: { key: 'mtime', dir: 'desc' }, columns: sysSortCols,
+  persistKey: 'backups.sys',
+})
 const sysError = ref('')
 const sysLoading = ref(false)
 /** 实际保留份数（后端下发的生效值；页面不得写死 7——改过 backup_keep 的机器会说谎） */
@@ -186,6 +224,23 @@ function resultClass(r: string | null) {
 }
 
 const curArtifacts = ref<{ plan: Plan; items: Artifact[] } | null>(null)
+// ── 产物明细表（弹窗内）：分页 + 排序 ──
+// 弹窗可能为空（items=[]），组合式要的是全量数组 ref，故先归一再切片。
+const artifactRows = computed(() => curArtifacts.value?.items ?? [])
+// 恢复/下载通常针对最新一份：时间倒序把最新产物置顶（与 selName 默认取最新一致）。
+const artSortCols: SortColumn<Artifact>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'size', dir: 'desc', compare: (a, b) => (a.size ?? 0) - (b.size ?? 0) },
+  { key: 'mtime', dir: 'desc', compare: (a, b) => (a.mtime ?? 0) - (b.mtime ?? 0) },
+]
+const {
+  size: artSize, page: artPage, pageCount: artPageCount, pageRows: artRows,
+  total: artTotal, sortDir: artSortDir, toggleSort: artToggleSort,
+  changeSize: artChangeSize, gotoPage: artGotoPage, isSorted: artIsSorted,
+} = useTableControls<Artifact>({
+  rows: artifactRows, defaultSize: 100, defaultSort: { key: 'mtime', dir: 'desc' }, columns: artSortCols,
+  persistKey: 'backups.cur',
+})
 
 const canManage = computed(() => auth.enabled(CAP.BACKUP_MANAGE, 'backup.manage'))
 
@@ -309,6 +364,19 @@ async function del(p: Plan) {
 
 /** 远端副本清单（null = 未展开；[] = 已展开但远端为空） */
 const remoteItems = ref<string[] | null>(null)
+// ── 远端文件表（弹窗内）：纯字符串数组，Row 就是 string ──
+const remoteList = computed(() => remoteItems.value ?? [])
+const remoteSortCols: SortColumn<string>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => a.localeCompare(b) },
+]
+const {
+  size: remoteSize, page: remotePage, pageCount: remotePageCount, pageRows: remoteRows,
+  total: remoteTotal, sortDir: remoteSortDir, toggleSort: remoteToggleSort,
+  changeSize: remoteChangeSize, gotoPage: remoteGotoPage, isSorted: remoteIsSorted,
+} = useTableControls<string>({
+  rows: remoteList, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: remoteSortCols,
+  persistKey: 'backups.remote',
+})
 const remoteError = ref('')
 const remoteLoading = ref(false)
 async function loadRemote(plan: Plan) {
@@ -450,7 +518,7 @@ const selName = ref('')
          请求还在飞就渲染了「暂无…」空态（带 CTA），数据到达后整块跳变；
          且加载失败时列表区与空列表长得一样，用户分不清是"没有"还是"没加载出来"。 -->
       <div v-if="loading && !plans.length" class="skeleton box" />
-      <div v-else-if="plans.length" class="card flush toolbar-card">
+      <div v-else-if="planTotal" class="card flush toolbar-card">
         <div class="card-toolbar">
           <span class="count">共 {{ plans.length }} 个计划</span>
           <span class="spacer" />
@@ -462,9 +530,19 @@ const selName = ref('')
           <colgroup>
             <col class="w-bid" /><col class="w-bkind" /><col class="w-btarget" /><col class="w-bdest" /><col class="w-bkeep" /><col class="w-benc" /><col class="w-bremote" /><col class="w-brun" /><col class="w-bacts" />
           </colgroup>
-          <thead><tr><th class="num">#</th><th>类型</th><th>目标</th><th>产物目录</th><th class="col-opt num">保留</th><th class="col-opt">加密</th><th>远端</th><th>上次执行</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh class="num" label="#" :active="planIsSorted('id')" :dir="planSortDir" @sort="planToggleSort('id')" />
+            <SortTh label="类型" :active="planIsSorted('kind')" :dir="planSortDir" @sort="planToggleSort('kind')" />
+            <SortTh label="目标" :active="planIsSorted('target')" :dir="planSortDir" @sort="planToggleSort('target')" />
+            <SortTh label="产物目录" :active="planIsSorted('dest_dir')" :dir="planSortDir" @sort="planToggleSort('dest_dir')" />
+            <SortTh class="col-opt num" label="保留" :active="planIsSorted('keep_count')" :dir="planSortDir" @sort="planToggleSort('keep_count')" />
+            <SortTh class="col-opt" label="加密" :active="planIsSorted('encrypt')" :dir="planSortDir" @sort="planToggleSort('encrypt')" />
+            <SortTh label="远端" :active="planIsSorted('remote_kind')" :dir="planSortDir" @sort="planToggleSort('remote_kind')" />
+            <SortTh label="上次执行" :active="planIsSorted('last_run_at')" :dir="planSortDir" @sort="planToggleSort('last_run_at')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="p in plans" :key="p.id">
+            <tr v-for="p in planRows" :key="p.id">
               <td class="num">{{ p.id }}</td>
               <td>{{ backupKindLabel(p.kind) }}</td>
               <td class="mono ellipsis" :title="p.target">{{ p.target }}</td>
@@ -499,6 +577,8 @@ const selName = ref('')
           </tbody>
         </table>
         </div>
+        <TablePager :total="planTotal" :page="planPage" :size="planSize" :page-count="planPageCount"
+          @update:page="planGotoPage" @update:size="planChangeSize" />
       </div>
       <EmptyState v-else title="暂无备份计划">
         <template #cta>
@@ -589,9 +669,14 @@ const selName = ref('')
           <colgroup>
             <col class="w-afile" /><col class="w-asize" /><col class="w-atime" /><col class="w-aact" />
           </colgroup>
-          <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
+          <thead><tr>
+            <SortTh label="文件" :active="artIsSorted('name')" :dir="artSortDir" @sort="artToggleSort('name')" />
+            <SortTh label="大小" :active="artIsSorted('size')" :dir="artSortDir" @sort="artToggleSort('size')" />
+            <SortTh label="时间" :active="artIsSorted('mtime')" :dir="artSortDir" @sort="artToggleSort('mtime')" />
+            <th>操作</th>
+          </tr></thead>
           <tbody>
-            <tr v-for="a in curArtifacts.items" :key="a.name">
+            <tr v-for="a in artRows" :key="a.name">
               <td class="mono ellipsis" :title="a.name">{{ a.name }}</td>
               <td>{{ fmtSize(a.size) }}</td>
               <td class="dim">{{ fmtDateTime(a.mtime) }}</td>
@@ -600,6 +685,9 @@ const selName = ref('')
           </tbody>
         </table>
         <p v-else class="dim">该计划暂无产物（点「执行」生成）</p>
+        <!-- 分页脚放弹窗（卡片）内表格下方；可见性由 TablePager 自判，不写 v-if -->
+        <TablePager :total="artTotal" :page="artPage" :size="artSize" :page-count="artPageCount"
+          @update:page="artGotoPage" @update:size="artChangeSize" />
 
         <!-- 远端副本：与本地列表并列，互不替代。本地那份没了，这里仍在。 -->
         <div v-if="remoteItems" class="remote-block">
@@ -610,12 +698,15 @@ const selName = ref('')
             <button class="btn-ghost btn-sm" @click="remoteItems = null">收起</button>
           </div>
           <p v-if="remoteError" class="err" role="alert">{{ remoteError }}</p>
-          <p v-else-if="!remoteItems.length" class="dim">远端没有本计划的产物</p>
+          <p v-else-if="!remoteTotal" class="dim">远端没有本计划的产物</p>
           <table v-else class="fixed">
             <colgroup><col class="w-afile" /><col class="w-aact" /></colgroup>
-            <thead><tr><th>文件</th><th>操作</th></tr></thead>
+            <thead><tr>
+              <SortTh label="文件" :active="remoteIsSorted('name')" :dir="remoteSortDir" @sort="remoteToggleSort('name')" />
+              <th>操作</th>
+            </tr></thead>
             <tbody>
-              <tr v-for="n in remoteItems" :key="n">
+              <tr v-for="n in remoteRows" :key="n">
                 <td class="mono ellipsis" :title="n">{{ n }}</td>
                 <td>
                   <button class="btn-ghost btn-sm danger" :disabled="!canManage || busy"
@@ -625,6 +716,8 @@ const selName = ref('')
               </tr>
             </tbody>
           </table>
+          <TablePager :total="remoteTotal" :page="remotePage" :size="remoteSize" :page-count="remotePageCount"
+            @update:page="remoteGotoPage" @update:size="remoteChangeSize" />
         </div>
       </section>
 
@@ -641,7 +734,7 @@ const selName = ref('')
         </div>
         <p v-if="sysError" class="err" role="alert">{{ sysError }}</p>
         <p v-else-if="sysLoading && !sysItems.length" class="dim">正在读取…</p>
-        <p v-else-if="!sysItems.length" class="dim">
+        <p v-else-if="!sysTotal" class="dim">
           {{ sysDailyOn
             ? '暂无系统自动备份（每日 03:30 生成；Nano 档位不做）'
             : '每日自动备份已关闭（config.toml [db] daily_backup = false）——不会自动产生快照，恢复面板库只能靠计划产物' }}
@@ -650,9 +743,14 @@ const selName = ref('')
           <colgroup>
             <col class="w-afile" /><col class="w-asize" /><col class="w-atime" /><col class="w-aact" />
           </colgroup>
-          <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
+          <thead><tr>
+            <SortTh label="文件" :active="sysIsSorted('name')" :dir="sysSortDir" @sort="sysToggleSort('name')" />
+            <SortTh label="大小" :active="sysIsSorted('size')" :dir="sysSortDir" @sort="sysToggleSort('size')" />
+            <SortTh label="时间" :active="sysIsSorted('mtime')" :dir="sysSortDir" @sort="sysToggleSort('mtime')" />
+            <th>操作</th>
+          </tr></thead>
           <tbody>
-            <tr v-for="b in sysItems" :key="b.name">
+            <tr v-for="b in sysRows" :key="b.name">
               <td class="mono ellipsis" :title="b.name">{{ b.name }}</td>
               <td>{{ fmtSize(b.size) }}</td>
               <td class="dim">{{ fmtDateTime(b.mtime) }}</td>
@@ -660,6 +758,8 @@ const selName = ref('')
             </tr>
           </tbody>
         </table>
+        <TablePager :total="sysTotal" :page="sysPage" :size="sysSize" :page-count="sysPageCount"
+          @update:page="sysGotoPage" @update:size="sysChangeSize" />
       </section>
     </template>
 

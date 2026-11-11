@@ -21,14 +21,17 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
 import StackEditorDialog from '@/components/StackEditorDialog.vue'
 import StackImportDialog from '@/components/StackImportDialog.vue'
+import TablePager from '@/components/TablePager.vue'
 import { COMPOSE_ACTIONS, type ComposeActionKey } from '@/composables/composeActions'
 import {
   containersOfProject, drillEmptyHint, projectCountMismatch,
 } from '@/composables/composeDrill'
 import type { StackServicePayload } from '@/composables/stackForm'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
 /** compose 行（`docker compose ls --all --format json`）。status 是组合语义串
@@ -215,6 +218,52 @@ async function doComposeDown() {
     composeDownTarget.value = null
   }
 }
+
+// ── 三张表的分页 + 排序（全站约定：useTableControls + SortTh + TablePager）──
+// 三张表各自独立记忆每页条数。默认都按名称升序（编排 / 项目 / 容器都以名字定位）；
+// 编排表的「服务」是条数指标，首次点击按规范把条数多的排前面。
+const stackSortCols: SortColumn<StackRow>[] = [
+  { key: 'project', dir: 'asc', compare: (a, b) => (a.project ?? '').localeCompare(b.project ?? '') },
+  { key: 'services', dir: 'desc', compare: (a, b) => (a.services?.length ?? 0) - (b.services?.length ?? 0) },
+  { key: 'dir', dir: 'asc', compare: (a, b) => (a.dir ?? '').localeCompare(b.dir ?? '') },
+]
+const {
+  size: stackSize, page: stackPage, pageCount: stackPageCount, pageRows: stackRows,
+  total: stackTotal, sortDir: stackSortDir, toggleSort: toggleStackSort,
+  changeSize: changeStackSize, gotoPage: gotoStackPage, isSorted: isStackSorted,
+} = useTableControls<StackRow>({
+  rows: stacks, defaultSize: 100, defaultSort: { key: 'project', dir: 'asc' }, columns: stackSortCols,
+  persistKey: 'compose.stacks',
+})
+
+const projectSortCols: SortColumn<ComposeProjectLine>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'status', dir: 'asc', compare: (a, b) => (a.status ?? '').localeCompare(b.status ?? '') },
+  { key: 'config_files', dir: 'asc', compare: (a, b) => (a.config_files ?? '').localeCompare(b.config_files ?? '') },
+]
+const {
+  size: projSize, page: projPage, pageCount: projPageCount, pageRows: projRows,
+  total: projTotal, sortDir: projSortDir, toggleSort: toggleProjSort,
+  changeSize: changeProjSize, gotoPage: gotoProjPage, isSorted: isProjSorted,
+} = useTableControls<ComposeProjectLine>({
+  rows: composeProjects, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: projectSortCols,
+  persistKey: 'compose.projects',
+})
+
+const drillSortCols: SortColumn<DrillContainer>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'compose_service', dir: 'asc', compare: (a, b) => (a.compose_service ?? '').localeCompare(b.compose_service ?? '') },
+  { key: 'state', dir: 'asc', compare: (a, b) => (a.state ?? '').localeCompare(b.state ?? '') },
+  { key: 'image', dir: 'asc', compare: (a, b) => (a.image ?? '').localeCompare(b.image ?? '') },
+]
+const {
+  size: drillSize, page: drillPage, pageCount: drillPageCount, pageRows: drillRows,
+  total: drillTotal, sortDir: drillSortDir, toggleSort: toggleDrillSort,
+  changeSize: changeDrillSize, gotoPage: gotoDrillPage, isSorted: isDrillSorted,
+} = useTableControls<DrillContainer>({
+  rows: drillContainers, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: drillSortCols,
+  persistKey: 'compose.drill',
+})
 </script>
 
 <template>
@@ -239,12 +288,19 @@ async function doComposeDown() {
         <button v-if="canManage && stacks.length" class="btn-primary btn-sm" type="button"
           @click="openStackEditor()">新建编排</button>
       </div>
-      <div v-if="stacks.length" class="t-scroll">
+      <div v-if="stackTotal" class="t-scroll">
         <table class="fixed">
           <colgroup><col class="w-sname" /><col class="w-snum" /><col /><col class="w-sact" /></colgroup>
-          <thead><tr><th>项目</th><th>服务</th><th>目录</th><th>操作</th></tr></thead>
+          <thead>
+            <tr>
+              <SortTh label="项目" :active="isStackSorted('project')" :dir="stackSortDir" @sort="toggleStackSort('project')" />
+              <SortTh label="服务" :active="isStackSorted('services')" :dir="stackSortDir" @sort="toggleStackSort('services')" />
+              <SortTh label="目录" :active="isStackSorted('dir')" :dir="stackSortDir" @sort="toggleStackSort('dir')" />
+              <th>操作</th>
+            </tr>
+          </thead>
           <tbody>
-            <tr v-for="s in stacks" :key="s.project">
+            <tr v-for="s in stackRows" :key="s.project">
               <td class="mono ellipsis" :title="s.project">
                 {{ s.project }}
                 <!-- 外部改过的文件必须显式标出来：面板不会覆盖它，用户得知道为什么改不动 -->
@@ -267,6 +323,8 @@ async function doComposeDown() {
           <button class="btn-primary btn-sm" type="button" @click="openStackEditor()">新建编排</button>
         </template>
       </EmptyState>
+      <TablePager :total="stackTotal" :page="stackPage" :size="stackSize" :page-count="stackPageCount"
+        @update:page="gotoStackPage" @update:size="changeStackSize" />
     </div>
 
     <!-- ── Compose 项目（docker compose ls --all --format json） ── -->
@@ -285,10 +343,14 @@ async function doComposeDown() {
             <col class="w-cpname" /><col class="w-cpstatus" /><col class="w-cpconf" />
           </colgroup>
           <thead>
-            <tr><th>项目</th><th>状态</th><th>配置文件</th></tr>
+            <tr>
+              <SortTh label="项目" :active="isProjSorted('name')" :dir="projSortDir" @sort="toggleProjSort('name')" />
+              <SortTh label="状态" :active="isProjSorted('status')" :dir="projSortDir" @sort="toggleProjSort('status')" />
+              <SortTh label="配置文件" :active="isProjSorted('config_files')" :dir="projSortDir" @sort="toggleProjSort('config_files')" />
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="p in composeProjects" :key="p.name">
+            <tr v-for="p in projRows" :key="p.name">
               <td class="mono ellipsis" :title="p.name">
                 <!-- 项目名可点：展开该项目下的容器（下钻）。
                      按钮而非整行可点——整行点击与文字选择/复制路径会打架。 -->
@@ -304,6 +366,8 @@ async function doComposeDown() {
           </tbody>
         </table>
       </div>
+      <TablePager :total="projTotal" :page="projPage" :size="projSize" :page-count="projPageCount"
+        @update:page="gotoProjPage" @update:size="changeProjSize" />
 
       <!-- 下钻面板：该项目下的容器。只在展开时出现，与上方表格同级（不是浮层）。 -->
       <div v-if="drillProject" class="drill-panel">
@@ -326,11 +390,18 @@ async function doComposeDown() {
             </button>
           </template>
         </div>
-        <table class="fixed" v-if="drillContainers.length">
+        <table class="fixed" v-if="drillTotal">
           <colgroup><col class="w-dname" /><col class="w-dservice" /><col class="w-dstate" /><col /></colgroup>
-          <thead><tr><th>容器</th><th>服务</th><th>状态</th><th>镜像</th></tr></thead>
+          <thead>
+            <tr>
+              <SortTh label="容器" :active="isDrillSorted('name')" :dir="drillSortDir" @sort="toggleDrillSort('name')" />
+              <SortTh label="服务" :active="isDrillSorted('compose_service')" :dir="drillSortDir" @sort="toggleDrillSort('compose_service')" />
+              <SortTh label="状态" :active="isDrillSorted('state')" :dir="drillSortDir" @sort="toggleDrillSort('state')" />
+              <SortTh label="镜像" :active="isDrillSorted('image')" :dir="drillSortDir" @sort="toggleDrillSort('image')" />
+            </tr>
+          </thead>
           <tbody>
-            <tr v-for="c in drillContainers" :key="c.id">
+            <tr v-for="c in drillRows" :key="c.id">
               <td class="mono ellipsis" :title="c.name">{{ c.name }}</td>
               <td class="mono dim">{{ c.compose_service || '—' }}</td>
               <td>
@@ -341,6 +412,8 @@ async function doComposeDown() {
           </tbody>
         </table>
         <p v-else class="drill-empty">{{ drillEmptyHint(drillMismatch.declared) }}</p>
+        <TablePager :total="drillTotal" :page="drillPage" :size="drillSize" :page-count="drillPageCount"
+          @update:page="gotoDrillPage" @update:size="changeDrillSize" />
       </div>
     </div>
     <EmptyState v-else-if="!loading" title="暂无 Compose 项目"

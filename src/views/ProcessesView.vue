@@ -112,6 +112,7 @@ const {
   defaultSize: 100,                       // 沿用进程页历史默认每页 100
   defaultSort: { key: 'cpu', dir: 'desc' },
   columns: sortColumns,
+  persistKey: 'system.procs',             // 记住用户选的每页条数（全站规范，按表分别记忆）
 })
 /** 改搜索词必须回第一页：否则「搜到 3 条但停在第 4 页」先空一屏再被夹回来 */
 watch(q, () => { page.value = 1 })
@@ -290,7 +291,7 @@ async function doKill() {
         </table>
         </div>
         <!-- 只有超过一页才出现：几十个进程时多一条分页栏是纯噪音 -->
-        <TablePager v-if="filtered.length > size"
+        <TablePager
           :total="total" :page="page" :size="size" :page-count="pageCount"
           @update:page="gotoPage" @update:size="changeSize" />
       </div>
@@ -321,12 +322,6 @@ async function doKill() {
   font-family: inherit; font-size: var(--fs-13);
 }
 .procs-toolbar .find:focus { outline: none; border-color: var(--c-primary); }
-/* 分页条：与 AuditView / DatabasesView 的 .pager 同构（各页 scoped，样式不跨组件） */
-.pager {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; font-size: var(--fs-13);
-  border-top: 1px solid var(--c-border);
-}
 /* 限高 = 容器真的会滚 = 吸顶表头才有意义（不限高时滚动发生在页面上，
    sticky 贴的是容器顶边，滚动时它跟着一起走，等于没加）。
    260px ≈ 顶栏 58 + 内容区上下内边距 62 + 卡片工具条 45 + 页头与留白 ~95。

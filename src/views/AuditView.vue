@@ -277,11 +277,6 @@ onMounted(load)
 .b-bad { color: var(--c-danger); }
 .b-wait { color: var(--c-warn); }
 
-/* 分页 */
-.pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: var(--fs-13); }
-.pager select {
-  background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
-  border-radius: var(--radius-sm); padding: 6px 9px; font-size: var(--fs-13); font-family: inherit; }
 /* 审计表列宽（站点表范式）：目标为唯一弹性列；时间/结果/箭头列定宽不换行。 */
 col.w-atime { width: 170px; }
 col.w-aactor { width: 11%; }

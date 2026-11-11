@@ -22,7 +22,7 @@
  * 所以「编辑」一个反代 / PHP 站时那两个输入框是空的，**必须重填**才能再应用
  * （后端会以 400 拒绝空值，不会静默把站点改成静态）。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { toast } from '@/composables/useToast'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
@@ -33,6 +33,9 @@ import {
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
 import SiteFormDialog from '@/components/SiteFormDialog.vue'
@@ -147,6 +150,29 @@ const visibleSites = computed(() => {
   return sites.value.filter(s =>
     s.name.toLowerCase().includes(k) || s.domains.some(d => d.toLowerCase().includes(k)))
 })
+
+// ── 表头排序 + 分页（项目规范：统一走共享 useTableControls）──
+// 比较的是**单元格里显示的那个值**（kindLabel / featText / wafProfileLabel / siteState / tlsState），
+// 而不是原始枚举/布尔：按「已启用/未启用」排序却按 ran 排在前面，用户会以为排序坏了。
+// 「上次下发」例外：显示的是「从未下发 / 08-12 14:03」，按时间戳比才符合直觉（null = 从未，排最前）。
+const siteSortCols: SortColumn<Site>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => a.name.localeCompare(b.name) },
+  { key: 'dom', dir: 'asc', compare: (a, b) => a.domains.join(', ').localeCompare(b.domains.join(', ')) },
+  { key: 'root', dir: 'asc', compare: (a, b) => (a.root ?? '').localeCompare(b.root ?? '') },
+  { key: 'kind', dir: 'asc', compare: (a, b) => kindLabel(a.kind).localeCompare(kindLabel(b.kind)) },
+  { key: 'feat', dir: 'asc', compare: (a, b) => featText(a).localeCompare(featText(b)) },
+  { key: 'waf', dir: 'asc', compare: (a, b) => wafProfileLabel(a.waf_profile ?? 'basic').localeCompare(wafProfileLabel(b.waf_profile ?? 'basic')) },
+  { key: 'state', dir: 'asc', compare: (a, b) => siteState(a).label.localeCompare(siteState(b).label) },
+  { key: 'applied', dir: 'desc', compare: (a, b) => (a.last_applied_at ?? 0) - (b.last_applied_at ?? 0) },
+  { key: 'tls', dir: 'asc', compare: (a, b) => tlsState(a).label.localeCompare(tlsState(b).label) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Site>({
+    rows: visibleSites, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+    columns: siteSortCols, persistKey: 'sites.list',
+  })
+// 搜索/删站导致总数变化时页码由组合式夹回；展开行只属于当前页，换页后不再保留展开态
+watch(page, () => { expanded.value = [] })
 
 /** 新建 / 编辑弹窗的开关。表单回填不做在这里（见 openEdit）。 */
 const modalOpen = ref(false)
@@ -346,18 +372,21 @@ async function batchDelete() {
         <!-- scope="col" 让读屏把列含义与单元格关联（审计 A3）；.col-opt 标记「次要列」，
              窄屏（<=720px）由 main.css 公共规则隐藏。 -->
         <thead><tr>
+          <!-- 全选语义 = **当前筛选结果全部（跨页）**，不是只选本页：批量启用/删除要能一次
+               覆盖整个筛选集，否则翻页后还得逐页再勾一次。title 里写明条数，避免误解。 -->
           <th scope="col" class="col-sel"><input type="checkbox" :checked="allSelected"
             @change="allSelected = ($event.target as HTMLInputElement).checked"
-            :disabled="!visibleSites.length" aria-label="全选站点" /></th>
-          <th v-if="shown('name')" scope="col">名称</th>
-          <th v-if="shown('dom')" scope="col">域名</th>
-          <th v-if="shown('root')" scope="col" class="col-opt">根目录</th>
-          <th v-if="shown('kind')" scope="col" class="col-opt">类型</th>
-          <th v-if="shown('feat')" scope="col" class="col-opt">特性</th>
-          <th v-if="shown('waf')" scope="col">WAF</th>
-          <th v-if="shown('state')" scope="col">状态</th>
-          <th v-if="shown('applied')" scope="col" class="col-opt">上次下发</th>
-          <th v-if="shown('tls')" scope="col">TLS</th>
+            :disabled="!visibleSites.length" :title="`全选筛选结果（共 ${visibleSites.length} 个站点，跨页）`"
+            aria-label="全选筛选结果（跨页）" /></th>
+          <SortTh v-if="shown('name')" label="名称" :active="isSorted('name')" :dir="sortDir" @sort="toggleSort('name')" />
+          <SortTh v-if="shown('dom')" label="域名" :active="isSorted('dom')" :dir="sortDir" @sort="toggleSort('dom')" />
+          <SortTh v-if="shown('root')" class="col-opt" label="根目录" :active="isSorted('root')" :dir="sortDir" @sort="toggleSort('root')" />
+          <SortTh v-if="shown('kind')" class="col-opt" label="类型" :active="isSorted('kind')" :dir="sortDir" @sort="toggleSort('kind')" />
+          <SortTh v-if="shown('feat')" class="col-opt" label="特性" :active="isSorted('feat')" :dir="sortDir" @sort="toggleSort('feat')" />
+          <SortTh v-if="shown('waf')" label="WAF" :active="isSorted('waf')" :dir="sortDir" @sort="toggleSort('waf')" />
+          <SortTh v-if="shown('state')" label="状态" :active="isSorted('state')" :dir="sortDir" @sort="toggleSort('state')" />
+          <SortTh v-if="shown('applied')" class="col-opt" label="上次下发" :active="isSorted('applied')" :dir="sortDir" @sort="toggleSort('applied')" />
+          <SortTh v-if="shown('tls')" label="TLS" :active="isSorted('tls')" :dir="sortDir" @sort="toggleSort('tls')" />
           <th scope="col">操作</th>
         </tr></thead>
         <tbody>
@@ -368,7 +397,7 @@ async function batchDelete() {
           </tr>
           <!-- 用 <template v-for> 包住「主行 + 展开行」：展开行是同一站点的兄弟 <tr>，
                塞进 <tr v-for> 内部不合法（tr 里不能套 tr）。 -->
-          <template v-for="s in visibleSites" :key="s.id">
+          <template v-for="s in pageRows" :key="s.id">
           <tr>
             <td class="col-sel"><input type="checkbox" :checked="selected.includes(s.id)"
               @change="toggleSelect(s.id)" :disabled="!canManage"
@@ -466,6 +495,8 @@ async function batchDelete() {
         </tbody>
       </table>
       </div>
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
       <div class="batch-bar" v-if="selected.length">
         <span class="batch-count">已选 {{ selected.length }} 项</span>
         <span class="spacer" />

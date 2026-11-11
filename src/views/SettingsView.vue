@@ -25,8 +25,11 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
 import Icon from '@/components/Icon.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 import { llmTestBlockReason } from '@/utils/llmTestGate'
 
@@ -125,6 +128,19 @@ const rolePerms = ref<string[]>([])
 const roleBusy = ref(false)
 const roleErr = ref('')
 const canRoles = computed(() => auth.can('user.manage'))
+
+// 全站表格约定：角色表是记录列表（自定义角色会随使用增长），接客户端分页 + 表头排序。
+// 默认按角色名升序（主标识列）；权限数按条数降序（先看权限多的），来源按显示文本升序。
+const roleSortCols: SortColumn<RoleRow>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'permissions', dir: 'desc', compare: (a, b) => (a.permissions?.length ?? 0) - (b.permissions?.length ?? 0) },
+  { key: 'builtin', dir: 'asc', compare: (a, b) => (a.builtin ? '内置' : '自定义').localeCompare(b.builtin ? '内置' : '自定义') },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<RoleRow>({
+    rows: roles, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+    columns: roleSortCols, persistKey: 'settings.roles',
+  })
 
 async function loadRoles() {
   if (!canRoles.value) return
@@ -491,9 +507,14 @@ onMounted(async () => {
           <colgroup>
             <col class="w-rlname" /><col class="w-rlperm" /><col class="w-rlsrc" /><col class="w-rlacts" />
           </colgroup>
-          <thead><tr><th>角色</th><th class="num">权限</th><th>来源</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="角色" :active="isSorted('name')" :dir="sortDir" @sort="toggleSort('name')" />
+            <SortTh class="num" label="权限" :active="isSorted('permissions')" :dir="sortDir" @sort="toggleSort('permissions')" />
+            <SortTh label="来源" :active="isSorted('builtin')" :dir="sortDir" @sort="toggleSort('builtin')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="r in roles" :key="r.name">
+            <tr v-for="r in pageRows" :key="r.name">
               <td class="mono ellipsis" :title="r.name">{{ r.name }}</td>
               <td class="num">
                 {{ r.permissions.length }} 项
@@ -506,6 +527,8 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
+        <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+          @update:page="gotoPage" @update:size="changeSize" />
       </div>
 
       <div class="form" style="margin-top:12px">

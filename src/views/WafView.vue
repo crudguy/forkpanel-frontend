@@ -25,7 +25,7 @@
  *    `enabled` 置 1，所以**已停用的站点**在逐站表里禁用「应用」、套用弹窗里标注
  *    "会一并启用"，避免用户只想改 WAF 却被静默启用站点。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -37,8 +37,11 @@ import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 // WAF 段 / apply 体 / 草稿比对的纯逻辑在 .ts 里（SFC 内 vitest 收不到）
 import {
   normIp, showIps, toDraft, draftDirty, siteBase, draftWafSeg, templateWafSeg,
@@ -52,6 +55,45 @@ const drafts = ref<Record<number, Draft>>({})
 const templates = ref<WafTemplate[]>([])
 const { error, loading, run } = useAsync()
 const busyId = ref<number | null>(null)
+// ── 表头排序 + 分页（项目规范：统一走共享 useTableControls）──
+// 站点表比较的是**草稿值**（drafts[s.id]）而不是 site.*：表格里显示/可改的就是草稿，
+// 按库内旧值排序会出现「看着开启、却排在关闭组里」。档位/限速同理。
+const siteWafSortCols: SortColumn<Site>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => a.name.localeCompare(b.name) },
+  { key: 'dom', dir: 'asc', compare: (a, b) => a.domains.join(', ').localeCompare(b.domains.join(', ')) },
+  { key: 'kind', dir: 'asc', compare: (a, b) => kindLabel(a.kind).localeCompare(kindLabel(b.kind)) },
+  { key: 'on', dir: 'asc', compare: (a, b) => Number(!!drafts.value[a.id]?.on) - Number(!!drafts.value[b.id]?.on) },
+  { key: 'profile', dir: 'asc', compare: (a, b) => wafProfileLabel(drafts.value[a.id]?.profile ?? '').localeCompare(wafProfileLabel(drafts.value[b.id]?.profile ?? '')) },
+  { key: 'rate', dir: 'desc', compare: (a, b) => (drafts.value[a.id]?.rate ?? 0) - (drafts.value[b.id]?.rate ?? 0) },
+  { key: 'burst', dir: 'desc', compare: (a, b) => (drafts.value[a.id]?.burst ?? 0) - (drafts.value[b.id]?.burst ?? 0) },
+  { key: 'ip', dir: 'asc', compare: (a, b) => (drafts.value[a.id]?.ipAllow.trim() ? '1' : '0').localeCompare(drafts.value[b.id]?.ipAllow.trim() ? '1' : '0') },
+]
+const {
+  size: siteSize, page: sitePage, pageCount: sitePageCount, pageRows: sitePageRows, total: siteTotal,
+  sortDir: siteSortDir, toggleSort: toggleSiteSort, changeSize: changeSiteSize,
+  gotoPage: gotoSitePage, isSorted: isSiteSorted,
+} = useTableControls<Site>({
+  rows: sites, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+  columns: siteWafSortCols, persistKey: 'waf.sites',
+})
+
+// 模板表：名称/档位/限速/突发/IP 白/IP 黑
+const tplSortCols: SortColumn<WafTemplate>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => a.name.localeCompare(b.name) },
+  { key: 'profile', dir: 'asc', compare: (a, b) => wafProfileLabel(a.waf_profile).localeCompare(wafProfileLabel(b.waf_profile)) },
+  { key: 'rate', dir: 'desc', compare: (a, b) => (a.rate_per_sec ?? 0) - (b.rate_per_sec ?? 0) },
+  { key: 'burst', dir: 'desc', compare: (a, b) => (a.burst ?? 0) - (b.burst ?? 0) },
+  { key: 'ipa', dir: 'asc', compare: (a, b) => showIps(a.ip_allow ?? []).localeCompare(showIps(b.ip_allow ?? [])) },
+  { key: 'ipd', dir: 'asc', compare: (a, b) => (a.ip_deny ?? []).join(', ').localeCompare((b.ip_deny ?? []).join(', ')) },
+]
+const {
+  size: tplSize, page: tplPage, pageCount: tplPageCount, pageRows: tplPageRows, total: tplTotal,
+  sortDir: tplSortDir, toggleSort: toggleTplSort, changeSize: changeTplSize,
+  gotoPage: gotoTplPage, isSorted: isTplSorted,
+} = useTableControls<WafTemplate>({
+  rows: templates, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+  columns: tplSortCols, persistKey: 'waf.templates',
+})
 /** 帮助抽屉（A6）：页面头部「?」打开，承载 WAF 完整约束说明 */
 const helpOpen = ref(false)
 
@@ -275,8 +317,14 @@ const events = ref<BlockEvent[]>([])
 const evtFilters = ref<{ site: string; status: string }>({ site: '', status: '' })
 const evtLoading = ref(false)
 const evtError = ref('')
+// 事件接口只给 limit/offset、**不返回总数**，故分页脚用「第 X 页」形态（TablePager 的
+// total=null 分支）：不编一个假总数，末页靠「本页是否取满」判断。
+// 从「加载更多」改成翻页的原因：累积追加 200 条一屏后，用户既看不到自己在第几屏，
+// 也没法回上一屏；而「每页条数可选」在追加模型里没有落点。
+const EVT_DEFAULT_SIZE = 100
 const evtHasMore = ref(false)
-const EVT_PAGE = 200
+const evtSize = ref(EVT_DEFAULT_SIZE)
+const evtPage = ref(1)
 /** 未开独立 access log 的站点数——采集不到，如实提示 */
 const sitesWithoutLog = computed(() => sites.value.filter(s => !s.log_access).length)
 
@@ -288,21 +336,26 @@ function evtStatusLabel(st: number): string {
 }
 
 /** 加载拦截事件（append=true 时翻页续接）。筛选：站点 / 状态码。 */
-async function loadEvents(append = false) {
+async function loadEvents() {
   evtLoading.value = true; evtError.value = ''
   try {
     const p = new URLSearchParams()
     if (evtFilters.value.site) p.set('site', evtFilters.value.site)
     if (evtFilters.value.status) p.set('status', evtFilters.value.status)
-    p.set('limit', String(EVT_PAGE))
-    p.set('offset', append ? String(events.value.length) : '0')
+    p.set('limit', String(evtSize.value))
+    p.set('offset', String((evtPage.value - 1) * evtSize.value))
     const list = await api.get<BlockEvent[]>(`${API.waf.events.list()}?${p.toString()}`)
-    events.value = append ? events.value.concat(list) : list
-    evtHasMore.value = list.length >= EVT_PAGE
+    events.value = list
+    // 「本页取满」= 可能还有下一页；取不满就是末页（无总数时唯一可靠的判据）
+    evtHasMore.value = list.length >= evtSize.value
   } catch (e) {
     evtError.value = errorText(e)
   } finally { evtLoading.value = false }
 }
+function changeEvtSize(n: number) { evtSize.value = n; evtPage.value = 1; void loadEvents() }
+function gotoEvtPage(p: number) { evtPage.value = Math.max(1, p); void loadEvents() }
+/** 改筛选条件必须回第 1 页：否则「换了个站点，停在第 3 页」看到的是空屏或错位数据 */
+watch(evtFilters, () => { evtPage.value = 1 }, { deep: true })
 
 // ─────────────────────────── 拦截告警配置（028） ───────────────────────────
 interface AlertCfg { enabled: boolean; threshold: number; window_min: number }
@@ -379,13 +432,19 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">站点</th><th scope="col">域名</th><th scope="col" class="col-opt">类型</th><th scope="col">WAF</th>
-              <th scope="col">档位</th><th scope="col">CC 限速</th><th scope="col" class="col-opt">突发桶</th>
-              <th scope="col" class="col-opt">访问控制</th><th scope="col">操作</th>
+              <SortTh label="站点" :active="isSiteSorted('name')" :dir="siteSortDir" @sort="toggleSiteSort('name')" />
+              <SortTh label="域名" :active="isSiteSorted('dom')" :dir="siteSortDir" @sort="toggleSiteSort('dom')" />
+              <SortTh class="col-opt" label="类型" :active="isSiteSorted('kind')" :dir="siteSortDir" @sort="toggleSiteSort('kind')" />
+              <SortTh label="WAF" :active="isSiteSorted('on')" :dir="siteSortDir" @sort="toggleSiteSort('on')" />
+              <SortTh label="档位" :active="isSiteSorted('profile')" :dir="siteSortDir" @sort="toggleSiteSort('profile')" />
+              <SortTh label="CC 限速" :active="isSiteSorted('rate')" :dir="siteSortDir" @sort="toggleSiteSort('rate')" />
+              <SortTh class="col-opt" label="突发桶" :active="isSiteSorted('burst')" :dir="siteSortDir" @sort="toggleSiteSort('burst')" />
+              <SortTh class="col-opt" label="访问控制" :active="isSiteSorted('ip')" :dir="siteSortDir" @sort="toggleSiteSort('ip')" />
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in sites" :key="s.id">
+            <tr v-for="s in sitePageRows" :key="s.id">
               <td class="ellipsis" :title="s.name">{{ s.name }}</td>
               <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
               <td class="col-opt">{{ kindLabel(s.kind) }}</td>
@@ -437,6 +496,8 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           </tbody>
         </table>
         </div>
+        <TablePager :total="siteTotal" :page="sitePage" :size="siteSize" :page-count="sitePageCount"
+          @update:page="gotoSitePage" @update:size="changeSiteSize" />
       </div>
     </template>
 
@@ -459,13 +520,17 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">名称</th><th scope="col">档位</th><th scope="col">CC 限速</th>
-              <th scope="col" class="col-opt">突发桶</th><th scope="col" class="col-opt">IP 白</th>
-              <th scope="col" class="col-opt">IP 黑</th><th scope="col">操作</th>
+              <SortTh label="名称" :active="isTplSorted('name')" :dir="tplSortDir" @sort="toggleTplSort('name')" />
+              <SortTh label="档位" :active="isTplSorted('profile')" :dir="tplSortDir" @sort="toggleTplSort('profile')" />
+              <SortTh label="CC 限速" :active="isTplSorted('rate')" :dir="tplSortDir" @sort="toggleTplSort('rate')" />
+              <SortTh class="col-opt" label="突发桶" :active="isTplSorted('burst')" :dir="tplSortDir" @sort="toggleTplSort('burst')" />
+              <SortTh class="col-opt" label="IP 白" :active="isTplSorted('ipa')" :dir="tplSortDir" @sort="toggleTplSort('ipa')" />
+              <SortTh class="col-opt" label="IP 黑" :active="isTplSorted('ipd')" :dir="tplSortDir" @sort="toggleTplSort('ipd')" />
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="t in templates" :key="t.id">
+            <tr v-for="t in tplPageRows" :key="t.id">
               <td class="ellipsis" :title="t.name">{{ t.name }}</td>
               <td>{{ wafProfileLabel(t.waf_profile) }}</td>
               <td class="num">{{ t.rate_per_sec || '不限速' }}</td>
@@ -491,6 +556,8 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           <button class="btn-primary btn-sm" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
         </template>
       </EmptyState>
+      <TablePager :total="tplTotal" :page="tplPage" :size="tplSize" :page-count="tplPageCount"
+        @update:page="gotoTplPage" @update:size="changeTplSize" />
     </div>
 
     <!-- 威胁日志 / 拦截事件（027）：后台每分钟采集开日志站点的 403/405/429 -->
@@ -498,7 +565,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       <div class="card-toolbar">
         <Icon name="shield" :size="15" class="sec-ico" />
         <span class="sec-title">威胁日志</span>
-        <span class="count">共 {{ events.length }} 条</span>
+        <span class="count">本页 {{ events.length }} 条</span>
         <span class="spacer" />
         <RefreshBtn :disabled="evtLoading" sm @click="loadEvents()" />
       </div>
@@ -545,9 +612,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       <EmptyState v-else-if="!evtLoading && !evtError" title="暂无拦截事件"
         hint="开启站点的独立 access log 后，被拦截的请求（403/405/429）会在这里出现" />
       <div v-if="evtLoading" class="skeleton box" />
-      <div v-if="evtHasMore" class="evt-more">
-        <button class="btn-ghost btn-sm" :disabled="evtLoading" @click="loadEvents(true)">加载更多</button>
-      </div>
+      <!-- 事件流无总数：TablePager 走 total=null 分支，只说「第 X 页」 -->
+      <TablePager :total="null" :page="evtPage" :size="evtSize" :has-next="evtHasMore"
+        @update:page="gotoEvtPage" @update:size="changeEvtSize" />
     </div>
 
     <!-- 拦截告警配置（028）：命中达阈值推站内通知 -->
@@ -739,7 +806,6 @@ col.w-tacts { width: 170px; }
 /* 威胁日志：筛选条 + 说明 + 事件表列宽 */
 .evt-filters { display: flex; gap: 8px; align-items: center; padding: 0 14px 10px; flex-wrap: wrap; }
 .evt-note { margin: 0; padding: 0 14px 10px; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
-.evt-more { padding: 4px 14px 12px; }
 col.w-ets { width: 150px; }
 col.w-etsite { width: 90px; }
 col.w-etip { width: 120px; }

@@ -12,6 +12,11 @@
  * 2026-10-20 已实际踩过（`d8a5976`）。这类缺陷 `vue-tsc` / `vite build` /
  * 真机点一遍「正常路径」都不会报——只有"先筛选再全选"才露头。
  *
+ * 2026-11-11 分页落地后判据升级：列表分页时「看得见」= **当前页渲染出来的行**，
+ * 不再是整个筛选集。故锚点从 `in visibleEntries` 扩成「页面实际 v-for 的那个集合」
+ * （`in pageRows` 或 `in visibleEntries`），并新增一条：`allChecked` / `selectedEntries`
+ * 必须与它**同一个源**——否则"翻到第 2 页勾选、批量删的却是第 1 页"会静默发生。
+ *
  * 断言口径（三条同源，缺一即违规）：
  *   [1] `allChecked` 的 computed 块内不得引用 `entries.value`；
  *   [2] `selectedEntries` 的 computed 块内不得引用 `entries.value`；
@@ -87,13 +92,17 @@ for (const file of files) {
   // ── 恒绿防护 [a]：三个锚点必须齐 ──
   const anchorA = 'const allChecked'
   const anchorB = 'const selectedEntries'
-  const anchorC = 'in visibleEntries'
+  // 渲染行集合：客户端分页页用 pageRows，未分页页仍是 visibleEntries。
+  // 两个都找不到 = 结构已变（或有人把行循环改回了 entries），直接判红。
+  const rowAnchor = /\bin\s+pageRows\b/.test(src) ? 'pageRows'
+    : (/\bin\s+visibleEntries\b/.test(src) ? 'visibleEntries' : null)
+  const anchorC = rowAnchor ? `in ${rowAnchor}` : 'in pageRows|visibleEntries'
   // 用词边界而不是 includes：`const allCheckedRenamed` 会把 `includes('const allChecked')`
   // 蒙过去（实测），于是"结构已变"的情况被当成"锚点齐全"。
   const missing = [
     [anchorA, /\bconst\s+allChecked\b/.test(src)],
     [anchorB, /\bconst\s+selectedEntries\b/.test(src)],
-    [anchorC, /\bin\s+visibleEntries\b/.test(src)],
+    [anchorC, rowAnchor !== null],
   ].filter(([, ok]) => !ok).map(([name]) => name)
   if (missing.length) {
     problems.push(
@@ -117,6 +126,22 @@ for (const file of files) {
         `批量删除会删掉用户在这个视图里从未见过的文件。`,
       )
     }
+  }
+
+  // ── [4] 判定/写入与「渲染出来的行」同源 ──
+  // 分页后若 selectedEntries 仍按整个 visibleEntries 算，就会出现「屏幕上只勾了 3 行、
+  // 批量删除却动了 30 行（其余在别的页）」。允许经由一个派生 computed（pageSelectable /
+  // visibleSelectable）间接引用，但那一层也必须基于同一个 rowAnchor。
+  const baseName = rowAnchor === 'pageRows' ? 'pageSelectable' : 'visibleSelectable'
+  const baseBlock = computedBlock(src, `const ${baseName}`)
+  if (!baseBlock) {
+    problems.push(`${rel}：找不到 \`const ${baseName}\`（选择基集改名了？本守卫判据失效）`)
+  } else if (!baseBlock.includes(`${rowAnchor}.value`)) {
+    problems.push(`${rel}：${baseName} 不是基于 ${rowAnchor} 算出的 —— 判定与渲染不同源`)
+  }
+  const selBlock = computedBlock(src, 'const selectedEntries')
+  if (selBlock && !selBlock.includes(`${baseName}.value`) && !selBlock.includes(`${rowAnchor}.value`)) {
+    problems.push(`${rel}：selectedEntries 既不用 ${baseName} 也不用 ${rowAnchor} —— 批量作用域与屏幕不一致`)
   }
 
   // ── [3] 批量动作的 paths 来源 ──

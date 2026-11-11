@@ -52,9 +52,12 @@ describe('ProcessesView 分页 / 排序接线', () => {
     // 页脚把页码与每页条数都回传给组合式：否则下拉框只是个摆设
     expect(SRC).toContain('@update:page="gotoPage"')
     expect(SRC).toContain('@update:size="changeSize"')
-    // 默认每页 100（沿用进程页历史默认），且只在一页以上才显示分页脚
+    // 默认每页 100（沿用进程页历史默认）
     expect(SRC).toContain('defaultSize: 100')
-    expect(SRC).toContain('v-if="filtered.length > size"')
+    // 可见性**不再由页面判**：旧的 `total > size` 判据是错的——30 条数据配默认 100 时
+    // 会把分页脚整个藏起来，用户再也切不到 10 条/页。判据收进 TablePager（total > 最小档）。
+    expect(SRC).not.toContain('v-if="filtered.length > size"')
+    expect(SRC).not.toContain('v-if="total > size"')
   })
 
   it('搜索框绑定到 q', () => {

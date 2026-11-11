@@ -12,10 +12,13 @@ import { API } from '@/api/endpoints'
 import EmptyState from '@/components/EmptyState.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 // 驱动列的展示规则（docker 对内置 none 网络输出字面串 `null`，`|| '—'` 兜不住）：
 // 判据在 containerStatus.ts 有单测，这里只接线。
 import { driverText } from '@/components/containers/containerStatus'
 import { useRowLoad } from '@/composables/useRowLoad'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 
 /** Docker 网络行（`docker network ls --no-trunc` 的一行）。driver / scope 为 docker
  *  原始串（bridge / host / overlay / macvlan…；local / swarm / global），与面板其它
@@ -33,6 +36,21 @@ const { loading, error, load } = useRowLoad(
 )
 
 watch(() => props.active, (v) => { if (v) void load() }, { immediate: true })
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 默认按名称升序：网络只有一个稳定标识就是名字（bridge / host / none 在前，自定义网络在后）。
+const networkSortCols: SortColumn<NetworkLine>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  // 按**展示文本**比较：driver 为字面串 `null` 时表格显示「—」，按原文排会把它塞进 n 段中间
+  { key: 'driver', dir: 'asc', compare: (a, b) => driverText(a.driver).localeCompare(driverText(b.driver)) },
+  { key: 'scope', dir: 'asc', compare: (a, b) => (a.scope ?? '').localeCompare(b.scope ?? '') },
+  { key: 'id', dir: 'asc', compare: (a, b) => (a.id ?? '').localeCompare(b.id ?? '') },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<NetworkLine>({
+    rows: networks, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: networkSortCols,
+    persistKey: 'containers.networks',
+  })
 
 /** 短 ID（12 位，与 `docker network ls` 默认展示一致）；完整值放 title 供核对。 */
 function shortId(id: string) {
@@ -65,10 +83,15 @@ function shortId(id: string) {
             <col class="w-nname" /><col class="w-ndrv" /><col class="w-nscope" /><col class="w-nid" />
           </colgroup>
           <thead>
-            <tr><th>名称</th><th>驱动</th><th>作用域</th><th>ID</th></tr>
+            <tr>
+              <SortTh label="名称" :active="isSorted('name')" :dir="sortDir" @sort="toggleSort('name')" />
+              <SortTh label="驱动" :active="isSorted('driver')" :dir="sortDir" @sort="toggleSort('driver')" />
+              <SortTh label="作用域" :active="isSorted('scope')" :dir="sortDir" @sort="toggleSort('scope')" />
+              <SortTh label="ID" :active="isSorted('id')" :dir="sortDir" @sort="toggleSort('id')" />
+            </tr>
           </thead>
           <tbody>
-            <tr v-for="n in networks" :key="n.id">
+            <tr v-for="n in pageRows" :key="n.id">
               <td class="mono ellipsis" :title="n.name">{{ n.name }}</td>
               <td class="mono dim">{{ driverText(n.driver) }}</td>
               <td class="mono dim">{{ n.scope || '—' }}</td>
@@ -77,6 +100,8 @@ function shortId(id: string) {
           </tbody>
         </table>
       </div>
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
     </div>
     <EmptyState v-else-if="!loading" title="暂无网络"
       hint="daemon 未返回任何网络（异常：连默认的 bridge 网络都不存在），可点「刷新」重试。" />

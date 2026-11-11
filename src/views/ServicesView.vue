@@ -147,7 +147,7 @@ function toggleSvcSort(k: SvcSortKey) {
 // ── 分页（项目规范：共享 useTableControls，仅用它切片；排序仍走上面的 sortSvcRows）──
 // 服务数通常不大，默认每页 100 足够一屏看完，超过才出现分页脚与每页条数选择。
 const { size, page, pageCount, pageRows, total, changeSize, gotoPage } = useTableControls({
-  rows: svcRows, defaultSize: 100, columns: [],
+  rows: svcRows, defaultSize: 100, columns: [], persistKey: 'services.units',
 })
 
 // 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
@@ -655,8 +655,8 @@ async function doConfirmed() {
               </td></tr>
             </tbody>
           </table>
-          <!-- 超过一页才出现分页脚（每页条数 10/20/50/100 可选） -->
-          <TablePager v-if="total > size"
+          <!-- 分页脚：可见性由组件自判（total 超过最小档 10 条才出现），这里不再写 v-if -->
+          <TablePager
             :total="total" :page="page" :size="size" :page-count="pageCount"
             @update:page="gotoPage" @update:size="changeSize" />
         </div>

@@ -35,6 +35,8 @@ import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TablePager from '@/components/TablePager.vue'
+import SortTh from '@/components/SortTh.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import {
   dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, tableOptionLabel,
   type DbLevelInput, type DbSchemaNode,
@@ -66,6 +68,27 @@ const browseSize = ref(50)
 
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
+
+// ── 连接表：排序 + 分页（项目规范）──
+// 名称/备注/引擎/主机/库按展示文本比；「客户端」徽标按就绪与否比（缺客户端的排前，
+// 便于先处理不能用的连接）。浏览数据表**不接**：列由后端动态下发、数据按 offset/limit
+// 服务端分页，前端连列名都不固定，无法定义排序比较函数。
+const connSortCols: SortColumn<Conn>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => a.name.localeCompare(b.name) },
+  { key: 'remark', dir: 'asc', compare: (a, b) => (a.remark ?? '').localeCompare(b.remark ?? '') },
+  { key: 'engine', dir: 'asc', compare: (a, b) => a.engine.localeCompare(b.engine) },
+  { key: 'host', dir: 'asc', compare: (a, b) => `${a.host ?? ''}:${a.port ?? ''}`.localeCompare(`${b.host ?? ''}:${b.port ?? ''}`) },
+  { key: 'db', dir: 'asc', compare: (a, b) => (a.default_db ?? '').localeCompare(b.default_db ?? '') },
+  { key: 'client', dir: 'asc', compare: (a, b) => Number(a.client_ready) - Number(b.client_ready) },
+]
+const {
+  size: connSize, page: connPage, pageCount: connPageCount, pageRows: connRows, total: connTotal,
+  sortDir: connSortDir, toggleSort: toggleConnSort, changeSize: changeConnSize,
+  gotoPage: gotoConnPage, isSorted: isConnSorted,
+} = useTableControls<Conn>({
+  rows: conns, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+  columns: connSortCols, persistKey: 'databases.conns',
+})
 const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载引擎差异与能力边界的完整说明 */
@@ -431,9 +454,17 @@ async function exportCsv() {
           <colgroup>
             <col class="w-dbname" /><col class="w-dbremark" /><col class="w-dbeng" /><col class="w-dbhost" /><col class="w-dbdb" /><col class="w-dbcli" /><col class="w-dbacts" />
           </colgroup>
-          <thead><tr><th scope="col">名称</th><th scope="col" class="col-opt">备注</th><th scope="col">引擎</th><th scope="col">主机</th><th scope="col">库 / 文件</th><th scope="col" class="col-opt">客户端</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="名称" :active="isConnSorted('name')" :dir="connSortDir" @sort="toggleConnSort('name')" />
+            <SortTh class="col-opt" label="备注" :active="isConnSorted('remark')" :dir="connSortDir" @sort="toggleConnSort('remark')" />
+            <SortTh label="引擎" :active="isConnSorted('engine')" :dir="connSortDir" @sort="toggleConnSort('engine')" />
+            <SortTh label="主机" :active="isConnSorted('host')" :dir="connSortDir" @sort="toggleConnSort('host')" />
+            <SortTh label="库 / 文件" :active="isConnSorted('db')" :dir="connSortDir" @sort="toggleConnSort('db')" />
+            <SortTh class="col-opt" label="客户端" :active="isConnSorted('client')" :dir="connSortDir" @sort="toggleConnSort('client')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="c in conns" :key="c.id">
+            <tr v-for="c in connRows" :key="c.id">
               <td class="ellipsis" :title="c.name">{{ c.name }}</td>
               <td class="remark-cell col-opt">
                 <InlineRemark :model-value="c.remark" :editable="canManage"
@@ -476,6 +507,8 @@ async function exportCsv() {
           </tbody>
         </table>
         </div>
+        <TablePager :total="connTotal" :page="connPage" :size="connSize" :page-count="connPageCount"
+          @update:page="gotoConnPage" @update:size="changeConnSize" />
       </div>
       <EmptyState v-else title="暂无连接"
         hint="用上方的「新增连接」卡片登记第一个数据库；SQLite 为内建引擎，无需额外安装。">
@@ -726,7 +759,6 @@ async function exportCsv() {
 .path-row > label select { min-width: 150px; max-width: 300px; }
 /* 「表」是最长、最常看的一层，给它更宽的余量 */
 .path-row:last-child > label select { min-width: 220px; max-width: 380px; }
-.pager { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 /* 遮罩 / 弹窗框 / 标题行 / 关闭按钮 / 字段 / 操作条 / 后果预警一律取 main.css 的公共式样。
    此前这里私有复刻了 .restore-warn（硬编码 #FF5A36）、.modal-actions、.danger-btn（#C73E1F）。 */
 /* 连接表列宽（站点表范式）：库/文件为唯一弹性列；操作列 270px 容下

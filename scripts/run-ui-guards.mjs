@@ -56,6 +56,8 @@ export const UI_GUARDS = [
   'check-theme-control.mjs',
   // 2026-11-06 视觉系统 A→C→B：圆角收敛 / 分段控件统一 / 次级按钮中性化
   'check-visual-system.mjs',
+  // 2026-11-11 表格约定：每张记录表都要有分页脚 + 可排序表头，登记例外须写理由
+  'check-table-convention.mjs',
 ]
 
 let failed = 0

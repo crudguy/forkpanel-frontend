@@ -17,8 +17,11 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 
 interface Job {
   id: string; expr: string; command: string; user: string
@@ -28,6 +31,24 @@ interface Job {
 
 const auth = useAuthStore()
 const jobs = ref<Job[]>([])
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 计划任务的「名称」就是任务标识 Job.id（新建时的 name 落库为 id），故按 id 排序；
+// 表达式/命令/用户为文本列；上次执行按时间降序（最近跑过的在前），
+// 下次预览按最近一次命中升序（无下次命中 = 一年内不触发，排到最后）。
+const cronSortCols: SortColumn<Job>[] = [
+  { key: 'id', dir: 'asc', compare: (a, b) => (a.id ?? '').localeCompare(b.id ?? '') },
+  { key: 'expr', dir: 'asc', compare: (a, b) => (a.expr ?? '').localeCompare(b.expr ?? '') },
+  { key: 'command', dir: 'asc', compare: (a, b) => (a.command ?? '').localeCompare(b.command ?? '') },
+  { key: 'user', dir: 'asc', compare: (a, b) => (a.user ?? '').localeCompare(b.user ?? '') },
+  { key: 'last_run_at', dir: 'desc', compare: (a, b) => (a.last_run_at ?? 0) - (b.last_run_at ?? 0) },
+  { key: 'next', dir: 'asc', compare: (a, b) => (a.next?.[0] ?? Number.MAX_SAFE_INTEGER) - (b.next?.[0] ?? Number.MAX_SAFE_INTEGER) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Job>({
+    rows: jobs, defaultSize: 100, defaultSort: { key: 'id', dir: 'asc' }, columns: cronSortCols,
+    persistKey: 'cron.jobs',
+  })
 const { error, loading, run } = useAsync()
 const note = ref('')
 const form = ref({ name: '', expr: '', command: '', user: 'root' })
@@ -230,9 +251,17 @@ async function triggerWebhook(j: Job) {
           <colgroup>
             <col class="w-cjid" /><col class="w-cjexpr" /><col class="w-cjcmd" /><col class="w-cjuser" /><col class="w-cjlast" /><col class="w-cjnext" /><col class="w-cjacts" />
           </colgroup>
-          <thead><tr><th>名称</th><th>表达式</th><th>命令</th><th class="col-opt">用户</th><th>上次执行</th><th>下次预览</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="名称" :active="isSorted('id')" :dir="sortDir" @sort="toggleSort('id')" />
+            <SortTh label="表达式" :active="isSorted('expr')" :dir="sortDir" @sort="toggleSort('expr')" />
+            <SortTh label="命令" :active="isSorted('command')" :dir="sortDir" @sort="toggleSort('command')" />
+            <SortTh class="col-opt" label="用户" :active="isSorted('user')" :dir="sortDir" @sort="toggleSort('user')" />
+            <SortTh label="上次执行" :active="isSorted('last_run_at')" :dir="sortDir" @sort="toggleSort('last_run_at')" />
+            <SortTh label="下次预览" :active="isSorted('next')" :dir="sortDir" @sort="toggleSort('next')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="j in jobs" :key="j.id">
+            <tr v-for="j in pageRows" :key="j.id">
               <td class="ellipsis" :title="j.id">{{ j.id }}</td>
               <td class="mono">{{ j.expr }}</td>
               <td class="mono dim ellipsis" :title="j.command">{{ j.command }}</td>
@@ -255,6 +284,9 @@ async function triggerWebhook(j: Job) {
           </tbody>
         </table>
         </div>
+        <!-- 分页脚：放在 .t-scroll 之外、同一张卡片内；可见性由组件自判 -->
+        <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+          @update:page="gotoPage" @update:size="changeSize" />
       </div>
       <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务"
         hint="用上方的「新建任务」卡片添加第一个定时任务，例如每天凌晨备份数据库。">

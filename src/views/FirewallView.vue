@@ -18,6 +18,9 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
 interface Rule {
@@ -27,6 +30,31 @@ interface Rule {
 
 const auth = useAuthStore()
 const rules = ref<Rule[]>([])
+
+// ── 规则表：分页 + 排序（全站表格约定，共享 useTableControls / SortTh / TablePager）──
+/** 端口是字符串，且可能是 "80" / "80,443" / "8000-8100"：取首个数字按数值比较
+ *  （`Number("80,443")` 是 NaN，直接相减会让整列顺序失效）；解析不出数字的排最后。 */
+function portNum(s: string): number {
+  const m = /^\d+/.exec((s ?? '').trim())
+  return m ? Number(m[0]) : Infinity
+}
+const ruleSortCols: SortColumn<Rule>[] = [
+  { key: 'ports', dir: 'asc', compare: (a, b) => { const x = portNum(a.ports), y = portNum(b.ports); return x === y ? 0 : x - y } },
+  { key: 'protocol', dir: 'asc', compare: (a, b) => (a.protocol ?? '').localeCompare(b.protocol ?? '') },
+  { key: 'action', dir: 'asc', compare: (a, b) => (a.action ?? '').localeCompare(b.action ?? '') },
+  { key: 'direction', dir: 'asc', compare: (a, b) => (a.direction ?? '').localeCompare(b.direction ?? '') },
+  { key: 'source', dir: 'asc', compare: (a, b) => (a.source ?? '').localeCompare(b.source ?? '') },
+  { key: 'comment', dir: 'asc', compare: (a, b) => (a.comment ?? '').localeCompare(b.comment ?? '') },
+  { key: 'panel_managed', dir: 'asc', compare: (a, b) => Number(a.panel_managed) - Number(b.panel_managed) },
+]
+// 默认按端口升序：这张表的常见用途是查「某端口放没放行」，升序让同端口族（22/80/443、
+// 8000-8100）彼此相邻；同时给出稳定顺序，不必依赖后端每次返回的排列。
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Rule>({
+    rows: rules, defaultSize: 100, defaultSort: { key: 'ports', dir: 'asc' }, columns: ruleSortCols,
+    persistKey: 'firewall.rules',
+  })
+
 const backend = ref('')
 const active = ref(false)
 const error = ref('')
@@ -285,16 +313,25 @@ onMounted(() => { load(); loadFail2ban() })
           text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
       </section>
 
-      <div class="card flush" v-if="rules.length">
+      <div class="card flush" v-if="total">
         <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽（站点表范式）：来源为唯一弹性列；方向列窄屏隐藏（.col-opt，恒为入站/出站枚举）。 -->
           <colgroup>
             <col class="w-fwport" /><col class="w-fwproto" /><col class="w-fwact" /><col class="w-fwdir" /><col class="w-fwsrc" /><col class="w-fwcmt" /><col class="w-fwown" /><col class="w-fwacts" />
           </colgroup>
-          <thead><tr><th>端口</th><th>协议</th><th>动作</th><th class="col-opt">方向</th><th>来源</th><th>备注</th><th>归属</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="端口" :active="isSorted('ports')" :dir="sortDir" @sort="toggleSort('ports')" />
+            <SortTh label="协议" :active="isSorted('protocol')" :dir="sortDir" @sort="toggleSort('protocol')" />
+            <SortTh label="动作" :active="isSorted('action')" :dir="sortDir" @sort="toggleSort('action')" />
+            <SortTh class="col-opt" label="方向" :active="isSorted('direction')" :dir="sortDir" @sort="toggleSort('direction')" />
+            <SortTh label="来源" :active="isSorted('source')" :dir="sortDir" @sort="toggleSort('source')" />
+            <SortTh label="备注" :active="isSorted('comment')" :dir="sortDir" @sort="toggleSort('comment')" />
+            <SortTh label="归属" :active="isSorted('panel_managed')" :dir="sortDir" @sort="toggleSort('panel_managed')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="r in rules" :key="r.id">
+            <tr v-for="r in pageRows" :key="r.id">
               <td class="mono">{{ r.ports }}</td>
               <td>{{ fwProtocolLabel(r.protocol) }}</td>
               <td><span class="badge" :class="r.action === 'allow' ? 'badge-ok' : 'badge-danger'">{{ fwActionLabel(r.action) }}</span></td>
@@ -316,6 +353,8 @@ onMounted(() => { load(); loadFail2ban() })
           </tbody>
         </table>
         </div>
+        <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+          @update:page="gotoPage" @update:size="changeSize" />
       </div>
       <EmptyState v-else title="暂无规则">
         <template #cta>

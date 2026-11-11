@@ -22,6 +22,9 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { sslGate } from '@/composables/sslGate'
@@ -70,6 +73,26 @@ function siteOf(domain: string): string {
   const s = sites.value.find(s => s.domains.includes(domain))
   return s ? s.name : '—'
 }
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 证书表一张证书绑定一个 domain（不是数组），故「域名」按 domain 字段比；
+// 「站点」不是证书字段，用 siteOf(domain) 派生后比。到期/剩余都是时间序，
+// 来源与自动续期按文本/布尔比。
+// 默认排序取「剩余天数升序」：巡检时最该先处理的是**快到期**的证书，
+// 按剩余天数排比按绝对到期日更直接对应用户眼前那一列（两者次序其实一致）。
+const certSortCols: SortColumn<Cert>[] = [
+  { key: 'domain', dir: 'asc', compare: (a, b) => (a.domain ?? '').localeCompare(b.domain ?? '') },
+  { key: 'site', dir: 'asc', compare: (a, b) => siteOf(a.domain).localeCompare(siteOf(b.domain)) },
+  { key: 'source', dir: 'asc', compare: (a, b) => (a.source ?? '').localeCompare(b.source ?? '') },
+  { key: 'not_after', dir: 'desc', compare: (a, b) => (a.not_after ?? 0) - (b.not_after ?? 0) },
+  { key: 'days_left', dir: 'asc', compare: (a, b) => (a.days_left ?? 0) - (b.days_left ?? 0) },
+  { key: 'auto_renew', dir: 'asc', compare: (a, b) => Number(a.auto_renew) - Number(b.auto_renew) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Cert>({
+    rows: certs, defaultSize: 100, defaultSort: { key: 'days_left', dir: 'asc' }, columns: certSortCols,
+    persistKey: 'certs.list',
+  })
 
 // 根证书（全局动作，始终可达——零站点也能进）
 function downloadCa() { window.location.href = API.certs.ca() }
@@ -201,12 +224,17 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
         <thead>
           <tr>
-            <th scope="col">域名</th><th scope="col" class="col-opt">站点</th><th scope="col" class="col-opt">来源</th>
-            <th scope="col">到期</th><th scope="col">剩余</th><th scope="col">自动续期</th><th scope="col">操作</th>
+            <SortTh label="域名" :active="isSorted('domain')" :dir="sortDir" @sort="toggleSort('domain')" />
+            <SortTh class="col-opt" label="站点" :active="isSorted('site')" :dir="sortDir" @sort="toggleSort('site')" />
+            <SortTh class="col-opt" label="来源" :active="isSorted('source')" :dir="sortDir" @sort="toggleSort('source')" />
+            <SortTh label="到期" :active="isSorted('not_after')" :dir="sortDir" @sort="toggleSort('not_after')" />
+            <SortTh label="剩余" :active="isSorted('days_left')" :dir="sortDir" @sort="toggleSort('days_left')" />
+            <SortTh label="自动续期" :active="isSorted('auto_renew')" :dir="sortDir" @sort="toggleSort('auto_renew')" />
+            <th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in certs" :key="c.id">
+          <tr v-for="c in pageRows" :key="c.id">
             <td class="mono ellipsis" :title="c.domain">{{ c.domain }}</td>
             <td class="ellipsis col-opt" :title="siteOf(c.domain)">{{ siteOf(c.domain) }}</td>
             <td class="col-opt">{{ certSourceLabel(c.source) }}</td>
@@ -235,6 +263,9 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         </tbody>
       </table>
       </div>
+      <!-- 分页脚：放在 .t-scroll 之外、同一张卡片内；可见性由组件自判 -->
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
     </div>
 
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在列表卡顶栏 -->

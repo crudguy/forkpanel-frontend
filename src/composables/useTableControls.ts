@@ -15,6 +15,10 @@
  *
  * 服务端分页的页面（审计 / 数据库）**不用**本组合式算切片——它们自己拉 `{items,total}`，
  * 只复用 `<TablePager>` 把 `size` / `page` 回传到接口即可；`columns` 不传即可（表头不在此处排序）。
+ *
+ * 适用范围（项目规范）：**记录列表**——行数随数据增长、按列可比的集合。纯 KV / 详情 /
+ * 实时指标表（设置项、容器统计、compose 详情）不加分页也不加表头排序：给固定 6 行的
+ * 表配「第 1/1 页」只是噪音，还会把 `--row-py` 省下的空间又吃回去。
  */
 import { computed, ref, watch, type Ref } from 'vue'
 import { clampPage, pageCountOf, pageSlice } from './procPaging'
@@ -41,10 +45,34 @@ export interface UseTableControlsOpts<Row> {
   defaultSort?: { key: string; dir?: SortDir }
   /** 可排序的表头描述；不传则不做客户端排序（服务端分页页用不到） */
   columns?: SortColumn<Row>[]
+  /** 记忆键：给了就把「每页条数」按表存进 localStorage，下次进来还是用户选的那档 */
+  persistKey?: string
+}
+
+const K_SIZE = 'forkpanel.table.size'
+
+/** 读回用户上次选的每页条数；只认 [10,20,50,100] 里的值（存量脏值不能把表撑爆） */
+function readSize(key: string | undefined, fallback: number): number {
+  if (!key) return fallback
+  try {
+    const raw = Number(localStorage.getItem(`${K_SIZE}.${key}`))
+    return (TABLE_PAGE_SIZES as readonly number[]).includes(raw) ? raw : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeSize(key: string | undefined, v: number) {
+  if (!key) return
+  try {
+    localStorage.setItem(`${K_SIZE}.${key}`, String(v))
+  } catch {
+    /* 隐私模式 / 配额满：不记忆而已，本次会话仍然生效，不打扰用户 */
+  }
 }
 
 export function useTableControls<Row>(opts: UseTableControlsOpts<Row>) {
-  const size = ref<number>(opts.defaultSize ?? 100)
+  const size = ref<number>(readSize(opts.persistKey, opts.defaultSize ?? 100))
   const page = ref(1)
   const sortKey = ref<string | null>(opts.defaultSort?.key ?? null)
   const sortDir = ref<SortDir>(opts.defaultSort?.dir ?? 'asc')
@@ -82,10 +110,12 @@ export function useTableControls<Row>(opts: UseTableControlsOpts<Row>) {
     // 换序后停在第 5 页没有意义（那一页内容全变了），统一回第一页
     page.value = 1
   }
-  /** 改每页条数：同样回第一页，避免停在越界页 */
+  /** 改每页条数：同样回第一页，避免停在越界页；非法值（0 / 负数 / NaN）直接忽略 */
   function changeSize(n: number) {
+    if (!Number.isFinite(n) || n <= 0) return
     size.value = n
     page.value = 1
+    writeSize(opts.persistKey, n)
   }
   function gotoPage(p: number) { page.value = clampPage(p, pageCount.value) }
   function next() { gotoPage(page.value + 1) }

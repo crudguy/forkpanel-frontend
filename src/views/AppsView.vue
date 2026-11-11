@@ -20,6 +20,9 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
@@ -75,6 +78,25 @@ const formError = ref('')
  *  按钮与「新建应用」并列在卡片顶栏最右（参考网站页）；零应用时列表卡不渲染、? 一并隐藏，
  *  但 EmptyState 已给上手引导，更深的说明在抽屉里。 */
 const helpOpen = ref(false)
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 应用表按字段排序：名称/运行时/状态/单元是文本列 → localeCompare 升序；
+// 端口是标识型数值（不是"越大越重要"的指标）→ 升序；域名是多值列，拼成串再比；
+// 托管是布尔 → 未托管在前。默认按应用名升序。
+const appSortCols: SortColumn<AppInfo>[] = [
+  { key: 'name', dir: 'asc', compare: (a, b) => (a.name ?? '').localeCompare(b.name ?? '') },
+  { key: 'runtime_label', dir: 'asc', compare: (a, b) => (a.runtime_label ?? '').localeCompare(b.runtime_label ?? '') },
+  { key: 'port', dir: 'asc', compare: (a, b) => (a.port ?? 0) - (b.port ?? 0) },
+  { key: 'domains', dir: 'asc', compare: (a, b) => (a.domains || []).join(', ').localeCompare((b.domains || []).join(', ')) },
+  { key: 'state', dir: 'asc', compare: (a, b) => (a.state ?? '').localeCompare(b.state ?? '') },
+  { key: 'unit', dir: 'asc', compare: (a, b) => (a.unit ?? '').localeCompare(b.unit ?? '') },
+  { key: 'enabled', dir: 'asc', compare: (a, b) => Number(a.enabled) - Number(b.enabled) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<AppInfo>({
+    rows: apps, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: appSortCols,
+    persistKey: 'apps.list',
+  })
 
 // 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
 const systemUsers = ref<{ name: string; uid: number; login_allowed: boolean }[]>([])
@@ -356,7 +378,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       </div>
       <!-- 顶栏固定：零应用也常驻（参考网站页）；其下按状态显示骨架 / 表格 / 空态 -->
       <div v-if="loading && !apps.length" class="skeleton box" />
-      <div v-else-if="apps.length" class="t-scroll">
+      <div v-if="apps.length" class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 应用表列宽独立一套（不与站点/证书表共用 class，避免改一处漂一片） -->
         <colgroup>
@@ -365,12 +387,18 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         </colgroup>
         <thead>
           <tr>
-            <th>应用</th><th>运行时</th><th>端口</th><th>域名</th>
-            <th>状态</th><th>单元</th><th>托管</th><th>操作</th>
+            <SortTh label="应用" :active="isSorted('name')" :dir="sortDir" @sort="toggleSort('name')" />
+            <SortTh label="运行时" :active="isSorted('runtime_label')" :dir="sortDir" @sort="toggleSort('runtime_label')" />
+            <SortTh label="端口" :active="isSorted('port')" :dir="sortDir" @sort="toggleSort('port')" />
+            <SortTh label="域名" :active="isSorted('domains')" :dir="sortDir" @sort="toggleSort('domains')" />
+            <SortTh label="状态" :active="isSorted('state')" :dir="sortDir" @sort="toggleSort('state')" />
+            <SortTh label="单元" :active="isSorted('unit')" :dir="sortDir" @sort="toggleSort('unit')" />
+            <SortTh label="托管" :active="isSorted('enabled')" :dir="sortDir" @sort="toggleSort('enabled')" />
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="a in apps" :key="a.id">
+          <tr v-for="a in pageRows" :key="a.id">
             <td class="ellipsis" :title="a.name">{{ a.name }}</td>
             <td class="dim">{{ a.runtime_label }}</td>
             <td class="mono">{{ a.port }}</td>
@@ -411,7 +439,10 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         </tbody>
       </table>
       </div>
-      <EmptyState v-else title="暂无托管应用"
+      <!-- 分页脚：放在 .t-scroll 之外、同一张卡片内；可见性由组件自判 -->
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
+      <EmptyState v-if="!loading && !apps.length" title="暂无托管应用"
         hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点" />
     </div>
 

@@ -18,12 +18,15 @@
  * 对「当前激活标签」的 computed 代理，既最小化改动面，又让既有逻辑（enter /
  * goto / up / load / 批量……）原样工作。列表接口本就按 path 拉取，故后端零改动。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, fmtDateTime, fmtSize } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortDir } from '@/composables/useTableControls'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
@@ -58,6 +61,8 @@ interface FileTab {
   truncated: boolean
   selected: Set<string>
   sortBy: 'name' | 'size' | 'modified'
+  /** 升/降序：每标签独立（与 sortBy 同一份状态，切标签互不串） */
+  sortDir: SortDir
   showHidden: boolean
   /** 该标签独立的请求序号：切标签 / 连点刷新时先到的结果不会覆盖后发的 */
   seq: number
@@ -71,7 +76,7 @@ function makeTab(path: string, id?: string): FileTab {
   return {
     id: id ?? `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     path, entries: [], loading: false, error: '', truncated: false,
-    selected: new Set(), sortBy: 'name', showHidden: false, seq: 0, filter: '',
+    selected: new Set(), sortBy: 'name', sortDir: 'asc', showHidden: false, seq: 0, filter: '',
   }
 }
 
@@ -88,6 +93,7 @@ const loading = computed({ get: () => activeTab.value.loading, set: (v) => { act
 const error = computed({ get: () => activeTab.value.error, set: (v) => { activeTab.value.error = v } })
 const selected = computed({ get: () => activeTab.value.selected, set: (v) => { activeTab.value.selected = v } })
 const sortBy = computed({ get: () => activeTab.value.sortBy, set: (v) => { activeTab.value.sortBy = v } })
+const sortDir = computed({ get: () => activeTab.value.sortDir, set: (v) => { activeTab.value.sortDir = v } })
 const showHidden = computed({ get: () => activeTab.value.showHidden, set: (v) => { activeTab.value.showHidden = v } })
 
 /** 当前标签的过滤串（本地筛选，不走后端——见 composables/fileFilter.ts 的语义说明）。
@@ -102,9 +108,40 @@ const visibleEntries = computed(() => filterEntries(entries.value, filterQuery.v
 const filterTip = computed(() =>
   filterHint(entries.value.length, visibleEntries.value.length, filterQuery.value))
 
-/** 排序：直接走后端 list 的 sort 参数（已支持 name/size/modified，dirs_first 恒真）。
- *  前端不再本地排序——服务端才是权威，本地排会让「截断 1000 项」的显示与真实顺序脱节。 */
-function setSortBy(v: 'name' | 'size' | 'modified') { activeTab.value.sortBy = v; load() }
+/**
+ * 排序：列由本地点选、方向可切（升/降），**不再为一次点击回源**。
+ *
+ * 为什么从「后端 sort 参数」改成「本地排序」：后端只返回一种顺序（dirs_first + 升序），
+ * 而表头规范要求同列再点一次能切降序——为此回源也没有参数可传。本地排序只作用于
+ * **已加载的这批条目**（后端上限 1000 且首屏已提示截断），所见即所排，不会出现
+ * 「界面上按降序、实际顺序仍是后端升序」的错位。
+ * `sort: tab.sortBy` 仍随请求发出去：它决定首次加载的初始顺序，本地排序在其之上覆盖。
+ */
+function setSortBy(v: 'name' | 'size' | 'modified') {
+  if (sortBy.value === v) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else { sortBy.value = v; sortDir.value = 'asc' }
+}
+
+/** 目录恒在前（文件管理器的固定约定），方向只反转**组内**顺序——
+ *  把目录也一起反转会让「点一下降序，文件夹全跑到底部」，与直觉相反。 */
+const sortedEntries = computed(() => {
+  const k = sortBy.value
+  const d = sortDir.value === 'asc' ? 1 : -1
+  return visibleEntries.value.slice().sort((a, b) => {
+    const dd = Number(b.kind === 'dir') - Number(a.kind === 'dir')
+    if (dd) return dd
+    if (k === 'name') return a.name.localeCompare(b.name, 'zh-CN', { numeric: true }) * d
+    // 目录没有大小/时间可比（后端给 0），组内比较本就只在同类间发生
+    if (k === 'size') return (a.size - b.size) * d
+    return ((a.modified ?? 0) - (b.modified ?? 0)) * d
+  })
+})
+
+// 分页（项目规范）：目录动辄上千项，一次全铺进 DOM 对滚动与选择都是负担
+const { size, page, pageCount, pageRows, total, changeSize, gotoPage } =
+  useTableControls<Entry>({ rows: sortedEntries, defaultSize: 100, persistKey: 'files.entries' })
+/** 换目录 / 改筛选词回第 1 页：停在第 5 页看新目录必然空一屏再被夹回 */
+watch([path, filterQuery], () => { page.value = 1 })
 function setShowHidden(v: boolean) { activeTab.value.showHidden = v; load() }
 
 // 请求序号按标签隔离：连续切目录/连点刷新时，先发的请求可能**后到**，
@@ -479,15 +516,19 @@ function askChmod(e: Entry) {
 // 于是作用在这些隐形条目上，用户无法从界面上核对哪些会被动到。这是最危险的一类
 // 不一致（列表看不见 ≠ 不会被操作），所以判定与写入都用同一份 visibleEntries。
 // 副作用是「过滤时全选只选匹配项」，这正是用户看着屏幕时的预期。
-const visibleSelectable = computed(() => visibleEntries.value.filter(e => !e.sensitive))
+// 分页之后「看得见」= **当前页渲染出来的行**（不再是整个筛选集）：批量删除/移动只能
+// 作用于眼前这一页勾中的条目，否则用户会删掉自己在别的页上从没核对过的文件——
+// 这正是 check-bulk-scope 立的规矩。翻页/换目录/改筛选时清空选择（见下方 watch），
+// 保证「勾选框看到的」与「批量条上的数量」永远指同一批行。
+const pageSelectable = computed(() => pageRows.value.filter(e => !e.sensitive))
 const allChecked = computed({
-  get: () => visibleSelectable.value.length > 0 &&
-    visibleSelectable.value.every(e => selected.value.has(e.name)),
+  get: () => pageSelectable.value.length > 0 &&
+    pageSelectable.value.every(e => selected.value.has(e.name)),
   set: (v: boolean) => {
     if (!v) { selected.value = new Set(); return }
-    // 勾「全选」是**并集**而非替换：过滤时反复变换查询词逐批全选，是常见操作；
-    // 若每次替换，前一批已选的会被悄悄取消。取消全选仍是清空（无法只取消不可见的）。
-    selected.value = new Set([...selected.value, ...visibleSelectable.value.map(e => e.name)])
+    // 勾「全选」= 选中本页全部可选项（**替换**而非并集）：本页之外的选择已在翻页时清空，
+    // 这里再并集只会把上一页的残留又悄悄带回来。
+    selected.value = new Set(pageSelectable.value.map(e => e.name))
   },
 })
 function toggle(e: Entry) {
@@ -496,11 +537,11 @@ function toggle(e: Entry) {
   s.has(e.name) ? s.delete(e.name) : s.add(e.name)
   selected.value = s
 }
-// 批量动作的作用范围**只认可见项**：即便 selected 里残留着被过滤掉的旧名字
-// （先全选再改查询词就会这样），也不会把它们带进「移动到…/移入回收站」。
-// 这与上面对 allChecked 的处理是同一条纪律：看得见的才动得着。
+// 批量动作的作用范围只认**当前页**：与 allChecked 同源于 pageRows（check-bulk-scope 的
+// 「判定/写入/计数三者同源」）。分页/换目录/改筛选后清空选择，不留下跨页的隐形已选项。
 const selectedEntries = computed(() =>
-  visibleEntries.value.filter(e => selected.value.has(e.name)))
+  pageRows.value.filter(e => selected.value.has(e.name)))
+watch([page, size, path, filterQuery], () => { selected.value = new Set() })
 
 const confirmBatchDel = ref(false)
 function runBatch(op: 'trash' | 'move' | 'copy') {
@@ -680,19 +721,19 @@ function full(p: string) {
           <col class="w-fname" /><col class="w-fsize" /><col class="w-fmode" /><col class="w-fowner" /><col class="w-fmtime" /><col class="w-facts" />
         </colgroup>
         <thead><tr>
-          <th v-if="canWrite" class="chk"><input type="checkbox" aria-label="全选" :checked="allChecked" @change="allChecked = !allChecked" /></th>
-          <!-- A7 排序：走后端 sort 参数（dirs_first 恒真）。点击已在生效的列头则
-               在 升/降 间不切换——后端只返回一种顺序，前端再反序会让「截断 1000 项」
-               与实际顺序脱节；改排序即重新拉取，selected 由 load 清空。 -->
-          <th class="sortable" :class="{ on: sortBy === 'name' }" @click="setSortBy('name')">名称</th>
-          <th class="sortable num" :class="{ on: sortBy === 'size' }" @click="setSortBy('size')">大小</th>
+          <th v-if="canWrite" class="chk"><input type="checkbox" aria-label="全选本页"
+            :checked="allChecked" :title="`全选本页可操作项（共 ${pageSelectable.length} 项）`"
+            :disabled="!pageSelectable.length" @change="allChecked = !allChecked" /></th>
+          <!-- 排序：目录恒在前，同列再点切升降（本地排序，见 sortedEntries 上方注释） -->
+          <SortTh label="名称" :active="sortBy === 'name'" :dir="sortDir" @sort="setSortBy('name')" />
+          <SortTh class="num" label="大小" :active="sortBy === 'size'" :dir="sortDir" @sort="setSortBy('size')" />
           <th>权限</th>
           <th class="col-opt">属主</th>
-          <th class="sortable num" :class="{ on: sortBy === 'modified' }" @click="setSortBy('modified')">修改时间</th>
+          <SortTh class="num" label="修改时间" :active="sortBy === 'modified'" :dir="sortDir" @sort="setSortBy('modified')" />
           <th />
         </tr></thead>
         <tbody>
-          <tr v-for="e in visibleEntries" :key="e.name" :class="{ sens: e.sensitive }">
+          <tr v-for="e in pageRows" :key="e.name" :class="{ sens: e.sensitive }">
             <td v-if="canWrite" class="chk">
               <input v-if="!e.sensitive" type="checkbox" :aria-label="`选择 ${e.name}`"
                 :checked="selectedSet.has(e.name)" @change="toggle(e)" />
@@ -728,6 +769,8 @@ function full(p: string) {
         </tbody>
       </table>
       </div>
+      <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+        @update:page="gotoPage" @update:size="changeSize" />
     </div>
     <!-- 三种「没东西可看」必须分开说，否则用户无法判断下一步该做什么：
          · 加载中 → 什么都不渲染（避免空态闪一下）

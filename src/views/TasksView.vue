@@ -7,8 +7,11 @@ import { useAuthStore } from '@/stores/auth'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { useAsync } from '@/composables/useAsync'
 import { usePolling } from '@/composables/usePolling'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
 /** 与后端 task_runs 实态对齐（契约 Task schema） */
@@ -24,6 +27,22 @@ const canView = computed(() => auth.can('task.view'))
 const canCancel = computed(() => auth.can('task.manage'))
 
 const tasks = ref<Task[]>([])
+// ── 任务表：分页 + 排序（全站表格约定；只切当前页数据，不动 `sel` 选中逻辑）──
+// 状态按后端枚举原文比较（不按中文标签）：标签文案调整不会让同一任务的排序位置漂移。
+const taskSortCols: SortColumn<Task>[] = [
+  { key: 'id', dir: 'desc', compare: (a, b) => a.id - b.id },
+  { key: 'key', dir: 'asc', compare: (a, b) => (a.key || a.kind || '').localeCompare(b.key || b.kind || '') },
+  { key: 'state', dir: 'asc', compare: (a, b) => (a.state ?? '').localeCompare(b.state ?? '') },
+  { key: 'progress', dir: 'desc', compare: (a, b) => (a.progress ?? 0) - (b.progress ?? 0) },
+  { key: 'started_at', dir: 'desc', compare: (a, b) => (a.started_at ?? 0) - (b.started_at ?? 0) },
+]
+// 默认 #（id）倒序：任务 id 自增，最新提交的备份/部署任务最需要盯着；列表轮询时新任务是
+// 追加在数组末尾的，倒序后它会出现在第一页首行，而不是被挤到最后一页看不到。
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<Task>({
+    rows: tasks, defaultSize: 100, defaultSort: { key: 'id', dir: 'desc' }, columns: taskSortCols,
+    persistKey: 'tasks.list',
+  })
 // 列表的 loading/error 生命周期交给 useAsync（与其余 12 个视图同一套）；
 // 本页只保留 `output` 自己的加载态——任务输出是另一路请求，与服务端无关。
 const { loading, error, run } = useAsync(true)
@@ -130,10 +149,17 @@ const stateText = taskStateLabel
           <colgroup>
             <col class="w-tid" /><col class="w-tname" /><col class="w-tstate" /><col class="w-tprog" /><col class="w-tstart" /><col class="w-tacts" />
           </colgroup>
-          <thead><tr><th>#</th><th>任务</th><th>状态</th><th class="num">进度</th><th>开始时间</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="#" :active="isSorted('id')" :dir="sortDir" @sort="toggleSort('id')" />
+            <SortTh label="任务" :active="isSorted('key')" :dir="sortDir" @sort="toggleSort('key')" />
+            <SortTh label="状态" :active="isSorted('state')" :dir="sortDir" @sort="toggleSort('state')" />
+            <SortTh class="num" label="进度" :active="isSorted('progress')" :dir="sortDir" @sort="toggleSort('progress')" />
+            <SortTh label="开始时间" :active="isSorted('started_at')" :dir="sortDir" @sort="toggleSort('started_at')" />
+            <th />
+          </tr></thead>
           <tbody>
             <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 打开详情 -->
-            <tr v-for="t in tasks" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)"
+            <tr v-for="t in pageRows" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)"
                 tabindex="0" role="button" :aria-label="`查看任务 #${t.id} 详情`"
                 @keydown.enter="open(t)" @keydown.space.prevent="open(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
@@ -154,10 +180,12 @@ const stateText = taskStateLabel
                 <button v-if="isLive(t) && canCancel" class="btn-ghost btn-sm danger" title="取消任务" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
-            <tr v-if="!tasks.length"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>
+            <tr v-if="!total"><td colspan="6"><EmptyState title="暂无任务" /></td></tr>
           </tbody>
         </table>
         </div>
+        <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+          @update:page="gotoPage" @update:size="changeSize" />
       </div>
 
       <div v-if="sel" class="card">

@@ -10,6 +10,9 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 
 /** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
 interface UserOut {
@@ -36,6 +39,22 @@ const auth = useAuthStore()
 const users = ref<UserOut[]>([])
 const { loading, error, run } = useAsync(true)
 const notReady = ref(false)
+
+// 全站表格约定：分页 + 排序走 useTableControls，页脚用 <TablePager>。
+// 用户表按字段排序：文本列 localeCompare 升序、布尔/时间列按语义；默认按用户名升序。
+const userSortCols: SortColumn<UserOut>[] = [
+  { key: 'username', dir: 'asc', compare: (a, b) => (a.username ?? '').localeCompare(b.username ?? '') },
+  { key: 'role', dir: 'asc', compare: (a, b) => (a.role ?? '').localeCompare(b.role ?? '') },
+  { key: 'allowed_roots', dir: 'asc', compare: (a, b) => (a.allowed_roots || []).join(', ').localeCompare((b.allowed_roots || []).join(', ')) },
+  { key: 'disabled', dir: 'asc', compare: (a, b) => Number(a.disabled) - Number(b.disabled) },
+  { key: 'mfa_enabled', dir: 'asc', compare: (a, b) => Number(a.mfa_enabled) - Number(b.mfa_enabled) },
+  { key: 'last_login_at', dir: 'desc', compare: (a, b) => (a.last_login_at ?? 0) - (b.last_login_at ?? 0) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<UserOut>({
+    rows: users, defaultSize: 100, defaultSort: { key: 'username', dir: 'asc' }, columns: userSortCols,
+    persistKey: 'users.list',
+  })
 
 /** 可分配的内置角色（owner 不可经 API 分配，故不在列）。 */
 const ROLES = ['admin', 'operator', 'viewer']
@@ -173,9 +192,17 @@ onMounted(() => { if (canManage.value) load() })
           <colgroup>
             <col class="w-uname" /><col class="w-urole" /><col class="w-uroots" /><col class="w-ustate" /><col class="w-umfa" /><col class="w-ulogin" /><col class="w-uacts" />
           </colgroup>
-          <thead><tr><th>用户名</th><th>角色</th><th>权限范围</th><th>状态</th><th>MFA</th><th>最后登录</th><th /></tr></thead>
+          <thead><tr>
+            <SortTh label="用户名" :active="isSorted('username')" :dir="sortDir" @sort="toggleSort('username')" />
+            <SortTh label="角色" :active="isSorted('role')" :dir="sortDir" @sort="toggleSort('role')" />
+            <SortTh label="权限范围" :active="isSorted('allowed_roots')" :dir="sortDir" @sort="toggleSort('allowed_roots')" />
+            <SortTh label="状态" :active="isSorted('disabled')" :dir="sortDir" @sort="toggleSort('disabled')" />
+            <SortTh label="MFA" :active="isSorted('mfa_enabled')" :dir="sortDir" @sort="toggleSort('mfa_enabled')" />
+            <SortTh label="最后登录" :active="isSorted('last_login_at')" :dir="sortDir" @sort="toggleSort('last_login_at')" />
+            <th />
+          </tr></thead>
           <tbody>
-            <tr v-for="u in users" :key="u.id">
+            <tr v-for="u in pageRows" :key="u.id">
               <td class="ellipsis" :title="u.username">{{ u.username }}</td>
               <td>
                 <span class="badge badge-primary">{{ roleLabel(u.role) }}</span>
@@ -199,10 +226,12 @@ onMounted(() => { if (canManage.value) load() })
             </tr>
             <!-- colspan 必须等于表头列数（用户名/角色/权限范围/状态/MFA/最后登录/操作 = 7）。
                  此前写 5，空列表时 EmptyState 只占前 5 列，最后一列留空。 -->
-            <tr v-if="!users.length"><td colspan="7"><EmptyState title="无用户" /></td></tr>
+            <tr v-if="!total"><td colspan="7"><EmptyState title="无用户" /></td></tr>
           </tbody>
         </table>
         </div>
+        <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+          @update:page="gotoPage" @update:size="changeSize" />
       </div>
     </template>
 

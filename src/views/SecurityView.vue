@@ -19,10 +19,13 @@ import QrCode from '@/components/QrCode.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -49,6 +52,21 @@ const baseline = ref<BaselineItem[]>([])
 const auth = useAuthStore()
 const sessions = ref<SessionInfo[]>([])
 const { loading, error, run } = useAsync(true)
+
+// 全站表格约定：会话表是记录列表（行数随登录会话增长），接客户端分页 + 表头排序。
+// 默认按用户升序（主标识列，与用户表同口径，顺序稳定）；created_at 时间降序，
+// idle_secs 数值降序——点开空闲列即「最久没动」在前，便于判断该吊销哪个会话。
+const sessionSortCols: SortColumn<SessionInfo>[] = [
+  { key: 'user', dir: 'asc', compare: (a, b) => (a.user ?? '').localeCompare(b.user ?? '') },
+  { key: 'role', dir: 'asc', compare: (a, b) => (a.role ?? '').localeCompare(b.role ?? '') },
+  { key: 'created_at', dir: 'desc', compare: (a, b) => (a.created_at ?? 0) - (b.created_at ?? 0) },
+  { key: 'idle_secs', dir: 'desc', compare: (a, b) => (a.idle_secs ?? 0) - (b.idle_secs ?? 0) },
+]
+const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
+  useTableControls<SessionInfo>({
+    rows: sessions, defaultSize: 100, defaultSort: { key: 'user', dir: 'asc' },
+    columns: sessionSortCols, persistKey: 'security.sessions',
+  })
 /** 区分「加载失败」与「动作失败」：前者不渲染汇总卡（否则显示风险 0），后者保留页面内容 */
 const loadFailed = ref(false)
 
@@ -243,15 +261,21 @@ async function doDisable() {
         <div class="grid cols-2">
           <section class="card">
             <div class="sec-head"><Icon name="users" :size="16" /><span>活跃会话</span></div>
-            <div class="t-scroll" v-if="sessions.length">
+            <div class="t-scroll" v-if="total">
             <table class="fixed" v-table-nav>
               <!-- 列宽（站点表范式）：用户为唯一弹性列；吊销按钮列定宽 100px。 -->
               <colgroup>
                 <col class="w-suser" /><col class="w-srole" /><col class="w-sctime" /><col class="w-sidle" /><col class="w-sacts" />
               </colgroup>
-              <thead><tr><th>用户</th><th>角色</th><th>创建于</th><th>空闲</th><th /></tr></thead>
+              <thead><tr>
+                <SortTh label="用户" :active="isSorted('user')" :dir="sortDir" @sort="toggleSort('user')" />
+                <SortTh label="角色" :active="isSorted('role')" :dir="sortDir" @sort="toggleSort('role')" />
+                <SortTh label="创建于" :active="isSorted('created_at')" :dir="sortDir" @sort="toggleSort('created_at')" />
+                <SortTh label="空闲" :active="isSorted('idle_secs')" :dir="sortDir" @sort="toggleSort('idle_secs')" />
+                <th />
+              </tr></thead>
               <tbody>
-                <tr v-for="s in sessions" :key="s.id">
+                <tr v-for="s in pageRows" :key="s.id">
                   <td>
                     {{ s.user }}
                     <span v-if="s.current" class="cur-badge">当前</span>
@@ -266,7 +290,9 @@ async function doDisable() {
               </tbody>
             </table>
             </div>
-            <p v-else class="muted">暂无活跃会话信息</p>
+            <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
+              @update:page="gotoPage" @update:size="changeSize" />
+            <p v-if="!total" class="muted">暂无活跃会话信息</p>
           </section>
 
           <section class="card">
