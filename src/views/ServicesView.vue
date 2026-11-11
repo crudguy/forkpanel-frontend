@@ -124,6 +124,27 @@ const tab = computed<'software' | 'services'>(() =>
 const onlyFailed = computed(() => route.query.filter === 'failed')
 const shownSvcs = computed(() => onlyFailed.value
   ? svcs.value.filter(s => s.state === 'failed') : svcs.value)
+// 列头排序：与「仅看失败」筛选**正交**——shownSvcs 是筛选结果，svcRows 再在筛选结果上排序。
+// 数据源是前端内存（svcs 随 5s 轮询刷新），排序不改后端请求，仅影响展示顺序。
+// 排序规则抽成纯函数 composables/svcTableSort.ts（有单测）；视图只管「点表头切列/方向」。
+import { sortSvcRows, type SvcSortKey, type SvcSortDir } from '@/composables/svcTableSort'
+const sortKey = ref<SvcSortKey>('name')
+const sortDir = ref<SvcSortDir>('asc')
+/** 在当前筛选结果上应用排序；排序只影响展示，不改原始数据与筛选语义。 */
+const svcRows = computed(() => sortSvcRows(shownSvcs.value, sortKey.value, sortDir.value))
+function toggleSvcSort(k: SvcSortKey) {
+  if (sortKey.value === k) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = k
+    // 各列首点默认升序（名字 A→Z、状态从健康到异常、自启 是→否、说明 A→Z），再点切反。
+    sortDir.value = 'asc'
+  }
+}
+function svcSortInd(k: SvcSortKey): string {
+  if (sortKey.value !== k) return ''
+  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
 
 // 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
 // 高亮按 route.path 精确比对）。顺序与侧边栏菜单名「软件与服务」对齐：
@@ -606,10 +627,14 @@ async function doConfirmed() {
               <col class="w-name" /><col class="w-state" /><col class="w-enabled" /><col /><col class="w-acts" />
             </colgroup>
             <thead><tr>
-              <th>服务</th><th>状态</th><th class="num">开机自启</th><th>说明</th><th class="acts-col">操作</th>
+              <th class="sortable" :class="{ active: sortKey === 'name' }" @click="toggleSvcSort('name')">服务{{ svcSortInd('name') }}</th>
+              <th class="sortable" :class="{ active: sortKey === 'state' }" @click="toggleSvcSort('state')">状态{{ svcSortInd('state') }}</th>
+              <th class="num sortable" :class="{ active: sortKey === 'enabled' }" @click="toggleSvcSort('enabled')">开机自启{{ svcSortInd('enabled') }}</th>
+              <th class="sortable" :class="{ active: sortKey === 'desc' }" @click="toggleSvcSort('desc')">说明{{ svcSortInd('desc') }}</th>
+              <th class="acts-col">操作</th>
             </tr></thead>
             <tbody>
-              <tr v-for="s in shownSvcs" :key="s.name" class="rowlink" @click="goDetail(s)">
+              <tr v-for="s in svcRows" :key="s.name" class="rowlink" @click="goDetail(s)">
                 <td class="svc-name" :title="s.name">
                   {{ s.name }}
                   <span v-if="!s.managed" class="badge"
@@ -910,6 +935,12 @@ col.w-enabled { width: 84px; }
 col.w-acts { width: 96px; }
 .svc-card td.svc-name,
 .svc-card td.svc-desc { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 表头可排序：与进程页同款约定（点击切向、当前列高亮、箭头 ▲/▼ 指示方向）。
+   「开机自启」同时带 num（右对齐）与 sortable，两轴不冲突。 */
+.svc-card th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.svc-card th.sortable:hover { color: var(--c-text); }
+.svc-card th.sortable.active { color: var(--c-primary); }
 
 /* 首次加载占位高度（骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 320px; }
