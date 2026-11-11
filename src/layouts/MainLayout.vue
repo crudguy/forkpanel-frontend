@@ -60,7 +60,7 @@ const title = computed(() => {
 // 覆盖所有带顶栏的路由（login 无顶栏，不参与）。新加路由必须同步补一条，
 // 否则该页顶栏副标题静默为空——守卫 scripts/check-subtitles.mjs 会拦。
 const SUBTITLES: Record<string, string> = {
-  dashboard: '主机状态总览 · 卡片可自定义显示与排序',
+  dashboard: '主机状态总览 · 指标卡可由管理员拖拽排序',
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
   'system-procs': '服务器全部进程 · 点表头可按 CPU / 内存 / 用户排序 · 可结束异常进程',
