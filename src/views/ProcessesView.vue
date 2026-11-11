@@ -277,22 +277,27 @@ async function doKill() {
               <td>{{ p.user ?? '-' }}</td>
               <td class="num">{{ (p.cpu_pct ?? 0).toFixed(1) }}%</td>
               <td class="num">{{ (p.rss_kib / 1024).toFixed(0) }} MB</td>
-              <td class="acts-col nowrap">
+              <td class="acts-col col-actions">
                 <!-- 操作改为纯图标：颜色即语义、节省列宽。
                      重载=中性灰(refresh↻) / 结束=琥珀(stop■) / 立即终止=红(bolt⚡)，
                      危险度梯度对应 SIGHUP<SIGTERM<SIGKILL；图标形状差异大，一眼可辨。
-                     文字说明保留在确认弹窗，hover 仍有 title 提示。 -->
+                     文字说明保留在确认弹窗，hover 仍有 title 提示。
+                     间距由全局 .col-actions 提供（同级 6px），不要再私有写 margin。
+                     aria-label 与 title 分开：title 是长解释，读屏念不动，按钮名取短标签。 -->
                 <button class="btn-icon act-reload" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
-                  :title="ACTION_META.reload.title" @click="askKill(p, 'reload')">
-                  <Icon name="refresh" :size="16" />
+                  :title="ACTION_META.reload.title" :aria-label="ACTION_META.reload.label"
+                  @click="askKill(p, 'reload')">
+                  <Icon name="refresh" :size="15" />
                 </button>
                 <button class="btn-icon act-term" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
-                  :title="ACTION_META.term.title" @click="askKill(p, 'term')">
-                  <Icon name="stop" :size="16" />
+                  :title="ACTION_META.term.title" :aria-label="ACTION_META.term.label"
+                  @click="askKill(p, 'term')">
+                  <Icon name="stop" :size="15" />
                 </button>
                 <button class="btn-icon act-kill" :disabled="!canSignal || busy === p.pid || p.pid <= 1"
-                  :title="ACTION_META.kill.title" @click="askKill(p, 'kill')">
-                  <Icon name="bolt" :size="16" />
+                  :title="ACTION_META.kill.title" :aria-label="ACTION_META.kill.label"
+                  @click="askKill(p, 'kill')">
+                  <Icon name="bolt" :size="15" />
                 </button>
               </td>
             </tr>
@@ -374,22 +379,41 @@ col.w-pid  { width: 80px; }
 col.w-user { width: 110px; }
 col.w-cpu  { width: 84px; }
 col.w-mem  { width: 96px; }
-col.w-acts { width: 144px; }   /* 纯图标按钮：3×34 + 间距 + 单元格内边距，足够且不撑宽 */
+col.w-acts { width: 120px; }   /* 3×28 图标钮 + 2×6 间距 + 左右内边距 24 = 120，不多占进程名列 */
 
-/* 操作列：按钮右对齐，与数值列的视觉重心一致；表头也右对齐，
-   否则「操作」二字悬在左、下方按钮靠右，看着像两列。 */
+/* 操作列：按钮组右对齐，与数值列的视觉重心一致；表头也右对齐，
+   否则「操作」二字悬在左、下方按钮靠右，看着像两列。
+   同级间距不在这里写——td 已挂全局 .col-actions（6px），避免各页漂移。 */
 th.acts-col, td.acts-col { text-align: right; }
 
-/* 纯图标操作按钮：颜色即语义，节省列宽。
-   重载(neutral) / 结束(amber, 温和停止) / 立即终止(red, 强制) 形成危险度梯度，
-   与 SIGHUP < SIGTERM < SIGKILL 的信号强度一致；hover 仍有 title 解释，
-   文字说明保留在确认弹窗。图标 refresh/stop/bolt 形状差异大，一眼可辨。 */
+/* 纯图标操作按钮：三个按钮**同一形态**（同尺寸 / 同描边 / 同底色），只靠色相区分
+   危险度，与 SIGHUP < SIGTERM < SIGKILL 的梯度一致。
+   此前只有「结束 / 立即终止」有底有框、「重载」是裸图标 —— 同一组里三种长相；
+   且三个圆零间距彼此贴边（旧注释写「+ 间距」，但没有任何 margin，实机是挨着的）。
+   28×28 而非全局 .btn-icon 的 34×34：34px 的圆比行内容还高，一组三个把操作列
+   撑成整行最重的一块；28 与 HelpBtn 的 sm 档同尺寸，表格里更服帖。
+   静止态透明底 + 32% 同色描边：436 行若每行都顶着实心红黄圆，危险色就失去信号
+   意义（满屏警报 = 没有警报），只有 hover / 键盘聚焦时才点亮底色与描边。
+   注意：**不改全局 .btn-icon**（顶栏命令面板 / 通知 / 主题都在用），只在本页收窄。 */
+.acts-col .btn-icon {
+  width: 28px; height: 28px; padding: 0;
+  background: transparent;
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+}
+.acts-col .btn-icon:hover:not(:disabled),
+.acts-col .btn-icon:focus-visible {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-color: color-mix(in srgb, currentColor 60%, transparent);
+  /* 行内按钮不做位移：整行会随鼠标上下抖（全局 button:hover 有 translateY(-1px)） */
+  transform: none;
+}
+/* 置灰比全局 .5 再淡一点：这些按钮成行出现，48 行同时「半亮」仍显得像可点 */
+.acts-col .btn-icon:disabled { opacity: .42; }
+
 .act-reload { color: var(--c-text-dim); }
-.act-reload:hover:not(:disabled) { color: var(--c-text); }
-.act-term { color: var(--c-warn); border-color: var(--c-warn); background: var(--c-warn-bg); }
-.act-term:hover:not(:disabled) { color: var(--c-warn); border-color: var(--c-warn); background: var(--c-warn-bg); filter: brightness(1.08); }
-.act-kill { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); }
-.act-kill:hover:not(:disabled) { color: var(--c-danger); border-color: var(--c-danger); background: var(--c-danger-soft); filter: brightness(1.08); }
+.act-reload:hover:not(:disabled), .act-reload:focus-visible { color: var(--c-text); }
+.act-term { color: var(--c-warn); }
+.act-kill { color: var(--c-danger); }
 
 /* 进程名可能极长（容器/内核线程的完整名可达数十字符），固定布局下必须
    省略号截断，否则会顶开列宽把右侧列挤出视口；完整名走 title 悬停。 */
