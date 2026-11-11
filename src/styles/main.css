@@ -424,6 +424,10 @@ td button { vertical-align: middle; }
    内容还近，层级是反的。故用显式修饰类补间距，只加在需要的地方。 */
 .sec-head.block { margin-top: 26px; }
 .sec-head .icon { color: var(--c-primary); }
+/* 页面根容器：四页（应用/网站/WAF/证书）统一外层包裹。flex 纵向 + 14px 间距，
+   此前各页各写（应用 .wrap 未定义、网站裸 div、WAF/证书 .view 私有 scoped）
+   → 顶层块间距契约不一致。抽到全局后四页都引用同一份。 */
+.view { display: flex; flex-direction: column; gap: 14px; }
 
 /* ── 卡片顶栏工具条 ── */
 /* 范式见 ProcessesView（.procs-toolbar + .card.flush.procs-card）：把「刷新 / 新建」
@@ -442,6 +446,10 @@ td button { vertical-align: middle; }
 .card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .card-toolbar .icon { color: var(--c-primary); }
 .card-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
+/* 卡片工具条里的「小节标题」槽（WAF 多卡页把图标 + 标题前置在工具条内，
+   此前 .sec-ico/.sec-title 是 WafView 私有 scoped → 抽到全局，保证跨页一致）。 */
+.card-toolbar .sec-ico { color: var(--c-text-dim); flex: none; }
+.card-toolbar .sec-title { font-weight: 600; font-size: var(--fs-13-5); }
 .mono { font-family: var(--mono); }
 
 /* ── 徽章 / 状态点 ── */
@@ -502,6 +510,17 @@ table.fixed th, table.fixed td { overflow: hidden; }
 table.fixed tbody td:last-child { white-space: nowrap; }
 .ellipsis { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
+
+/* 数据表操作列（图标 / 文字按钮混排）：恒单行、不换行。此前 Sites .actions /
+   Waf·Certs .acts / Apps .app-acts-cell 各写一份 → 四套长相、min-width 还不一致。
+   统一到 .col-actions；窄屏按钮收纯图标、min-width 见下方 @media。 */
+/* ⚠ td 绝不能改成 display:flex：它会失去 table-cell 身份，浏览器用匿名单元格
+   包裹；连续两个这样的 td 会叠到同一列位置上下堆叠（WAF 页实测：名称弹性列被
+   压成 0、行高 42→120、「应用」按钮掉到 IP 名单下方）。按钮横排让 td 保持
+   table-cell，用 nowrap + 相邻间距表达即可。 */
+td.col-actions { white-space: nowrap; }
+td.col-actions > * + * { margin-left: 6px; }
+td.col-actions .btn-sm { padding: 4px 7px; }
 
 /* ── 吸顶表头（B8）──
    只对**自身可滚动**的容器生效（容器加 `.t-scroll` 并限高）。
@@ -576,6 +595,9 @@ table.fixed tbody td:last-child { white-space: nowrap; }
    仅用于通用加载失败（网络/5xx）；isUnsupported 确定性错误与表单错误不加。 */
 .err-retry { color: var(--c-danger); border-color: var(--c-danger); background: transparent; margin-left: 8px; }
 .err-retry:hover:not(:disabled) { background: var(--c-glass); }
+/* 重试按钮放进 .err-bar 红条内：红条本身是 flex，按钮作为 flex item，保持红边 +
+   悬停浅底；flex:none 防止被红条拉伸成满宽（此前裸 .err + .err-retry 无红条）。 */
+.err-bar .err-retry { flex: none; }
 .note { font-size: var(--fs-13); color: var(--c-primary); margin: 0 0 12px; }
 .tip { font-size: var(--fs-12); color: var(--c-text-dim); margin: 0; }
 
@@ -834,6 +856,9 @@ table.fixed tbody td:last-child { white-space: nowrap; }
   border-radius: var(--radius-xs); line-height: 1.6; color: var(--c-text);
   background: var(--c-danger-soft); border: 1px solid var(--c-danger);
   animation: panel-shake .3s ease;
+  /* 默认底部留白（页面级错误条由根容器 .view 的 gap 管上间距）；
+     弹窗内的 .form-msg 由 .modal > .form-msg 更具体选择器覆盖回 margin:0。 */
+  margin: 0 0 12px;
 }
 .err-bar .ic { flex: none; margin-top: 1px; color: var(--c-danger); }
 
@@ -885,11 +910,11 @@ label.has-err input, label.has-err select { border-color: var(--c-danger); }
      4 个图标按钮（各 29px）+ 3 个 6px 间距 = 134，**再加单元格左右内边距
      （实测 34）** = 168。只写 134 时第 4 个仍会掉到第二行——min-width 管的是
      border box，padding 要从里面扣。 */
-  .card.flush .actions { min-width: 168px; }
+  .card.flush .col-actions { min-width: 168px; }
   /* 表内按钮收成纯图标：窄列里 4 个带文字按钮会 flex-wrap 竖堆成 4 行
      （实测行高 247px）。图标按钮靠 title/aria-label 仍可辨识，点击目标不变。 */
   .btn-label { display: none; }
-  .actions .btn-sm { padding: 4px 7px; }
+  .col-actions .btn-sm { padding: 4px 7px; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

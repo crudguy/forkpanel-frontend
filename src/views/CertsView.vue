@@ -24,12 +24,12 @@ import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
-import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import { toast } from '@/composables/useToast'
 import { sslGate } from '@/composables/sslGate'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 
 const auth = useAuthStore()
 const certs = ref<Cert[]>([])
@@ -181,7 +181,10 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
 <template>
   <div class="view">
-    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
+    <p v-if="error" class="err-bar" role="alert">
+      <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
+      <button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
+    </p>
 
     <!-- 自动续期扫描状态（全局，非单站） -->
     <p v-if="sweep.last_at || sweep.next_at" class="sweep">
@@ -221,7 +224,8 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         <colgroup>
           <col class="cert-dom" /><col class="cert-site" /><col class="cert-src" /><col class="cert-exp" /><col class="cert-left" /><col class="cert-auto" /><col class="cert-acts" />
         </colgroup>
-        <!-- scope="col"（审计 A3）；.col-opt 标记次要列，窄屏由公共规则隐藏 -->
+        <!-- 数据列用 SortTh（组件输出的 <th> 不带 scope；表头语义仍由 thead 成立，
+             不为保留 scope 放弃可排序）。.col-opt 标记次要列，窄屏由公共规则隐藏 -->
         <thead>
           <tr>
             <SortTh label="域名" :active="isSorted('domain')" :dir="sortDir" @sort="toggleSort('domain')" />
@@ -251,7 +255,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
               </span>
               <span v-else class="dim" title="自签 / 手动证书没有可交互的 CA，无法自动续期；到期前请手动点「续期」">—</span>
             </td>
-            <td class="acts">
+            <td class="col-actions">
               <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '续期' : sslHint" @click="renewCert(c)">
                 <Icon name="refresh" :size="13" /><span class="btn-label">续期</span>
               </button>
@@ -341,7 +345,6 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 </template>
 
 <style scoped>
-.view { display: flex; flex-direction: column; gap: 14px; }
 .sweep { display: flex; align-items: center; gap: 6px; color: var(--c-text-dim); font-size: var(--fs-12-5); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0; }
 
@@ -355,8 +358,7 @@ table.fixed { table-layout: fixed; width: 100%; }
 .cert-auto { width: 112px; }
 .cert-acts { width: 168px; }
 /* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议、会被压到按钮
-   min-content（实测 64px 竖堆）；min-width 必须落在 td 上才生效，保两按钮单行。 */
-.acts { white-space: nowrap; min-width: 168px; }
+   min-content（实测 64px 竖堆）；统一由公共 .col-actions 的 nowrap 与窄屏 min-width 兜底。 */
 
 /* 按钮 / 文字色 / 区块标题 / 弹窗 / 骨架屏 一律复用 main.css 公共类，
    不再私有重定义（审计 V1：证书页自造按钮样式曾与全局漂移）。

@@ -20,14 +20,14 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
-import SortTh from '@/components/SortTh.vue'
-import TablePager from '@/components/TablePager.vue'
-import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import DirectoryPickerDialog from '@/components/DirectoryPickerDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { allFieldHints } from '@/composables/appsFieldGuide'
 // dirnameOf 此前是本文件私有的第三份父目录实现（尾斜杠输入下会取到自身而非上级），
 // 统一走 composables/filePath 的 parentPath。
@@ -348,12 +348,14 @@ async function doRemove() {
   }
 }
 
-/** systemd 状态 → 徽章类。null（探测失败）单独一档，别混成 unknown。 */
+/** systemd 状态 → 徽章类。null（探测失败）单独一档，别混成 unknown。
+ *  配色走全站统一的 badge-* 彩色药丸（main.css），与 Sites/WAF 一致——
+ *  此前这里用 .ok/.warn/.err 文字色工具类配 .badge，得到的是「灰底彩字」而非药丸。 */
 function stateBadge(s: string | null): { cls: string; text: string } {
-  if (s === null) return { cls: 'dim', text: '—' }
-  if (s === 'running') return { cls: 'ok', text: '运行中' }
-  if (s === 'failed') return { cls: 'err', text: '失败' }
-  if (s === 'activating' || s === 'deactivating' || s === 'reloading') return { cls: 'warn', text: s }
+  if (s === null) return { cls: '', text: '—' }
+  if (s === 'running') return { cls: 'badge-ok', text: '运行中' }
+  if (s === 'failed') return { cls: 'badge-danger', text: '失败' }
+  if (s === 'activating' || s === 'deactivating' || s === 'reloading') return { cls: 'badge-warn', text: s }
   return { cls: 'dim', text: '已停止' }
 }
 
@@ -361,10 +363,16 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 </script>
 
 <template>
-  <div class="wrap">
-    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
+  <div class="view">
+    <p v-if="error" class="err-bar" role="alert">
+      <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
+      <button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
+    </p>
 
-    <div class="card flush toolbar-card">
+    <!-- 与网站/WAF/证书页同构：骨架 → 数据卡（工具栏 + 表格）→ 空态自带 #cta。
+         工具栏随数据卡渲染；空态下「新建应用」入口由 EmptyState 的 #cta 提供 -->
+    <div v-if="loading && !apps.length" class="skeleton box" />
+    <div v-else-if="apps.length" class="card flush toolbar-card">
       <div class="card-toolbar">
         <span class="count">共 {{ apps.length }} 个应用</span>
         <span class="spacer" />
@@ -376,9 +384,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           <Icon name="plus" :size="14" /> 新建应用
         </button>
       </div>
-      <!-- 顶栏固定：零应用也常驻（参考网站页）；其下按状态显示骨架 / 表格 / 空态 -->
-      <div v-if="loading && !apps.length" class="skeleton box" />
-      <div v-if="apps.length" class="t-scroll">
+      <div class="t-scroll">
       <table class="fixed" v-table-nav>
         <!-- 应用表列宽独立一套（不与站点/证书表共用 class，避免改一处漂一片） -->
         <colgroup>
@@ -416,7 +422,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 <i />
               </label>
             </td>
-            <td class="app-acts-cell">
+            <td class="col-actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage || !a.enabled || busyId === a.id"
                 :title="!canManage ? '无 service.manage 权限' : (!a.enabled ? '先启用托管才能启动' : '启动')"
                 @click="act(a, 'start')"><Icon name="play" :size="13" /></button>
@@ -442,9 +448,17 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
       <!-- 分页脚：放在 .t-scroll 之外、同一张卡片内；可见性由组件自判 -->
       <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
         @update:page="gotoPage" @update:size="changeSize" />
-      <EmptyState v-if="!loading && !apps.length" title="暂无托管应用"
-        hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点" />
     </div>
+    <EmptyState v-else title="暂无托管应用"
+      hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点">
+      <template #cta>
+        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
+          :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
+          @click="openCreate">
+          <Icon name="plus" :size="13" /> 新建应用
+        </button>
+      </template>
+    </EmptyState>
 
     <!-- 新建 / 编辑弹窗 -->
     <Teleport to="body">
@@ -642,17 +656,17 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .fg-note .fg-item { display: inline; }
 .fg-note .fg-f { color: var(--c-text); font-weight: 600; }
 .fg-note .fg-sep { color: var(--c-text-dim); margin: 0 4px 0 2px; }
-/* 应用表列宽：名称唯一弹性列，其余按实测最长取值定宽 */
-.app-name { width: 14%; }
-.app-rt   { width: 8%; }
-.app-port { width: 7%; }
-.app-dom  { width: 20%; }
-.app-state{ width: 8%; }
-.app-unit { width: 18%; }
-.app-en   { width: 7%; }
-.app-acts { width: 18%; }
-
-.field-err { display: block; color: var(--c-danger); font-size: var(--fs-12); margin-top: 4px; }
+/* 应用表列宽：名称唯一弹性列（吸收剩余），其余按实测控件/取值定宽——与 Sites/Certs
+   同款「实测 px + 弹性列」范式。此前用百分比（14%/8%/…），按 SitesView 注释会
+   在窄屏把名称列压到 29px、把弹性列挤成 0，故统一改 px。 */
+.app-name { width: auto; }
+.app-rt   { width: 78px; }
+.app-port { width: 70px; }
+.app-dom  { width: 220px; }
+.app-state{ width: 78px; }
+.app-unit { width: 200px; }
+.app-en   { width: 70px; }
+.app-acts { width: 200px; }
 /* 字段下的补充说明（非错误）。与 .hint-note 不同：没有底色/图标，
    只是把「这个字段留空会发生什么」讲清楚，避免用户误以为留空 = root。 */
 .hint-inline { display: block; margin-top: 4px; font-size: var(--fs-12); line-height: 1.6;
@@ -660,9 +674,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .hint-inline b { font-weight: 500; color: var(--c-text); }
 .hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: 4px;
   background: var(--c-surface-2); border: 1px solid var(--c-border); }
-/* 5 个操作按钮必须**单行**：flex-wrap 换行会让行高突然变高、表格错位 */
-.app-acts-cell { display: flex; gap: 4px; flex-wrap: nowrap; }
-.app-acts-cell .btn-sm { flex: none; padding: 4px 7px; }
+/* 5 个操作按钮必须**单行**：已抽到公共 .col-actions（main.css），此处不再私有重抄 */
 .modal > label.has-err input,
 .modal > label.has-err select { border-color: var(--c-danger); }
 

@@ -411,7 +411,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 
 <template>
   <div>
-    <div class="page-head">
+    <div class="tools-row">
       <!-- 返回**上一页面**而非硬编码跳服务页签：本页可从软件页、概览等多处进入，
            写死跳 services-units 会把用户送到一个他从没待过的地方。
            深链直接进入（无历史）时才兜底回服务列表。 -->
@@ -419,7 +419,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
               @click="goBack">
         <Icon name="chevron-left" :size="14" />
       </button>
-      <!-- 服务名 + 状态徽标上提至顶栏，与返回按钮同排：标题区一眼可见，
+      <!-- 服务名 + 状态徽标上提至页级工具行，与返回按钮同排：标题区一眼可见，
            不再与卡片内的说明/操作区叠在一起。 -->
       <h1 v-if="svc" class="page-title mono">{{ svc.name }}</h1>
       <span v-if="svc" class="badge status-badge" :class="stateBadge(svc.state)">
@@ -588,8 +588,8 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 /* 返回按钮去掉文字后需保持可点击面积：固定为正方形，图标居中 */
 .icon-only { display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0; }
-/* 顶栏：返回按钮 + 服务名 + 状态徽标 + 局部刷新 同排，标题区一眼可见、不叠卡片内说明 */
-.page-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+/* 页级工具行：返回 / 服务名 / 状态徽标同排。布局复用全局 .tools-row（无玻璃容器），
+   此处不再私有重抄一份 .page-head —— check-page-head.mjs [1b] 要求全站清零。 */
 .page-title { margin: 0; font-size: var(--fs-17); font-weight: 600; }
 /* 状态徽标：圆点 + 文字一体化，让「运行中/已停止」一眼可辨（圆点配色见 statusDot） */
 .status-badge { display: inline-flex; align-items: center; gap: 6px; }

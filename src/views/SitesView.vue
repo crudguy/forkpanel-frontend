@@ -299,10 +299,10 @@ async function batchDelete() {
 </script>
 
 <template>
-  <div>
+  <div class="view">
     <!-- 页面级错误也用公共 .err-bar（红底 + 图标），不再是无图标的裸红字——
-         与弹窗内的错误条保持同一长相。 -->
-    <p v-if="error" class="err-bar page-err" role="alert">
+          与弹窗内的错误条保持同一长相。 -->
+    <p v-if="error" class="err-bar" role="alert">
       <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
     </p>
 
@@ -326,7 +326,7 @@ async function batchDelete() {
         <span class="count">共 {{ sites.length }} 个站点</span>
         <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低；
              count 领队、搜索框紧邻其后（"过滤这 N 个"语义自然），操作簇统一靠右 -->
-        <input v-model="q" class="site-search" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
+        <input v-model="q" class="filter" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
         <span class="spacer" />
         <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
              偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
@@ -457,7 +457,7 @@ async function batchDelete() {
                  新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
                  文字装在 .btn-label 里：窄屏（<=720px）由 main.css 收起只留图标，
                  否则 4 个按钮在窄列里会竖着堆成 4 行（实测行高 247px）。 -->
-            <td class="actions">
+            <td class="col-actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage || busy" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
               <button class="btn-ghost btn-sm" :disabled="!canReload || busy" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">{{ rowBusyId === s.id ? '重载中…' : '重载' }}</span></button>
               <button class="btn-ghost btn-sm" :disabled="!sslReady || busy" :title="sslReady ? '为该站点申请 / 续签证书' : sslHint" @click="rowSsl?.applySsl(s)"><Icon name="lock" :size="13" /><span class="btn-label">证书</span></button>
@@ -567,7 +567,7 @@ async function batchDelete() {
    与下方卡片严丝合缝贴合（实测 0px），文字还顶到内容区左边缘。 */
 /* （.tip.warn 已删除：本页那处「未检测到 nginx」警示已改用公共 .hint-note.is-warn，
    留着这套私有警告样式只会让同一语义出现两种长相。） */
-.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 操作列改用全局 .col-actions（main.css），不再私有重抄 */
 
 /* 「启用」开关的后果说明：停用是**真停用**（摘配置 + reload），必须让用户看见代价。
    原 .hint-line（12px + --c-text-mute）太小太淡、又用负 margin 紧贴勾选框，读起来像
@@ -658,8 +658,7 @@ col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 �
 .box { height: 300px; }
 
 /* ══ UX 审计整改（2026-10-11）新增样式 ══ */
-/* 页头检索框：与工具按钮同高，窄屏下不跟标题抢空间 */
-.site-search { width: min(220px, 40vw); padding: 5px 10px; font-size: var(--fs-13); }
+/* 页头检索框改用全局 .filter（容器/镜像两处共用的搜索框类），不再私有 .site-search */
 /* 状态列：单格最多 3 个徽章，改可换行的 flex 行——行高稳定，不再参差 */
 .st-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* 特性列（021）：图标徽章，含义走 title 悬停 */
@@ -667,8 +666,8 @@ col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 �
 .feat { display: inline-flex; color: var(--c-primary); }
 /* 配置区读取失败条：要塞一个「重试」按钮（.err-bar 是 flex，单独排布） */
 /* 只读原因条：紧贴编辑器上方，收掉 .hint-note 默认下边距避免与编辑器拉开距离 */
-/* 页面级错误条也走公共 .err-bar：此前是裸红字无图标，与弹窗内的 .err-bar 两种长相 */
-.page-err { margin: 0 0 12px; }
+/* 页面级错误条也走公共 .err-bar：此前是裸红字无图标，与弹窗内的 .err-bar 两种长相
+   （错误条底部间距由 .err-bar 自身 margin 提供，顶层块间距由根容器 .view 的 gap 提供） */
 /* ── 列表批量操作（G3）── */
 col.w-sel { width: 40px; }
 .col-sel { text-align: center; width: 40px; padding-left: 0; padding-right: 0; }
