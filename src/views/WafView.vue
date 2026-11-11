@@ -21,11 +21,13 @@
  * 由本页读取模板后经既有 `POST /sites/apply` 逐站编排（不在前端重复站点部署管线）。
  * ⚠ TplReq 的 PATCH 是**全量替换**（缺省=默认、非保留），故模板表单每次都送全字段。
  *
- * ⚠️ 已知副作用（如实写在界面上，不藏着）：后端 apply 的 upsert 会把站点
- *    `enabled` 置 1，所以**已停用的站点**在逐站表里禁用「应用」、套用弹窗里标注
- *    "会一并启用"，避免用户只想改 WAF 却被静默启用站点。
+ * ⚠️ 停用态守恒（后端 apply.rs：`deploy = cur_row.enabled != 0`）：已停用站点
+ *    apply 只更新库内规格、不下发 Web 服务器，enabled 保持 0。故停用站点照样可以
+ *    编辑并应用 WAF，但界面必须如实说明「改动会保存，启用站点后才下发」。
+ *    ⚠ 应用前重拉站点现值做基线比对，避免本页旧草稿覆盖站点弹窗刚保存的新值。
  */
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -45,16 +47,21 @@ import { useTableControls, type SortColumn } from '@/composables/useTableControl
 // WAF 段 / apply 体 / 草稿比对的纯逻辑在 .ts 里（SFC 内 vitest 收不到）
 import {
   normIp, showIps, toDraft, draftDirty, siteBase, draftWafSeg, templateWafSeg,
-  applyBody, applyTemplateBody, kindLabel, type Draft,
+  applyBody, applyTemplateBody, kindLabel, hasConflict, type Draft,
 } from '@/composables/siteWaf'
+import { wafCoverage } from '@/composables/wafPresentation'
 
 
 const auth = useAuthStore()
+const route = useRoute()
 const sites = ref<Site[]>([])
+/** 从 ?site=<name> 定位到的站点行：编辑弹窗跳过来时高亮并滚到视野内 */
+const focusSiteId = ref<number | null>(null)
 const drafts = ref<Record<number, Draft>>({})
 const templates = ref<WafTemplate[]>([])
 const { error, loading, run } = useAsync()
 const busyId = ref<number | null>(null)
+
 // ── 表头排序 + 分页（项目规范：统一走共享 useTableControls）──
 // 站点表比较的是**草稿值**（drafts[s.id]）而不是 site.*：表格里显示/可改的就是草稿，
 // 按库内旧值排序会出现「看着开启、却排在关闭组里」。档位/限速同理。
@@ -130,12 +137,46 @@ function dirty(s: Site): boolean {
   return draftDirty(s, drafts.value[s.id])
 }
 
+/** ?site=<name>（站点编辑弹窗入口）：load 之后才有站点可匹配，故由 watch(sites) 触发。 */
+async function focusFromQuery() {
+  const name = typeof route.query.site === 'string' ? route.query.site.trim() : ''
+  const hit = name ? sites.value.find(s => s.name === name) : undefined
+  focusSiteId.value = hit?.id ?? null
+  if (!hit) return
+  await nextTick()
+  document.querySelector('.row-focus')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+watch(sites, () => { void focusFromQuery() })
+
+/**
+ * 应用前重拉站点现值做基线比对：本页持有的是上次 load 的快照，站点编辑弹窗
+ * 若在期间保存过，直接 POST apply 会把新值覆盖回旧值。三条 apply 路径都过这里。
+ * 重拉失败不能静默放行——错误落到页面级错误条，由用户决定是否重试。
+ */
+async function assertFresh(targets: Site[]): Promise<boolean> {
+  if (!targets.length) return true
+  let latest: Site[]
+  try {
+    latest = (await api.get<Site[]>(API.sites.list())) ?? []
+  } catch (e) {
+    error.value = `无法校验站点现值：${errorText(e)}`
+    return false
+  }
+  const byName = new Map(latest.map(s => [s.name, s]))
+  const stale = targets.filter(s => hasConflict(s, byName.get(s.name)))
+  if (stale.length) {
+    error.value = `${stale.map(s => s.name).join('、')} 的配置已在别处更新，请刷新后再应用`
+    return false
+  }
+  return true
+}
+
 /**
  * 顶部总览指标（与 SecurityView 的 summaryCards 同范式：computed 出卡片 props 数组）。
  * 数字全部由 sites 现值算出，不额外请求——WAF/IP 状态本就在站点列表里。
  */
 const summaryCards = computed(() => {
-  const total = sites.value.length
+  const { total, off } = wafCoverage(sites.value)
   const on = sites.value.filter(s => s.waf_enabled)
   const strict = on.filter(s => s.waf_profile === 'strict').length
   const basic = on.length - strict
@@ -143,7 +184,7 @@ const summaryCards = computed(() => {
   const acl = sites.value.filter(s => (s.ip_allow ?? []).length || (s.ip_deny ?? []).length).length
   return [
     { label: 'WAF 开启', value: String(on.length), unit: `/ ${total} 站`,
-      sub: total - on.length ? `${total - on.length} 站未开启` : '全部站点已开启',
+      sub: off ? `${off} 站未开启` : '全部站点已开启',
       icon: 'shield', tone: 'ok' as const,
       progress: total ? (on.length / total) * 100 : 0 },
     { label: '严格档', value: String(strict), unit: '站',
@@ -162,6 +203,7 @@ const summaryCards = computed(() => {
 
 async function applyWaf(s: Site) {
   const d = drafts.value[s.id]; if (!d) return
+  if (!await assertFresh([s])) return
   busyId.value = s.id; error.value = ''
   try {
     await api.post(API.sites.apply(), applyBody(s, d))
@@ -173,11 +215,11 @@ async function applyWaf(s: Site) {
   } finally { busyId.value = null }
 }
 
-/** 「应用全部」的目标：已启用站点中确有改动、且当前环境可下发的那些。 */
+/** 「应用全部」的目标：有改动且当前环境可应用的站点（停用站点同样保存规格）。 */
 const pending = computed(() =>
-  sites.value.filter((s) => s.enabled && canApply.value && dirty(s)))
-/** 有改动但**不能**下发的（站点已停用）——如实计数并说明，不静默跳过。 */
-const blockedPending = computed(() =>
+  sites.value.filter((s) => canApply.value && dirty(s)))
+/** 其中已停用的站点数：改动只入库、不下发，如实计数避免用户以为已生效。 */
+const stoppedPending = computed(() =>
   sites.value.filter((s) => s.enabled === false && dirty(s)).length)
 const batchBusy = ref(false)
 
@@ -189,6 +231,7 @@ const batchBusy = ref(false)
 async function applyAll() {
   const targets = pending.value.slice()
   if (!targets.length) return
+  if (!await assertFresh(targets)) return
   batchBusy.value = true; error.value = ''
   let ok = 0
   try {
@@ -210,10 +253,10 @@ async function applyAll() {
 }
 
 
-/** 停用站点不可应用的原因（后端 apply 会把它置为启用） */
-function blockedReason(s: Site): string {
+/** 逐站应用的门控提示：停用站点可保存规格，但不会下发到 Web 服务器。 */
+function applyHint(s: Site): string {
   if (!canApply.value) return webSupported.value ? '无 site.manage 权限' : '当前环境未接入 Web 服务器'
-  if (!s.enabled) return '站点已停用；应用配置会一并启用它，请先启用站点'
+  if (!s.enabled) return '站点已停用：改动会保存，启用站点后才下发'
   return ''
 }
 
@@ -281,14 +324,13 @@ async function doDelTpl() {
 const applyTpl = ref<WafTemplate | null>(null)
 const applyPicks = ref<Set<number>>(new Set())
 const applyBusy = ref(false)
-/** 勾选中含已停用站点 → 套用会一并启用它（后端 upsert 副作用），如实提示 */
+/** 勾选中含已停用站点 → 配置只入库、不下发，如实提示 */
 const applyHasDisabled = computed(() =>
   sites.value.some(s => applyPicks.value.has(s.id) && !s.enabled))
 
 function openApplyTpl(t: WafTemplate) {
   applyTpl.value = t
-  // 默认勾选全部「启用中」的站点——停用站点不默认勾（套用会顺带启用它）
-  applyPicks.value = new Set(sites.value.filter(s => s.enabled).map(s => s.id))
+  applyPicks.value = new Set(sites.value.map(s => s.id))
 }
 function togglePick(id: number) {
   const next = new Set(applyPicks.value)
@@ -300,6 +342,7 @@ async function doApplyTpl() {
   // 只读账号：按钮已置灰，这里再兜一道，防止程序化调用绕过
   if (!canApply.value) return
   const targets = sites.value.filter(s => applyPicks.value.has(s.id))
+  if (!await assertFresh(targets)) return
   applyBusy.value = true
   let ok = 0; let failMsg = ''
   try {
@@ -390,7 +433,10 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 
 <template>
   <div class="view">
-    <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button></p>
+    <p v-if="error" class="err-bar" role="alert">
+      <Icon name="alert" :size="15" class="ic" /><span>{{ error }}</span>
+      <button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
+    </p>
 
     <!-- 首屏必须先给骨架：请求还在飞就渲染「暂无…」会让"没有"和"没加载出来"长得一样 -->
     <div v-if="loading && !sites.length" class="skeleton box" />
@@ -412,10 +458,10 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           <span class="count">共 {{ sites.length }} 个站点</span>
           <span class="spacer" />
           <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />
-          <!-- 有改动但因站点停用而下发不了的，如实计数：不然用户会以为「都改完了」 -->
-          <span v-if="blockedPending" class="dim tiny"
-            :title="`${blockedPending} 个站点已停用，改动无法下发；应用配置会一并启用该站点`">
-            · {{ blockedPending }} 项不可下发
+          <!-- 停用站点的改动只入库不下发：如实计数，别让用户以为已经生效 -->
+          <span v-if="stoppedPending" class="dim tiny"
+            :title="`${stoppedPending} 个站点已停用：改动会保存，启用站点后才下发`">
+            · {{ stoppedPending }} 项待启用后下发
           </span>
           <RefreshBtn :disabled="batchBusy" sm @click="load()" />
           <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
@@ -444,17 +490,17 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in sitePageRows" :key="s.id">
+            <tr v-for="s in sitePageRows" :key="s.id" :class="{ 'row-focus': focusSiteId === s.id }">
               <td class="ellipsis" :title="s.name">{{ s.name }}</td>
               <td class="mono dim ellipsis" :title="s.domains.join(', ')">{{ s.domains.join(', ') }}</td>
               <td class="col-opt">{{ kindLabel(s.kind) }}</td>
               <td>
                 <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
-                  :disabled="!canApply || !s.enabled" :title="blockedReason(s)" />
+                  :disabled="!canApply" :title="applyHint(s)" />
               </td>
               <td>
                 <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile" :aria-label="`${s.name} 防护档位`"
-                  :disabled="!canApply || !s.enabled">
+                  :disabled="!canApply">
                   <option value="basic">基础</option>
                   <option value="strict">严格</option>
                 </select>
@@ -463,14 +509,14 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td>
                 <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].rate"
                   type="number" min="0" max="1000" class="num" :aria-label="`${s.name} CC 限速（每秒请求数）`"
-                  :disabled="!canApply || !s.enabled" />
+                  :disabled="!canApply" />
                 <span v-else-if="drafts[s.id].on && isCaddy" class="dim tiny" title="标准 caddy 无 rate_limit 指令，限速在 caddy 后端被忽略">不支持</span>
                 <span v-else class="dim">—</span>
               </td>
               <td class="col-opt">
                 <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].burst"
                   type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 突发桶`"
-                  :disabled="!canApply || !s.enabled || !drafts[s.id].rate"
+                  :disabled="!canApply || !drafts[s.id].rate"
                   :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
                 <span v-else-if="drafts[s.id].on && isCaddy" class="dim">—</span>
                 <span v-else class="dim">—</span>
@@ -479,16 +525,16 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
                 <input class="ip" v-model="drafts[s.id].ipAllow" placeholder="白名单" spellcheck="false"
                   :aria-label="`${s.name} IP 白名单`"
                   :title="'IP 白名单（单 IP 或 CIDR，逗号/空格分隔）。非空即只放行名单内、其余拒绝'"
-                  :disabled="!canApply || !s.enabled || !!drafts[s.id].ipDeny.trim()" />
+                  :disabled="!canApply || !!drafts[s.id].ipDeny.trim()" />
                 <input class="ip" v-model="drafts[s.id].ipDeny" placeholder="黑名单" spellcheck="false"
                   :class="{ dim: !!drafts[s.id].ipAllow.trim() }"
                   :aria-label="`${s.name} IP 黑名单`"
                   :title="drafts[s.id].ipAllow.trim() ? '白名单优先：已启用白名单，黑名单被忽略' : 'IP 黑名单（单 IP 或 CIDR，逗号/空格分隔）'"
-                  :disabled="!canApply || !s.enabled || !!drafts[s.id].ipAllow.trim()" />
+                  :disabled="!canApply || !!drafts[s.id].ipAllow.trim()" />
               </td>
-              <td class="acts">
-                <button class="btn-primary" :disabled="!canApply || !s.enabled || !dirty(s) || busyId === s.id || batchBusy"
-                  :title="blockedReason(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
+              <td class="col-actions">
+                <button class="btn-primary" :disabled="!canApply || !dirty(s) || busyId === s.id || batchBusy"
+                  :title="applyHint(s) || (dirty(s) ? '' : '无改动')" @click="applyWaf(s)">
                   {{ busyId === s.id ? '应用中…' : '应用' }}
                 </button>
               </td>
@@ -501,8 +547,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       </div>
     </template>
 
-    <!-- 策略模板（026）：与站点解耦的 WAF+访问控制预设，可套用到站点。常驻（有站无站都能建模板）。 -->
-    <div class="card flush toolbar-card">
+    <!-- 策略模板（026）：与站点解耦的 WAF+访问控制预设，可套用到站点。
+         与 Sites/Apps 同构：有模板才渲染工具栏卡；无模板走视图级空态（#cta 提供新建入口） -->
+    <div v-if="templates.length" class="card flush toolbar-card">
       <div class="card-toolbar">
         <Icon name="list" :size="15" class="sec-ico" />
         <span class="sec-title">策略模板</span>
@@ -513,7 +560,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           <Icon name="plus" :size="14" /> 新建模板
         </button>
       </div>
-      <div v-if="templates.length" class="t-scroll">
+      <div class="t-scroll">
         <table class="fixed" aria-label="WAF 策略模板" v-table-nav>
           <colgroup>
             <col class="w-tname" /><col class="w-tprof" /><col class="w-trate" /><col class="w-tburst" /><col class="w-tipa" /><col class="w-tipd" /><col class="w-tacts" />
@@ -541,7 +588,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td class="mono dim ellipsis col-opt" :title="(t.ip_deny ?? []).join(', ')">
                 {{ (t.ip_deny ?? []).length ? (t.ip_deny ?? []).join(', ') : '—' }}
               </td>
-              <td class="acts">
+              <td class="col-actions">
                 <button class="btn-ghost btn-sm" :disabled="!canApply || !sites.length" :title="canApply ? '套用到站点' : '无 site.manage 权限或 Web 服务器不可用'" @click="openApplyTpl(t)">套用</button>
                 <button v-if="canManage" class="btn-ghost btn-sm" @click="openEditTpl(t)">编辑</button>
                 <button v-if="canManage" class="btn-ghost btn-sm danger" @click="delTpl = t">删除</button>
@@ -550,15 +597,15 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           </tbody>
         </table>
       </div>
-      <EmptyState v-else title="暂无策略模板"
-        hint="把一套 WAF + 访问控制设成模板，便于批量套用到多个站点">
-        <template v-if="canManage" #cta>
-          <button class="btn-primary btn-sm" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
-        </template>
-      </EmptyState>
       <TablePager :total="tplTotal" :page="tplPage" :size="tplSize" :page-count="tplPageCount"
         @update:page="gotoTplPage" @update:size="changeTplSize" />
     </div>
+    <EmptyState v-else title="暂无策略模板"
+      hint="把一套 WAF + 访问控制设成模板，便于批量套用到多个站点">
+      <template v-if="canManage" #cta>
+        <button class="btn-primary btn-sm" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
+      </template>
+    </EmptyState>
 
     <!-- 威胁日志 / 拦截事件（027）：后台每分钟采集开日志站点的 403/405/429 -->
     <div class="card flush toolbar-card">
@@ -586,7 +633,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         仅采集<b>开了独立 access log</b>的站点{{ sitesWithoutLog ? `（当前 ${sitesWithoutLog} 个站点未开，不会出现在此）` : '' }}；
         且<b>无法区分是哪条规则</b>——WAF / 敏感文件 / IP 黑名单都返回 403。要开启某站日志，到「网站 → 编辑站点」打开独立日志。
       </p>
-      <p v-if="evtError" class="err" role="alert">{{ evtError }}</p>
+      <p v-if="evtError" class="err-bar" role="alert"><Icon name="alert" :size="15" class="ic" /><span>{{ evtError }}</span></p>
       <div v-if="events.length" class="t-scroll">
         <table class="fixed" aria-label="拦截事件" v-table-nav>
           <colgroup>
@@ -626,7 +673,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <RefreshBtn :disabled="alertLoading" sm @click="loadAlert" />
       </div>
       <div class="alert-cfg">
-        <p v-if="alertError" class="err" role="alert">{{ alertError }}</p>
+        <p v-if="alertError" class="err-bar" role="alert"><Icon name="alert" :size="15" class="ic" /><span>{{ alertError }}</span></p>
         <label class="al-row"><input type="checkbox" v-model="alertCfg.enabled" :disabled="alertSaving" /> <span>启用拦截告警</span></label>
         <div class="al-fields">
           <label class="blk">阈值（近窗内拦截次数）<input v-model.number="alertCfg.threshold" type="number" min="1" max="100000" :disabled="alertSaving || !alertCfg.enabled" /></label>
@@ -654,8 +701,8 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       </ul>
       <h4>策略模板</h4>
       <p>模板 = 一套 WAF + 访问控制预设（档位 / 限速 / 突发 / IP 名单）。「套用」会把所选站点的这些值设成模板的值（WAF 随之开启）。模板可新建 / 编辑 / 删除；删除模板不影响已套用的站点。</p>
-      <h4>已知副作用</h4>
-      <p>后端 apply 的 upsert 会把站点 <code>enabled</code> 置 1，因此<b>已停用的站点</b>在逐站表里禁用「应用」、套用弹窗标注"会一并启用"，避免用户只想改 WAF 却被静默启用站点。</p>
+      <h4>停用站点</h4>
+      <p><b>已停用的站点</b>也可以在此调整并应用：改动会保存到面板，但不会下发到 Web 服务器；启用站点后才会生效。</p>
     </HelpDrawer>
 
     <!-- ── 以下浮层一律放链尾：不得插在 v-if / v-else 链中间，也不得嵌进别的浮层 v-if 块内 ── -->
@@ -731,15 +778,15 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           黑 <b>{{ (applyTpl.ip_deny ?? []).length }}</b> 项。
         </p>
         <p v-if="isCaddy && applyTpl.rate_per_sec" class="warn">当前为 caddy 后端，暂不支持限速——该模板的限速设置不会生效。</p>
-        <p class="dim tiny">勾选要套用的站点（默认已选全部启用中的站点）：</p>
+        <p class="dim tiny">勾选要套用的站点（默认全选）：</p>
         <div class="pick-list">
           <label v-for="s in sites" :key="s.id" class="pick">
             <input type="checkbox" :checked="applyPicks.has(s.id)" @change="togglePick(s.id)" :disabled="applyBusy" />
             <span class="ellipsis">{{ s.name }}</span>
-            <span v-if="!s.enabled" class="dim tiny" title="套用会一并启用该站点">（已停用）</span>
+            <span v-if="!s.enabled" class="dim tiny" title="改动会保存，启用站点后才下发">（已停用）</span>
           </label>
         </div>
-        <p v-if="applyHasDisabled" class="warn">勾选中含已停用站点：套用会将其一并启用。</p>
+        <p v-if="applyHasDisabled" class="warn">勾选中含已停用站点：配置会保存，启用站点后才下发。</p>
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" @click="applyTpl = null" :disabled="applyBusy">取消</button>
@@ -760,15 +807,15 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 </template>
 
 <style scoped>
-.view { display: flex; flex-direction: column; gap: 14px; }
-/* 仅保留布局级宽度；按钮 / 文字色 / 区块标题等一律复用 main.css 公共类 */
+/* 仅保留布局级宽度；容器 / 按钮 / 文字色 / 区块标题 / 错误条 / 操作列一律复用 main.css 公共类 */
 .num { width: 92px; }
-/* 模板卡小节标题 */
-.sec-ico { color: var(--c-text-dim); }
-.sec-title { font-weight: 600; font-size: var(--fs-13-5); }
 /* 站点表：访问控制列两个 IP 输入并排；按控件实测宽定宽 */
-.ip { width: 92px; }
-.ip-cell { display: flex; gap: 6px; align-items: center; }
+.ip { width: 84px; }
+.ip-cell { white-space: nowrap; }
+.ip-cell > input + input { margin-left: 6px; }
+/* ?site=<name> 定位行：编辑弹窗跳过来时给出落点，避免在一长串站点里找 */
+.row-focus > td { background: var(--c-primary-soft); }
+.row-focus > td:first-child { box-shadow: inset 3px 0 0 var(--c-primary); }
 .ip-cell .ip:disabled { opacity: .55; }
 .ip-cell .ip.dim { opacity: .55; }
 /* 套用弹窗的站点勾选列表 */
@@ -776,16 +823,20 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 .pick { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); }
 .pick .ellipsis { min-width: 0; }
 .is-dim { opacity: .55; }
-/* 站点表列宽（站点表范式）：域名为唯一弹性列；控件列按实测控件宽定宽 */
-col.w-wfname { width: 10%; }
-col.w-wfdom { width: auto; }
-col.w-wfkind { width: 7%; }
-col.w-wfon { width: 64px; }
-col.w-wfprof { width: 104px; }
-col.w-wfrate { width: 120px; }
-col.w-wfburst { width: 120px; }
-col.w-wfip { width: 216px; }
-col.w-wfacts { width: 130px; }
+/* 站点表列宽（站点表范式）：名称为唯一弹性列（吸收剩余）；其余按实测控件宽定宽——
+   此前名称/类型用百分比（10%/7%），同 SitesView 注释所述会把弹性列挤成 0，统一改 px。 */
+col.w-wfname { width: auto; }
+/* 固定列总和按「控件实宽 + 单元格内边距 26px」定，务必留够余量给唯一的
+   弹性列（站点名）：此前总和 1044px > 1280 视口容器 1000px，弹性列被压成 0，
+   站点名整列不可见。现总和 882px，1280 下站点名可拿 ~118px。 */
+col.w-wfdom { width: 160px; }
+col.w-wfkind { width: 56px; }
+col.w-wfon { width: 52px; }
+col.w-wfprof { width: 92px; }
+col.w-wfrate { width: 118px; }
+col.w-wfburst { width: 118px; }
+col.w-wfip { width: 200px; }
+col.w-wfacts { width: 86px; }
 /* 模板表列宽：名称为弹性列；IP 列等宽；操作列容 3 个文字按钮 */
 col.w-tname { width: auto; }
 col.w-tprof { width: 80px; }
@@ -794,8 +845,7 @@ col.w-tburst { width: 96px; }
 col.w-tipa { width: 150px; }
 col.w-tipd { width: 150px; }
 col.w-tacts { width: 170px; }
-/* 操作列下限（审计 U-窄屏）：auto 布局下 col 的 width 只是建议，min-width 须落在 td 上 */
-.acts { white-space: nowrap; min-width: 130px; }
+/* 操作列下限（审计 U-窄屏）：已抽到公共 .col-actions（main.css），此处不再私有重抄 */
 /* 拦截告警配置卡 */
 .alert-cfg { padding: 0 14px 14px; }
 .alert-cfg .err { margin: 4px 0 10px; }
@@ -805,6 +855,9 @@ col.w-tacts { width: 170px; }
 .al-fields input[type=number] { width: 130px; }
 /* 威胁日志：筛选条 + 说明 + 事件表列宽 */
 .evt-filters { display: flex; gap: 8px; align-items: center; padding: 0 14px 10px; flex-wrap: wrap; }
+/* 全局 input/select{width:100%} 会让两个下拉各撑满一整行、筛选按钮掉到第三行；
+   按控件实宽给 flex-basis，让「两个下拉 + 筛选」同排（窄屏仍可收缩换行）。 */
+.evt-filters select { flex: 0 1 180px; width: auto; }
 .evt-note { margin: 0; padding: 0 14px 10px; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
 col.w-ets { width: 150px; }
 col.w-etsite { width: 90px; }

@@ -27,19 +27,20 @@ import { toast } from '@/composables/useToast'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import {
-  fmtDateTime, wafProfileLabel,
+  fmtDateTime,
   type Cert, type RenewSweep, type Site,
 } from '@/api/types'
+import { wafBadge, wafCoverage, wafDetail } from '@/composables/wafPresentation'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
-import SortTh from '@/components/SortTh.vue'
-import TablePager from '@/components/TablePager.vue'
-import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ColumnPicker from '@/components/ColumnPicker.vue'
 import SiteFormDialog from '@/components/SiteFormDialog.vue'
 import SiteSslSection from '@/components/SiteSslSection.vue'
+import SortTh from '@/components/SortTh.vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { SITE_COLS, useSiteColumns } from '@/composables/useSiteColumns'
 import { useSiteCaps } from '@/composables/useSiteCaps'
 import { fmtApplied, siteState, tlsState } from '@/composables/siteState'
@@ -81,6 +82,8 @@ function featText(s: Site): string {
 
 const sites = ref<Site[]>([])
 const certs = ref<Cert[]>([])
+/** 未开启站点数：与 WAF 页共用 wafCoverage 口径，缺口为 0 时不占工具条空间 */
+const wafOffCount = computed(() => wafCoverage(sites.value ?? []).off)
 const sweep = ref<RenewSweep>({ last_at: 0, last_queued: 0, next_at: 0 })
 
 /**
@@ -152,7 +155,7 @@ const visibleSites = computed(() => {
 })
 
 // ── 表头排序 + 分页（项目规范：统一走共享 useTableControls）──
-// 比较的是**单元格里显示的那个值**（kindLabel / featText / wafProfileLabel / siteState / tlsState），
+// 比较的是**单元格里显示的那个值**（kindLabel / featText / wafBadge / siteState / tlsState），
 // 而不是原始枚举/布尔：按「已启用/未启用」排序却按 ran 排在前面，用户会以为排序坏了。
 // 「上次下发」例外：显示的是「从未下发 / 08-12 14:03」，按时间戳比才符合直觉（null = 从未，排最前）。
 const siteSortCols: SortColumn<Site>[] = [
@@ -161,7 +164,7 @@ const siteSortCols: SortColumn<Site>[] = [
   { key: 'root', dir: 'asc', compare: (a, b) => (a.root ?? '').localeCompare(b.root ?? '') },
   { key: 'kind', dir: 'asc', compare: (a, b) => kindLabel(a.kind).localeCompare(kindLabel(b.kind)) },
   { key: 'feat', dir: 'asc', compare: (a, b) => featText(a).localeCompare(featText(b)) },
-  { key: 'waf', dir: 'asc', compare: (a, b) => wafProfileLabel(a.waf_profile ?? 'basic').localeCompare(wafProfileLabel(b.waf_profile ?? 'basic')) },
+  { key: 'waf', dir: 'asc', compare: (a, b) => wafBadge(a).label.localeCompare(wafBadge(b).label) },
   { key: 'state', dir: 'asc', compare: (a, b) => siteState(a).label.localeCompare(siteState(b).label) },
   { key: 'applied', dir: 'desc', compare: (a, b) => (a.last_applied_at ?? 0) - (b.last_applied_at ?? 0) },
   { key: 'tls', dir: 'asc', compare: (a, b) => tlsState(a).label.localeCompare(tlsState(b).label) },
@@ -324,6 +327,9 @@ async function batchDelete() {
            页面级横条时，横条本身比「搜索框」这个内容还重。 -->
       <div class="card-toolbar">
         <span class="count">共 {{ sites.length }} 个站点</span>
+        <RouterLink v-if="wafOffCount" class="waf-cover" to="/waf">
+          <span class="badge badge-warn">{{ wafOffCount }} 站未开启 WAF</span>
+        </RouterLink>
         <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低；
              count 领队、搜索框紧邻其后（"过滤这 N 个"语义自然），操作簇统一靠右 -->
         <input v-model="q" class="filter" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
@@ -426,12 +432,9 @@ async function batchDelete() {
               <span v-if="!s.auth_basic && !s.log_access && !s.log_error
                 && !(s.ip_allow ?? []).length && !(s.ip_deny ?? []).length" class="dim">—</span>
             </td>
-            <td v-if="shown('waf')">
-              <template v-if="s.waf_enabled">
-                <span class="badge badge-ok">{{ wafProfileLabel(s.waf_profile ?? 'basic') }}</span>
-                <span v-if="s.waf_rate_per_sec" class="dim tiny">· {{ s.waf_rate_per_sec }}/s</span>
-              </template>
-              <span v-else class="dim">—</span>
+            <td v-if="shown('waf')" :title="wafDetail(s)">
+              <span class="badge" :class="wafBadge(s).cls">{{ wafBadge(s).label }}</span>
+              <span v-if="s.waf_enabled && s.waf_rate_per_sec" class="dim tiny">· {{ s.waf_rate_per_sec }}/s</span>
             </td>
             <!-- .st-cell：单格最多 3 个徽章（状态 + 未同步 + 外部改动），6% 列宽放不下会
                  参差不齐地换行；改 flex 换行并给列加下限，行高才稳定。 -->
@@ -484,6 +487,7 @@ async function batchDelete() {
                 </div>
                 <div class="d-item"><span class="d-k">类型</span><span class="d-v">{{ kindLabel(s.kind) }}</span></div>
                 <div class="d-item"><span class="d-k">特性</span><span class="d-v">{{ featText(s) }}</span></div>
+                <div class="d-item"><span class="d-k">WAF</span><span class="d-v">{{ wafDetail(s) }}</span></div>
                 <div class="d-item">
                   <span class="d-k">上次下发</span>
                   <span class="d-v">{{ s.last_applied_at ? fmtDateTime(s.last_applied_at) : '从未下发过' }}</span>
@@ -675,4 +679,7 @@ col.w-sel { width: 40px; }
 .batch-bar { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-top: 1px solid var(--c-border); margin-top: 4px; flex-wrap: wrap; }
 .batch-count { font-size: var(--fs-13); color: var(--c-text-dim); }
 .batch-bar .spacer { flex: 1; }
+/* 工具条里的未开启数：整块可点，跳 WAF 页；flex:none 防止被 filter 挤变形 */
+.waf-cover { flex: none; text-decoration: none; }
+.waf-cover:hover .badge { filter: brightness(1.08); }
 </style>

@@ -802,7 +802,11 @@ function confSpecChanged(): boolean {
       <!-- WAF：站点配置的一部分，与其它字段**同一次下发**，故同处一个表单 -->
       </section>
       <section class="sector" id="sec-secure">
-        <h4 class="sector-h">安全与性能</h4>
+        <h4 class="sector-h">安全与高级</h4>
+      <h5 class="sub-h">WAF 防护</h5>
+      <div v-if="editing" class="waf-goto-row">
+        <RouterLink class="btn-ghost btn-sm" :to="{ path: '/waf', query: { site: editing.name } }">在 WAF 页统一配置</RouterLink>
+      </div>
       <div class="waf">
         <label class="inline" title="在被管理站点前生成拦截规则；规则集由系统内置，此处只能选档位与数值">
           <input type="checkbox" v-model="form.wafOn" :disabled="!webSupported" /> 启用 WAF
@@ -831,6 +835,23 @@ function confSpecChanged(): boolean {
             <span v-if="fieldErrs.wafBurst" :key="'wb' + errSeq" class="field-err">{{ fieldErrs.wafBurst }}</span>
           </label>
         </template>
+        <!-- IP 名单与 WAF 开关相互独立：必须留在 v-if="form.wafOn" 之外，
+             否则未开启 WAF 的站点将无法配置访问控制。 -->
+        <label class="blk full adv-row waf-ip" title="单 IP 或 CIDR（IPv4），逗号/空格分隔。白名单非空即只放行名单内、其余拒绝">
+          IP 白名单（allow）
+          <textarea v-model="form.ipAllow" class="mono adv-text" rows="2" spellcheck="false"
+            :disabled="!!form.ipDeny.trim()" placeholder="192.168.1.10, 10.0.0.0/24"></textarea>
+        </label>
+        <label class="blk full adv-row waf-ip" :class="{ 'is-dim': !!form.ipAllow.trim() }"
+          title="单 IP 或 CIDR（IPv4）。白名单非空时被忽略">
+          IP 黑名单（deny）
+          <textarea v-model="form.ipDeny" class="mono adv-text" rows="2" spellcheck="false"
+            :disabled="!!form.ipAllow.trim()" placeholder="1.2.3.4, 5.6.7.0/24"></textarea>
+        </label>
+        <p class="hint-note adv-note waf-ip" v-if="form.ipAllow.trim()">
+          <Icon name="info" :size="14" class="ic" />
+          <span>已启用白名单：黑名单被忽略（白名单优先，名单外全部拒绝）。</span>
+        </p>
       </div>
       <!-- caddy：WAF **规则集档位生效、限速不生效**（标准版无 rate_limit 指令，
            需第三方模块）。如实写明，否则用户会以为填了就在防 CC。 -->
@@ -951,22 +972,7 @@ function confSpecChanged(): boolean {
         <div class="adv-head">
           <span class="adv-title"><Icon name="key" :size="14" /> 访问控制与反代</span>
         </div>
-        <!-- IP 黑白名单（互斥：白名单非空时黑名单被忽略，对应 input 禁用） -->
-        <label class="blk full adv-row" title="单 IP 或 CIDR（IPv4），逗号/空格分隔。白名单非空即只放行名单内、其余拒绝">
-          IP 白名单（allow）
-          <textarea v-model="form.ipAllow" class="mono adv-text" rows="2" spellcheck="false"
-            :disabled="!!form.ipDeny.trim()" placeholder="192.168.1.10, 10.0.0.0/24"></textarea>
-        </label>
-        <label class="blk full adv-row" :class="{ 'is-dim': !!form.ipAllow.trim() }"
-          title="单 IP 或 CIDR（IPv4）。白名单非空时被忽略">
-          IP 黑名单（deny）
-          <textarea v-model="form.ipDeny" class="mono adv-text" rows="2" spellcheck="false"
-            :disabled="!!form.ipAllow.trim()" placeholder="1.2.3.4, 5.6.7.0/24"></textarea>
-        </label>
-        <p class="hint-note adv-note" v-if="form.ipAllow.trim()">
-          <Icon name="info" :size="14" class="ic" />
-          <span>已启用白名单：黑名单被忽略（白名单优先，名单外全部拒绝）。</span>
-        </p>
+        <!-- IP 名单已并入上方 WAF 区块：同一份访问控制配置不再分散两处 -->
         <!-- HTTP Basic Auth：口令不落库，仅设置时经 openssl 生成 apr1 摘要写入 htpasswd -->
         <label class="blk row-inline" :class="{ 'is-dim': isCaddy }"
           :title="isCaddy ? caddyNoop : '开启后访问站点需输入用户名口令（口令不落库）'">
@@ -1015,7 +1021,7 @@ function confSpecChanged(): boolean {
 
       </section>
       <section class="sector" id="sec-ops">
-        <h4 class="sector-h">日志与证书</h4>
+        <h4 class="sector-h">日志 · 证书 · 原文</h4>
       <!-- 站点日志（021）：独立 access/error 开关 + 级别 + 查看/下载/清空 -->
       <div class="adv">
         <div class="adv-head">
@@ -1134,6 +1140,8 @@ function confSpecChanged(): boolean {
 .waf label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .waf label.inline { flex-direction: row; align-items: center; }
 .waf label.inline input { width: auto; }
+/* IP 名单并入 WAF 区块后作跨列项；抵消 .blk 的 12px 上下边距与 .adv-row 的 8px */
+.modal-body .waf > .waf-ip { grid-column: 1 / -1; margin: 0; }
 /* 窄窗（弹窗退到 94vw 后内容区不足 ~470px）：字段行退回单列堆叠，防止数值列挤没「档位」 */
 @media (max-width: 480px) {
   .waf { grid-template-columns: minmax(0, 1fr); }
@@ -1266,7 +1274,10 @@ function confSpecChanged(): boolean {
 .modal-body .sector > .waf,
 .modal-body .sector > .cc,
 .modal-body .sector > .adv,
-.modal-body .sector > .hint-note { grid-column: 1 / -1; }
+.modal-body .sector > .hint-note,
+.modal-body .sector > .sub-h { grid-column: 1 / -1; }
+.modal-body .sector > .waf-goto-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin: 0; }
+.modal-body .sector > .sub-h { margin: 4px 0 0; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
 .modal-body .sector-h { grid-column: 1 / -1; font-size: var(--fs-14); font-weight: 700; margin: 0 0 2px; color: var(--c-text); }
 /* 这里原先有一条「通用宽版弹窗操作条吸底」的本地规则（.modal.wide .modal-actions
    自带 sticky + 硬编码 20px 负边距）。它是 scoped 的，只可能命中本组件自己渲染的元素，

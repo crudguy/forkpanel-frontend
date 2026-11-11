@@ -10,6 +10,8 @@ import {
   applyBody,
   applyTemplateBody,
   kindLabel,
+  applyBaseline,
+  hasConflict,
   type Draft,
 } from './siteWaf'
 import type { Site, WafTemplate } from '@/api/types'
@@ -341,5 +343,49 @@ describe('单一事实源守卫：IP 提交口径不得有第二份实现', () =
 
   it('活性自检：守卫扫过足够多的文件（扫不到东西＝没在守）', () => {
     expect(scanSourceFiles(SRC).length).toBeGreaterThan(50)
+  })
+})
+
+describe('applyBaseline / hasConflict：应用前的草稿冲突检测', () => {
+  it('同一份现值不冲突（能正常应用）', () => {
+    const s = site()
+    expect(hasConflict(s, { ...s })).toBe(false)
+  })
+
+  it('★ 站点弹窗改过 WAF / IP 现值 → 判冲突，旧草稿不得覆盖', () => {
+    const base = site()
+    expect(hasConflict(base, site({ waf_enabled: true }))).toBe(true)
+    expect(hasConflict(base, site({ waf_profile: 'strict' }))).toBe(true)
+    expect(hasConflict(base, site({ waf_rate_per_sec: 20 }))).toBe(true)
+    expect(hasConflict(base, site({ waf_burst: 40 }))).toBe(true)
+    expect(hasConflict(base, site({ ip_allow: ['1.2.3.4'] }))).toBe(true)
+    expect(hasConflict(base, site({ ip_deny: ['5.6.7.8'] }))).toBe(true)
+  })
+
+  it('★ 站点基础字段被改过也判冲突（旧 s 会把 domains / root / upstreams 覆盖回去）', () => {
+    const base = site({ kind: 'proxy', upstreams: ['127.0.0.1:8080'] })
+    expect(hasConflict(base, site({ kind: 'proxy', upstreams: ['127.0.0.1:9090'] }))).toBe(true)
+    expect(hasConflict(base, site({ root: '/var/www/b' }))).toBe(true)
+    expect(hasConflict(base, site({ domains: ['b.com'] }))).toBe(true)
+  })
+
+  it('★ apply 自身改写的字段不进基线（否则紧接着的第二次应用必被误拦）', () => {
+    const base = site()
+    const after = { ...base, enabled: false, conf_stale: true, last_applied_at: 1700000000 } as Site
+    expect(hasConflict(base, after)).toBe(false)
+  })
+
+  it('IP 名单只换顺序不算冲突（语义未变，不该逼用户刷新）', () => {
+    const base = site({ ip_allow: ['1.2.3.4', '5.6.7.8'] })
+    expect(hasConflict(base, site({ ip_allow: ['5.6.7.8', '1.2.3.4'] }))).toBe(false)
+  })
+
+  it('★ 站点已被删除（重拉不到）判冲突，不能拿旧 s 去 apply', () => {
+    expect(hasConflict(site(), undefined)).toBe(true)
+  })
+
+  it('活性自检：基线确实取了字段快照，且非基线字段不会改变它', () => {
+    expect(applyBaseline(site())).not.toBe(applyBaseline(site({ waf_enabled: true })))
+    expect(applyBaseline(site())).toBe(applyBaseline(site({ enabled: false })))
   })
 })

@@ -56,7 +56,14 @@ export const UI_GUARDS = [
   'check-theme-control.mjs',
   // 2026-11-06 视觉系统 A→C→B：圆角收敛 / 分段控件统一 / 次级按钮中性化
   'check-visual-system.mjs',
-  // 2026-11-11 表格约定：每张记录表都要有分页脚 + 可排序表头，登记例外须写理由
+  // 2026-11-11 WAF 状态呈现：纯函数单测挡不住视图里另写死一套，钉住接线与口径共用
+  'check-waf-presentation.mjs',
+  // 2026-11-11 WAF P2：停用态守恒 / 编辑弹窗入口 / 三条 apply 路径的草稿冲突检测
+  'check-waf-p2.mjs',
+  // 2026-11-11 WAF 表格几何：td 禁用 display:flex / 筛选条宽度覆盖 / 固定列总和上限
+  'check-waf-layout.mjs',
+  // 2026-11-11 表格规范：每个含 <table> 的文件必须登记（接分页/排序 或 例外+理由），
+  // 且不得再出现私有 .pager 样式——新加表格漏接是本类问题唯一的退化方式
   'check-table-convention.mjs',
 ]
 

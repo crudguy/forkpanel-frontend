@@ -143,3 +143,35 @@ export function kindLabel(k: string): string {
   if (k === 'php') return 'PHP'
   return '静态'
 }
+
+/**
+ * 「应用前」的基线快照：只取 apply 体真正会写回的字段。
+ *
+ * 为什么不是整对象 JSON：`last_applied_at` / `conf_snapshot` / `enabled` 等会在每次
+ * apply 后被后端改写，算进基线会让**紧接着的第二次应用永远被判冲突**。反过来，
+ * name / domains / root / upstreams / fpm 若在站点弹窗里被改过，本页持有的是旧 s，
+ * 直接 apply 会把新值覆盖回去 —— 这些字段必须算进基线。
+ * IP 名单排序后再比：只调顺序不改变语义，不该误报成冲突逼用户刷新。
+ */
+export function applyBaseline(s: Site): string {
+  return JSON.stringify({
+    name: s.name,
+    domains: s.domains,
+    root: s.root,
+    kind: s.kind,
+    upstreams: s.kind === 'proxy' ? (s.upstreams ?? []) : null,
+    fpm: s.kind === 'php' ? (s.fpm ?? '') : null,
+    waf_enabled: s.waf_enabled,
+    waf_profile: s.waf_profile ?? null,
+    waf_rate_per_sec: s.waf_rate_per_sec ?? null,
+    waf_burst: s.waf_burst ?? null,
+    ip_allow: [...(s.ip_allow ?? [])].sort(),
+    ip_deny: [...(s.ip_deny ?? [])].sort(),
+  })
+}
+
+/** 基线快照与重拉到的现值是否冲突；站点已被删除（latest 缺失）同样算冲突。 */
+export function hasConflict(baseline: Site, latest: Site | undefined): boolean {
+  if (!latest) return true
+  return applyBaseline(baseline) !== applyBaseline(latest)
+}
