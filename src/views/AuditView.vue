@@ -228,8 +228,8 @@ onMounted(load)
           </div>
         </div>
 
-        <!-- 分页（共享 TablePager：每页条数 10/20/50/100 回传后端 page_size） -->
-        <TablePager :total="total" :page="page" :size="pageSize" :page-count="totalPages"
+        <!-- 分页（共享 TablePager：每页条数 10/20/50/100 回传后端 page_size；服务端分页故无「全部」） -->
+        <TablePager :total="total" :page="page" :size="pageSize" :page-count="totalPages" :allow-all="false"
           @update:page="goto" @update:size="changeSize" />
       </template>
     </template>

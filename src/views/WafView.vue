@@ -613,7 +613,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         hint="开启站点的独立 access log 后，被拦截的请求（403/405/429）会在这里出现" />
       <div v-if="evtLoading" class="skeleton box" />
       <!-- 事件流无总数：TablePager 走 total=null 分支，只说「第 X 页」 -->
-      <TablePager :total="null" :page="evtPage" :size="evtSize" :has-next="evtHasMore"
+      <TablePager :total="null" :page="evtPage" :size="evtSize" :has-next="evtHasMore" :allow-all="false"
         @update:page="gotoEvtPage" @update:size="changeEvtSize" />
     </div>
 

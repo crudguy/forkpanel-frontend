@@ -630,7 +630,7 @@ async function exportCsv() {
           </div>
           <TablePager v-if="browse.data"
             :total="browse.data.total" :page="browse.data.page" :size="browseSize"
-            :page-count="browsePageCount"
+            :page-count="browsePageCount" :allow-all="false"
             @update:page="p => browse && browse.table && pickTable(browse.table, p)"
             @update:size="changeBrowseSize" />
         </div>

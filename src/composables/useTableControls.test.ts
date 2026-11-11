@@ -8,7 +8,7 @@
 // ——构建、tsc、其它页的守卫都不会红。这里逐条钉死。
 import { beforeEach, describe, expect, it } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { useTableControls, TABLE_PAGE_SIZES, type SortColumn } from './useTableControls'
+import { useTableControls, TABLE_PAGE_SIZES, PAGE_SIZE_ALL, type SortColumn } from './useTableControls'
 
 interface Row { id: number; name: string; n: number }
 
@@ -82,6 +82,49 @@ describe('useTableControls：分页', () => {
     expect(t.total.value).toBe(0)
     expect(t.pageCount.value).toBe(1)
     expect(t.pageRows.value).toEqual([])
+  })
+})
+
+describe('useTableControls：每页条数「全部」', () => {
+  it('选「全部」时不分页：1 页、整表一次返回、总数不变', () => {
+    const rows = ref(mk(250))
+    const t = useTableControls({ rows, columns: cols })
+    t.changeSize(PAGE_SIZE_ALL)
+    expect(t.size.value).toBe(PAGE_SIZE_ALL)
+    expect(t.pageCount.value).toBe(1)
+    expect(t.pageRows.value).toHaveLength(250)
+  })
+
+  it('「全部」下排序仍回第 1 页，且整表按序返回', () => {
+    const rows = ref(mk(250))
+    const t = useTableControls({ rows, columns: cols })
+    t.changeSize(PAGE_SIZE_ALL)
+    t.toggleSort('n') // 数值列默认降序
+    expect(t.page.value).toBe(1)
+    expect(t.pageRows.value).toHaveLength(250)
+    expect(t.pageRows.value[0].n).toBe(250)
+  })
+
+  it('「全部」能被 persistKey 记住（下次进来还是整表）', () => {
+    useTableControls({ rows: ref(mk(50)), columns: cols, persistKey: 'all.mem' }).changeSize(PAGE_SIZE_ALL)
+    const t2 = useTableControls({ rows: ref(mk(50)), columns: cols, persistKey: 'all.mem' })
+    expect(t2.size.value).toBe(PAGE_SIZE_ALL)
+    expect(t2.pageRows.value).toHaveLength(50)
+  })
+
+  it('从「全部」切回 10 条会重新分页并回第 1 页', () => {
+    const rows = ref(mk(250))
+    const t = useTableControls({ rows, columns: cols })
+    t.changeSize(PAGE_SIZE_ALL)
+    t.changeSize(10)
+    expect(t.pageCount.value).toBe(25)
+    expect(t.pageRows.value).toHaveLength(10)
+    expect(t.page.value).toBe(1)
+  })
+
+  it('「全部」是独立哨兵，不进入四档白名单', () => {
+    expect([...TABLE_PAGE_SIZES]).toEqual([10, 20, 50, 100])
+    expect((TABLE_PAGE_SIZES as readonly number[]).includes(PAGE_SIZE_ALL)).toBe(false)
   })
 })
 

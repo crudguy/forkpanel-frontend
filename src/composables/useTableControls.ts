@@ -2,7 +2,8 @@
  * 数据表「分页 + 排序」的通用组合式（项目规范，全站表格共用）。
  *
  * 设计目标（与 `procPaging.ts` 同口径，但上升到"每个表格都长一个样"）：
- *  - 分页默认 100 条，可切 10 / 20 / 50 / 100 —— `size` 是响应式变量，不再是写死常量；
+ *  - 分页默认 100 条，可切 10 / 20 / 50 / 100 或「全部」（不分页整表展示）——
+ *    `size` 是响应式变量，不再是写死常量；
  *  - 表头点击排序：升/降切换，且切换后**回到第 1 页**（停在一个内容全变的旧页码无意义）；
  *  - 总数变少（搜索 / 进程退出 / 换页大小）时**夹回**合法页码，不渲染空表；
  *  - 分页纯函数（`pageCountOf` / `pageSlice` / `clampPage`）仍在 `procPaging.ts`，
@@ -28,6 +29,17 @@ export const TABLE_PAGE_SIZES = [10, 20, 50, 100] as const
 export type PageSize = (typeof TABLE_PAGE_SIZES)[number]
 export type SortDir = 'asc' | 'desc'
 
+/**
+ * 「全部」哨兵：作为每页条数时表示不分页、整表一次展示。
+ *
+ * 取一个足够大的有限值（而非 0 / -1）是关键：`pageCountOf(total, ALL)` 天然算成 1 页、
+ * `pageSlice(rows, 1, ALL)` 天然返回整表，两条分页纯函数**一行都不用改**；同时 0 与负数
+ * 仍被 `changeSize` 判为非法（存量脏值/误调用不会把表撑爆）。「全部」是独立选项而不是
+ * 塞进 `TABLE_PAGE_SIZES`——那四档是「真实行数」的候选，混进哨兵会让档位断言与
+ * `Math.min(...sizes)` 的可见性门槛一起失真。
+ */
+export const PAGE_SIZE_ALL = Number.MAX_SAFE_INTEGER
+
 /** 一列的排序描述：用什么函数比较两个行对象（数值 / localeCompare 由调用方决定） */
 export interface SortColumn<Row> {
   key: string
@@ -51,12 +63,13 @@ export interface UseTableControlsOpts<Row> {
 
 const K_SIZE = 'forkpanel.table.size'
 
-/** 读回用户上次选的每页条数；只认 [10,20,50,100] 里的值（存量脏值不能把表撑爆） */
+/** 读回用户上次选的每页条数；只认 [10,20,50,100] 与「全部」哨兵（存量脏值不能把表撑爆） */
 function readSize(key: string | undefined, fallback: number): number {
   if (!key) return fallback
   try {
     const raw = Number(localStorage.getItem(`${K_SIZE}.${key}`))
-    return (TABLE_PAGE_SIZES as readonly number[]).includes(raw) ? raw : fallback
+    // 「全部」也要认得：用户特意选了整表展示，下次进来不能被悄悄改回 100
+    return raw === PAGE_SIZE_ALL || (TABLE_PAGE_SIZES as readonly number[]).includes(raw) ? raw : fallback
   } catch {
     return fallback
   }
