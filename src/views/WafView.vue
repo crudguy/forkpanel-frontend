@@ -838,13 +838,25 @@ col.w-wfrate { width: 118px; }
 col.w-wfburst { width: 118px; }
 col.w-wfip { width: 200px; }
 col.w-wfacts { width: 86px; }
-/* ── 宽屏列宽（>=1440）：9 列全按「内容 / 控件实宽」给定宽 ──
+/* 模板表列宽（中小屏 <1440）：名称为唯一弹性列；IP 列等宽；操作列容 3 个文字按钮。
+   宽屏走下方媒体档的 7 条定宽，避免名称列独吞 898px。
+   ⚠ 基础档必须排在 @media **之前**：scoped 编译后二者特异性相同、谁在后谁赢，
+   基础档若写在媒体档之后会把宽屏定宽整组盖掉（实测 1920 仍退回 898px）。 */
+col.w-tname { width: auto; }
+col.w-tprof { width: 80px; }
+col.w-trate { width: 96px; }
+col.w-tburst { width: 96px; }
+col.w-tipa { width: 150px; }
+col.w-tipd { width: 150px; }
+col.w-tacts { width: 170px; }
+/* ── 宽屏列宽（>=1440）：站点表 9 列、模板表 7 列全按「内容 / 控件实宽」给定宽 ──
    table-layout:fixed 下 Chrome 会把容器余量按这些宽度**等比**分给每一列
-   （实测 1920 视口表宽 1640 / 总和 1136 = 1.44 倍：站点名 180→260、域名 200→289），
-   不再像旧版那样把 758px 全塞给唯一的弹性列、域名反被 160px 截断。
-   ⚠ 断点与列宽绑定（同 SitesView 的 1799 例外，不是通用视口档位）：总和 1136px
-   必须 <= 1440 视口下实测容器 1160px，否则这一档就会横向滚动；<1440 沿用上面的
-   「唯一弹性列」布局——中小屏余量本就少，硬铺理想宽反而把表格撑出横滚。 */
+   （实测 1920 视口表宽 1640：站点表 1640/1136=1.44 倍，站点名 180→260、域名 200→289；
+   模板表 1640/1140=1.44 倍，名称 260→374）。不再像旧版那样把余量全塞给唯一的
+   弹性列（站点名 758px、模板名 898px），域名反被 160px 截断。
+   ⚠ 断点与列宽绑定（同 SitesView 的 1799 例外，不是通用视口档位）：两张表总和
+   分别 1136 / 1140px，均 <= 1440 视口下实测容器 1160px，否则这一档就会横向滚动；
+   <1440 沿用上面的「唯一弹性列」布局——中小屏余量本就少，硬铺理想宽反而撑出横滚。 */
 @media (min-width: 1440px) {
   col.w-wfname { width: 180px; }
   col.w-wfdom { width: 200px; }
@@ -855,15 +867,17 @@ col.w-wfacts { width: 86px; }
   col.w-wfburst { width: 120px; }
   col.w-wfip { width: 200px; }
   col.w-wfacts { width: 92px; }
+
+  /* 策略模板表同档 7 列全定宽：与站点表共用同一断点和同一套等比放大逻辑，
+     两张表的列宽密度保持一致。 */
+  col.w-tname { width: 260px; }
+  col.w-tprof { width: 90px; }
+  col.w-trate { width: 110px; }
+  col.w-tburst { width: 110px; }
+  col.w-tipa { width: 200px; }
+  col.w-tipd { width: 200px; }
+  col.w-tacts { width: 170px; }
 }
-/* 模板表列宽：名称为弹性列；IP 列等宽；操作列容 3 个文字按钮 */
-col.w-tname { width: auto; }
-col.w-tprof { width: 80px; }
-col.w-trate { width: 96px; }
-col.w-tburst { width: 96px; }
-col.w-tipa { width: 150px; }
-col.w-tipd { width: 150px; }
-col.w-tacts { width: 170px; }
 /* 操作列下限（审计 U-窄屏）：已抽到公共 .col-actions（main.css），此处不再私有重抄 */
 /* 拦截告警配置卡 */
 .alert-cfg { padding: 0 14px 14px; }
