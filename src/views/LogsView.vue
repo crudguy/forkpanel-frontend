@@ -64,6 +64,14 @@ const since = ref('')
 const foldRepeats = ref(true)
 const expandedGroups = ref<Set<number>>(new Set())
 
+// ① 软换行：默认关（横向滚动），开启后长行自动折行
+const wrapLines = ref(false)
+// ② 复制当前视图：复制当前过滤/折叠后的可见文本
+const copyDone = ref(false)
+// ③ 非跟随模式自动刷新（秒；0=关）。跟随由 SSE 实时推送，二者互斥
+const autoRefresh = ref(0)
+let autoTimer: number | undefined
+
 const curSource = computed(() => sources.value.find(s => s.id === cur.value))
 const isFileSource = computed(() => FILE_KINDS.includes((curSource.value?.kind ?? '') as typeof FILE_KINDS[number]))
 /** 时间筛选只在 journald 源有意义；文件源行没有时间戳 → 禁用并诚实说明 */
@@ -146,6 +154,28 @@ function downloadLog() {
   if (level.value) p.set('level', level.value)
   if (sinceUnix.value) p.set('since', String(sinceUnix.value))
   window.location.href = `${API.logs.download(cur.value)}?${p.toString()}`
+}
+
+/** ② 复制当前视图：复制当前过滤（grep/level/since）+ 折叠后的可见文本，所见即所得 */
+async function copyView() {
+  if (!display.value.length) return
+  // 格式与界面渲染一致：时钟前缀 + 空格 + 文本（文件源无时间戳时前缀为空）
+  const text = display.value.map(d => `${fmtClock(d.line.ts)} ${d.line.text}`).join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+    copyDone.value = true
+    window.setTimeout(() => { copyDone.value = false }, 1500)
+  } catch {
+    error.value = '复制失败：浏览器拒绝了剪贴板访问'
+  }
+}
+
+/** ③ 自动刷新：仅在非跟随模式生效；跟随由 SSE 实时推送，故二者互斥 */
+function applyAutoRefresh() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = undefined }
+  if (autoRefresh.value > 0 && !follow.value && cur.value) {
+    autoTimer = window.setInterval(() => { load() }, autoRefresh.value * 1000)
+  }
 }
 
 interface LogStatsResp {
@@ -265,14 +295,14 @@ function openStream() {
 
 function toggleFollow() {
   follow.value = !follow.value
-  if (follow.value) openStream()
-  else { closeStream(); load() }
+  if (follow.value) { applyAutoRefresh(); openStream() }
+  else { closeStream(); applyAutoRefresh(); load() }
 }
 
 onMounted(loadSources)
 // 卸载即断开 SSE 与节流定时器：实时跟随状态下切页/切 Tab 时，旧实例不释放会
 // 一直保留一条 EventSource（后端对应一条 journalctl 跟随进程），属无界泄漏。
-onUnmounted(() => { closeStream(); loadSeq++ })
+onUnmounted(() => { closeStream(); if (autoTimer) clearInterval(autoTimer); loadSeq++ })
 // 切源：跟随中重开流，否则重新拉取
 watch(cur, () => { if (follow.value) openStream(); else load() })
 // A8：改级别 / 时间筛选 → 重新拉取（筛选条件一并带进 stats 与 stream，口径一致）
@@ -282,6 +312,8 @@ watch([level, since], () => {
   if (follow.value) openStream()
   else if (cur.value) load()
 })
+// ③ 刷新间隔变更即重排定时器（跟随模式下 applyAutoRefresh 内部会清空）
+watch(autoRefresh, applyAutoRefresh)
 
 const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 </script>
@@ -306,8 +338,17 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         <option :value="500">500 行</option>
         <option :value="2000">2000 行（上限）</option>
       </select>
+      <select v-model.number="autoRefresh" class="ctl" :disabled="follow" @change="applyAutoRefresh" title="非跟随模式下自动刷新间隔（跟随由 SSE 实时推送）">
+        <option :value="0">不刷新</option>
+        <option :value="3">每 3 秒</option>
+        <option :value="5">每 5 秒</option>
+        <option :value="10">每 10 秒</option>
+      </select>
       <label class="ctl chk" :class="{ on: foldRepeats }" title="折叠相邻重复行">
         <input type="checkbox" v-model="foldRepeats" /> 折叠重复
+      </label>
+      <label class="ctl chk" :class="{ on: wrapLines }" title="长行自动换行（默认横向滚动）">
+        <input type="checkbox" v-model="wrapLines" /> 自动换行
       </label>
       <button class="btn-primary" :class="{ active: follow }" :disabled="!canView"
         :title="canView ? '' : '无 log.view 权限'" @click="toggleFollow">
@@ -320,6 +361,9 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       </button>
       <button class="btn-ghost" :disabled="!canView || follow || !cur" title="按当前过滤条件下载（上限 10000 行 / 8MB）" @click="downloadLog">
         <Icon name="download" :size="15" /> 下载
+      </button>
+      <button class="btn-ghost" :disabled="!canView || follow || !cur" :title="copyDone ? '已复制当前可见文本' : '复制当前过滤后的可见文本'" @click="copyView">
+        <Icon name="copy" :size="15" /> {{ copyDone ? '已复制' : '复制' }}
       </button>
     </div>
 
@@ -365,7 +409,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         </template>
       </section>
 
-      <pre ref="viewEl" class="view"><code v-for="d in display" :key="d.start" :class="d.line.level?.toLowerCase()">
+      <pre ref="viewEl" class="view" :class="{ wrap: wrapLines }"><code v-for="d in display" :key="d.start" :class="d.line.level?.toLowerCase()">
 <span class="ts">{{ fmtClock(d.line.ts) }}</span> {{ d.line.text }}<button v-if="d.repeat > 1 && d.collapsed" class="fold-badge" type="button" @click="toggleGroup(d.start)" :title="`展开重复的 ${d.repeat} 行`">×{{ d.repeat }} 展开</button></code></pre>
       <EmptyState v-if="!lines.length && !error" :title="follow ? '等待新日志…' : '无匹配日志'" />
     </template>
@@ -436,4 +480,12 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 .pat-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--c-text-mute); }
 .live-dot { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+/* ① 日志正文按级别着色：此前只有统计面板（.lv-row.*）有配色，正文行无视觉区分。
+   走主题 token，随亮/暗主题联动；warn 此前靠全局 .warn 偶然上色，这里统一收口。 */
+.view code.error { color: var(--c-danger); }
+.view code.warn  { color: var(--c-warn); }
+.view code.info  { color: var(--chart-net-in); }
+.view code.debug { color: var(--chart-load); }
+/* 软换行开关：开启后长行折行而非横向滚动 */
+.view.wrap { white-space: pre-wrap; word-break: break-word; }
 </style>

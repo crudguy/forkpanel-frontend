@@ -68,6 +68,8 @@ const ICONS: Record<string, string> = {
   // alert-circle = **错误**（圆框感叹），与 alert（三角感叹=警告）分工——
   // 两者此前共用 alert，导致「失败」和「警告」看起来一样。
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  // 复制（当前可见文本）：两页叠放。LogView 的「复制」按钮使用
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   'alert-circle': '<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>',
   // 备注/说明（022）：便签形文档——本机说明卡与内联备注的标识
   note: '<path d="M5 4h14v13.5L14.5 21H5z"/><path d="M14.5 21v-3.5H19"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/>',
