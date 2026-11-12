@@ -286,6 +286,14 @@ button:focus-visible { outline: none; border-color: var(--c-primary); box-shadow
    统一降透明度 + 禁用光标，与按钮禁用同一语义（各视图的私有 .is-dim 之类补丁可并入）。 */
 input:disabled, textarea:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
 
+/* 下拉弹层（原生 option）：select 的弹出列表是浏览器原生控件。Chromium 在 select
+   带自定义（尤其半透明）background 时，不会把根部的 color-scheme: dark 传导给弹层，
+   弹层回退成系统浅色底；而 option 文字继承 select 的浅色 --c-text ⇒ 白底白字
+   （审计页「每页条数」下拉实测：10/50/100 三项浅字贴白底，仅选中项靠系统高亮可读）。
+   显式给 option 配主题实色底 + 主题文字色，弹层不再依赖 color-scheme 传导：
+   深色下弹层=深底浅字，浅色下=白底黑字，两端都成立。 */
+option { background-color: var(--c-surface); color: var(--c-text); }
+
 /* 自动填充兜底：登录页的 username / current-password 最常命中。主题声明已让
    Chrome / Edge 自行改用深色填充，这里给不认它的浏览器兜底，并钉住「深色主题
    下不允许出现亮色输入框」这条视觉约束。
