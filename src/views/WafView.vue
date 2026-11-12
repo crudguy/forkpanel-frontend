@@ -809,8 +809,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 <style scoped>
 /* 仅保留布局级宽度；容器 / 按钮 / 文字色 / 区块标题 / 错误条 / 操作列一律复用 main.css 公共类 */
 .num { width: 92px; }
-/* 站点表：访问控制列两个 IP 输入并排；按控件实测宽定宽 */
-.ip { width: 84px; }
+/* 站点表：访问控制列两个 IP 输入并排。列宽在宽屏档会等比放大（见下），故两个输入
+   按单元格内容宽对半分，而非写死 84px：宽屏不留一大截空白，中小屏也不会被裁。 */
+.ip { width: calc((100% - 6px) / 2); }
 .ip-cell { white-space: nowrap; }
 .ip-cell > input + input { margin-left: 6px; }
 /* ?site=<name> 定位行：编辑弹窗跳过来时给出落点，避免在一长串站点里找 */
@@ -823,7 +824,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 .pick { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); }
 .pick .ellipsis { min-width: 0; }
 .is-dim { opacity: .55; }
-/* 站点表列宽（站点表范式）：名称为唯一弹性列（吸收剩余）；其余按实测控件宽定宽——
+/* 站点表列宽（中小屏 <1440）：名称为唯一弹性列（吸收剩余）；其余按实测控件宽定宽——
    此前名称/类型用百分比（10%/7%），同 SitesView 注释所述会把弹性列挤成 0，统一改 px。 */
 col.w-wfname { width: auto; }
 /* 固定列总和按「控件实宽 + 单元格内边距 26px」定，务必留够余量给唯一的
@@ -837,6 +838,24 @@ col.w-wfrate { width: 118px; }
 col.w-wfburst { width: 118px; }
 col.w-wfip { width: 200px; }
 col.w-wfacts { width: 86px; }
+/* ── 宽屏列宽（>=1440）：9 列全按「内容 / 控件实宽」给定宽 ──
+   table-layout:fixed 下 Chrome 会把容器余量按这些宽度**等比**分给每一列
+   （实测 1920 视口表宽 1640 / 总和 1136 = 1.44 倍：站点名 180→260、域名 200→289），
+   不再像旧版那样把 758px 全塞给唯一的弹性列、域名反被 160px 截断。
+   ⚠ 断点与列宽绑定（同 SitesView 的 1799 例外，不是通用视口档位）：总和 1136px
+   必须 <= 1440 视口下实测容器 1160px，否则这一档就会横向滚动；<1440 沿用上面的
+   「唯一弹性列」布局——中小屏余量本就少，硬铺理想宽反而把表格撑出横滚。 */
+@media (min-width: 1440px) {
+  col.w-wfname { width: 180px; }
+  col.w-wfdom { width: 200px; }
+  col.w-wfkind { width: 64px; }
+  col.w-wfon { width: 56px; }
+  col.w-wfprof { width: 104px; }
+  col.w-wfrate { width: 120px; }
+  col.w-wfburst { width: 120px; }
+  col.w-wfip { width: 200px; }
+  col.w-wfacts { width: 92px; }
+}
 /* 模板表列宽：名称为弹性列；IP 列等宽；操作列容 3 个文字按钮 */
 col.w-tname { width: auto; }
 col.w-tprof { width: 80px; }

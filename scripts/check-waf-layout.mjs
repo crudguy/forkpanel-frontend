@@ -126,23 +126,90 @@ const selRule = ruleFor(wafCss, /^\.evt-filters select$/)
 check(!!selRule && /width\s*:\s*auto/.test(selRule.body ?? ''), '[11] .evt-filters select 覆盖全局 width:100%')
 check(!!selRule && /flex\s*:\s*0\s+1\s+\d+px/.test(selRule.body ?? ''), '[12] .evt-filters select 用有限 flex-basis 保持同排')
 
-// ── 站点表固定列总和：必须给唯一的弹性列（站点名）留余量 ──
+// ── 站点表列宽：中小屏基础档与宽屏档必须分开判定 ──
+// ⚠ 宽屏档是 @media 嵌套块，里面的 9 条 col 定义与基础档同名。不分块的话
+//   [13]「恰好 8 条」会把宽屏定义一起数进来（假红），或两档混算成恒绿。
+function takeMedia(css, re) {
+  const m = re.exec(css)
+  if (!m) return { block: '', rest: css }
+  const open = css.indexOf('{', m.index + m[0].length)
+  if (open < 0) return { block: '', rest: css }
+  let depth = 0
+  let close = -1
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === '{') depth++
+    else if (css[i] === '}' && --depth === 0) { close = i; break }
+  }
+  if (close < 0) return { block: '', rest: css }
+  return { block: css.slice(open + 1, close), rest: css.slice(0, m.index) + css.slice(close + 1) }
+}
+function parseCols(css) {
+  return [...css.matchAll(/col\.(w-wf[a-z]+)\s*\{\s*width:\s*(\d+)px\s*;?\s*\}/g)]
+    .map((m) => ({ cls: m[1], px: Number(m[2]) }))
+}
+const WIDE_RE = /@media\s*\(\s*min-width:\s*1440px\s*\)/
+const { block: wideCss, rest: baseCss } = takeMedia(wafCss, WIDE_RE)
+
+// 解析链路自检：块提取必须真把两档拆开（坏样本里块内的宽度不得混进基础档）
+const PROBE_MEDIA = 'col.w-wfname { width:auto } @media (min-width: 1440px) { col.w-wfname { width:180px } }'
+const probeSplit = takeMedia(PROBE_MEDIA, WIDE_RE)
+check(probeSplit.rest.includes('width:auto') && !probeSplit.rest.includes('180px'), '[13a] 媒体块提取把基础档与宽屏档分开')
+check(probeSplit.block.includes('180px'), '[13b] 媒体块提取能取到宽屏档声明体')
+
 const EXPECT_COLS = ['w-wfdom', 'w-wfkind', 'w-wfon', 'w-wfprof', 'w-wfrate', 'w-wfburst', 'w-wfip', 'w-wfacts']
-const colDefs = [...wafCss.matchAll(/col\.(w-wf[a-z]+)\s*\{\s*width:\s*(\d+)px\s*;?\s*\}/g)]
-  .map((m) => ({ cls: m[1], px: Number(m[2]) }))
+const colDefs = parseCols(baseCss)
 const foundCols = colDefs.map((c) => c.cls).sort()
 const wantCols = [...EXPECT_COLS].sort()
 check(foundCols.length === wantCols.length && foundCols.every((c, i) => c === wantCols[i]),
-  `[13] 固定列定义恰好 ${wantCols.length} 条且集合不变（当前 ${foundCols.join(',')}）`)
+  `[13] 基础档固定列定义恰好 ${wantCols.length} 条且集合不变（当前 ${foundCols.join(',')}）`)
 const total = colDefs.reduce((n, c) => n + c.px, 0)
-check(total >= 700 && total <= 900, `[14] 固定列总和 ${total}px 落在 [700,900]：1280 视口容器 1000px 下弹性列有余量`)
-check(/col\.w-wfname\s*\{\s*width:\s*auto\s*;?\s*\}/.test(wafCss), '[15] 站点名列 w-wfname 是唯一弹性列（width:auto）')
+check(total >= 700 && total <= 900, `[14] 基础档固定列总和 ${total}px 落在 [700,900]：1280 视口容器 1000px 下弹性列有余量`)
+check(/col\.w-wfname\s*\{\s*width:\s*auto\s*;?\s*\}/.test(baseCss), '[15] 基础档站点名列 w-wfname 仍是唯一弹性列（width:auto）')
 
 // CSS 定义与模板 colgroup 必须对得上，否则「删一列让总和变小」会假绿
 const colgroup = /<colgroup[^>]*>([\s\S]*?)<\/colgroup>/.exec(wafRaw)?.[1] ?? ''
 const used = [...colgroup.matchAll(/class="(w-wf[a-z]+)"/g)].map((m) => m[1])
 check(used.length === 9 && used.includes('w-wfname') && EXPECT_COLS.every((c) => used.includes(c)),
   `[16] 模板 colgroup 用齐 ${used.length} 列（含弹性列与 8 条固定列）`)
+
+// ── 宽屏档：站点名列不再独吞余量，9 列按内容实宽等比放大 ──
+// 判据与负向自检共用同一个函数，避免「测试自持一套实现」的恒绿。
+function wideViolations(block, colgroupUsed) {
+  const v = []
+  const defs = parseCols(block)
+  const names = defs.map((c) => c.cls).sort()
+  const want = [...colgroupUsed].sort()
+  if (defs.length !== want.length || names.some((n, i) => n !== want[i])) v.push('列集合 / 条数与 colgroup 不一致')
+  const sum = defs.reduce((n, c) => n + c.px, 0)
+  // 1440 视口下 .t-scroll 容器实测 1160px：总和超出就会横向滚动。
+  if (sum < 1000 || sum > 1160) v.push(`总和 ${sum} 超出 [1000,1160]`)
+  const name = defs.find((c) => c.cls === 'w-wfname')
+  if (!name || name.px > 200) v.push('站点名列未定宽或过宽（会重新独吞余量）')
+  const dom = defs.find((c) => c.cls === 'w-wfdom')
+  if (!dom || dom.px < 180) v.push('域名列过窄（长域名被截断）')
+  const px = defs.map((c) => c.px)
+  if (px.length && Math.min(...px) < 50) v.push('存在过窄列（控件放不下）')
+  if (px.length && Math.max(...px) / Math.min(...px) > 5) v.push('最宽 / 最窄列比例失衡')
+  return v
+}
+const wideProblems = wideViolations(wideCss, used)
+check(wideProblems.length === 0,
+  `[17] 宽屏档（>=1440）9 列理想宽守恒${wideProblems.length ? `：${wideProblems.join('、')}` : ''}`)
+const wideDefs = parseCols(wideCss)
+check(wideDefs.length === 9, `[18] 宽屏档恰好 ${wideDefs.length} 列定义（含站点名，不再有 auto 弹性列）`)
+check(wideDefs.find((c) => c.cls === 'w-wfname')?.px <= 200, '[19] 宽屏档站点名列有固定上限，不再吸收全部余量')
+
+// 列宽放大会同步放大单元格：IP 输入必须跟着伸，否则宽屏留白、窄屏被裁
+const ipWidth = ruleFor(baseCss, /^\.ip$/)?.body ?? ''
+check(/width\s*:\s*calc\([^)]*100%[^)]*\)/.test(ipWidth), '[20] .ip 用 calc(100%) 随列宽伸缩，不写死 84px')
+
+// 负向自检：把宽屏档改回旧语义（站点名 auto / 总和超上限）必须能被同一套判据判红
+const BAD_AUTO = wideCss.replace(/col\.w-wfname\s*\{\s*width:\s*180px\s*;?\s*\}/, 'col.w-wfname { width: auto; }')
+check(BAD_AUTO !== wideCss && wideViolations(BAD_AUTO, used).length > 0,
+  '[21] 负向：宽屏站点名退回 width:auto（旧语义）能判红')
+const BAD_SUM = wideCss.replace('width: 200px', 'width: 400px')
+check(BAD_SUM !== wideCss && wideViolations(BAD_SUM, used).some((v) => v.includes('总和')),
+  '[22] 负向：宽屏总和超出 1440 容器能判红')
 
 if (failed) process.exit(1)
 console.log('PASS：WAF 表格几何约束全部守恒')
