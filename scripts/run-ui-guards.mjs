@@ -68,6 +68,8 @@ export const UI_GUARDS = [
   // 2026-11-12 行号编辑框：新增原生 textarea 必须登记，且侧栏/输入层共用行高、
   // 禁软折行、窗口化——单测挡不住有人把 white-space 改回 pre-wrap
   'check-line-numbers.mjs',
+  // 2026-11-12 语法高亮：规则/配色单一事实源 + 每个编辑框调用点必须带文件类型信息
+  'check-syntax-highlight.mjs',
 ]
 
 let failed = 0
