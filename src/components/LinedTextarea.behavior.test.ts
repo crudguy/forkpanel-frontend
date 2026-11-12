@@ -130,7 +130,11 @@ describe('NginxEditor：高亮层与行号侧栏共用一份滚动位置', () =>
     const ta = m.host.querySelector<HTMLTextAreaElement>('.ne-ta')!
     const pre = m.host.querySelector<HTMLPreElement>('.ne-pre')!
     expect(ta.getAttribute('wrap')).toBe('off')
-    expect(m.host.querySelector('.tok-num'), '语法着色回归：数字 token 没渲染').not.toBeNull()
+    // 内容是纯注释行：顺带钉住「大文本窗口化后着色层仍渲染注释 token」。
+    // 旧断言查 .tok-num 其实在吃 bug 的副作用——注释正则失效时 `# line 1`
+    // 里的数字才会被当成数字 token；注释修好后它必然变红。数字着色由下方
+    // 「# 注释高亮」用例单独覆盖。
+    expect(m.host.querySelector('.tok-comment'), '注释 token 没渲染').not.toBeNull()
     ta.scrollTop = 1900
     ta.scrollLeft = 40
     ta.dispatchEvent(new Event('scroll', { bubbles: true }))
@@ -138,5 +142,38 @@ describe('NginxEditor：高亮层与行号侧栏共用一份滚动位置', () =>
     expect(pre.scrollTop).toBe(ta.scrollTop)
     expect(pre.scrollLeft).toBe(ta.scrollLeft)
     expect(Number(lnTexts(m.host, '.ne-ln')[0])).toBeGreaterThan(50)
+  })
+})
+
+describe('NginxEditor：# 注释高亮（真挂载，查着色层 DOM）', () => {
+  const comments = (root: ParentNode) =>
+    [...root.querySelectorAll('.ne-pre .tok-comment')].map((el) => el.textContent)
+
+  it('整行 / 行尾 / 紧跟方括号的注释各自命中到行尾，且不吞下一行', async () => {
+    const m = mount(NginxEditor, {}, [
+      '# whole line',
+      'listen 80; # tail comment',
+      '#[anchor] 80',
+      'set $x 1;',
+    ].join('\n'))
+    await nextTick(); await nextTick()
+    expect(comments(m.host), '注释须整段落进 .tok-comment，每行一条且不跨行').toEqual([
+      '# whole line', '# tail comment', '#[anchor] 80',
+    ])
+    // 注释之外的 token 仍按各自身份着色：防「整行被吞」或 tokenizer 提前停摆
+    expect([...m.host.querySelectorAll('.tok-directive')].map((el) => el.textContent)).toEqual(['listen', 'set'])
+    expect([...m.host.querySelectorAll('.tok-num')].map((el) => el.textContent)).toEqual(['80', '1'])
+    expect([...m.host.querySelectorAll('.tok-var')].map((el) => el.textContent)).toEqual(['$x'])
+  })
+
+  it('字符串里的 # 不当注释；内容变化后注释跟着重算', async () => {
+    const m = mount(NginxEditor, {}, 'set $msg "a # b";')
+    await nextTick(); await nextTick()
+    expect(comments(m.host), '字符串内的 # 被误判成注释').toEqual([])
+    expect(m.host.querySelector('.tok-string')?.textContent).toBe('"a # b"')
+
+    await m.setValue('set $msg "a # b";\n# real one')
+    expect(comments(m.host)).toEqual(['# real one'])
+    expect(m.host.querySelector('.tok-string')?.textContent).toBe('"a # b"')
   })
 })
