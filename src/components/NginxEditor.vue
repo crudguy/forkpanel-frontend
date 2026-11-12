@@ -15,6 +15,7 @@
  */
 import { computed, ref } from 'vue'
 import { useLineGutter } from '@/composables/useLineGutter'
+import { detectLanguage, tokenize, type SyntaxLang } from '@/composables/syntaxHighlight'
 
 const props = defineProps<{
   modelValue: string
@@ -25,44 +26,21 @@ const props = defineProps<{
   ariaLabel?: string
   /** 填充父容器高度（全屏编辑用）：textarea 撑满且禁手动缩放 */
   fill?: boolean
+  /** 显式指定语言；未给时按 filename 识别，两者都无则默认 nginx */
+  language?: SyntaxLang
+  filename?: string
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
 const ta = ref<HTMLTextAreaElement | null>(null)
 const pre = ref<HTMLPreElement | null>(null)
 
-interface Seg { t: string; c?: string }
-
-// 顺序：字符串 > 注释 > 变量 > 指令 > 数字/IP > 标点。指令按「后接空白/;/{」判定。
-// 注释分支必须是字符类 `[^\n]*`：写成 `\[` 会退化成「字面 [ + 行首断言 + 换行」，
-// 整条分支恒不命中（着色层永远不出现 .tok-comment）。
-const TOKEN_RE =
-  /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(#[^\n]*)|(\$[A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*(?=[\s;{]))|(\b\d+(?:\.\d+){3}\b|\b\d+(?:\.\d+)?\b)|([{};])/g
-
-function tokenize(src: string): Seg[] {
-  const segs: Seg[] = []
-  let last = 0
-  let m: RegExpExecArray | null
-  TOKEN_RE.lastIndex = 0
-  while ((m = TOKEN_RE.exec(src))) {
-    if (m.index > last) segs.push({ t: src.slice(last, m.index) })
-    let cls = ''
-    if (m[1]) cls = 'tok-string'
-    else if (m[2]) cls = 'tok-comment'
-    else if (m[3]) cls = 'tok-var'
-    else if (m[4]) cls = 'tok-directive'
-    else if (m[5]) cls = 'tok-num'
-    else if (m[6]) cls = 'tok-punc'
-    segs.push({ t: m[0], c: cls })
-    last = m.index + m[0].length
-  }
-  if (last < src.length) segs.push({ t: src.slice(last) })
-  // 末尾换行：textarea 会多渲染一个空行，pre 末尾补一个空格对齐高度。
-  if (src.endsWith('\n')) segs.push({ t: ' ' })
-  return segs
-}
-
-const segs = computed(() => tokenize(props.modelValue ?? ''))
+// 着色规则只有一份（syntaxHighlight.ts）：默认 nginx 保持站点配置的既有行为；
+// 接了文件名就按文件类型自动切换，避免同一份 conf 在两类编辑框里出现两套颜色。
+const lang = computed<SyntaxLang>(() => props.filename
+  ? detectLanguage({ language: props.language, filename: props.filename })
+  : (props.language ?? 'nginx'))
+const segs = computed(() => tokenize(props.modelValue ?? '', lang.value))
 
 const lineCount = computed(() => {
   const v = props.modelValue ?? ''
@@ -203,12 +181,4 @@ function syncScroll() {
 .nginx-editor:has(.ne-ta:read-only) .ne-ta { cursor: default; }
 </style>
 
-<!-- token 配色：用 .nginx-editor 前缀（非 scoped），以命中 v-for 渲染的 span -->
-<style>
-.nginx-editor .tok-comment { color: var(--c-text-mute); font-style: italic; }
-.nginx-editor .tok-string { color: var(--c-ok); }
-.nginx-editor .tok-var { color: var(--c-cyan); }
-.nginx-editor .tok-directive { color: var(--c-primary); font-weight: 600; }
-.nginx-editor .tok-num { color: var(--c-warn); }
-.nginx-editor .tok-punc { color: var(--c-text-dim); }
-</style>
+<!-- token 配色统一定义在 src/styles/main.css，两个编辑框共用一份 -->

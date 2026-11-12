@@ -941,6 +941,20 @@ label.has-err input, label.has-err select { border-color: var(--c-danger); }
    为什么连 --content-pb 一起改：--page-chrome-h 是三者之和，只改 padding-top
    而不改 padding-bottom，全高布局（FilesView/TerminalView）会多算 24px 导致纵向溢出一屏。
    ────────────────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   语法高亮 token 配色（单一事实源）
+
+   两类编辑框都渲染同一批 .tok-* span，配色必须放全局：组件 scoped 样式不会给
+   v-for 动态生成的 span 补父级 data-v，而写在单个组件里的非 scoped 规则又只有
+   该组件加载时才存在。收敛到此处后，新增语言或新增编辑框都无需再抄一份。
+   ────────────────────────────────────────────────────────────────────────── */
+.tok-comment { color: var(--c-text-mute); font-style: italic; }
+.tok-string { color: var(--c-ok); }
+.tok-var { color: var(--c-cyan); }
+.tok-directive { color: var(--c-primary); font-weight: 600; }
+.tok-num { color: var(--c-warn); }
+.tok-punc { color: var(--c-text-dim); }
+
 @media (max-width: 900px) {
   :root { --content-pt: 16px; --content-pb: 16px; }
 }
