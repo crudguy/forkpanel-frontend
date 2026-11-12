@@ -398,7 +398,7 @@ watch(() => props.site?.id ?? null, (id) => {
             <span>{{ !webSupported ? '未接入 Web 服务器（nginx）：配置只读'
               : (!isOwner ? '仅 owner 可编辑原始配置（当前为只读）' : '无 site.manage 权限：配置只读') }}</span>
           </p>
-          <NginxEditor v-model="confText" class="conf-editor" :rows="10" :spellcheck="false"
+          <NginxEditor v-model="confText" class="conf-editor" :rows="10" :spellcheck="false" language="nginx"
             :readonly="!canManage || !isOwner || !webSupported"
             :placeholder="confLoading ? '读取中…' : (confErr ? '（读取失败：请点上方「重试」）' : '（配置文件为空或尚未下发——先保存「并应用」生成）')"
             aria-label="站点 Nginx 配置原文" />
@@ -489,7 +489,7 @@ watch(() => props.site?.id ?? null, (id) => {
             <Icon name="close" :size="16" />
           </button>
         </div>
-        <NginxEditor v-model="confText" class="conf-full-editor" fill :spellcheck="false" />
+        <NginxEditor v-model="confText" class="conf-full-editor" fill :spellcheck="false" language="nginx" />
         <div class="conf-full-foot">
           <span class="dim tiny">Ctrl/⌘ + Enter 保存 · Esc 关闭并还原到打开时的内容</span>
           <span class="spacer" />

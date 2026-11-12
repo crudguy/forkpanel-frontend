@@ -131,13 +131,13 @@ function cancel() { emit('cancel') }
 
       <label>
         <span>compose YAML<small>（必填）</small></span>
-        <ExpandableTextarea v-model="yamlText" :rows="7"
+        <ExpandableTextarea v-model="yamlText" :rows="7" language="yaml"
           :placeholder="'version: \'3\'\nservices:\n  web:\n    image: nginx:1.27-alpine\n    ports:\n      - 8080:80'" />
       </label>
 
       <label>
         <span>环境变量文件（.env）<small>（可选；KEY=VALUE 每行一个，合并到所有服务）</small></span>
-        <ExpandableTextarea v-model="envText" :rows="3"
+        <ExpandableTextarea v-model="envText" :rows="3" language="env"
           :placeholder="'TZ=Asia/Shanghai\nNGINX_PORT=80'" />
       </label>
 

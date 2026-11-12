@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * LinedTextarea —— 带行号侧栏的多行文本框。
+ * LinedTextarea —— 带行号侧栏、按文件类型自动高亮的多行文本框。
  *
  * 对齐契约（三条缺一不可，scripts/check-line-numbers.mjs 钉住）：
  * 1. 不软折行：white-space:pre + wrap="off"，长行走横向滚动。若允许软折行，
@@ -12,9 +12,14 @@
  *
  * 外部未声明的属性/事件经 $attrs 全部落到 textarea（inheritAttrs:false）；
  * 若沿用默认透传到根 div，focus 这类不冒泡的事件会静默收不到。
+ *
+ * 高亮是可选叠加层：识别到语言时透明 textarea 叠在着色 pre 之上；识别不到
+ * （plain）时 pre 根本不渲染、textarea 文字色也不变 —— 纯文本文件的编辑、
+ * 选中、复制与保存链路与改造前等价。
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useLineGutter } from '@/composables/useLineGutter'
+import { detectLanguage, tokenize, type SyntaxLang } from '@/composables/syntaxHighlight'
 
 defineOptions({ inheritAttrs: false })
 
@@ -37,6 +42,10 @@ const props = withDefaults(defineProps<{
   surface?: 'bg' | 'surface2'
   /** 右侧额外留白（px），给叠在框内的按钮（如「放大」）让位 */
   padRight?: number
+  /** 关联文件名 / 路径：据此自动选高亮规则（优先级低于显式 language） */
+  filename?: string
+  /** 显式语言；传 'plain' 可强制关闭高亮 */
+  language?: SyntaxLang
 }>(), {
   rows: 6,
   readonly: false,
@@ -52,6 +61,7 @@ const props = withDefaults(defineProps<{
 })
 
 const ta = ref<HTMLTextAreaElement | null>(null)
+const pre = ref<HTMLPreElement | null>(null)
 
 const lineCount = computed(() => {
   const v = model.value ?? ''
@@ -59,8 +69,27 @@ const lineCount = computed(() => {
 })
 
 const { lnWindow, sync } = useLineGutter(ta, lineCount)
-// 外部赋值 / 清空会让浏览器 clamp scrollTop，重读一次以免窗口停留在旧位置
-watch(() => model.value, () => nextTick(sync))
+
+// 内容嗅探只在「既无 language 又无 filename」时兜底，且用挂载时的内容算一次：
+// 跟着每次输入重算会让语言跳变（删掉一个关键字着色就消失），界面会闪。
+const sniffed = detectLanguage({ content: model.value ?? '' })
+const lang = computed<SyntaxLang>(() => props.language ?? (props.filename
+  ? detectLanguage({ filename: props.filename })
+  : sniffed))
+const highlighted = computed(() => lang.value !== 'plain')
+const segs = computed(() => highlighted.value ? tokenize(model.value ?? '', lang.value) : [])
+const taStyle = computed(() => props.padRight ? { paddingRight: props.padRight + 'px' } : undefined)
+
+function onScroll() {
+  sync()
+  if (pre.value && ta.value) {
+    pre.value.scrollTop = ta.value.scrollTop
+    pre.value.scrollLeft = ta.value.scrollLeft
+  }
+}
+
+// 外部赋值 / 清空会让浏览器 clamp scrollTop，重读一次以免窗口与着色层停在旧位置
+watch(() => model.value, () => nextTick(onScroll))
 
 defineExpose({ focus: () => ta.value?.focus() })
 </script>
@@ -76,22 +105,25 @@ defineExpose({ focus: () => ta.value?.focus() })
         <div v-for="n in lnWindow.numbers" :key="n" class="ln">{{ n }}</div>
       </div>
     </div>
-    <textarea
-      ref="ta"
-      v-bind="$attrs"
-      v-model="model"
-      class="lined-ta"
-      :class="{ mono }"
-      wrap="off"
-      :rows="rows"
-      :readonly="readonly"
-      :disabled="disabled"
-      :spellcheck="spellcheck"
-      :placeholder="placeholder"
-      :aria-label="ariaLabel"
-      :style="padRight ? { paddingRight: padRight + 'px' } : undefined"
-      @scroll="sync"
-    />
+    <div class="lined-body">
+      <pre v-if="highlighted" ref="pre" class="lined-pre" :class="{ mono }" aria-hidden="true"><code><span v-for="(s, i) in segs" :key="i" :class="s.c">{{ s.t }}</span></code></pre>
+      <textarea
+        ref="ta"
+        v-bind="$attrs"
+        v-model="model"
+        class="lined-ta"
+        :class="{ mono, 'has-hl': highlighted }"
+        wrap="off"
+        :rows="rows"
+        :readonly="readonly"
+        :disabled="disabled"
+        :spellcheck="spellcheck"
+        :placeholder="placeholder"
+        :aria-label="ariaLabel"
+        :style="taStyle"
+        @scroll="onScroll"
+      />
+    </div>
   </div>
 </template>
 
@@ -135,6 +167,14 @@ defineExpose({ focus: () => ta.value?.focus() })
 .ln-window { position: absolute; top: 0; left: 0; right: 0; }
 .ln { line-height: var(--editor-line-h); }
 
+/* 着色层与输入层的相对定位上下文；pre 绝对铺满，不参与 flex 尺寸计算 */
+.lined-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .lined-ta {
   flex: 1 1 auto;
   min-width: 0;
@@ -158,4 +198,36 @@ defineExpose({ focus: () => ta.value?.focus() })
 .lined-ta.mono { font-family: var(--mono); }
 .lined.is-fill .lined-ta { height: 100%; min-height: 0; resize: none; }
 .lined-ta:disabled { opacity: .6; cursor: not-allowed; }
+
+/* 高亮态：textarea 只留 caret，文字由下层 pre 渲染。两者同盒模型/字体/padding，
+   并同时预留滚动条槽位，否则出现纵向滚动条时正文与着色层会横向错位。 */
+.lined-pre {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 9px 11px;
+  border: 0;
+  font-size: var(--fs-12-5);
+  line-height: var(--editor-line-h);
+  white-space: pre;
+  overflow: hidden;
+  overflow-wrap: normal;
+  tab-size: 2;
+  color: var(--c-text);
+  background: transparent;
+  pointer-events: none;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+}
+.lined-pre.mono { font-family: var(--mono); }
+.lined-ta.has-hl {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--c-text);
+  scrollbar-gutter: stable;
+}
+.lined-ta.has-hl::placeholder { color: var(--c-text-mute); }
+.lined:has(.lined-ta:disabled) .lined-pre { opacity: .6; }
 </style>

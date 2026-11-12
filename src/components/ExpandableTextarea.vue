@@ -12,6 +12,7 @@
 import { nextTick, ref } from 'vue'
 import { useModal } from '@/composables/useModal'
 import LinedTextarea from '@/components/LinedTextarea.vue'
+import type { SyntaxLang } from '@/composables/syntaxHighlight'
 
 const model = defineModel<string>({ default: '' })
 
@@ -19,6 +20,8 @@ const props = withDefaults(defineProps<{
   rows?: number
   placeholder?: string
   spellcheck?: boolean
+  /** 内容类型：同时透传给小框与放大层，保证两处同一套高亮规则 */
+  language?: SyntaxLang
 }>(), {
   rows: 3,
   placeholder: '',
@@ -55,6 +58,7 @@ function open() {
       :rows="props.rows"
       :placeholder="props.placeholder"
       :spellcheck="props.spellcheck"
+      :language="props.language"
       :pad-right="34"
       aria-label="可放大编辑的多行文本"
     />
@@ -93,6 +97,7 @@ function open() {
             fill
             :placeholder="props.placeholder"
             :spellcheck="props.spellcheck"
+            :language="props.language"
             aria-label="放大编辑的多行文本"
             @keydown.ctrl.enter.prevent="modalClose"
             @keydown.meta.enter.prevent="modalClose"

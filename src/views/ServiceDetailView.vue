@@ -558,6 +558,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
                 v-model="cfgDraft"
                 :min-height="'320px'"
                 :disabled="cfgSaving"
+                :filename="cfg.path"
                 aria-label="服务配置文件内容"
               />
               <div class="cfg-foot">

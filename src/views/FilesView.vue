@@ -810,6 +810,7 @@ function full(p: string) {
         v-model="editing.content"
         :min-height="'320px'"
         :readonly="!canWrite"
+        :filename="editing.dir + '/' + editing.name"
         aria-label="文件内容"
       />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>

@@ -124,7 +124,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 
           <label>
             <span>启动命令<small>（每行一个参数；含空格的参数写在一行里）</small></span>
-            <ExpandableTextarea v-model="d.commandText" :rows="2" :placeholder="'nginx\n-g\ndaemon off;'" />
+            <ExpandableTextarea v-model="d.commandText" :rows="2" language="plain" :placeholder="'nginx\n-g\ndaemon off;'" />
           </label>
 
           <div class="fields two">

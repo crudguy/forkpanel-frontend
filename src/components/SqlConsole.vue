@@ -116,6 +116,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
       <LinedTextarea
         v-model="sql"
         surface="surface2"
+        language="sql"
         :min-height="'118px'"
         placeholder="只读语句：SELECT / WITH / EXPLAIN / PRAGMA / VALUES"
         aria-label="SQL 语句"
