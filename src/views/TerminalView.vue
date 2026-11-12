@@ -61,6 +61,10 @@ interface TermSession {
 const sessions = new Map<string, TermSession>()
 /** 每个标签各自的终端容器 DOM（同样非响应式）。 */
 const panes = new Map<string, HTMLElement>()
+/** 容器尺寸变化（错误条出现/消失、提示条换行、标签栏折行、切换标签显隐）时把 xterm
+    重新 fit 到新尺寸；否则画布仍是旧高度，会比终端黑框高出一截。pane 高度由外层
+    flex 分配、不受 xterm 内容影响，故不会形成「fit → 尺寸变化 → 再 fit」的循环。 */
+let paneObs: ResizeObserver | null = null
 
 let seqNo = 0
 function makeTab(): TermTab {
@@ -92,8 +96,12 @@ function sessionFor(id: string): TermSession {
 
 /** 模板里的函数 ref：把每个标签的容器 DOM 收进 panes。 */
 function bindPane(id: string, el: Element | ComponentPublicInstance | null | undefined) {
-  if (el instanceof HTMLElement) panes.set(id, el)
-  else panes.delete(id)
+  const old = panes.get(id)
+  if (old) paneObs?.unobserve(old)
+  if (el instanceof HTMLElement) {
+    panes.set(id, el)
+    paneObs?.observe(el)
+  } else panes.delete(id)
 }
 
 /** 按当前页面地址构造同源 WS URL（dev 经 Vite /api 代理；prod 同主机）。 */
@@ -274,17 +282,27 @@ onMounted(async () => {
   await nextTick()
   ensureTerm(tabs.value[0].id)
   connect(tabs.value[0].id)
+  if (typeof ResizeObserver !== 'undefined') {
+    paneObs = new ResizeObserver(() => {
+      const el = panes.get(activeId.value)
+      if (!el || !el.clientWidth || !el.clientHeight) return
+      sessions.get(activeId.value)?.fit?.fit()
+    })
+    for (const el of panes.values()) paneObs.observe(el)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResizeWin)
+  paneObs?.disconnect()
+  paneObs = null
   // 所有标签都要收：漏一个就是一条 WS 泄漏 + 一个 PTY 常驻。
   for (const id of [...sessions.keys()]) disposeSession(id)
 })
 </script>
 
 <template>
-  <div>
+  <div class="term-view">
     <!-- 多页签与工具条同一行：标签栏 + 操作按钮共用一行，不单独占一行 -->
     <div class="fp-head-row">
     <div class="tabbar" role="tablist" aria-label="终端会话">
@@ -331,11 +349,12 @@ onUnmounted(() => {
 
     <template v-else>
       <p v-if="errorMsg" class="err" role="alert">{{ errorMsg }}</p>
+      <!-- 高危提示前置：进入终端输入区之前就要看见，且不与终端贴边 -->
+      <RiskBanner level="danger" title="宿主级权限"
+        text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面或关闭标签即断开会话。" />
       <!-- 每个标签一个常驻容器：隐藏而非销毁，切回来才能保住滚动缓冲与回显 -->
       <div v-for="t in tabs" :key="t.id" :ref="(el) => bindPane(t.id, el)"
         class="term-pane" :class="{ active: t.id === activeId }" />
-      <RiskBanner level="danger" title="宿主级权限"
-        text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面或关闭标签即断开会话。" />
     </template>
   </div>
 </template>
@@ -367,9 +386,21 @@ onUnmounted(() => {
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-mute); }
 .stat.on .dot { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
 
+/* 页面定高成 flex column：工具行 / 提示条固定，终端 flex:1 吃满剩余视口。
+   高度取 100vh - var(--page-chrome-h)（顶栏 + .content 上下内边距的单一来源，窄屏
+   自动变小），与 FilesView 的全高布局同源；此前写死 258px 把提示条高度算进常量，
+   提示条换行变高就会把整页顶出一屏滚动。 */
+.term-view {
+  display: flex; flex-direction: column; min-height: 0;
+  height: calc(100vh - var(--page-chrome-h));
+}
+.term-view > .fp-head-row { flex: none; }
+.term-view > .err { flex: none; }
+/* RiskBanner 是子组件根（scoped 不给它补父级 data-v），需 :deep 才能钉住不伸缩。 */
+.term-view > :deep(.risk) { flex: none; }
 /* 终端容器：所有标签共用一套尺寸；非激活的隐藏（保活）而非销毁。 */
 .term-pane {
-  height: calc(100vh - 258px); min-height: 360px;
+  flex: 1 1 0; min-height: 360px;
   background: var(--term-bg); border: 1px solid var(--c-border); border-radius: 12px;
   padding: 10px;
 }
