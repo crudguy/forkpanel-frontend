@@ -87,9 +87,11 @@ const llmNarrative = ref(false)
 const llmChatContext = ref(false)
 const showKey = ref(false)
 
-// ── C10 测试连接：真实探测 OpenAI 兼容 /v1/models ──
+// ── C10 测试连接：配模型时真实探测 /v1/chat/completions，否则 /v1/models ──
 // F-02①：Endpoint 锁定已保存值（改动须先保存）、已存密钥绝不参与；Model 与本次
-// 输入的 Key 仍可先测后存——避免"保存后才知道配置是否可用"。
+// 输入的 Key 仍可先测后存——避免"保存后才知道配置是否可用"。配模型时改打
+// /chat/completions 是修复：部分服务商（如 Agnes）即便密钥有效也对 /v1/models
+// 返回 401，却对 /chat/completions 正常，只探 /models 会误报 401。
 // savedLlmEndpoint 是「后端已保存的 Endpoint」快照，比较基准不能取输入框自身。
 const savedLlmEndpoint = ref('')
 const testing = ref(false)
@@ -392,8 +394,10 @@ onMounted(async () => {
               <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
             </button>
           </div>
-          <p class="sec-note">「测试连接」只请求<strong>已保存的 API Endpoint</strong> 的
-            <code class="mono">/v1/models</code>；改动 Endpoint 后请先保存。
+          <p class="sec-note">「测试连接」只请求<strong>已保存的 API Endpoint</strong>：
+            已配置模型时向 <code class="mono">/v1/chat/completions</code> 发起一次最小对话验证
+            （更权威，避免部分服务商对 <code class="mono">/v1/models</code> 误报 401）；
+            未配置模型时退回 <code class="mono">/v1/models</code> 列表。改动 Endpoint 后请先保存。
             <strong>不会使用已保存的 API Key</strong>——要验证密钥请在上方重新输入后再测试。
             Model 与本次输入的 Key 仍可先测后存。</p>
         </template>

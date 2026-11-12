@@ -372,7 +372,7 @@ export const API = {
     get: () => '/api/v1/settings',
     patch: () => '/api/v1/settings',
     dashboard: () => '/api/v1/settings/dashboard',
-    // C10 测试连接：真实探测 /v1/models（仅探测，不改配置）
+    // C10 测试连接：配模型时探测 /v1/chat/completions，否则 /v1/models（仅探测，不改配置）
     llmTest: () => '/api/v1/settings/llm/test',
   },
 
