@@ -670,6 +670,10 @@ export interface SettingsReport {
     narrative: boolean
     /** 开启后会外发什么的披露文案（后端单一维护，原样展示） */
     narrative_note: string
+    /** chat 模式是否附带脱敏系统概要；缺省 false；开启后自由对话也能结合本机实况作答 */
+    chat_context: boolean
+    /** 开启 chat 系统上下文后会外发什么的披露文案（后端单一维护，原样展示） */
+    chat_context_note: string
   }
   deployment: {
     read_only: boolean

@@ -82,6 +82,9 @@ const llmKey = ref('')            // 留空 = 保持不变；输入 = 覆盖
 // P0-2：叙事层独立开关。缺省关（后端 narrative_on 同款语义）——外发第三方端点
 // 必须显式同意，不搞「配齐三键就自动外发」。关时后端 llm_config() 直接 None。
 const llmNarrative = ref(false)
+// chat 系统上下文开关。缺省关——自由对话默认不把任何系统数据带出本机；开启后
+// 自由输入也能结合本机实况（脱敏）作答。仅当叙事开关已开时才有意义。
+const llmChatContext = ref(false)
 const showKey = ref(false)
 
 // ── C10 测试连接：真实探测 OpenAI 兼容 /v1/models ──
@@ -186,6 +189,7 @@ async function load() {
     savedLlmEndpoint.value = report.value.runtime.endpoint ?? ''
     llmModel.value = report.value.runtime.model ?? ''
     llmNarrative.value = report.value.runtime.narrative ?? false
+    llmChatContext.value = report.value.runtime.chat_context ?? false
   }, onError)
 }
 
@@ -199,6 +203,7 @@ async function save() {
       'assistant.llm_endpoint': llmEndpoint.value.trim() || null,
       'assistant.llm_model': llmModel.value.trim() || null,
       'assistant.llm_narrative': llmNarrative.value,
+      'assistant.llm_chat_context': llmChatContext.value,
     }
     if (llmKey.value.trim()) patch['assistant.llm_api_key'] = llmKey.value.trim()
     report.value = await api.patch<SettingsReport>(API.settings.patch(), { settings: patch })
@@ -358,6 +363,12 @@ onMounted(async () => {
             <!-- 披露文案由后端 NARRATIVE_NOTE 单一维护、原样渲染——前端不改写，
                  杜绝「文档说已脱敏、代码没脱敏」的漂移。 -->
             <p v-if="report.runtime.narrative_note" class="sec-note">{{ report.runtime.narrative_note }}</p>
+            <label class="field">
+              <span class="lbl">自由对话带上系统概要</span>
+              <input v-model="llmChatContext" type="checkbox" />
+              <span class="dim">开启后，自由输入的问题也会结合本机实况（脱敏）作答；默认关</span>
+            </label>
+            <p v-if="report.runtime.chat_context_note" class="sec-note">{{ report.runtime.chat_context_note }}</p>
           </div>
           <p class="sec-note">密钥经主密钥 AES-GCM 加密落库，界面与接口均不回显明文。</p>
           <p v-if="formError" class="err" role="alert">{{ formError }}</p>
