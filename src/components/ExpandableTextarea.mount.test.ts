@@ -43,8 +43,8 @@ function mountWithModel(initial = '') {
   return { value, emitted }
 }
 
-const small = () => host!.querySelector<HTMLTextAreaElement>('.expand-small')!
-const big = () => document.body.querySelector<HTMLTextAreaElement>('.expand-input')
+const small = () => host!.querySelector<HTMLTextAreaElement>('.lined-ta')!
+const big = () => document.body.querySelector<HTMLTextAreaElement>('.expand-modal .lined-ta')
 
 /** E2E 同款：受控输入必须走原生 setter + input 事件，直接赋 value 不触发响应式。 */
 function type(el: HTMLTextAreaElement, text: string) {
@@ -96,7 +96,7 @@ describe('ExpandableTextarea：两个编辑区共享同一份数据', () => {
     mountWithModel()
     host!.querySelector<HTMLButtonElement>('.expand-open')!.click()
     await nextTick()
-    expect(host!.querySelector('.expand-input'), '放大层留在了组件内部（会被父级裁切/层叠上下文困住）').toBeNull()
+    expect(host!.querySelector('.expand-modal .lined-ta'), '放大层留在了组件内部（会被父级裁切/层叠上下文困住）').toBeNull()
     expect(document.body.querySelector('.mask.level-2')?.parentElement).toBe(document.body)
   })
 })
@@ -117,6 +117,6 @@ describe('ExpandableTextarea：Esc 关的是放大层', () => {
       await new Promise((r) => setTimeout(r, 200))
       await nextTick()
     }
-    expect(document.body.querySelector('.expand-input'), 'Esc 后放大层仍未卸载').toBeNull()
+    expect(document.body.querySelector('.expand-modal .lined-ta'), 'Esc 后放大层仍未卸载').toBeNull()
   })
 })

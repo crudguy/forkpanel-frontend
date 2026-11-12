@@ -29,6 +29,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import LinedTextarea from '@/components/LinedTextarea.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -553,7 +554,12 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
                 ⚠ 该文件位于发行版目录，修改可能在软件包升级时被覆盖。建议改用上方的「drop-in」。
               </p>
               <p v-if="cfgError" class="err">{{ cfgError }}</p>
-              <textarea v-model="cfgDraft" class="cfg-edit" spellcheck="false" :disabled="cfgSaving" />
+              <LinedTextarea
+                v-model="cfgDraft"
+                :min-height="'320px'"
+                :disabled="cfgSaving"
+                aria-label="服务配置文件内容"
+              />
               <div class="cfg-foot">
                 <label class="switch-row">
                   <span>保存后重启服务</span>
@@ -667,12 +673,6 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
 .seg-btn.active { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }
 .rec { font-size: var(--fs-12); color: var(--c-ok); margin-left: 4px; }
 .cfg-path { font-family: var(--mono); word-break: break-all; margin: 0 0 8px; }
-.cfg-edit { width: 100%; min-height: 320px; resize: vertical; box-sizing: border-box;
-           padding: 12px 14px; background: var(--c-bg); color: var(--c-text);
-           border: 1px solid var(--c-border); border-radius: var(--radius-sm);
-           font-family: var(--mono); font-size: var(--fs-12-5); line-height: 1.55;
-           white-space: pre; overflow: auto; tab-size: 2; }
-.cfg-edit:focus { outline: none; border-color: var(--c-primary); }
 .cfg-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 
 .out { margin: 0; padding: 12px 14px; background: var(--c-bg); border: 1px solid var(--c-border);

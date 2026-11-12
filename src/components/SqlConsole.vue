@@ -18,6 +18,7 @@ import { ref, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import Icon from '@/components/Icon.vue'
+import LinedTextarea from '@/components/LinedTextarea.vue'
 import { useModal } from '@/composables/useModal'
 
 const props = defineProps<{ conn: { id: number; name: string; engine?: string | null } }>()
@@ -112,11 +113,12 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
         </label>
       </div>
 
-      <textarea
+      <LinedTextarea
         v-model="sql"
-        class="sp-sql"
-        spellcheck="false"
+        surface="surface2"
+        :min-height="'118px'"
         placeholder="只读语句：SELECT / WITH / EXPLAIN / PRAGMA / VALUES"
+        aria-label="SQL 语句"
         @keydown.ctrl.enter="run"
         @keydown.meta.enter="run"
       />
@@ -189,13 +191,6 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
 .sp-samples { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 9px; }
 .lim { font-size: var(--fs-12); color: var(--c-text-mute); display: flex; align-items: center; gap: 4px; }
 .lim-input { width: 66px; padding: 3px 6px; font-size: var(--fs-12); }
-.sp-sql {
-  width: 100%; min-height: 118px; resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-12-5);
-  line-height: 1.5; padding: 9px 11px;
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-border); border-radius: 9px; color: var(--c-text);
-}
 .sp-actions { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
 .sp-actions .muted { font-size: var(--fs-12); color: var(--c-text-mute); }
 .sp-scroll { overflow: auto; max-height: 46vh; border: 1px solid var(--c-border); border-radius: 9px; }

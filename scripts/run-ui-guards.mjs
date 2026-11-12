@@ -65,6 +65,9 @@ export const UI_GUARDS = [
   // 2026-11-11 表格规范：每个含 <table> 的文件必须登记（接分页/排序 或 例外+理由），
   // 且不得再出现私有 .pager 样式——新加表格漏接是本类问题唯一的退化方式
   'check-table-convention.mjs',
+  // 2026-11-12 行号编辑框：新增原生 textarea 必须登记，且侧栏/输入层共用行高、
+  // 禁软折行、窗口化——单测挡不住有人把 white-space 改回 pre-wrap
+  'check-line-numbers.mjs',
 ]
 
 let failed = 0

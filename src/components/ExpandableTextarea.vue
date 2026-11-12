@@ -11,6 +11,7 @@
  */
 import { nextTick, ref } from 'vue'
 import { useModal } from '@/composables/useModal'
+import LinedTextarea from '@/components/LinedTextarea.vue'
 
 const model = defineModel<string>({ default: '' })
 
@@ -27,7 +28,7 @@ const props = withDefaults(defineProps<{
 const expanded = ref(false)
 const fullscreen = ref(false)
 const box = ref<HTMLElement | null>(null)
-const bigBox = ref<HTMLTextAreaElement | null>(null)
+const bigBox = ref<{ focus: () => void } | null>(null)
 
 const { close: modalClose } = useModal(
   () => expanded.value,
@@ -49,12 +50,13 @@ function open() {
 
 <template>
   <div class="expand-wrap">
-    <textarea
+    <LinedTextarea
       v-model="model"
-      class="expand-small"
       :rows="props.rows"
       :placeholder="props.placeholder"
       :spellcheck="props.spellcheck"
+      :pad-right="34"
+      aria-label="可放大编辑的多行文本"
     />
     <button
       class="expand-open"
@@ -85,12 +87,13 @@ function open() {
           aria-modal="true"
           aria-label="放大编辑"
         >
-          <textarea
+          <LinedTextarea
             ref="bigBox"
             v-model="model"
-            class="expand-input"
+            fill
             :placeholder="props.placeholder"
             :spellcheck="props.spellcheck"
+            aria-label="放大编辑的多行文本"
             @keydown.ctrl.enter.prevent="modalClose"
             @keydown.meta.enter.prevent="modalClose"
           />
@@ -109,26 +112,6 @@ function open() {
 
 <style scoped>
 .expand-wrap { position: relative; }
-
-/* 小框自身的式样：父级的 scoped `textarea` 规则不会跨组件命中这里 */
-.expand-small {
-  width: 100%;
-  padding: 9px 34px 9px 11px;
-  font-family: inherit;
-  font-size: var(--fs-13);
-  line-height: 1.5;
-  color: var(--c-text);
-  background-color: var(--c-bg);
-  border: 1px solid var(--c-border-strong);
-  border-radius: var(--radius-xs);
-  resize: vertical;
-  transition: border-color .14s ease, box-shadow .14s ease;
-}
-.expand-small:focus-visible {
-  outline: none;
-  border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px var(--c-primary-soft);
-}
 
 .expand-open {
   position: absolute;
@@ -155,6 +138,8 @@ function open() {
 
 /* 放大层：覆盖 .modal 的默认宽度 / 内边距，让编辑区吃满 */
 .expand-modal {
+  display: flex;
+  flex-direction: column;
   width: min(1100px, 94vw);
   height: 86vh;
   max-height: 86vh;
@@ -169,21 +154,6 @@ function open() {
   max-height: 100vh;
   border: 0;
   border-radius: 0;
-}
-
-.expand-input {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  padding: 16px 18px;
-  font-family: var(--mono);
-  font-size: var(--fs-13);
-  line-height: 1.6;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 0;
-  outline: none;
-  resize: none;
 }
 
 .expand-foot {

@@ -114,6 +114,10 @@
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC',
           'PingFang SC', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 行号编辑框行高：侧栏与输入层共用（check-line-numbers.mjs 钉住）。
+     不软折行时行号 y = padding-top + (行号-1)×行高 - scrollTop，
+     两侧任何一处写死行高都会让行号整体错位。 */
+  --editor-line-h: 1.55;
 
   /* ── 字号档位（评估报告 B6）：禁 <12px；档位=当前全仓实际在用值 ──
      收敛原则（第十批）：token 值逐字符等于替换前的渲染值 → 零视觉变化；

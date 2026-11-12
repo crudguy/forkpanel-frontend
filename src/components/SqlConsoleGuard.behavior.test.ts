@@ -109,7 +109,7 @@ describe('SQL 控制台：默认语句、示例与说明都来自后端 sql-meta
       component: SqlConsole, props: CONSOLE_PROPS,
       routes: { [API.db.sqlMeta(7)]: META },
     })
-    const ta = m.host.querySelector<HTMLTextAreaElement>('.sp-sql')
+    const ta = m.host.querySelector<HTMLTextAreaElement>('.lined-ta')
     expect(ta, '找不到 SQL textarea').not.toBeNull()
     expect(ta!.value).toBe(META.default_sql)
     expect(ta!.value).not.toContain('sqlite_master')
@@ -124,7 +124,7 @@ describe('SQL 控制台：默认语句、示例与说明都来自后端 sql-meta
       props: { conn: { id: 7, name: 'sqlite-labeled', engine: 'sqlite' } },
       routes: { [API.db.sqlMeta(7)]: META },
     })
-    const ta = m.host.querySelector<HTMLTextAreaElement>('.sp-sql')
+    const ta = m.host.querySelector<HTMLTextAreaElement>('.lined-ta')
     expect(ta, '找不到 SQL textarea').not.toBeNull()
     expect(ta!.value).toBe(META.default_sql)
   })
@@ -152,7 +152,7 @@ describe('SQL 控制台：默认语句、示例与说明都来自后端 sql-meta
     expect(btns.length).toBe(2)
     btns[1].click()
     await m.flush()
-    expect(m.host.querySelector<HTMLTextAreaElement>('.sp-sql')!.value).toBe('SELECT 2')
+    expect(m.host.querySelector<HTMLTextAreaElement>('.lined-ta')!.value).toBe('SELECT 2')
   })
 
   it('只读护栏说明原样显示 meta.note', async () => {

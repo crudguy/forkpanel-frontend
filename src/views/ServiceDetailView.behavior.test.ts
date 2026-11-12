@@ -192,7 +192,7 @@ describe('配置防呆：默认 drop-in + 新 drop-in 预填模板 + 非可写�
     const dropinBtn = btnByText(m!.host, 'drop-in')
     expect(dropinBtn.classList.contains('active'), '默认应选中 drop-in').toBe(true)
     // 新 drop-in 预填模板：文本框含 [Service] 段头，引导起步（避免空白框 + 忘写段头）
-    const ta = m!.host.querySelector<HTMLTextAreaElement>('.cfg-edit')
+    const ta = m!.host.querySelector<HTMLTextAreaElement>('.lined-ta')
     expect(ta, '应渲染配置文本框').not.toBeNull()
     expect(ta!.value).toContain('[Service]')
   })

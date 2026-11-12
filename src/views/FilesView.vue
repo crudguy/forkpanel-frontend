@@ -39,6 +39,7 @@ import {
 } from '@/composables/filePath'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
+import LinedTextarea from '@/components/LinedTextarea.vue'
 import { toast } from '@/composables/useToast'
 import PageLayout from '@/components/PageLayout.vue'
 
@@ -805,7 +806,12 @@ function full(p: string) {
       <p v-if="editing.hasMore" class="warn" role="alert">
         该文件大于 2MB，编辑器仅载入了前半部分内容。保存已禁用，以免覆盖并截断原文件。请用「下载」取到完整文件后在本地编辑。
       </p>
-      <textarea v-model="editing.content" spellcheck="false" :readonly="!canWrite" aria-label="文件内容" />
+      <LinedTextarea
+        v-model="editing.content"
+        :min-height="'320px'"
+        :readonly="!canWrite"
+        aria-label="文件内容"
+      />
       <p class="tip">保存时会校验修改时间，若文件已被他人改动将拒绝覆盖</p>
     </div>
 
@@ -1061,7 +1067,6 @@ tr.sens { background: var(--c-warn-bg); }
 .chk { width: 48px; text-align: center; }
 .editor { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .editor header { display: flex; align-items: center; gap: 8px; }
-.editor textarea { min-height: 320px; font-family: var(--mono); font-size: var(--fs-13); }
 /* 通用输入弹窗（与 DatabasesView 同形态） */
 /* 遮罩 / 弹窗框 / 标题 / 字段 / 操作条一律取 main.css 的公共式样 */
 /* .modal-actions 已取 main.css 公共规则（此前本页另抄一份） */
