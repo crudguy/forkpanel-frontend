@@ -357,19 +357,17 @@ onMounted(async () => {
                 </button>
               </div>
             </label>
-            <label class="field">
-              <span class="lbl">LLM 叙事层</span>
-              <input v-model="llmNarrative" type="checkbox" />
+            <div class="field">
+              <label class="chk-inline"><input v-model="llmNarrative" type="checkbox" /> LLM 叙事层</label>
               <span class="dim">关闭（默认）时仅内置规则诊断，不外发任何数据</span>
-            </label>
+            </div>
             <!-- 披露文案由后端 NARRATIVE_NOTE 单一维护、原样渲染——前端不改写，
                  杜绝「文档说已脱敏、代码没脱敏」的漂移。 -->
             <p v-if="report.runtime.narrative_note" class="sec-note">{{ report.runtime.narrative_note }}</p>
-            <label class="field">
-              <span class="lbl">自由对话带上系统概要</span>
-              <input v-model="llmChatContext" type="checkbox" />
+            <div class="field">
+              <label class="chk-inline"><input v-model="llmChatContext" type="checkbox" /> 自由对话带上系统概要</label>
               <span class="dim">开启后，自由输入的问题也会结合本机实况（脱敏）作答；默认关</span>
-            </label>
+            </div>
             <p v-if="report.runtime.chat_context_note" class="sec-note">{{ report.runtime.chat_context_note }}</p>
           </div>
           <p class="sec-note">密钥经主密钥 AES-GCM 加密落库，界面与接口均不回显明文。</p>
@@ -616,6 +614,11 @@ onMounted(async () => {
 .form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .lbl { font-size: var(--fs-12-5); color: var(--c-text-dim); }
+/* 勾选框与标签同行（与文件内 .perm-chk 同一套对齐思路）：默认 .field 是纵向堆叠，
+   文本框那样正常，勾选框独占一行就脱离了标签、位置别扭。这里让勾选框 + 文字在一行，
+   说明文字留在下方；accent-color 用主色，深色主题下比原生灰框更协调。 */
+.chk-inline { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: var(--fs-12-5); color: var(--c-text); cursor: pointer; }
+.chk-inline input { accent-color: var(--c-primary); margin: 0; }
 .inp {
   background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-sm);
   padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5); font-family: var(--mono);
