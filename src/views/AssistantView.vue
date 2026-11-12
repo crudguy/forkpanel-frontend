@@ -2,8 +2,10 @@
 /**
  * AI 运维助手（#52 / 后端 routes/assistant.rs）。
  *
- * 诚实定位：内核为**内置规则诊断引擎**（确定性、可解释、零外部依赖），
- * 问句经关键词路由到诊断域；若面板设置已配置 LLM，后端会附加 `narrative` 人话解读。
+ * 两种显式意图：自由输入走 chat（原样转发消息，展示模型生成内容）；
+ * 快捷提问 / 页面解释走 diagnose（规则体检 + 可选 LLM 人话解读）。
+ * 意图由入口决定，关键词只在 diagnose 模式内选诊断域，不参与意图判定。
+ * LLM 未配置 / 停用 / 失败时展示明确状态，不把降级报告伪装成成功。
  * 护栏：助手只读——「去处理」仅导航到对应视图，处置由用户人工确认。
  */
 import { ref, computed } from 'vue'
@@ -11,7 +13,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { fmtKib, fmtUptime, type AssistantReport, type AssistantFinding } from '@/api/types'
+import { fmtKib, fmtUptime, type AssistantReport, type AssistantFinding, type AssistantMode, type LlmStatus } from '@/api/types'
+import { assistantMode, shouldShowDiagnostics, type AskSource } from '@/utils/assistantMode'
 import Icon from '@/components/Icon.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -29,26 +32,28 @@ const ctxPage = computed(() => {
   return c && c !== 'AI 助手' ? c.slice(0, 40) : ''
 })
 function askAboutPage() {
-  if (ctxPage.value) ask(`解释一下「${ctxPage.value}」这个页面：它负责什么、常见问题有哪些`)
+  if (ctxPage.value) ask(`解释一下「${ctxPage.value}」这个页面：它负责什么、常见问题有哪些`, 'page')
 }
 
 const question = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
 /** 问答历史（本地 state，不持久化——诊断数据无留存价值） */
-const turns = ref<Array<{ q: string; report: AssistantReport | null; err?: string }>>([])
+const turns = ref<Array<{ q: string; mode: AssistantMode; report: AssistantReport | null; err?: string }>>([])
 
 const chips = ['系统体检', '为什么 CPU 高', '最近的报错', '安全风险', '备份状况'] as const
 
-async function ask(q: string) {
+async function ask(q: string, source: AskSource = 'input') {
   const text = q.trim()
   if (!text || busy.value) return
+  // 意图由入口显式决定，不靠关键词猜；后端 diagnose 内的关键词路由只选诊断域。
+  const mode = assistantMode(source)
   busy.value = true
   errorMsg.value = ''
-  const turn = { q: text, report: null as AssistantReport | null, err: undefined as string | undefined }
+  const turn = { q: text, mode, report: null as AssistantReport | null, err: undefined as string | undefined }
   turns.value.push(turn)
   try {
-    turn.report = await api.post<AssistantReport>(API.assistant.diagnose(), { question: text })
+    turn.report = await api.post<AssistantReport>(API.assistant.diagnose(), { question: text, mode })
     question.value = ''   // 成功才清空：失败时保留问题，用户可直接重试
   } catch (e) {
     turn.err = errorText(e)
@@ -66,6 +71,14 @@ function worst(r: AssistantReport): 'crit' | 'warn' | 'ok' {
 
 const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重', warn: '风险', info: '提醒' }
 
+/** 失败状态的简短标签；llm_error 由后端给分类原因，前端不改写。 */
+const llmStatusText: Record<LlmStatus, string> = {
+  used: '',
+  not_configured: '模型未配置',
+  disabled: '模型已停用',
+  failed: '模型调用失败',
+}
+
 </script>
 
 <template>
@@ -76,7 +89,7 @@ const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重',
       <!-- 提问区 -->
       <div class="ask glass">
         <div class="chips">
-          <button v-for="c in chips" :key="c" class="chip" :disabled="busy" @click="ask(c)">{{ c }}</button>
+          <button v-for="c in chips" :key="c" class="chip" :disabled="busy" @click="ask(c, 'chip')">{{ c }}</button>
         </div>
         <div v-if="ctxPage" class="ctx-page">
           <span class="ctx-chip">正在查看：{{ ctxPage }}</span>
@@ -85,11 +98,11 @@ const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重',
         <div class="row">
           <input
             v-model="question" class="inp" type="text" :disabled="busy"
-            placeholder="问点什么，例如：为什么 CPU 高 / 最近有没有报错"
+            placeholder="问点什么，例如：什么是反向代理 / 为什么 CPU 高"
             @keyup.enter="ask(question)"
           >
           <button class="btn-primary" :disabled="busy || !question.trim()" @click="ask(question)">
-            <Icon name="sparkles" :size="15" /> {{ busy ? '诊断中…' : '诊断' }}
+            <Icon name="sparkles" :size="15" /> {{ busy ? '处理中…' : '发送' }}
           </button>
         </div>
         <p v-if="errorMsg" class="err" role="alert">{{ errorMsg }}</p>
@@ -108,42 +121,57 @@ const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重',
 
         <template v-else-if="t.report">
           <div class="report" :class="worst(t.report)">
-            <p class="summary">
-              <Icon :name="worst(t.report) === 'ok' ? 'check' : 'alert'" :size="14" />
-              {{ t.report.summary }}
-            </p>
-
-            <!-- LLM 人话解读（仅当面板已配置 LLM 时返回） -->
-            <p v-if="t.report.narrative" class="narrative">
+            <!-- chat：模型生成内容为主响应 -->
+            <p v-if="t.report.answer" class="answer">
               <Icon name="sparkles" :size="14" />
-              <span>{{ t.report.narrative }}</span>
+              <span>{{ t.report.answer }}</span>
             </p>
 
-            <!-- 体检基线 -->
-            <div class="ctx">
-              <span>CPU {{ t.report.ctx.cpu_pct.toFixed(0) }}%</span>
-              <span>load {{ t.report.ctx.load1.toFixed(1) }} / {{ t.report.ctx.load5.toFixed(1) }} / {{ t.report.ctx.load15.toFixed(1) }}</span>
-              <span>内存 {{ fmtKib(t.report.ctx.mem_used_kib) }} / {{ fmtKib(t.report.ctx.mem_total_kib) }}</span>
-              <span v-if="t.report.ctx.top_disk">磁盘 {{ t.report.ctx.top_disk.mount }} {{ t.report.ctx.top_disk.used_pct.toFixed(0) }}%</span>
-              <span>进程 {{ t.report.ctx.proc_count }}</span>
-              <span>运行 {{ fmtUptime(t.report.ctx.uptime_sec) }}</span>
-              <span class="scope-tag">域：{{ t.report.scope }}</span>
-            </div>
+            <!-- LLM 状态：未配置 / 停用 / 失败必须显式暴露，不得静默 -->
+            <p v-if="t.report.llm_status && t.report.llm_status !== 'used'" class="llm-status" role="status">
+              <Icon name="alert-circle" :size="14" />
+              <span>{{ llmStatusText[t.report.llm_status] }}<template v-if="t.report.llm_error"> · {{ t.report.llm_error }}</template></span>
+            </p>
 
-            <!-- 发现卡片 -->
-            <article v-for="f in t.report.findings" :key="f.id" class="finding" :class="f.severity">
-              <header>
-                <span class="badge" :class="f.severity">{{ sevLabel[f.severity] }}</span>
-                <strong>{{ f.title }}</strong>
-              </header>
-              <ul class="evidence">
-                <li v-for="(e, j) in f.evidence" :key="j">{{ e }}</li>
-              </ul>
-              <p class="sug">{{ f.suggestion }}</p>
-              <button v-if="f.action?.kind === 'navigate'" class="btn-ghost go" @click="router.push(f.action.view)">
-                去处理 <Icon name="chevron" :size="13" />
-              </button>
-            </article>
+            <!-- 规则诊断只在 diagnose 模式展示：chat 不应看起来像一份体检报告 -->
+            <template v-if="shouldShowDiagnostics(t.mode)">
+              <p class="summary">
+                <Icon :name="worst(t.report) === 'ok' ? 'check' : 'alert'" :size="14" />
+                {{ t.report.summary }}
+              </p>
+
+              <!-- LLM 人话解读（仅当面板已配置 LLM 时返回） -->
+              <p v-if="t.report.narrative" class="narrative">
+                <Icon name="sparkles" :size="14" />
+                <span>{{ t.report.narrative }}</span>
+              </p>
+
+              <!-- 体检基线 -->
+              <div class="ctx">
+                <span>CPU {{ t.report.ctx.cpu_pct.toFixed(0) }}%</span>
+                <span>load {{ t.report.ctx.load1.toFixed(1) }} / {{ t.report.ctx.load5.toFixed(1) }} / {{ t.report.ctx.load15.toFixed(1) }}</span>
+                <span>内存 {{ fmtKib(t.report.ctx.mem_used_kib) }} / {{ fmtKib(t.report.ctx.mem_total_kib) }}</span>
+                <span v-if="t.report.ctx.top_disk">磁盘 {{ t.report.ctx.top_disk.mount }} {{ t.report.ctx.top_disk.used_pct.toFixed(0) }}%</span>
+                <span>进程 {{ t.report.ctx.proc_count }}</span>
+                <span>运行 {{ fmtUptime(t.report.ctx.uptime_sec) }}</span>
+                <span class="scope-tag">域：{{ t.report.scope }}</span>
+              </div>
+
+              <!-- 发现卡片 -->
+              <article v-for="f in t.report.findings" :key="f.id" class="finding" :class="f.severity">
+                <header>
+                  <span class="badge" :class="f.severity">{{ sevLabel[f.severity] }}</span>
+                  <strong>{{ f.title }}</strong>
+                </header>
+                <ul class="evidence">
+                  <li v-for="(e, j) in f.evidence" :key="j">{{ e }}</li>
+                </ul>
+                <p class="sug">{{ f.suggestion }}</p>
+                <button v-if="f.action?.kind === 'navigate'" class="btn-ghost go" @click="router.push(f.action.view)">
+                  去处理 <Icon name="chevron" :size="13" />
+                </button>
+              </article>
+            </template>
           </div>
         </template>
       </section>
@@ -179,15 +207,21 @@ const sevLabel: Record<AssistantFinding['severity'], string> = { crit: '严重',
 .summary { display: flex; align-items: center; gap: 7px; font-size: var(--fs-13-5); margin: 0 0 10px; color: var(--c-text); }
 .report.crit .summary { color: var(--c-danger); }
 .report.warn .summary { color: var(--c-warn); }
-.narrative {
+.narrative, .answer {
   display: flex; align-items: flex-start; gap: 7px; font-size: var(--fs-13-5);
   margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-sm); line-height: 1.55;
   background: var(--c-primary-soft);
   border: 1px solid var(--c-primary-soft);
   color: var(--c-text);
 }
-.narrative :deep(svg) { color: var(--c-primary); flex: 0 0 auto; margin-top: 2px; }
-.narrative span { white-space: pre-wrap; }
+.narrative :deep(svg), .answer :deep(svg) { color: var(--c-primary); flex: 0 0 auto; margin-top: 2px; }
+.narrative span, .answer span { white-space: pre-wrap; }
+.llm-status {
+  display: flex; align-items: flex-start; gap: 7px; font-size: var(--fs-12-5);
+  margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius-sm);
+  background: var(--c-warn-bg); color: var(--c-warn);
+}
+.llm-status span { word-break: break-word; }
 
 .ctx {
   display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-12); color: var(--c-text-mute);

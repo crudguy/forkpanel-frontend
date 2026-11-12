@@ -637,13 +637,25 @@ export interface AssistantContext {
   top_disk: { mount: string; used_pct: number } | null
 }
 
-/** AI 助手：诊断报告（POST /api/v1/assistant/diagnose） */
+/** AI 助手：显式意图（chat=转发消息，diagnose=规则体检） */
+export type AssistantMode = 'chat' | 'diagnose'
+
+/** AI 助手：LLM 调用状态，恒存在，失败不得静默 */
+export type LlmStatus = 'used' | 'not_configured' | 'disabled' | 'failed'
+
+/** AI 助手：问答响应（POST /api/v1/assistant/diagnose） */
 export interface AssistantReport {
   question: string
+  mode: AssistantMode
   scope: AssistantScope
   generated_at: number
   summary: string
+  /** chat 模式的模型生成内容 */
+  answer?: string
+  /** diagnose 模式的 LLM 人话解读 */
   narrative?: string
+  llm_status: LlmStatus
+  llm_error?: string
   findings: AssistantFinding[]
   ctx: AssistantContext
 }
