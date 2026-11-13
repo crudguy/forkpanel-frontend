@@ -388,7 +388,7 @@ onMounted(async () => {
             <button class="btn-primary" :disabled="saving" @click="save">
               <Icon name="check" :size="15" /> {{ saving ? '保存中…' : '保存' }}
             </button>
-            <button class="btn-ghost" :disabled="testing || saving" title="只请求已保存的 API Endpoint；不会使用已保存的 API Key" @click="testConn">
+            <button class="btn-ghost" :disabled="testing || saving" title="只请求已保存的 API Endpoint；密钥框留空即用已保存密钥测试" @click="testConn">
               <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
             </button>
           </div>
@@ -396,8 +396,7 @@ onMounted(async () => {
             已配置模型时向 <code class="mono">/v1/chat/completions</code> 发起一次最小对话验证
             （更权威，避免部分服务商对 <code class="mono">/v1/models</code> 误报 401）；
             未配置模型时退回 <code class="mono">/v1/models</code> 列表。改动 Endpoint 后请先保存。
-            <strong>不会使用已保存的 API Key</strong>——要验证密钥请在上方重新输入后再测试。
-            Model 与本次输入的 Key 仍可先测后存。</p>
+            密钥框<strong>留空即使用已保存的密钥</strong>测试当前配置；填入新密钥则优先用填入的（先测后存）。</p>
         </template>
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>
