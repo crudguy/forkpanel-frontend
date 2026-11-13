@@ -176,7 +176,7 @@ function onKey(e: KeyboardEvent) {
 .inp::placeholder { color: var(--c-text-mute); }
 .kbd {
   flex: none; font-size: var(--fs-12); color: var(--c-text-dim);
-  border: 1px solid var(--c-border); border-radius: 6px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-chip);
   padding: 2px 6px; background: var(--c-bg);
 }
 .list {
@@ -185,7 +185,7 @@ function onKey(e: KeyboardEvent) {
 }
 .list li {
   display: flex; align-items: center; gap: 11px;
-  padding: 9px 11px; border-radius: 9px; cursor: pointer;
+  padding: 9px 11px; border-radius: var(--radius-xs); cursor: pointer;
   color: var(--c-text); font-size: var(--fs-14);
 }
 .list li.on { background: var(--c-active); color: var(--c-primary); }

@@ -339,7 +339,7 @@ onMounted(() => { load(); loadFail2ban() })
               <td class="mono">{{ r.source ?? '任意' }}</td>
               <td class="dim ellipsis" :title="r.comment ?? ''">{{ r.comment ?? '—' }}</td>
               <td class="nowrap">
-                <span v-if="r.panel_managed" class="badge badge-primary">面板管理</span>
+                <span v-if="r.panel_managed" class="badge">面板管理</span>
                 <span v-else class="badge" title="面板不会删除用户自建规则">用户自建</span>
               </td>
               <td class="nowrap">
@@ -358,7 +358,7 @@ onMounted(() => { load(); loadFail2ban() })
       </div>
       <EmptyState v-else title="暂无规则">
         <template #cta>
-          <button class="btn-primary btn-sm" :disabled="!canManage"
+          <button class="btn-primary" :disabled="!canManage"
             :title="canManage ? '' : '无 firewall.manage 权限'" @click="focusAllow">放行第一个端口</button>
         </template>
       </EmptyState>
@@ -369,7 +369,7 @@ onMounted(() => { load(); loadFail2ban() })
          必须在「防火墙不支持」的 v-else 之外——它是独立能力位，不能让防火墙后端缺失把它一起隐藏。 -->
     <section class="card f2b" v-if="auth.supported(CAP.FAIL2BAN)">
       <div class="sec-head"><Icon name="shield" :size="16" /> fail2ban 入侵防御
-        <span v-if="f2b" class="badge" :class="f2b.active ? 'badge-ok' : 'badge-dim'">{{ f2b.active ? '运行中' : '未运行' }}</span>
+        <span v-if="f2b" class="badge" :class="f2b.active ? 'badge-ok' : ''">{{ f2b.active ? '运行中' : '未运行' }}</span>
       </div>
 
       <p v-if="f2bError" class="err" role="alert">{{ f2bError }}</p>
@@ -451,14 +451,9 @@ col.w-fwacts { width: 100px; }
 .ip-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; color: var(--c-text-dim); cursor: pointer; }
 .ip-x:hover:not(:disabled) { background: var(--c-danger-soft); color: var(--c-danger); }
 .ip-x:disabled { opacity: .5; cursor: not-allowed; }
-.badge-dim { background: var(--c-surface-2); color: var(--c-text-dim); border: 1px solid var(--c-border); }
+
 /* 开关（与 CronView / SitesView 自动续期同一套外观：实心主色底 + 白滑块 42×24） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
-.switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }
-.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--c-border-strong); transition: background .15s; pointer-events: none; }
-.switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--c-on-accent); transition: transform .15s; }
-.switch input:checked + i { background: var(--c-primary); }
-.switch input:checked + i::after { transform: translateX(18px); }
-.switch input:disabled { cursor: not-allowed; }
+/* 开关样式统一走 main.css 全局 .switch（42×24，input+i 结构）；本视图标记
+   <span class="switch"><input><i></i></span> 与之兼容，不再私有重定义。 */
 </style>

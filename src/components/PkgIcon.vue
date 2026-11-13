@@ -85,7 +85,7 @@ const fallbackColor = computed(() => FALLBACK_COLORS[hashOf(props.name) % FALLBA
    故此处只管形状与排版。 */
 .pkg-icon-fb {
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 5px; color: var(--c-on-accent); font-weight: 700; letter-spacing: -.5px;
+  border-radius: var(--radius-chip); color: var(--c-on-accent); font-weight: 700; letter-spacing: -.5px;
   line-height: 1;
 }
 </style>

@@ -301,7 +301,7 @@ async function doDisable() {
             <p class="muted">当前状态：<b :class="mfaEnabled ? 's-ok' : 's-risk'">{{ mfaEnabled ? '已启用' : '未启用' }}</b></p>
 
             <div v-if="!mfaEnabled && !mfaEnrolling" class="ops-row">
-              <button class="btn-primary btn-sm" :disabled="acting" @click="doEnroll">启用 MFA</button>
+              <button class="btn-primary" :disabled="acting" @click="doEnroll">启用 MFA</button>
               <span class="muted small">登录时除密码外，还需验证器生成的 6 位动态口令</span>
             </div>
 
@@ -335,7 +335,7 @@ async function doDisable() {
               <div class="ops-row">
                 <input v-model="mfaCode" class="inp" placeholder="6 位动态口令" maxlength="6" />
                 <button
-                  class="btn-primary btn-sm"
+                  class="btn-primary"
                   :disabled="acting || mfaCode.trim().length !== 6"
                   @click="doVerify"
                 >验证并启用</button>
@@ -439,7 +439,7 @@ async function doDisable() {
 }
 .qr-tile-head { display: flex; align-items: center; gap: 7px; }
 .qr-tile-logo {
-  width: 24px; height: 24px; border-radius: 7px; flex: none;
+  width: 24px; height: 24px; border-radius: var(--radius-chip); flex: none;
   display: grid; place-items: center; color: var(--c-on-accent);
   background: var(--gradient);
 }

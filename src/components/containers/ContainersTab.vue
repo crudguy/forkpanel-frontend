@@ -231,7 +231,7 @@ async function saveRemark(c: Container, v: string) {
           <button type="button" :class="{ on: stateFilter === 'exited' }" @click="stateFilter = 'exited'">已停止</button>
         </div>
         <RefreshBtn sm :disabled="!supported" title="立即刷新一次容器列表" @click="load()" />
-        <button class="btn-primary btn-sm" :disabled="!canManage"
+        <button class="btn-primary" :disabled="!canManage"
           :title="canManage ? '创建容器（docker create）' : '需要 container.manage 权限'" @click="createOpen = true">
           <Icon name="plus" :size="14" /> 新建容器
         </button>

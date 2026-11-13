@@ -327,7 +327,7 @@ onMounted(load)
 .lbl em { font-style: normal; font-weight: 400; font-size: var(--fs-12); color: var(--c-text-dim); margin-left: 6px; }
 .hint { font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.6; }
 .hint code { font-family: var(--mono); background: color-mix(in srgb, var(--c-border) 60%, transparent);
-  padding: 1px 4px; border-radius: 4px; }
+  padding: 1px 4px; border-radius: var(--radius-chip); }
 .warn-hint { color: var(--c-warn); }
 textarea { font-family: var(--mono); resize: vertical; }
 .radios { display: flex; gap: 16px; flex-wrap: wrap; }

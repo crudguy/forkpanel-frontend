@@ -200,7 +200,7 @@ const actionDisabled = computed(() => svc.value
 
 function stateBadge(s: string) {
   return s === 'active' ? 'badge-ok' : s === 'failed' ? 'badge-danger'
-    : (s === 'activating' || s === 'deactivating') ? 'badge-warn' : ''
+    : (s === 'activating' || s === 'deactivating') ? 'badge-info' : ''
 }
 
 /** 状态徽标前的小圆点配色：运行中绿、失败红、过渡态琥珀、其余（已停止/未知）中性灰。

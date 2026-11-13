@@ -40,7 +40,7 @@ defineProps<{
 /* tone → 颜色。**基础（无 tone）= 中性 UI 灰**，不再默认品牌橙（B5）——
    数据卡漏传 tone 不应看起来像主操作；品牌橙须显式 tone="primary"。
    数据系列色（cpu/hot/load）引用 --chart-*，与图表柱/线同源、随主题切换。 */
-.ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+.ico { width: 30px; height: 30px; border-radius: var(--radius-xs); display: grid; place-items: center;
       background: color-mix(in srgb, var(--c-text-dim) 16%, transparent); color: var(--c-text-dim); }
 .ico.primary { background: var(--c-primary-soft); color: var(--c-primary); }
 .ico.cyan { background: color-mix(in srgb, var(--c-cyan) 14%, transparent); color: var(--c-cyan); }

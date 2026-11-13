@@ -582,7 +582,7 @@ const selName = ref('')
       </div>
       <EmptyState v-else title="暂无备份计划">
         <template #cta>
-          <button class="btn-primary btn-sm" :disabled="!canManage"
+          <button class="btn-primary" :disabled="!canManage"
             :title="canManage ? '' : '无 backup.manage 权限'" @click="scrollToCreate">新建计划</button>
         </template>
       </EmptyState>
@@ -595,7 +595,7 @@ const selName = ref('')
           <button class="btn-ghost btn-sm" :disabled="busy || !editRemote.cfg.kind" @click="testRemote">
             <Icon name="bolt" :size="13" /> 测试连接
           </button>
-          <button class="btn-primary btn-sm" :disabled="!canManage || busy" @click="saveRemote">保存</button>
+          <button class="btn-primary" :disabled="!canManage || busy" @click="saveRemote">保存</button>
           <button class="btn-ghost btn-sm" @click="editRemote = null">关闭</button>
         </div>
 
@@ -614,7 +614,7 @@ const selName = ref('')
           <Icon name="edit" :size="16" />
           编辑计划 #{{ editPlan.plan.id }}（{{ editPlan.plan.kind }}/{{ editPlan.plan.target }}）
           <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="!canManage || busy" @click="saveEditPlan">保存</button>
+          <button class="btn-primary" :disabled="!canManage || busy" @click="saveEditPlan">保存</button>
           <button class="btn-ghost btn-sm" @click="editPlan = null">关闭</button>
         </div>
 

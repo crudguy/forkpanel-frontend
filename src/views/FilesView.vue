@@ -968,7 +968,7 @@ function full(p: string) {
 .tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); border-color: transparent; font-weight: 600; }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
-  margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
+  margin-left: 2px; border: none; background: none; color: inherit; border-radius: var(--radius-chip); cursor: pointer; padding: 0; }
 /* 关闭钮 hover 的浅色覆盖层跟着标签前景色走（与 TerminalView 同源）。 */
 .tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }
 .tab.add { color: var(--c-text-dim); }
@@ -977,7 +977,7 @@ function full(p: string) {
    走 page-head 既有字号（--fs-12-5 与旧 .cwd 一致），不新增视觉变量。 */
 .crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; font-size: var(--fs-12-5); }
 .crumbs .sep { color: var(--c-text-mute); user-select: none; }
-.crumbs .crumb { background: none; border: none; padding: 2px 4px; border-radius: 5px; cursor: pointer;
+.crumbs .crumb { background: none; border: none; padding: 2px 4px; border-radius: var(--radius-chip); cursor: pointer;
   font: inherit; color: var(--c-text-dim); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs .crumb:hover { background: var(--c-hover); color: var(--c-text); }
 .crumbs .crumb.now { font-weight: 600; color: var(--c-text); cursor: default; }

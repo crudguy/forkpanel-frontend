@@ -330,10 +330,10 @@ async function batchDelete() {
         <RouterLink v-if="wafOffCount" class="waf-cover" to="/waf">
           <span class="badge badge-warn">{{ wafOffCount }} 站未开启 WAF</span>
         </RouterLink>
-        <!-- 本地检索：站点一多就只能肉眼扫表，加一个按名称/域名过滤的框成本最低；
-             count 领队、搜索框紧邻其后（"过滤这 N 个"语义自然），操作簇统一靠右 -->
-        <input v-model="q" class="filter" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
+        <!-- 工具条统一范式（S1）：count 在左 → spacer 居中 → 筛选/搜索与动作簇整体靠右，
+             与容器 / 镜像 / 其余 15+ 个 card-toolbar 一致；搜索框属动作簇，不夹在计数中间。 -->
         <span class="spacer" />
+        <input v-model="q" class="filter" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
         <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
              偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
              怎么看"，不是面板级共享配置，故不占用后端 settings。
@@ -342,7 +342,7 @@ async function batchDelete() {
         <ColumnPicker v-if="!narrow" :cols="SITE_COLS" :hidden="hiddenCols" label="站点列表"
           @toggle="toggleCol" @reset="resetCols" />
         <RefreshBtn :disabled="busy" sm @click="load()" />
-        <button class="btn-primary btn-sm" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
+        <button class="btn-primary" :disabled="!canCreate || busy" :title="createHint" @click="openCreate">
           <Icon name="plus" :size="13" /> 新建站点
         </button>
       </div>
@@ -442,12 +442,12 @@ async function batchDelete() {
               <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
               <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
                    「面板所见 ≠ 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
-              <span v-if="s.manual_conf" class="badge conf-badge" :class="s.conf_stale ? 'badge-danger' : 'badge-warn'"
+              <span v-if="s.manual_conf" class="badge" :class="s.conf_stale ? 'badge-danger' : ''"
                 :title="s.conf_stale
                   ? '未同步：表单规格已变更，但磁盘配置没有跟着更新——面板显示 ≠ 实际生效；编辑该站点可「按表单重新生成」同步'
                   : '站点配置处于「手动维护」：表单「保存并应用」不再覆盖磁盘上的配置文件（编辑弹窗内可「按表单重新生成」）'">
                 {{ s.conf_stale ? '未同步' : '手动' }}</span>
-              <span v-if="s.conf_external" class="badge conf-badge badge-warn"
+              <span v-if="s.conf_external" class="badge"
                 title="外部修改：磁盘上的配置文件与最后一次落盘的内容不一致——文件在面板之外被改动过（脚本误写 / 人工手改）。面板不会静默覆盖它，可在编辑弹窗内「按表单重新生成」或改写为自定义片段">外部改动</span>
             </td>
             <!-- 上次下发（023）：「这个站多久没管了」此前只能翻日志。null = 从未成功
@@ -526,7 +526,7 @@ async function batchDelete() {
     <EmptyState v-else title="暂无站点"
       :hint="canCreate ? '添加第一个虚拟主机：面板会生成站点配置并按需签发证书' : '当前未接入 Web 服务器（nginx / caddy）：需先安装并启动，才能新建站点'">
       <template #cta>
-        <button v-if="canCreate" class="btn-primary btn-sm" :disabled="!canCreate || busy" @click="openCreate">
+        <button v-if="canCreate" class="btn-primary" :disabled="!canCreate || busy" @click="openCreate">
           <Icon name="plus" :size="13" /> 新建站点
         </button>
       </template>
@@ -614,8 +614,11 @@ table.fixed th, table.fixed td { overflow: hidden; }
    td 里放了按钮，纯 text-overflow 会把按钮一起算进溢出区域而挤掉图标。 */
 .name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .name-cell .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 行内展开 Chevron：专用档（非通用控件，不在 btn-sm 体系内）。原 20×20 在 ~31px 的
+   btn-sm 表操作按钮旁显得过小、点不准；提到 28×28 既触摸友好、又与行内交互控件体量协调。
+   仍保持 borderless + radius-chip，维持「次级、不抢主行视觉重量」的语义。 */
 .exp { flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; padding: 0; border: none; border-radius: 6px;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: var(--radius-chip);
   background: none; color: var(--c-text-dim); cursor: pointer;
   transition: transform .15s ease, color .12s ease, background .12s ease; }
 .exp:hover { color: var(--c-primary); background: var(--c-primary-soft); }

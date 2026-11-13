@@ -273,7 +273,7 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 .sec-note b { color: var(--c-text); font-weight: 600; }
 .sec-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: color-mix(in srgb, var(--c-border) 60%, transparent);
-  padding: 1px 5px; border-radius: 4px; color: var(--c-text); }
+  padding: 1px 5px; border-radius: var(--radius-chip); color: var(--c-text); }
 .legend { margin-left: auto; display: inline-flex; gap: 14px; align-items: center;
   font-size: var(--fs-12); color: var(--c-text-dim); font-weight: 500; }
 .lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px;

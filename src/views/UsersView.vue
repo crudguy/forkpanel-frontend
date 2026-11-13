@@ -181,7 +181,7 @@ onMounted(() => { if (canManage.value) load() })
           <Icon name="users" :size="16" />
           <span class="count">共 {{ users.length }} 个用户</span>
           <span class="spacer" />
-          <button class="btn-primary btn-sm" :disabled="loading || notReady || !canManage"
+          <button class="btn-primary" :disabled="loading || notReady || !canManage"
         :title="canManage ? '' : '无 user.manage 权限'" @click="openCreate">
             <Icon name="user-plus" :size="14" /> 新建用户
           </button>
@@ -205,13 +205,13 @@ onMounted(() => { if (canManage.value) load() })
             <tr v-for="u in pageRows" :key="u.id">
               <td class="ellipsis" :title="u.username">{{ u.username }}</td>
               <td>
-                <span class="badge badge-primary">{{ roleLabel(u.role) }}</span>
-                <span v-if="u.role === 'owner'" class="badge badge-soft"
+                <span class="badge">{{ roleLabel(u.role) }}</span>
+                <span v-if="u.role === 'owner'" class="badge"
                       title="首启向导创建的初始管理员账号，受保护：不可删除、不可禁用">引导账号</span>
               </td>
               <td class="muted ellipsis" :title="(u.allowed_roots || []).join(', ') || '全部'">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
               <td><span class="badge" :class="u.disabled ? 'badge-danger' : 'badge-ok'">{{ u.disabled ? '已禁用' : '正常' }}</span></td>
-              <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : ''">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
+              <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : 'badge-warn'">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
               <td class="muted">{{ u.last_login_at ? fmtDateTime(u.last_login_at) : '从未登录' }}</td>
               <td class="nowrap">
                 <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage"
@@ -267,10 +267,10 @@ onMounted(() => { if (canManage.value) load() })
           <textarea v-model="form.rootsText" rows="2" placeholder="/srv/www,/var/backups" />
         </div>
         <div v-if="editing" class="field row">
-          <label class="switch-row">
-            <input type="checkbox" v-model="form.disabled" />
-            <span class="switch" /><span>禁用该账号</span>
-          </label>
+          <div class="switch-row">
+            <label class="switch"><input type="checkbox" v-model="form.disabled" /><i></i></label>
+            <span class="switch-label" @click="form.disabled = !form.disabled">禁用该账号</span>
+          </div>
         </div>
         <div class="modal-foot">
           <div class="modal-actions">
@@ -300,7 +300,7 @@ onMounted(() => { if (canManage.value) load() })
 .muted { color: var(--c-text-dim); }
 .badge-ok { color: var(--c-ok); }
 .badge-danger { color: var(--c-danger); }
-.badge-soft { color: var(--c-text-dim); background: color-mix(in srgb, var(--c-text-dim) 15%, transparent); border-color: transparent; }
+
 
 /* 标题行（.modal-head）/ 关闭按钮（.modal-close）/ 操作条（.modal-actions）统一取 main.css，
    本页不再保留 .m-head / .m-acts 私有副本（与全站弹窗漂移） */
@@ -311,16 +311,10 @@ onMounted(() => { if (canManage.value) load() })
   border-radius: var(--radius-sm); padding: 9px 11px; font-size: var(--fs-13-5); font-family: inherit; }
 .field textarea { resize: vertical; }
 .field.row { display: flex; align-items: center; }
-/* ⚠ 本页的 .switch **不是** main.css 里那个 input+i 结构的开关，而是把 .switch 直接
-   当滑块本体（靠 input:checked + .switch 上色），故此处保留自有实现、不并入公共式样。
-   两种结构混用会导致「改了公共样式本页却没变」或反之——动手前先看 DOM。 */
+/* 本页开关现已统一走 main.css 全局 .switch（42×24，input+i 结构）。
+   外层 .switch-row 仅作行容器，文字单独 @click 切换，避免嵌套 <label> 关联歧义。 */
 .switch-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.switch-row input { display: none; }
-.switch { width: 38px; height: 20px; border-radius: 20px; background: var(--c-border); position: relative; transition: .15s; }
-.switch-row input:checked + .switch { background: var(--c-primary); }
-.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-                 border-radius: 50%; background: var(--c-on-accent); transition: .15s; }
-.switch-row input:checked + .switch::after { left: 20px; }
+.switch-label { cursor: pointer; }
 /* 用户表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    权限范围为唯一弹性列（目录白名单可能很长），ellipsis 截断、完整值走 title。 */
 .w-uname { width: 12%; }

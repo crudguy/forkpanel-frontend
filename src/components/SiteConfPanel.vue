@@ -495,7 +495,7 @@ watch(() => props.site?.id ?? null, (id) => {
           <span class="spacer" />
           <span v-if="confTooBig" class="is-warn-text tiny">已超 64 KiB，保存会被后端拒绝</span>
           <button class="btn-ghost btn-sm" @click="cancelFull">取消</button>
-          <button class="btn-primary btn-sm"
+          <button class="btn-primary"
             :disabled="confBusy || !canManage || !isOwner || !webSupported || !editing?.enabled"
             :title="confHint" @click="saveFull">
             <Icon name="check" :size="13" /> {{ confBusy ? '保存中…' : '保存配置' }}
@@ -564,7 +564,7 @@ watch(() => props.site?.id ?? null, (id) => {
 .vers-ops { display: flex; gap: 4px; flex: none; }
 
 .vers-content { grid-column: 1 / -1; margin: 4px 0 2px; padding: 8px 10px; max-height: 240px; overflow: auto;
-  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 6px;
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-chip);
   font-size: var(--fs-12); line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
 
 .conf-fail { align-items: center; flex-wrap: wrap; gap: 8px; }

@@ -16,7 +16,7 @@ export function wafBadge(s: WafBadgeSite): WafBadge {
   if (!s.waf_enabled) return { cls: 'badge-warn', label: '未防护' }
   const profile = s.waf_profile ?? 'basic'
   return {
-    cls: profile === 'strict' ? 'badge-primary' : 'badge-ok',
+    cls: profile === 'strict' ? '' : 'badge-ok',
     label: wafProfileLabel(profile),
   }
 }

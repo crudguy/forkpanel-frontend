@@ -608,7 +608,7 @@ onMounted(async () => {
 .reach-hint ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .reach-hint code {
   font-family: var(--mono); background: color-mix(in srgb, var(--c-border) 60%, transparent);
-  padding: 1px 4px; border-radius: 4px;
+  padding: 1px 4px; border-radius: var(--radius-chip);
 }
 .form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
@@ -641,9 +641,9 @@ onMounted(async () => {
 .to-meta { font-size: var(--fs-12); color: var(--c-text-dim); font-family: var(--mono); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); cursor: pointer; }
-.perm-chk code { font-family: var(--mono); color: var(--c-text-dim); }
+.perm-chk code { color: var(--c-text-dim); }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }
-.perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: var(--fs-12); font-family: var(--mono); }
+.perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: var(--fs-12); }
 /* 能力矩阵表列宽：原因为唯一弹性列；角色表列宽：角色名为唯一弹性列。 */
 col.w-capk { width: 26%; }
 col.w-capst { width: 90px; }

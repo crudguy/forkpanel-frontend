@@ -452,7 +452,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .menu {
   position: fixed; z-index: 41; width: 200px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
-  border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
 .menu-head { display: flex; align-items: center; gap: 11px; padding: 8px 10px 10px; }
 .m-name { font-weight: 600; font-size: var(--fs-14); }

@@ -373,7 +373,7 @@ onUnmounted(() => {
 .tdot.on { background: var(--c-ok); box-shadow: 0 0 6px var(--c-ok); }
 .tab.on .tdot.on { background: var(--seg-on-fg); box-shadow: none; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
-  margin-left: 2px; border: none; background: none; color: inherit; border-radius: 4px; cursor: pointer; padding: 0; }
+  margin-left: 2px; border: none; background: none; color: inherit; border-radius: var(--radius-chip); cursor: pointer; padding: 0; }
 /* 关闭钮 hover 的浅色覆盖层：跟着标签自身的前景色走，激活态（白字）与非激活态
    （次要文字色）共用一条规则，不再为两种状态各写一份 rgba。 */
 .tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }
@@ -401,7 +401,7 @@ onUnmounted(() => {
 /* 终端容器：所有标签共用一套尺寸；非激活的隐藏（保活）而非销毁。 */
 .term-pane {
   flex: 1 1 0; min-height: 360px;
-  background: var(--term-bg); border: 1px solid var(--c-border); border-radius: 12px;
+  background: var(--term-bg); border: 1px solid var(--c-border); border-radius: var(--radius-md);
   padding: 10px;
 }
 .term-pane:not(.active) { display: none; }

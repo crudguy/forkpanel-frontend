@@ -285,7 +285,7 @@ const {
         <button v-if="canManage" class="btn-ghost btn-sm" type="button"
           @click="openStackImport()">导入编排</button>
         <!-- 空态时由下方 EmptyState 的 #cta 承担入口，这里不重复出现 -->
-        <button v-if="canManage && stacks.length" class="btn-primary btn-sm" type="button"
+        <button v-if="canManage && stacks.length" class="btn-primary" type="button"
           @click="openStackEditor()">新建编排</button>
       </div>
       <div v-if="stackTotal" class="t-scroll">
@@ -320,7 +320,7 @@ const {
       <EmptyState v-else title="还没有编排定义"
         hint="面板可以在这里定义服务并生成 compose.yaml（不支持特权模式与宿主敏感挂载）。已有项目请用 docker compose CLI 管理。">
         <template v-if="canManage" #cta>
-          <button class="btn-primary btn-sm" type="button" @click="openStackEditor()">新建编排</button>
+          <button class="btn-primary" type="button" @click="openStackEditor()">新建编排</button>
         </template>
       </EmptyState>
       <TablePager :total="stackTotal" :page="stackPage" :size="stackSize" :page-count="stackPageCount"
@@ -497,7 +497,7 @@ col.w-dstate { width: 96px; }
   font-family: var(--mono);
   font-size: var(--fs-12);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   background: var(--bg-inset);
 }
 
@@ -507,7 +507,7 @@ col.w-dstate { width: 96px; }
 .ext-mark {
   margin-left: 6px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   font-size: var(--fs-12);
   background: var(--c-warn-bg);
   color: var(--c-warn);

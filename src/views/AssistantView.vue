@@ -180,7 +180,7 @@ const llmStatusText: Record<LlmStatus, string> = {
 </template>
 
 <style scoped>
-.ask { padding: 14px; border: 1px solid var(--c-border); border-radius: 12px; margin-bottom: 14px; }
+.ask { padding: 14px; border: 1px solid var(--c-border); border-radius: var(--radius-md); margin-bottom: 14px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .chip {
   border: 1px solid var(--c-border); background: transparent; color: var(--c-text-dim);
@@ -201,7 +201,7 @@ const llmStatusText: Record<LlmStatus, string> = {
 .turn { margin: 14px 0; }
 .q { color: var(--c-text-dim); font-size: var(--fs-13); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
 
-.report { border: 1px solid var(--c-border); border-radius: 12px; padding: 12px; background: var(--c-glass); }
+.report { border: 1px solid var(--c-border); border-radius: var(--radius-md); padding: 12px; background: var(--c-glass); }
 .report.crit { border-color: var(--c-danger); }
 .report.warn { border-color: var(--c-warn); }
 .summary { display: flex; align-items: center; gap: 7px; font-size: var(--fs-13-5); margin: 0 0 10px; color: var(--c-text); }

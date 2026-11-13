@@ -125,7 +125,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
       />
 
       <div class="sp-actions">
-        <button class="btn-primary btn-sm" :disabled="busy || !sql.trim()" @click="run">
+        <button class="btn-primary" :disabled="busy || !sql.trim()" @click="run">
           <Icon name="play" :size="13" /> {{ busy ? '执行中…' : '执行' }}
         </button>
         <span class="muted">Ctrl/⌘ + Enter 执行</span>
@@ -194,7 +194,7 @@ const { close: modalClose } = useModal(() => true, box, () => emit('close'))
 .lim-input { width: 66px; padding: 3px 6px; font-size: var(--fs-12); }
 .sp-actions { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
 .sp-actions .muted { font-size: var(--fs-12); color: var(--c-text-mute); }
-.sp-scroll { overflow: auto; max-height: 46vh; border: 1px solid var(--c-border); border-radius: 9px; }
+.sp-scroll { overflow: auto; max-height: 46vh; border: 1px solid var(--c-border); border-radius: var(--radius-xs); }
 .sp-scroll table { border-collapse: collapse; width: 100%; font-size: var(--fs-12-5); }
 .sp-scroll th, .sp-scroll td {
   text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--c-border);

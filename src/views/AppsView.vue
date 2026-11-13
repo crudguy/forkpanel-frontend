@@ -355,7 +355,7 @@ function stateBadge(s: string | null): { cls: string; text: string } {
   if (s === null) return { cls: '', text: '—' }
   if (s === 'running') return { cls: 'badge-ok', text: '运行中' }
   if (s === 'failed') return { cls: 'badge-danger', text: '失败' }
-  if (s === 'activating' || s === 'deactivating' || s === 'reloading') return { cls: 'badge-warn', text: s }
+  if (s === 'activating' || s === 'deactivating' || s === 'reloading') return { cls: 'badge-info', text: s }
   return { cls: 'dim', text: '已停止' }
 }
 
@@ -378,7 +378,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
         <span class="spacer" />
         <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
         <RefreshBtn :disabled="loading || busyId !== null" @click="load()" />
-        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
+        <button class="btn-primary" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
           <Icon name="plus" :size="14" /> 新建应用
@@ -452,7 +452,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     <EmptyState v-else title="暂无托管应用"
       hint="点「新建应用」登记一个进程：选运行时、填工作目录与启动命令，面板会装好 systemd 单元并自动建好反代站点">
       <template #cta>
-        <button class="btn-primary btn-sm" :disabled="(!canManage || !webSupported) || busyId !== null"
+        <button class="btn-primary" :disabled="(!canManage || !webSupported) || busyId !== null"
           :title="canManage ? (webSupported ? '' : '需要 webserver 能力才能建反代站点') : '无 service.manage 权限'"
           @click="openCreate">
           <Icon name="plus" :size="13" /> 新建应用
@@ -672,7 +672,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .hint-inline { display: block; margin-top: 4px; font-size: var(--fs-12); line-height: 1.6;
   color: var(--c-text-dim); }
 .hint-inline b { font-weight: 500; color: var(--c-text); }
-.hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: 4px;
+.hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: var(--radius-chip);
   background: var(--c-surface-2); border: 1px solid var(--c-border); }
 /* 5 个操作按钮必须**单行**：已抽到公共 .col-actions（main.css），此处不再私有重抄 */
 .modal > label.has-err input,

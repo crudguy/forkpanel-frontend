@@ -142,7 +142,7 @@ function cancel() { emit('cancel') }
       </label>
 
       <div class="actions-row">
-        <button class="btn-primary btn-sm" type="button" :disabled="parsing" @click="parse">
+        <button class="btn-primary" type="button" :disabled="parsing" @click="parse">
           {{ parsing ? '解析中…' : '解析' }}
         </button>
         <span v-if="parseErr" class="err" role="alert">{{ parseErr }}</span>
@@ -228,7 +228,7 @@ textarea:focus-visible, input:focus-visible {
 .svc-mini .dim { font-size: var(--fs-12); color: var(--c-text-dim); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  font-family: var(--mono); font-size: var(--fs-12); padding: 2px 7px; border-radius: 5px;
+  font-family: var(--mono); font-size: var(--fs-12); padding: 2px 7px; border-radius: var(--radius-chip);
   background: var(--bg-inset); color: var(--c-text-dim); border: 1px solid var(--c-border);
 }
 .chip.vol { color: var(--c-primary); }

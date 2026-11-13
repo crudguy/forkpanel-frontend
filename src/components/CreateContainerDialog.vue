@@ -229,5 +229,5 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 .err-tip { color: var(--c-danger); }
 .hint-note { margin: 2px 0 0; }
 /* 在弹窗里说明性引用 code 用静音色底，避免与输入框混淆 */
-.modal-lead code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
+
 </style>

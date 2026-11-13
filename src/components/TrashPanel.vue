@@ -153,7 +153,7 @@ onMounted(load)
 .tp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .tp-list > li {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--c-border); border-radius: 9px; padding: 9px 11px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs); padding: 9px 11px;
 }
 .tp-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto auto; gap: 2px 10px; }
 .tp-name { font-weight: 600; font-size: var(--fs-13-5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -168,7 +168,7 @@ onMounted(load)
 .tp-acts .danger { color: var(--c-danger); }
 .tp-confirm {
   margin-top: 12px; border: 1px solid color-mix(in srgb, var(--c-danger) 45%, transparent); background: color-mix(in srgb, var(--c-danger) 7%, transparent);
-  border-radius: 9px; padding: 11px 13px;
+  border-radius: var(--radius-xs); padding: 11px 13px;
 }
 .tp-confirm p { margin: 0 0 9px; font-size: var(--fs-13); }
 </style>

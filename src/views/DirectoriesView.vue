@@ -24,6 +24,6 @@ import DirectoriesPanel from '@/components/DirectoriesPanel.vue'
 .intro { margin: 0 2px 10px; font-size: var(--fs-12-5); line-height: 1.7; }
 .intro code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: color-mix(in srgb, var(--c-border) 60%, transparent);
-  padding: 1px 5px; border-radius: 4px; color: var(--c-text); }
+  padding: 1px 5px; border-radius: var(--radius-chip); color: var(--c-text); }
 .intro b { color: var(--c-text); font-weight: 600; }
 </style>

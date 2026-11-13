@@ -163,7 +163,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
 kbd {
   font-family: var(--mono); font-size: var(--fs-12);
   background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-bottom-width: 2px; border-radius: 6px; padding: 2px 8px; color: var(--c-text);
+  border-bottom-width: 2px; border-radius: var(--radius-chip); padding: 2px 8px; color: var(--c-text);
 }
 .kbd-or { color: var(--c-text-mute); }
 .kbd-list .dim { font-size: var(--fs-12-5); }

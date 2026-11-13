@@ -513,7 +513,7 @@ async function exportCsv() {
       <EmptyState v-else title="暂无连接"
         hint="用上方的「新增连接」卡片登记第一个数据库；SQLite 为内建引擎，无需额外安装。">
         <template #cta>
-          <button class="btn-primary btn-sm" type="button" :disabled="!canManage"
+          <button class="btn-primary" type="button" :disabled="!canManage"
             @click="focusCreateCard('db-create-card')">
             <Icon name="plus" :size="13" /> 去新增连接
           </button>
@@ -740,7 +740,7 @@ async function exportCsv() {
    末段是 <span>（当前位置）。三者必须**看起来一致**，否则「同一排里有的能点有的不能点」
    会让人误判。统一 padding / 字号 / 行高，并把 button 的原生外观清掉。 */
 .crumb {
-  padding: 2px 8px; border-radius: 6px; font-size: inherit; font-family: inherit;
+  padding: 2px 8px; border-radius: var(--radius-chip); font-size: inherit; font-family: inherit;
   line-height: 1.5; background: none; border: 0; color: var(--c-text-dim);
 }
 .crumb.is-link { cursor: pointer; }

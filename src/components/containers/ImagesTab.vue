@@ -241,7 +241,7 @@ function shortId(id: string) {
       <div class="card-toolbar">
         <span class="count">共 {{ images.length }} 个镜像</span>
         <span class="spacer" />
-        <button class="btn-primary btn-sm" :disabled="!canManage"
+        <button class="btn-primary" :disabled="!canManage"
           :title="canManage ? '从 registry 拉取 / 更新镜像（docker pull）' : '需要 container.manage 权限'" @click="openPull()">
           <Icon name="download" :size="14" /> 拉取 / 更新镜像
         </button>
@@ -265,7 +265,7 @@ function shortId(id: string) {
           <tbody>
             <tr v-for="i in pageRows" :key="i.id + i.tag">
               <td class="mono ellipsis" :title="i.repository">{{ i.repository }}</td>
-              <td><span class="badge" :class="i.tag === '<none>' ? 'badge-warn' : 'badge-primary'">{{ i.tag }}</span></td>
+              <td><span class="badge">{{ i.tag }}</span></td>
               <td class="mono dim col-opt" :title="i.id">{{ shortId(i.id) }}</td>
               <td>{{ i.size }}</td>
               <td class="dim">{{ i.created }}</td>
@@ -349,7 +349,7 @@ col.w-iacts { width: 260px; }
 .pop-badge {
   font-size: var(--fs-12);
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   background: var(--bg-inset);
   color: var(--c-text-dim);
 }

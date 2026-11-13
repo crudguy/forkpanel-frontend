@@ -162,7 +162,7 @@ function onNavClick(it: NavItem, e: MouseEvent) {
   padding: 16px 16px 14px;
 }
 .logo {
-  width: 32px; height: 32px; border-radius: 9px; flex: none;
+  width: 32px; height: 32px; border-radius: var(--radius-xs); flex: none;
   display: grid; place-items: center; color: var(--c-on-accent);
   background: var(--gradient); box-shadow: var(--glow);
 }

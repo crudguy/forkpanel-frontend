@@ -107,7 +107,7 @@ function open() {
             <button class="btn-ghost btn-sm" type="button" @click="fullscreen = !fullscreen">
               {{ fullscreen ? '退出全屏' : '全屏' }}
             </button>
-            <button class="btn-primary btn-sm" type="button" @click="modalClose">完成</button>
+            <button class="btn-primary" type="button" @click="modalClose">完成</button>
           </div>
         </div>
       </div>
@@ -131,7 +131,7 @@ function open() {
   color: var(--c-text-dim);
   background: var(--c-surface-2);
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: var(--radius-chip);
   opacity: .8;
   transition: color .14s ease, border-color .14s ease, opacity .14s ease;
 }

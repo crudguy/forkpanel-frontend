@@ -52,6 +52,8 @@
   --c-warn-bg: rgba(251, 191, 36, 0.14);
   --c-ok: #4ade80;
   --c-ok-soft: rgba(74, 222, 128, 0.14);
+  --c-info: #60a5fa;
+  --c-info-soft: rgba(96, 165, 250, 0.16);
 
   /* ── 图表数据色板（评估报告 B5）：与「状态/操作色」(--c-primary/--c-danger) 解耦。
      品牌橙退场为纯状态色——普通数据色一律中性/冷色/已分配语义色，
@@ -87,6 +89,14 @@
   --radius-lg: 16px;
   --radius-sm: var(--radius-md);
   --radius-xs: 8px;
+  /* 亚控件圆角（B-圆角收敛）：inline <code> / 极小图标钮 / 小芯片专用，介于 xs(8) 与
+     无圆角之间。此前这类元素的圆角散落 4/5/6/7/9px 五种野值，抽到单一档后全站统一。 */
+  --radius-chip: 6px;
+
+  /* inline <code> 全局样式（单一事实源）：此前 CreateContainer/EditContainer/PullImage/
+     Confirm/ContainerLogs/HelpDrawer 等 12+ 组件各写一份 `code{background;padding;border-radius:4px}`，
+     既重复又是野值。统一到此处，组件私有副本改引用本规则（圆角走 --radius-chip）。 */
+  code { font-family: var(--mono); font-size: .92em; line-height: 1.4; color: var(--c-text); background: var(--c-hover); padding: 1px 5px; border-radius: var(--radius-chip); }
 
   /* 分段控件单一事实源（C 阶段）：导航 TabBar / 用户菜单偏好 / 登录页主题 /
      容器页 / 服务详情的私有 .seg 全引用这一组，不再各写一份圆角与选中色。
@@ -195,6 +205,8 @@
   --c-warn-bg: #fef3c7;
   --c-ok: #16a34a;
   --c-ok-soft: rgba(22, 163, 74, 0.10);
+  --c-info: #2563eb;
+  --c-info-soft: rgba(37, 99, 235, 0.10);
 
   /* 图表数据色板（B5）：浅色主题提升明度对比，语义不变 */
   --chart-cpu: #64748b;
@@ -455,6 +467,10 @@ td button { vertical-align: middle; }
    其余（FirewallView / ComposeTab 等）仍是双滚动。:has() 不支持的旧浏览器
    退回原行为（卡片可滚），不会更糟。 */
 .card.flush:has(> .t-scroll) { overflow: hidden; }
+/* 工具条排布范式（S1，2026-11-13）：[计数 / 面包屑] → [spacer] → [筛选·搜索 + 动作簇]。
+   搜索框归右侧动作簇，不夹在计数与 spacer 之间、不居中；计数文本占左侧独立槽。
+   FilesView 是显式例外：其 tools-actions 整组换行（≥1401 display:contents /
+   ≤1400 基准宽 140），拆出筛选框会破坏布局，详见 FilesView scoped 注释。 */
 .card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
 .card-toolbar .icon { color: var(--c-primary); }
 .card-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
@@ -474,6 +490,7 @@ td button { vertical-align: middle; }
 .badge-warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: transparent; }
 .badge-danger { color: var(--c-danger); background: var(--c-danger-soft); border-color: transparent; }
 .badge-primary { color: var(--c-primary); background: var(--c-primary-soft); border-color: transparent; }
+.badge-info { color: var(--c-info); background: var(--c-info-soft); border-color: transparent; }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--c-text-mute); flex: none; }
 .dot.ok { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
@@ -593,8 +610,19 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 .bad, .danger { color: var(--c-danger); }
 /* 表格工具栏里的搜索框（容器 / 镜像两处共用）。放全局而不是各视图 scoped：
    拆组件时样式留在父级会静默失效（ImagesTab 就这么裸奔过一轮——输入框没边框没高度）。 */
-.filter { width: 220px; max-width: 46vw; height: 31px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); color: var(--c-text); font-size: var(--fs-13); }
+/* T1 工具条等高：主操作已统一默认档 38px，工具条内 .filter 此前 31px 既矮于主 CTA，
+   也矮于标准输入框(37-39px)。提到 38px 让工具条内部完全等高，并顺带对齐输入控件家族。
+   仅改高度，其余（描边/圆角/底色）沿用原定义，避免引入新差异。 */
+.filter { width: 220px; max-width: 46vw; height: 38px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); color: var(--c-text); font-size: var(--fs-13); }
 .filter:focus { outline: none; border-color: var(--c-primary); }
+
+/* T1 工具条等高：工具条容器内的次级 btn-sm 同步到默认 38px（与主 CTA 等高），
+   避免 align-items:center 下主按钮上下各凸 3.5px。表格行内(td.col-actions .btn-sm)
+   与弹窗内联的 btn-sm 不受影响——它们不在下列工具条容器内。 */
+.card-toolbar .btn-sm,
+.tools-row .btn-sm,
+.fp-head-row .btn-sm,
+.procs-toolbar .btn-sm { height: 38px; padding: 7px 14px; font-size: var(--fs-14); }
 
 .err { color: var(--c-danger); font-size: var(--fs-13); margin: 0 0 12px; }
 /* 紧跟表单行（`.row`：输入框 + 提交按钮）的校验错误补上方间距。

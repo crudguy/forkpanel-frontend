@@ -65,6 +65,6 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 .hd-body :deep(li) { margin: 2px 0; }
 .hd-body :deep(code) {
   font-family: var(--mono); background: var(--c-glass);
-  padding: 1px 5px; border-radius: 5px; font-size: var(--fs-12);
+  padding: 1px 5px; border-radius: var(--radius-chip); font-size: var(--fs-12);
 }
 </style>

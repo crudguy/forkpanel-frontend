@@ -443,7 +443,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
     <EmptyState v-else-if="!sites.length && !error" title="暂无站点"
       hint="先在「网站」建站，再回来统一配置 WAF 与访问控制">
       <template #cta>
-        <RouterLink class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
+        <RouterLink class="btn-primary" to="/sites">去建站</RouterLink>
       </template>
     </EmptyState>
 
@@ -465,7 +465,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           </span>
           <RefreshBtn :disabled="batchBusy" sm @click="load()" />
           <!-- 批量下发：改了多个站点时省去逐个点「应用」 -->
-          <button class="btn-primary btn-sm" :disabled="!pending.length || batchBusy" @click="applyAll"
+          <button class="btn-primary" :disabled="!pending.length || batchBusy" @click="applyAll"
             :title="pending.length ? `一次下发这 ${pending.length} 个站点的改动` : '暂无待下发的改动'">
             <Icon name="check" :size="15" /> 应用全部{{ pending.length ? `（${pending.length}）` : '' }}
           </button>
@@ -556,7 +556,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <span class="count">共 {{ templates.length }} 个</span>
         <span class="spacer" />
         <RefreshBtn :disabled="loading" sm @click="load()" />
-        <button v-if="canManage" class="btn-primary btn-sm" @click="openCreateTpl">
+        <button v-if="canManage" class="btn-primary" @click="openCreateTpl">
           <Icon name="plus" :size="14" /> 新建模板
         </button>
       </div>
@@ -603,7 +603,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
     <EmptyState v-else title="暂无策略模板"
       hint="把一套 WAF + 访问控制设成模板，便于批量套用到多个站点">
       <template v-if="canManage" #cta>
-        <button class="btn-primary btn-sm" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
+        <button class="btn-primary" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
       </template>
     </EmptyState>
 
@@ -650,7 +650,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td class="mono">{{ e.remote_addr }}</td>
               <td class="col-opt mono">{{ e.method }}</td>
               <td class="mono ellipsis" :title="e.uri">{{ e.uri }}</td>
-              <td><span class="badge" :class="e.status === 429 ? 'badge-warn' : 'badge-danger'">{{ e.status }} {{ evtStatusLabel(e.status) }}</span></td>
+              <td><span class="badge" :class="e.status === 429 ? 'badge-info' : 'badge-danger'">{{ e.status }} {{ evtStatusLabel(e.status) }}</span></td>
               <td class="mono dim ellipsis col-opt" :title="e.user_agent">{{ e.user_agent }}</td>
             </tr>
           </tbody>
@@ -678,7 +678,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <div class="al-fields">
           <label class="blk">阈值（近窗内拦截次数）<input v-model.number="alertCfg.threshold" type="number" min="1" max="100000" :disabled="alertSaving || !alertCfg.enabled" /></label>
           <label class="blk">时间窗（分钟）<input v-model.number="alertCfg.window_min" type="number" min="1" max="1440" :disabled="alertSaving || !alertCfg.enabled" /></label>
-          <button class="btn-primary btn-sm" :disabled="alertSaving" @click="saveAlert">{{ alertSaving ? '保存中…' : '保存' }}</button>
+          <button class="btn-primary" :disabled="alertSaving" @click="saveAlert">{{ alertSaving ? '保存中…' : '保存' }}</button>
         </div>
         <p class="evt-note">近「时间窗」内单站拦截数超过「阈值」即推送一条站内通知（在顶栏铃铛 / 通知中心查看）；同站每窗至多一条，不刷屏。仅采集开了独立 access log 的站点。</p>
       </div>

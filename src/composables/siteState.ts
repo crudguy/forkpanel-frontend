@@ -27,7 +27,7 @@ export function siteState(s: Site): StateBadge {
     return { label: '已停用', cls: '', title: '已从 Web 服务器摘除配置（或从未启用）' }
   }
   if (!s.deployed) {
-    return { label: '未下发', cls: 'badge-warn', title: '已登记，但配置尚未下发到 Web 服务器；点「应用」后才会对外服务' }
+    return { label: '未下发', cls: '', title: '已登记，但配置尚未下发到 Web 服务器；点「应用」后才会对外服务' }
   }
   return { label: '运行中', cls: 'badge-ok', title: '配置已下发到 Web 服务器并已 reload' }
 }
@@ -41,7 +41,7 @@ export function tlsState(s: Site): StateBadge {
     return { label: '无', cls: '', title: '尚未为该站点签发证书（在「编辑站点」里点「申请证书」）' }
   }
   if (!s.deployed) {
-    return { label: '已签发·未生效', cls: 'badge-warn', title: '证书已生成并落盘，但站点配置尚未下发到 Web 服务器，HTTPS 还没生效' }
+    return { label: '已签发·未生效', cls: 'badge-info', title: '证书已生成并落盘，但站点配置尚未下发到 Web 服务器，HTTPS 还没生效' }
   }
   return { label: '已启用', cls: 'badge-ok', title: '证书已随站点配置在 Web 服务器生效' }
 }

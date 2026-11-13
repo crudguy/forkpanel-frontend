@@ -33,7 +33,7 @@ function back() {
       可能是收藏的链接过期（面板改过路由），或地址拼写有误。
     </p>
     <div class="nf-actions">
-      <button class="btn-primary btn-sm" type="button" @click="router.push('/')">回到概览</button>
+      <button class="btn-primary" type="button" @click="router.push('/')">回到概览</button>
       <button class="btn-ghost btn-sm" type="button" @click="back">返回上一页</button>
     </div>
   </div>
@@ -62,7 +62,7 @@ function back() {
   font-family: var(--mono);
   font-size: var(--fs-12);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   background: var(--bg-inset);
   word-break: break-all;
 }

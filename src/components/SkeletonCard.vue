@@ -30,12 +30,12 @@ defineProps<{ progress?: boolean }>()
 /* 与 MetricCard 同栅格、同间距：替换时零跳动 */
 .stat { display: flex; flex-direction: column; gap: 11px; }
 .head { display: flex; align-items: center; gap: 9px; }
-.ico { width: 30px; height: 30px; border-radius: 9px; flex: none; }
-.sk-label { height: 12px; width: 44%; border-radius: 6px; }
+.ico { width: 30px; height: 30px; border-radius: var(--radius-xs); flex: none; }
+.sk-label { height: 12px; width: 44%; border-radius: var(--radius-chip); }
 .val { display: flex; align-items: baseline; gap: 5px; }
-.sk-num { height: 26px; width: 56%; border-radius: 6px; }
+.sk-num { height: 26px; width: 56%; border-radius: var(--radius-chip); }
 .sub { min-height: 15px; }
-.sk-sub { display: inline-block; height: 12px; width: 72%; border-radius: 6px; }
+.sk-sub { display: inline-block; height: 12px; width: 72%; border-radius: var(--radius-chip); }
 .progress { height: 6px; }
 .sk-bar { display: block; height: 100%; border-radius: 999px; }
 </style>

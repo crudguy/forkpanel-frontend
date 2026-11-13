@@ -105,5 +105,5 @@ input {
 input:focus-visible { outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-primary-soft); }
 .code, code { font-family: var(--mono); font-size: var(--fs-12); }
 .hint { margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.6; }
-.modal-lead code { background: var(--c-hover); padding: 1px 5px; border-radius: 4px; }
+
 </style>

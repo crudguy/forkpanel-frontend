@@ -133,7 +133,7 @@ onMounted(() => { if (canView.value) load() })
 
 <style scoped>
 .list { list-style: none; padding: 0; margin-top: 12px; }
-.item { border-left: 3px solid var(--c-border-strong); padding: 10px 12px; margin-bottom: 8px; background: var(--c-glass); border-radius: 6px; }
+.item { border-left: 3px solid var(--c-border-strong); padding: 10px 12px; margin-bottom: 8px; background: var(--c-glass); border-radius: var(--radius-chip); }
 .item.crit { border-left-color: var(--c-danger); }
 .item.warn { border-left-color: var(--c-warn); }
 .item.info { border-left-color: var(--c-cyan); }

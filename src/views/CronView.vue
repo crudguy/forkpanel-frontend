@@ -291,7 +291,7 @@ async function triggerWebhook(j: Job) {
       <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务"
         hint="用上方的「新建任务」卡片添加第一个定时任务，例如每天凌晨备份数据库。">
         <template #cta>
-          <button class="btn-primary btn-sm" type="button" :disabled="!canManage"
+          <button class="btn-primary" type="button" :disabled="!canManage"
             @click="focusCreateCard('cron-create-card')">
             <Icon name="plus" :size="13" /> 去新建任务
           </button>

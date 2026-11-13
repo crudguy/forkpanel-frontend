@@ -166,7 +166,7 @@ const stateText = taskStateLabel
               <td class="mono dim ellipsis" :title="t.key || t.kind">{{ t.key || t.kind }}</td>
               <td>
                 <span class="badge" :class="stateClass(t.state)">{{ stateText(t.state) }}</span>
-                <span v-if="t.needs_human" class="badge badge-danger" title="任务被中断，需人工确认后续影响">需人工</span>
+                <span v-if="t.needs_human" class="badge" title="任务被中断，需人工确认后续影响">需人工</span>
               </td>
               <td class="num">
                 <div class="mini">

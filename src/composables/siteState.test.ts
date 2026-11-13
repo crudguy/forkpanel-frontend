@@ -24,7 +24,7 @@ describe('siteState', () => {
     // 这条是本模块存在的核心理由：新建后 enabled 即为 true，此刻服务器里没这站点
     const b = siteState(site({ enabled: true, deployed: false }))
     expect(b.label).toBe('未下发')
-    expect(b.cls).toBe('badge-warn')
+    expect(b.cls).toBe('')
     expect(b.title).toContain('尚未下发')
   })
 
@@ -46,7 +46,7 @@ describe('tlsState', () => {
     // 与同一行「未下发」的站点状态自相矛盾。
     const b = tlsState(site({ tls: true, deployed: false }))
     expect(b.label).toBe('已签发·未生效')
-    expect(b.cls).toBe('badge-warn')
+    expect(b.cls).toBe('badge-info')
     expect(b.title).toContain('尚未下发')
   })
 

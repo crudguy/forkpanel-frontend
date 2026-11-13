@@ -384,7 +384,7 @@ usePolling({ fn: () => { if (canSys.value) void checkUpgrade() }, ms: 12 * 60 * 
 .menu {
   position: fixed; z-index: 41; width: 230px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
-  border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 6px; overflow: hidden;
 }
 .mi {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
@@ -400,7 +400,7 @@ usePolling({ fn: () => { if (canSys.value) void checkUpgrade() }, ms: 12 * 60 * 
 .ver-panel {
   position: fixed; z-index: 41; width: 280px;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
-  border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px;
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 14px;
 }
 .vp-head { display: flex; align-items: center; gap: 7px; font-size: var(--fs-13); color: var(--c-text-dim); margin-bottom: 12px; }
 .vp-head b { margin-left: auto; color: var(--c-text); font-size: var(--fs-13-5); }

@@ -182,7 +182,7 @@ defineExpose({ applySsl })
   <div v-if="editing" class="ssl">
     <div class="ssl-head">
       <span class="ssl-title"><Icon name="lock" :size="14" /> SSL 证书</span>
-      <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为当前站点申请证书' : sslHint" @click="applySslEditing">
+      <button class="btn-primary" :disabled="!sslReady" :title="sslReady ? '为当前站点申请证书' : sslHint" @click="applySslEditing">
         <Icon name="plus" :size="13" /> 申请证书
       </button>
     </div>

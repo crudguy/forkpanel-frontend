@@ -781,7 +781,7 @@ onUnmounted(() => { es?.close() })
 .note-row .note-body { flex: 1; min-width: 0; }
 .note-time { flex: none; padding-top: 4px; font-size: var(--fs-12); color: var(--c-text-dim); white-space: nowrap; }
 .note-del { flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; margin-top: 1px; border: none; border-radius: 7px;
+  width: 26px; height: 26px; margin-top: 1px; border: none; border-radius: var(--radius-chip);
   background: none; color: var(--c-text-dim); cursor: pointer; opacity: .45; transition: opacity .12s ease; }
 .note-del:hover { opacity: 1; color: var(--c-danger); background: var(--c-danger-soft); }
 
@@ -796,7 +796,7 @@ onUnmounted(() => { es?.close() })
 .dragging { opacity: .45; }
 .lay-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px; }
 .lay-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-  border-radius: 9px; cursor: pointer; font-size: var(--fs-13-5); }
+  border-radius: var(--radius-xs); cursor: pointer; font-size: var(--fs-13-5); }
 .lay-row:hover { background: var(--c-hover); }
 /* 原生勾选框复位 width（全局 input{width:100%}） */
 .lay-row input { width: auto; }
@@ -804,9 +804,11 @@ onUnmounted(() => { es?.close() })
 .sec-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-14); margin-bottom: 14px; }
 .sec-head :deep(.icon) { color: var(--c-primary); }
 
-.status { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+/* S2 概览「运行状态」磁贴曾用 auto-fill：宽屏下第 5 条隐式轨道为空却仍占 200px，
+   右侧留出约 180px 空白、视觉重心偏左。改为 auto-fit：空轨道塌缩为 0，4 个磁贴始终拉满整行。 */
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .st-tile { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
-           column-gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px;
+           column-gap: 12px; align-items: center; padding: 14px 16px; border-radius: var(--radius-md);
            text-decoration: none; color: var(--c-text); border: 1px solid var(--c-border);
            background: var(--c-surface-2); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .st-tile:hover { transform: translateY(-2px); border-color: var(--c-border-strong); box-shadow: var(--shadow); }
@@ -837,7 +839,7 @@ li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; backgroun
 
 /* ── 指标卡 hover 悬浮详情 ── */
 .m-tip { position: fixed; z-index: 60; width: 250px; box-sizing: border-box;
-  padding: 13px 15px 14px; border-radius: 12px; pointer-events: none;
+  padding: 13px 15px 14px; border-radius: var(--radius-md); pointer-events: none;
   background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
   box-shadow: var(--shadow-lg); opacity: 1; }
 .mtip-enter-from, .mtip-leave-to { opacity: 0; }
@@ -868,7 +870,7 @@ li:has(.dot.ok) .a-lv { color: var(--c-ok); border-color: transparent; backgroun
 .m-tip-procs-msg.err { color: var(--c-danger); }
 .m-tip-procs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .m-tip-proc { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12-5); }
-.m-tip-proc .rank { flex: none; width: 15px; height: 15px; border-radius: 4px; display: grid; place-items: center;
+.m-tip-proc .rank { flex: none; width: 15px; height: 15px; border-radius: var(--radius-chip); display: grid; place-items: center;
   font-size: var(--fs-12); font-weight: 700; color: var(--c-text-mute); background: var(--c-hover); }
 .m-tip-proc .pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); }
 .m-tip-proc .pval { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--c-text-dim); }

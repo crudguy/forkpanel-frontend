@@ -759,7 +759,7 @@ async function doConfirmed() {
                     <!-- 有新版：只在真探测到时显示，并给出「现→新」两个版本；
                          用 warn 色而非 danger（升级是常规维护，不是危险态）。 -->
                     <span v-if="upgradableMap.get(p.name)" class="badge nowrap"
-                          :class="upgradableMap.get(p.name)!.major ? 'badge-danger' : 'badge-warn'"
+                          :class="upgradableMap.get(p.name)!.major ? 'badge-danger' : 'badge-info'"
                           :title="`可更新：v${upgradableMap.get(p.name)!.current} → v${upgradableMap.get(p.name)!.candidate}${upgradableMap.get(p.name)!.major ? '（跨主版本，升级需数据迁移）' : ''}`">
                       {{ upgradableMap.get(p.name)!.major ? '跨主版本 ' : '有新版 ' }}v{{ upgradableMap.get(p.name)!.candidate }}
                     </span>
@@ -958,7 +958,7 @@ col.w-acts { width: 96px; }
 .ts-row + .ts-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--c-border); }
 .ts-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ts-head strong { font-size: var(--fs-13-5); }
-.progress { height: 6px; background: var(--c-hover); border-radius: 3px; overflow: hidden; }
+.progress { height: 6px; background: var(--c-hover); border-radius: 999px; overflow: hidden; }
 .progress i { display: block; height: 100%; background: var(--c-primary); transition: width .4s; }
 .taskstrip .out { margin-top: 10px; }
 .out { margin: 0; padding: 12px 14px; background: var(--c-bg); border: 1px solid var(--c-border);

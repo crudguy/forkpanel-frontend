@@ -198,8 +198,8 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     <EmptyState v-else-if="!certs.length && !error" title="暂无证书"
       hint="先在「网站」建站并申请证书，或用下方按钮直接申请">
       <template #cta>
-        <RouterLink v-if="!sites.length" class="btn-primary btn-sm" to="/sites">去建站</RouterLink>
-        <button v-else class="btn-primary btn-sm" :disabled="!sslReady" :title="sslHint" @click="openApply">申请证书</button>
+        <RouterLink v-if="!sites.length" class="btn-primary" to="/sites">去建站</RouterLink>
+        <button v-else class="btn-primary" :disabled="!sslReady" :title="sslHint" @click="openApply">申请证书</button>
       </template>
     </EmptyState>
 
@@ -213,7 +213,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
           <Icon name="shield" :size="15" /> 信任根证书
         </button>
         <RefreshBtn :disabled="busy" sm @click="load()" />
-        <button class="btn-primary btn-sm" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
+        <button class="btn-primary" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
           <Icon name="plus" :size="15" /> 申请证书
         </button>
       </div>

@@ -30,7 +30,7 @@ describe('wafBadge', () => {
     const basic = wafBadge(on('basic'))
     const strict = wafBadge(on('strict'))
     expect(basic).toEqual({ cls: 'badge-ok', label: '基础' })
-    expect(strict).toEqual({ cls: 'badge-primary', label: '严格' })
+    expect(strict).toEqual({ cls: '', label: '严格' })
     expect(basic.cls).not.toBe(strict.cls)
   })
 
