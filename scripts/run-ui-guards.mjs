@@ -72,6 +72,8 @@ export const UI_GUARDS = [
   'check-syntax-highlight.mjs',
   // 2026-11-13 B1 收尾：scoped 圆角野值（单值裸 px）回潮防护，含例外登记与扫描活性自检
   'check-radius-wildcard.mjs',
+  // 2026-11-13 全局兜底：main.ts 必须真挂 unhandledrejection / error（只写模块不算接线）
+  'check-global-errors.mjs',
 ]
 
 let failed = 0
