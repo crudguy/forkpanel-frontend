@@ -88,8 +88,9 @@ const llmChatContext = ref(false)
 const showKey = ref(false)
 
 // ── C10 测试连接：配模型时真实探测 /v1/chat/completions，否则 /v1/models ──
-// F-02①：Endpoint 锁定已保存值（改动须先保存）、已存密钥绝不参与；Model 与本次
-// 输入的 Key 仍可先测后存——避免"保存后才知道配置是否可用"。配模型时改打
+// F-02①：Endpoint 锁定已保存值（改动须先保存）；api_key 框留空时后端回退到
+// 库里已存的密钥（Endpoint 已锁定，无外带风险），填了则优先用填的（先测后存），
+// Model 一样可先测后存——避免"保存后才知道配置是否可用"。配模型时改打
 // /chat/completions 是修复：部分服务商（如 Agnes）即便密钥有效也对 /v1/models
 // 返回 401，却对 /chat/completions 正常，只探 /models 会误报 401。
 // savedLlmEndpoint 是「后端已保存的 Endpoint」快照，比较基准不能取输入框自身。
