@@ -70,6 +70,8 @@ export const UI_GUARDS = [
   'check-line-numbers.mjs',
   // 2026-11-12 语法高亮：规则/配色单一事实源 + 每个编辑框调用点必须带文件类型信息
   'check-syntax-highlight.mjs',
+  // 2026-11-13 B1 收尾：scoped 圆角野值（单值裸 px）回潮防护，含例外登记与扫描活性自检
+  'check-radius-wildcard.mjs',
 ]
 
 let failed = 0
