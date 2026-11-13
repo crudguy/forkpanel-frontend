@@ -10,6 +10,7 @@ import '@/styles/dialog-form.css'
 import { applyTheme } from '@/composables/theme'
 import { tableNav } from '@/composables/tableNav'
 import { loginRedirect } from '@/composables/sessionRedirect'
+import { createGlobalErrorHandlers } from '@/composables/globalErrors'
 
 applyTheme()
 
@@ -36,6 +37,18 @@ app.config.errorHandler = (err, _instance, info) => {
     .then(({ toast }) => { toast(`页面出现异常：${msg}`, 'err') })
     .catch((e) => { console.error('[panel] 错误提示弹不出来（toast 模块加载失败）：', e) })
 }
+
+// Vue 组件树之外的异常（动态 import 失败、async 事件处理器抛出的 rejection 等）
+// 不会走 app.config.errorHandler。只进 console 的话用户看到的是「点了没反应」。
+const globalErrors = createGlobalErrorHandlers({
+  notify: (text) => {
+    void import('@/composables/useToast')
+      .then(({ toast }) => { toast(text, 'err') })
+      .catch((e) => { console.error('[panel] 错误提示弹不出来（toast 模块加载失败）：', e) })
+  },
+})
+window.addEventListener('unhandledrejection', globalErrors.onUnhandledRejection)
+window.addEventListener('error', globalErrors.onError)
 
 // 全局事件：401 → 先清会话（丢弃残留的 me/权限，避免返回首页短暂渲染越权菜单）→ 跳登录
 window.addEventListener('panel:unauthorized', () => {
