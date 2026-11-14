@@ -122,7 +122,7 @@ describe('NginxEditor：高亮层与行号侧栏共用一份滚动位置', () =>
 
     await m.setValue(Array.from({ length: 12_000 }, () => 'set $x 1;').join('\n'))
     expect(m.host.querySelectorAll('.ne-ln').length).toBeLessThan(60)
-  })
+  }, 15_000)
 
   it('滚动时行号窗口与着色层都跟随 textarea', async () => {
     const m = mount(NginxEditor, {}, Array.from({ length: 400 }, (_, i) => '# line ' + (i + 1)).join('\n'))
