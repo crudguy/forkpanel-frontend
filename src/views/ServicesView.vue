@@ -911,7 +911,6 @@ async function doConfirmed() {
 .ext-hint { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 5px;
   font-size: var(--fs-12); line-height: 1.5; color: var(--c-text-dim);
   border: 1px solid var(--c-border); border-radius: 999px; white-space: nowrap; }
-.acts { white-space: nowrap; }
 
 /* 顶部 Tab 已改用全站统一的分段控件 components/TabBar.vue：
    原先本地的 .tabs 是"胶囊 + 橙色填充"，与其它页面的分段控件形状不一致。 */

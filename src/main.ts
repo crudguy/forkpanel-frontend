@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from '@/App.vue'
 import { router } from '@/router'
-import { api } from '@/api/client'
+import { api, API_VERSION } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import '@/styles/main.css'
@@ -66,8 +66,8 @@ window.addEventListener('panel:csrf-expired', () => {
 if (import.meta.env.PROD) {
   api.get<{ api: string }>(API.version())
     .then((v) => {
-      if (v && v.api !== '1.0') {
-        console.warn(`[panel] API 版本不匹配（后端 ${v.api} / 前端 1.0），请升级面板`)
+      if (v && v.api !== API_VERSION) {
+        console.warn(`[panel] API 版本不匹配（后端 ${v.api} / 前端 ${API_VERSION}），请升级面板`)
       }
     })
     .catch(() => { /* 未登录时可忽略 */ })

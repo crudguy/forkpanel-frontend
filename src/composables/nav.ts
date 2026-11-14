@@ -29,6 +29,4 @@ export function toggleNav() {
  * 不写 localStorage：抽屉是一次性临时态，刷新回到收起即可。
  */
 export const navDrawerOpen = ref(false)
-export function openNav() { navDrawerOpen.value = true }
 export function closeNav() { navDrawerOpen.value = false }
-export function toggleNavDrawer() { navDrawerOpen.value = !navDrawerOpen.value }

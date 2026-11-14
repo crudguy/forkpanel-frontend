@@ -190,10 +190,6 @@ export function unsupportedReason(caps: CapabilityMap, key: string): string | nu
 // 此前 SitesView 与 WafView 各声明一份（后者是前者的删减副本，缺 tls/created_at），
 // 两处独立维护必然漂移 —— 统一到此处。
 
-/** 站点类型。**注意** 库内值是 `static|reverse_proxy|php`，API 呈现为 `static|proxy|php`
- *  （换算在后端 kind_to_api/kind_to_db）。 */
-export const siteKindLabel = enumLabel({ static: '静态站点', proxy: '反向代理', php: 'PHP 站点', redirect: '整站重定向' })
-
 /** 站点 WAF 档位（落库值 basic / strict，对应 migrations/008_site_waf.sql）。 */
 export const wafProfileLabel = enumLabel({ basic: '基础', strict: '严格' })
 
@@ -873,10 +869,9 @@ export function containerStateBadge(s: string): string {
   return ''
 }
 
-/** 防火墙规则的协议 / 动作 / 方向。 */
+/** 防火墙规则的协议 / 动作。 */
 export const fwProtocolLabel = enumLabel({ tcp: 'TCP', udp: 'UDP', icmp: 'ICMP', any: '任意' })
 export const fwActionLabel = enumLabel({ allow: '允许', deny: '拒绝', reject: '拒绝并回复' })
-export const fwDirectionLabel = enumLabel({ in: '入站', out: '出站' })
 
 /** 防火墙后端（能力位 backend 字段）。 */
 export const fwBackendLabel = enumLabel({
@@ -906,11 +901,6 @@ export interface Cert {
  *  生英文 `selfsigned` 直接渲染到「来源」列。 */
 export const certSourceLabel = enumLabel({
   acme: 'ACME 签发', selfsigned: '自签', manual: '手动上传',
-})
-
-/** 证书自动续期扫描状态。 */
-export const certRenewStateLabel = enumLabel({
-  idle: '空闲', pending: '续期中', ok: '成功', failed: '失败',
 })
 
 /** 自动续期扫描状态（`GET /certs/renew-sweep`）。CertsView 与 SitesView 都要拉
@@ -955,11 +945,6 @@ export const remoteKindLabel = enumLabel({ webdav: 'WebDAV', s3: 'S3' })
 /** 计划任务类型。 */
 export const cronKindLabel = enumLabel({
   script: '脚本', backup: '备份', cert_renew: '证书续期', internal: '内部任务',
-})
-
-/** 文件条目类型。 */
-export const fileKindLabel = enumLabel({
-  dir: '目录', file: '文件', symlink: '符号链接', other: '其他',
 })
 
 /** 通知级别（后端对非法值归一为 warn）。 */
