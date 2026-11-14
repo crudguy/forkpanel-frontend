@@ -95,8 +95,8 @@ function isOn(it: Item): boolean {
  *   此时 `e.preventDefault()` 生效，navigate 开头检查
  *   `e.defaultPrevented` 直接返回，不跳转。
  *
- * 这一条由 `SideNav.disabledReason.test.ts` 源码级钉住（禁止回退 pointer-events，
- * 也禁止把 `.capture` 简化成普通 `@click`）。
+ * 这一条由 `SideNav.behavior.test.ts` 钉住：pointer-events 由该文件末尾的源码断言守，
+ * `.capture` 由真挂载行为断言守（点了不跳转）。
  */
 function onNavClick(it: NavItem, e: MouseEvent) {
   if (it.off) e.preventDefault()

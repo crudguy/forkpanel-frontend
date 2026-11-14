@@ -420,6 +420,9 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 /* 日志视图主体：此前无任何规则，2000 行直接撑开整页，scrollBottom() 对
    不可滚动元素无效（实时跟随失效）。限定高度 + 自身滚动后跟随才生效。 */
 .view {
+  /* 类名与全局页面根容器 .view 同名：全局是 flex column + gap，本元素是 <pre>
+     日志正文，必须压回 block，否则日志行被 flex 化并插入行间距。 */
+  display: block;
   max-height: 58vh;
   overflow: auto;
   margin: 0;
