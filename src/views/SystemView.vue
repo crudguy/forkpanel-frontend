@@ -2,11 +2,10 @@
 /**
  * 主机监控。
  * 与首页概览的分工：概览看全貌（经 SSE 实时推送），本页看时间趋势（实时滚动 + 持久化历史）。
- * 曲线用自绘 SVG（不引图表库，守 150KB 首屏预算）。
+ * 曲线用自绘 SVG（不引图表库，守 110KB 首屏预算）。
  *
  * 实时指标 5 项：CPU / 内存 / 负载 / 磁盘使用率 / 网络吞吐（入·出）。
- * 其中磁盘与网络为实时采集，后端 history 聚合表仅落盘 CPU / 内存 / 负载，
- * 故历史趋势模块不含磁盘/网络（见页面说明）。
+ * history 接口只返回 CPU / 内存 / 负载，故历史曲线覆盖这三项。
  */
 import { ref, onMounted, computed } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
@@ -16,6 +15,8 @@ import { CAP } from '@/api/types'
 import MetricHeader, { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone } from '@/composables/metricTone'
 import { usePolling } from '@/composables/usePolling'
+import { smoothSeriesPath } from '@/composables/smoothPath'
+import { axisTicks, nearestIndex, tipLeft, valueY } from '@/composables/chartGuides'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -101,10 +102,8 @@ usePolling({ fn: loadHistory, ms: 30_000, enabled: () => canView.value })
 onMounted(() => { loadRealtime(); loadHistory() })
 
 const last = computed(() => buf.value.at(-1))
-const memPct = computed(() =>
-  last.value && last.value.mem_total_kib ? (last.value.mem_used_kib / last.value.mem_total_kib * 100) : 0)
-const diskPct = computed(() =>
-  last.value && last.value.disk_total_bytes ? (last.value.disk_used_bytes / last.value.disk_total_bytes * 100) : 0)
+const memPct = computed(() => last.value ? memPctOf(last.value) : 0)
+const diskPct = computed(() => last.value ? diskPctOf(last.value) : 0)
 
 /** 指标头数据项（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列 */
 const hdrItems = computed<MetricItem[]>(() => [
@@ -123,25 +122,18 @@ const loadMax = computed(() =>
 const netMaxBps = computed(() =>
   Math.max(1, ...buf.value.map(s => Math.max(s.net_in_bps, s.net_out_bps))))
 
-/** 把缓冲序列映射成 SVG polyline 点串；缓冲定长 → x 间距恒定 → 滚动不跳变 */
-function buildPoints(accessor: (s: Sample) => number, max: number) {
-  const n = buf.value.length
-  if (n < 2) return ''
-  return buf.value.map((s, i) => {
-    const v = Math.min(Math.max(accessor(s), 0), max)
-    const x = (i / (n - 1) * 100).toFixed(2)
-    const y = (100 - (v / max) * 100).toFixed(2)
-    return `${x},${y}`
-  }).join(' ')
+/** 把缓冲序列映射为平滑 path；x 按索引等分 → 定长缓冲滚动时点距恒定，不跳变 */
+function buildPath(accessor: (s: Sample) => number, max: number) {
+  return smoothSeriesPath(buf.value.map(s => accessor(s)), max)
 }
 
-const cpuPts = computed(() => buildPoints(s => s.cpu, 100))
-const memPts = computed(() => buildPoints(s => s.mem_total_kib ? s.mem_used_kib / s.mem_total_kib * 100 : 0, 100))
-const loadPts = computed(() => buildPoints(s => s.load1, loadMax.value))
-const diskPts = computed(() =>
-  buildPoints(s => s.disk_total_bytes ? (s.disk_used_bytes / s.disk_total_bytes * 100) : 0, 100))
-const netInPts = computed(() => buildPoints(s => s.net_in_bps, netMaxBps.value))
-const netOutPts = computed(() => buildPoints(s => s.net_out_bps, netMaxBps.value))
+const cpuPath = computed(() => buildPath(s => s.cpu, 100))
+const memPath = computed(() => buildPath(s => s.mem_total_kib ? s.mem_used_kib / s.mem_total_kib * 100 : 0, 100))
+const loadPath = computed(() => buildPath(s => s.load1, loadMax.value))
+const diskPath = computed(() =>
+  buildPath(s => s.disk_total_bytes ? (s.disk_used_bytes / s.disk_total_bytes * 100) : 0, 100))
+const netInPath = computed(() => buildPath(s => s.net_in_bps, netMaxBps.value))
+const netOutPath = computed(() => buildPath(s => s.net_out_bps, netMaxBps.value))
 
 function mbps(bps: number) { return (bps / 1e6).toFixed(1) }
 
@@ -149,38 +141,106 @@ function mbps(bps: number) { return (bps / 1e6).toFixed(1) }
 const histRows = computed<HistRow[]>(() => history.value?.samples ?? [])
 const historyUnavailable = computed(() =>
   auth.me?.tier === 'nano' || !!history.value?.unavailable)
-const histCpuPts = computed(() => buildHist(r => r[1], 100))
+const histCpuPath = computed(() => buildHistPath(r => r[1], 100))
 // 历史样本只记录 mem_used_kib，总量只有实时快照里有。快照尚未到达时不能拿
 // "已用×4" 当总量——那会让曲线恒为 25%，是个编出来的数字。改为总量未知时先不画
-// （polyline points 为空即不渲染），等快照到达后按真实总量绘制。
-const histMemPts = computed(() => {
+// （path d 为空即不渲染），等快照到达后按真实总量绘制。
+const histMemPath = computed(() => {
   const total = last.value?.mem_total_kib
   if (!total) return ''
-  return buildHist(r => r[2] / Math.max(1, total) * 100, 100)
+  return buildHistPath(r => r[2] / Math.max(1, total) * 100, 100)
 })
 const histLoadMax = computed(() => Math.max(2, ...histRows.value.map(r => r[3])))
-const histLoadPts = computed(() => buildHist(r => r[3], histLoadMax.value))
+const histLoadPath = computed(() => buildHistPath(r => r[3], histLoadMax.value))
 
-function buildHist(accessor: (r: HistRow) => number, max: number) {
-  const n = histRows.value.length
-  if (n < 2) return ''
-  return histRows.value.map((r, i) => {
-    const v = Math.min(Math.max(accessor(r), 0), max)
-    const x = (i / (n - 1) * 100).toFixed(2)
-    const y = (100 - (v / max) * 100).toFixed(2)
-    return `${x},${y}`
-  }).join(' ')
+function buildHistPath(accessor: (r: HistRow) => number, max: number) {
+  return smoothSeriesPath(histRows.value.map(r => accessor(r)), max)
 }
+
+// ── 刻度 / 时间轴 / 悬停读数（不引图表库，全部沿用 0..100 坐标）──
+type ChartKind = 'rt' | 'net' | 'hist'
+interface TipLine { name: string; value: string; color: string }
+const hover = ref<{ kind: ChartKind; index: number; left: number } | null>(null)
+
+const pctTicks = axisTicks(100, v => v.toFixed(0))
+const netTicks = computed(() => axisTicks(netMaxBps.value / 1e6, v => v.toFixed(v >= 10 ? 0 : 1)))
+
+function memPctOf(s: Sample) { return s.mem_total_kib ? s.mem_used_kib / s.mem_total_kib * 100 : 0 }
+function diskPctOf(s: Sample) { return s.disk_total_bytes ? s.disk_used_bytes / s.disk_total_bytes * 100 : 0 }
+
+function hms(ts?: number) {
+  if (!ts) return '—'
+  const d = new Date(ts * 1000)
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(v => String(v).padStart(2, '0')).join(':')
+}
+function mdhm(ts?: number) {
+  if (!ts) return '—'
+  const d = new Date(ts * 1000)
+  return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+const rtFrom = computed(() => hms(buf.value[0]?.ts))
+const rtTo = computed(() => hms(buf.value.at(-1)?.ts))
+const histFrom = computed(() => mdhm(histRows.value[0]?.[0]))
+const histTo = computed(() => mdhm(histRows.value.at(-1)?.[0]))
+
+function onHover(e: MouseEvent, kind: ChartKind, count: number) {
+  const rect = (e.currentTarget as SVGElement).getBoundingClientRect()
+  if (!rect.width || count < 2) return
+  const ratio = (e.clientX - rect.left) / rect.width
+  hover.value = { kind, index: nearestIndex(ratio, count), left: tipLeft(ratio) }
+}
+const cursorX = computed(() => {
+  const h = hover.value
+  if (!h) return 0
+  const n = h.kind === 'hist' ? histRows.value.length : buf.value.length
+  return n > 1 ? (h.index / (n - 1)) * 100 : 0
+})
+const tip = computed<{ time: string; lines: TipLine[] } | null>(() => {
+  const h = hover.value
+  if (!h) return null
+  if (h.kind === 'hist') {
+    const r = histRows.value[h.index]
+    if (!r) return null
+    const total = last.value?.mem_total_kib
+    return {
+      time: mdhm(r[0]),
+      lines: [
+        { name: 'CPU', value: `${r[1].toFixed(1)}%`, color: COLOR.cpu },
+        { name: '内存', value: total ? `${(r[2] / Math.max(1, total) * 100).toFixed(1)}%` : '—', color: COLOR.mem },
+        { name: '负载', value: r[3].toFixed(2), color: COLOR.load },
+      ],
+    }
+  }
+  const s = buf.value[h.index]
+  if (!s) return null
+  if (h.kind === 'net') {
+    return {
+      time: hms(s.ts),
+      lines: [
+        { name: '入站', value: `${mbps(s.net_in_bps)} Mbps`, color: NET.in },
+        { name: '出站', value: `${mbps(s.net_out_bps)} Mbps`, color: NET.out },
+      ],
+    }
+  }
+  return {
+    time: hms(s.ts),
+    lines: [
+      { name: 'CPU', value: `${s.cpu.toFixed(1)}%`, color: COLOR.cpu },
+      { name: '内存', value: `${memPctOf(s).toFixed(1)}%`, color: COLOR.mem },
+      { name: '负载', value: s.load1.toFixed(2), color: COLOR.load },
+      { name: '磁盘', value: `${diskPctOf(s).toFixed(1)}%`, color: COLOR.disk },
+    ],
+  }
+})
 </script>
 
 <template>
   <div>
     <p v-if="rtError" class="err" role="alert">{{ rtError }}</p>
 
-    <!-- 顶部读数（A2）：与「专业快照」页共用 MetricHeader + 同一采样序列（环形缓冲），
-         同一时刻两页读数一致；下方曲线为趋势呈现 -->
+    <!-- 顶部读数：与「专业快照」页取同一采样序列的末样本，同一时刻两页读数一致 -->
     <MetricHeader :items="hdrItems" :sampled-at="last?.ts ?? null"
-      source-hint="取自面板统一的 60 秒滚动采样序列（每 2 秒采样一次）；与「专业快照」页顶端读数同源，同一时刻两页一致。" />
+      source-hint="最近 60 秒的末样本；与「专业快照」页顶端读数同源，同一时刻两页一致。" />
 
     <!-- 实时曲线：CPU / 内存 / 负载 / 磁盘 四系列 -->
     <div class="sec-head">
@@ -192,22 +252,38 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
         <i class="lg" :style="{ background: COLOR.disk }" /> 磁盘 {{ diskPct.toFixed(0) }}%
       </span>
     </div>
-    <p class="sec-note">
-      最近 60 秒滚动采样，每 {{ interval }}ms 自动刷新；曲线随新数据自右向左平滑滚动，颜色对应上方图例。
-    </p>
+    <p class="sec-note">最近 60 秒，每 {{ interval }}ms 刷新；悬停查看各点数值。</p>
     <div v-if="buf.length" class="card chart">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="cpuPts" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
+      <div class="plot">
+        <div class="axis-y">
+          <span v-for="t in pctTicks" :key="t.y" :style="{ top: t.y + '%' }">{{ t.label }}</span>
+        </div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi"
+             @mousemove="onHover($event, 'rt', buf.length)" @mouseleave="hover = null">
+          <line v-for="t in pctTicks" :key="t.y" class="grid" x1="0" :y1="t.y" x2="100" :y2="t.y" vector-effect="non-scaling-stroke" />
+          <line class="threshold hot" x1="0" :y1="valueY(60, 100)" x2="100" :y2="valueY(60, 100)" vector-effect="non-scaling-stroke" />
+          <line class="threshold danger" x1="0" :y1="valueY(85, 100)" x2="100" :y2="valueY(85, 100)" vector-effect="non-scaling-stroke" />
+          <path :d="cpuPath" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="memPts" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
+          <path :d="memPath" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="loadPts" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
+          <path :d="loadPath" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="diskPts" fill="none" :style="{ stroke: COLOR.disk }" stroke-width="1"
+          <path :d="diskPath" fill="none" :style="{ stroke: COLOR.disk }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-      </svg>
+          <line v-if="hover?.kind === 'rt'" class="cursor" :x1="cursorX" y1="0" :x2="cursorX" y2="100" vector-effect="non-scaling-stroke" />
+        </svg>
+        <div v-if="hover?.kind === 'rt' && tip" class="tip" :style="{ left: (hover?.left ?? 50) + '%' }">
+          <div class="tip-time">{{ tip.time }}</div>
+          <div v-for="l in tip?.lines ?? []" :key="l.name" class="tip-line">
+            <span class="tip-name"><i class="tip-dot" :style="{ '--dot': l.color }" />{{ l.name }}</span><b>{{ l.value }}</b>
+          </div>
+        </div>
+      </div>
+      <div class="axis-x"><span>{{ rtFrom }}</span><span>现在 {{ rtTo }}</span></div>
+      <p class="threshold-note">虚线：60% 偏热 · 85% 危险</p>
     </div>
-    <EmptyState v-else title="暂无采样数据" hint="采集由内部调度器驱动，稍候自动出现" />
+    <EmptyState v-else title="暂无采样数据" hint="采集启动后会自动出现" />
 
     <!-- 网络吞吐：入/出双线（量纲为速率，与主曲线分开以免混淆） -->
     <div class="sec-head">
@@ -217,18 +293,31 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
         <i class="lg" :style="{ background: NET.out }" /> 出站 {{ mbps(last?.net_out_bps ?? 0) }} Mbps
       </span>
     </div>
-    <p class="sec-note">
-      实时采样速率（排除回环接口），单位 Mbps；曲线随新数据平滑滚动。<b>网络为实时指标，不落盘历史。</b>
-    </p>
+    <p class="sec-note">入 / 出速率，单位 Mbps；悬停查看各点数值。历史视图目前只提供 CPU / 内存 / 负载。</p>
     <div v-if="buf.length" class="card chart">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="netInPts" fill="none" :style="{ stroke: NET.in }" stroke-width="1"
+      <div class="plot">
+        <div class="axis-y">
+          <span v-for="t in netTicks" :key="t.y" :style="{ top: t.y + '%' }">{{ t.label }}</span>
+        </div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi"
+             @mousemove="onHover($event, 'net', buf.length)" @mouseleave="hover = null">
+          <line v-for="t in netTicks" :key="t.y" class="grid" x1="0" :y1="t.y" x2="100" :y2="t.y" vector-effect="non-scaling-stroke" />
+          <path :d="netInPath" fill="none" :style="{ stroke: NET.in }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="netOutPts" fill="none" :style="{ stroke: NET.out }" stroke-width="1"
+          <path :d="netOutPath" fill="none" :style="{ stroke: NET.out }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-      </svg>
+          <line v-if="hover?.kind === 'net'" class="cursor" :x1="cursorX" y1="0" :x2="cursorX" y2="100" vector-effect="non-scaling-stroke" />
+        </svg>
+        <div v-if="hover?.kind === 'net' && tip" class="tip" :style="{ left: (hover?.left ?? 50) + '%' }">
+          <div class="tip-time">{{ tip.time }}</div>
+          <div v-for="l in tip?.lines ?? []" :key="l.name" class="tip-line">
+            <span class="tip-name"><i class="tip-dot" :style="{ '--dot': l.color }" />{{ l.name }}</span><b>{{ l.value }}</b>
+          </div>
+        </div>
+      </div>
+      <div class="axis-x"><span>{{ rtFrom }}</span><span>现在 {{ rtTo }}</span></div>
     </div>
-    <EmptyState v-else title="暂无采样数据" hint="采集由内部调度器驱动，稍候自动出现" />
+    <EmptyState v-else title="暂无采样数据" hint="采集启动后会自动出现" />
 
     <!-- 历史趋势：持久化长时趋势（nano 档位不落盘） -->
     <div class="sec-head">
@@ -238,27 +327,37 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
         <button class="chip" :class="{ on: gran === '1h' }" @click="gran = '1h'; loadHistory()">1h</button>
       </span>
     </div>
-    <p class="sec-note">
-      <b>设计目的：</b>将内存环形缓冲中的实时采样聚合并落盘，形成可回看的长时趋势，弥补实时曲线只保留近 60 秒的局限。<br>
-      <b>数据含义：</b>每个点来自已落盘的聚合表——<code>1m</code> 粒度下每点代表「该 1 分钟内的聚合值」（默认保留 7 天），<code>1h</code> 粒度下每点代表「该 1 小时内的聚合值」（保留 90 天）。<br>
-      <b>关于「1m」：</b>它是<strong>聚合粒度（一个点的时间桶宽）</strong>，并非「仅过去 1 分钟」。整条曲线覆盖服务运行以来已落盘的全部历史；nano 档位不落盘，故无此模块。<br>
-      <b>覆盖范围：</b>历史聚合表当前落盘 <strong>CPU / 内存 / 负载</strong> 三项；磁盘与网络为实时指标，未进入历史聚合，故本模块不含二者。
-    </p>
+    <p class="sec-note">1m 每点代表 1 分钟，可回看 7 天；1h 每点代表 1 小时，可回看 90 天。悬停查看各点数值。</p>
     <EmptyState v-if="historyUnavailable"
-      title="nano 档位不落盘历史数据"
-      hint="512MB 机器仅保留内存环形缓冲，升级档位后即可查看长时曲线" />
+      title="nano 档位不提供历史曲线"
+      hint="升级档位后即可查看长时趋势" />
     <div v-else-if="histRows.length" class="card chart">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi">
-        <polyline :points="histCpuPts" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
+      <div class="plot">
+        <div class="axis-y">
+          <span v-for="t in pctTicks" :key="t.y" :style="{ top: t.y + '%' }">{{ t.label }}</span>
+        </div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="multi"
+             @mousemove="onHover($event, 'hist', histRows.length)" @mouseleave="hover = null">
+          <line v-for="t in pctTicks" :key="t.y" class="grid" x1="0" :y1="t.y" x2="100" :y2="t.y" vector-effect="non-scaling-stroke" />
+          <path :d="histCpuPath" fill="none" :style="{ stroke: COLOR.cpu }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="histMemPts" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
+          <path :d="histMemPath" fill="none" :style="{ stroke: COLOR.mem }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-        <polyline :points="histLoadPts" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
+          <path :d="histLoadPath" fill="none" :style="{ stroke: COLOR.load }" stroke-width="1"
                   vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
-      </svg>
-      <p class="dim pad">CPU / 内存 / 负载 历史趋势 · 当前粒度 {{ gran === '1m' ? '1 分钟' : '1 小时' }}</p>
+          <line v-if="hover?.kind === 'hist'" class="cursor" :x1="cursorX" y1="0" :x2="cursorX" y2="100" vector-effect="non-scaling-stroke" />
+        </svg>
+        <div v-if="hover?.kind === 'hist' && tip" class="tip" :style="{ left: (hover?.left ?? 50) + '%' }">
+          <div class="tip-time">{{ tip.time }}</div>
+          <div v-for="l in tip?.lines ?? []" :key="l.name" class="tip-line">
+            <span class="tip-name"><i class="tip-dot" :style="{ '--dot': l.color }" />{{ l.name }}</span><b>{{ l.value }}</b>
+          </div>
+        </div>
+      </div>
+      <div class="axis-x"><span>{{ histFrom }}</span><span>{{ histTo }}</span></div>
+      <p class="dim pad">CPU / 内存 / 负载 · {{ gran === '1m' ? '每点 1 分钟' : '每点 1 小时' }}；负载纵轴自适应</p>
     </div>
-    <EmptyState v-else title="历史数据为空" hint="服务运行片刻后开始聚合落盘" />
+    <EmptyState v-else title="历史数据为空" hint="运行片刻后即可查看" />
 
   </div>
 </template>
@@ -267,6 +366,28 @@ function buildHist(accessor: (r: HistRow) => number, max: number) {
 .chart { padding: 10px; }
 .chart svg { width: 100%; height: 130px; display: block; }
 .chart svg.multi { height: 150px; }
+.plot { position: relative; display: flex; gap: 6px; }
+.plot svg { flex: 1; width: auto; min-width: 0; }
+.axis-y { position: relative; width: 34px; flex: none; }
+.axis-y span { position: absolute; right: 0; transform: translateY(-50%);
+  font-size: var(--fs-12); color: var(--c-text-dim); }
+.axis-x { display: flex; justify-content: space-between; margin: 4px 0 0 40px;
+  font-size: var(--fs-12); color: var(--c-text-dim); }
+.grid { stroke: var(--c-border); stroke-width: 1; }
+.threshold { stroke-width: 1; stroke-dasharray: 4 3; }
+.threshold.hot { stroke: var(--chart-hot); }
+.threshold.danger { stroke: var(--c-danger); }
+.cursor { stroke: var(--c-text-dim); stroke-width: 1; stroke-dasharray: 2 2; }
+.threshold-note { margin: 4px 0 0 40px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.tip { position: absolute; top: 4px; transform: translateX(-50%); min-width: 118px;
+  padding: 6px 8px; background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--radius-xs); pointer-events: none; }
+.tip-time { color: var(--c-text-dim); font-size: var(--fs-12); margin-bottom: 3px; }
+.tip-line { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: var(--fs-12); line-height: 1.6; white-space: nowrap; }
+.tip-name { display: inline-flex; align-items: center; gap: 5px; color: var(--c-text-dim); }
+.tip-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; background: var(--dot); }
+.tip-line b { color: var(--c-text); font-weight: 600; }
 .pad { padding: 4px 2px 0; margin: 0; }
 /* 模块说明：与图例/曲线配套，避免与页面副标重复 */
 .sec-note { margin: 6px 2px 12px; font-size: var(--fs-12-5); line-height: 1.7; color: var(--c-text-dim); }
