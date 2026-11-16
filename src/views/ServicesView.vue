@@ -33,6 +33,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import { usePolling } from '@/composables/usePolling'
 // 软件区的卡片分组 / 单元兜底匹配 / 跨主版本文案：纯逻辑在 .ts 里（SFC 内测不了）
 import { findServiceUnit, groupInstalled, groupInstallable, majorUpgradeDetail } from '@/composables/serviceCards'
+import { matchFields } from '@/composables/listSearch'
 import PkgIcon from '@/components/PkgIcon.vue'
 import TabBar from '@/components/TabBar.vue'
 import PageLayout from '@/components/PageLayout.vue'
@@ -127,14 +128,20 @@ const tab = computed<'software' | 'services'>(() =>
 const onlyFailed = computed(() => route.query.filter === 'failed')
 const shownSvcs = computed(() => onlyFailed.value
   ? svcs.value.filter(s => s.state === 'failed') : svcs.value)
-// 列头排序：与「仅看失败」筛选**正交**——shownSvcs 是筛选结果，svcRows 再在筛选结果上排序。
+// 页级搜索框位于 tools-row：两个 Tab 共用同一个查询词（同一时刻只渲染一个 Tab）。
+// 只过滤 shownSvcs 的**副本**——svcs 原样保留给软件卡片反查服务状态，裁掉会误显示无服务。
+// 关键字段取用户在表里看得见的：服务名 / 说明 / 状态文案（搜「失败」能直接命中心态）。
+const q = ref('')
+const searchedSvcs = computed(() => shownSvcs.value.filter(s =>
+  matchFields(q.value, [s.name, s.description, serviceStateLabel(s.state)])))
+// 列头排序：与「仅看失败」筛选**正交**——searchedSvcs 是筛选结果，svcRows 再在筛选结果上排序。
 // 数据源是前端内存（svcs 随 5s 轮询刷新），排序不改后端请求，仅影响展示顺序。
 // 排序规则抽成纯函数 composables/svcTableSort.ts（有单测）；视图只管「点表头切列/方向」。
 import { sortSvcRows, type SvcSortKey, type SvcSortDir } from '@/composables/svcTableSort'
 const sortKey = ref<SvcSortKey>('name')
 const sortDir = ref<SvcSortDir>('asc')
 /** 在当前筛选结果上应用排序；排序只影响展示，不改原始数据与筛选语义。 */
-const svcRows = computed(() => sortSvcRows(shownSvcs.value, sortKey.value, sortDir.value))
+const svcRows = computed(() => sortSvcRows(searchedSvcs.value, sortKey.value, sortDir.value))
 function toggleSvcSort(k: SvcSortKey) {
   if (sortKey.value === k) {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -149,6 +156,8 @@ function toggleSvcSort(k: SvcSortKey) {
 const { size, page, pageCount, pageRows, total, changeSize, gotoPage } = useTableControls({
   rows: svcRows, defaultSize: 100, columns: [], persistKey: 'services.units',
 })
+/** 改搜索词回第一页：否则「搜到 3 条却停在第 4 页」会先空一屏再被夹回来 */
+watch(q, () => { page.value = 1 })
 
 // 供全站统一的分段控件 components/TabBar.vue 渲染（路由模式：点击即导航，
 // 高亮按 route.path 精确比对）。顺序与侧边栏菜单名「软件与服务」对齐：
@@ -191,6 +200,37 @@ const installedByCat = computed(() =>
 
 // 可安装软件按类别分组：白名单内、且尚未安装的包。
 const installableByCat = computed(() => groupInstallable(CATEGORIES, installedNames.value))
+
+/**
+ * 软件 Tab 共用同一个 q：按包名 / 品牌名 / 后端下发的用途说明匹配。
+ * 过滤发生在分组**之后**——CATEGORIES 的类别顺序与组内顺序不变，pkgs 原集合也不动；
+ * 空类别连同标题一起去掉（与 groupInstalled/groupInstallable 的既有约定一致）。
+ */
+const visibleInstalledByCat = computed(() => {
+  if (!q.value.trim()) return installedByCat.value
+  return installedByCat.value
+    .map(c => ({
+      ...c,
+      items: c.items.filter(p => matchFields(q.value, [
+        p.name, labelOf(p.name), helpMap.value.get(p.name)?.summary,
+      ])),
+    }))
+    .filter(c => c.items.length > 0)
+})
+const visibleInstallableByCat = computed(() => {
+  if (!q.value.trim()) return installableByCat.value
+  return installableByCat.value
+    .map(c => ({
+      ...c,
+      items: c.items.filter(n => matchFields(q.value, [
+        n, labelOf(n), helpMap.value.get(n)?.summary,
+      ])),
+    }))
+    .filter(c => c.items.length > 0)
+})
+/** 零结果必须是独立空态：不能落进「暂无已安装软件」，那会把「没搜到」说成「没装」。 */
+const pkgNoMatch = computed(() => !!q.value.trim() && pkgs.value !== null
+  && !visibleInstalledByCat.value.length && !visibleInstallableByCat.value.length)
 
 async function load(silent = false) {
   // silent=true 是轮询刷新：不能重置 loading（否则表格每轮闪一次骨架），
@@ -584,6 +624,11 @@ async function doConfirmed() {
     <div class="tools-row">
       <TabBar :tabs="TABS" />
       <span class="spacer" />
+      <!-- 搜索放页级工具条：两个 Tab 共用同一入口，位置沿用全站「spacer 右侧动作簇」范式 -->
+      <input v-model="q" class="filter" type="search"
+        :placeholder="tab === 'services' ? '搜索服务名 / 说明 / 状态…' : '搜索软件名称 / 用途…'"
+        :aria-label="tab === 'services' ? '搜索服务' : '搜索软件'" />
+      <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
       <HelpBtn title="软件与服务说明" aria-label="软件与服务说明" :expanded="helpOpen" @click="helpOpen = true" />
       <!-- 禁用依据必须是真实加载态：此前用恒空的 busy，保护从未生效 -->
       <RefreshBtn :disabled="tab === 'services' ? loading : pkgs === null" @click="refresh()" />
@@ -649,9 +694,15 @@ async function doConfirmed() {
                 <td class="dim svc-desc">{{ s.description ?? '—' }}</td>
                 <td class="acts-col nowrap"><button class="btn-ghost btn-sm">详情 ›</button></td>
               </tr>
-              <tr v-if="!shownSvcs.length"><td colspan="5">
-                <EmptyState :title="onlyFailed ? '没有失败的服务' : '未发现服务'"
-                  :hint="onlyFailed ? '异常已恢复，或该筛选下暂无失败单元' : undefined" />
+              <tr v-if="!pageRows.length"><td colspan="5">
+                <EmptyState
+                  :title="q.trim() ? `没有匹配「${q.trim()}」的服务` : (onlyFailed ? '没有失败的服务' : '未发现服务')"
+                  :hint="q.trim() ? '换个关键词，或清空搜索查看全部服务。'
+                    : (onlyFailed ? '异常已恢复，或该筛选下暂无失败单元' : undefined)">
+                  <template v-if="q.trim()" #cta>
+                    <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                  </template>
+                </EmptyState>
               </td></tr>
             </tbody>
           </table>
@@ -671,17 +722,24 @@ async function doConfirmed() {
         :reason="auth.capabilities[CAP.PACKAGE_INSTALL]?.reason ?? undefined" />
       <template v-else>
         <div v-if="pkgs === null" class="card"><div class="skeleton shimmer box" /></div>
+        <!-- 搜索零结果是独立状态：不能落进下面的「暂无已安装软件」，那会把「没搜到」说成「没装」 -->
+        <EmptyState v-else-if="pkgNoMatch" :title="`没有匹配「${q.trim()}」的软件`"
+          hint="换个关键词，或清空搜索查看全部软件。">
+          <template #cta>
+            <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+          </template>
+        </EmptyState>
         <template v-else>
           <p v-if="pkgNote" class="tip dim">{{ pkgNote }}</p>
           <!-- 已安装软件：按类别分组 -->
-          <div v-if="installedByCat.length" class="card" style="margin-bottom:14px">
+          <div v-if="visibleInstalledByCat.length" class="card" style="margin-bottom:14px">
             <!-- 不再挂「（白名单内 N 个）」：
                  ① "白名单内"是实现概念，用户不关心这个限制条件；
                  ② 总数已被下面每个类别标题的「已装 1/3 」分项表达，更直观且带分母。 -->
             <div class="sec-head">
               <Icon name="database" :size="16" /> 已安装软件
             </div>
-            <template v-for="cat in installedByCat" :key="cat.key">
+            <template v-for="cat in visibleInstalledByCat" :key="cat.key">
               <div class="cat-head">
                 {{ cat.label }}
                 <span class="cat-count">已装 {{ cat.items.length }}/{{ cat.pkgs.length }}</span>
@@ -786,9 +844,14 @@ async function doConfirmed() {
               这里只提供经过验证的常用运维软件。卸载会排队执行，进度见顶部任务条。
             </p>
           </div>
-          <EmptyState v-else title="暂无已安装软件" hint="从下方「安装软件」中选择需要的组件" />
+          <EmptyState v-else :title="q.trim() ? '没有匹配的已安装软件' : '暂无已安装软件'"
+            :hint="q.trim() ? '清空搜索可查看全部已安装软件；下方「安装软件」仍按关键词筛选。' : '从下方「安装软件」中选择需要的组件'">
+            <template v-if="q.trim()" #cta>
+              <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+            </template>
+          </EmptyState>
           <!-- 可安装软件：按类别分组 -->
-          <div v-if="installableByCat.length" class="card">
+          <div v-if="visibleInstallableByCat.length" class="card">
             <!-- 版本选择已移到「点安装 → 弹窗选版本」。此处刻意不再放任何开关或说明：
                  开关/说明放在区块头容易被略过，而弹窗就在点击路径上，用户必然看见。 -->
             <!-- 标题图标：用本区最具代表性的服务器软件 logo（Docker），
@@ -797,7 +860,7 @@ async function doConfirmed() {
             <div class="sec-head">
               <PkgIcon name="docker" label="Docker" :size="16" /> 安装软件
             </div>
-            <template v-for="cat in installableByCat" :key="cat.key">
+            <template v-for="cat in visibleInstallableByCat" :key="cat.key">
               <div class="cat-head">
                 {{ cat.label }}
                 <span class="cat-count">可选 {{ cat.items.length }}</span>

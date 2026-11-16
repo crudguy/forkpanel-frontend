@@ -51,6 +51,7 @@ import {
   applyBody, applyTemplateBody, kindLabel, hasConflict, type Draft,
 } from '@/composables/siteWaf'
 import { wafCoverage } from '@/composables/wafPresentation'
+import { matchFields } from '@/composables/listSearch'
 
 
 const auth = useAuthStore()
@@ -68,6 +69,10 @@ const WAF_TABS: { value: WafTab; label: string; icon: string }[] = [
 function setTab(v: string) { tab.value = v as WafTab }
 
 const sites = ref<Site[]>([])
+/** 站点表本地检索：站点名 / 域名与「网站」页同口径，按草稿值排序与搜索互不干扰 */
+const q = ref('')
+const filteredSites = computed(() => sites.value.filter(s =>
+  matchFields(q.value, [s.name, ...(s.domains ?? [])])))
 /** 从 ?site=<name> 定位到的站点行：编辑弹窗跳过来时高亮并滚到视野内 */
 const focusSiteId = ref<number | null>(null)
 const drafts = ref<Record<number, Draft>>({})
@@ -93,9 +98,11 @@ const {
   sortDir: siteSortDir, toggleSort: toggleSiteSort, changeSize: changeSiteSize,
   gotoPage: gotoSitePage, isSorted: isSiteSorted,
 } = useTableControls<Site>({
-  rows: sites, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+  rows: filteredSites, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
   columns: siteWafSortCols, persistKey: 'waf.sites',
 })
+/** 改搜索词回第一页 */
+watch(q, () => { sitePage.value = 1 })
 
 // 模板表：名称/档位/限速/突发/IP 白/IP 黑
 const tplSortCols: SortColumn<WafTemplate>[] = [
@@ -475,8 +482,14 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 
       <div class="card flush toolbar-card">
         <div class="card-toolbar">
-          <span class="count">共 {{ sites.length }} 个站点</span>
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filteredSites.length }} / 共 {{ sites.length }} 个站点</template>
+            <template v-else>共 {{ sites.length }} 个站点</template>
+          </span>
           <span class="spacer" />
+          <input v-model="q" class="filter" type="search" placeholder="搜索站点 / 域名…"
+            aria-label="搜索 WAF 站点" />
+          <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />
           <!-- 停用站点的改动只入库不下发：如实计数，别让用户以为已经生效 -->
           <span v-if="stoppedPending" class="dim tiny"
@@ -559,6 +572,14 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
                 </button>
               </td>
             </tr>
+            <tr v-if="!sitePageRows.length"><td colspan="9">
+              <EmptyState :title="`没有匹配「${q.trim()}」的站点`"
+                hint="换个关键词，或清空搜索查看全部站点。">
+                <template #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td></tr>
           </tbody>
         </table>
         </div>

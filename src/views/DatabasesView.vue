@@ -17,7 +17,7 @@
  * 缺少外部客户端的连接由后端标记 `client_ready=false`，此处置灰。
  * 注意它**不代表连接可达**——只表示本机有没有 psql/mysqldump 这类工具。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useModal } from '@/composables/useModal'
@@ -38,6 +38,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TablePager from '@/components/TablePager.vue'
 import SortTh from '@/components/SortTh.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
+import { matchFields } from '@/composables/listSearch'
 import {
   dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, tableOptionLabel,
   type DbLevelInput, type DbSchemaNode,
@@ -82,14 +83,22 @@ const connSortCols: SortColumn<Conn>[] = [
   { key: 'db', dir: 'asc', compare: (a, b) => (a.default_db ?? '').localeCompare(b.default_db ?? '') },
   { key: 'client', dir: 'asc', compare: (a, b) => Number(a.client_ready) - Number(b.client_ready) },
 ]
+// 连接表本地检索：名称 / 备注 / 引擎 / 主机:端口 / 库或文件都是表里可见的字段。
+// 只作用于连接列表；「数据浏览」页签的表由后端动态下发列且服务端分页，不在此列。
+const q = ref('')
+const filteredConns = computed(() => conns.value.filter(c => matchFields(q.value, [
+  c.name, c.remark, c.engine, `${c.host ?? ''}:${c.port ?? ''}`, c.default_db,
+])))
 const {
   size: connSize, page: connPage, pageCount: connPageCount, pageRows: connRows, total: connTotal,
   sortDir: connSortDir, toggleSort: toggleConnSort, changeSize: changeConnSize,
   gotoPage: gotoConnPage, isSorted: isConnSorted,
 } = useTableControls<Conn>({
-  rows: conns, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+  rows: filteredConns, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' },
   columns: connSortCols, persistKey: 'databases.conns',
 })
+/** 改搜索词回第一页 */
+watch(q, () => { connPage.value = 1 })
 const { error, loading, run } = useAsync()
 const busy = ref(false)
 /** 帮助抽屉（A6）：页面头部「?」打开，承载引擎差异与能力边界的完整说明 */
@@ -455,8 +464,14 @@ async function exportCsv() {
       <div v-if="loading && !conns.length" class="skeleton box" />
       <div v-else-if="conns.length" class="card flush toolbar-card">
         <div class="card-toolbar">
-          <span class="count">共 {{ conns.length }} 个连接</span>
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filteredConns.length }} / 共 {{ conns.length }} 个连接</template>
+            <template v-else>共 {{ conns.length }} 个连接</template>
+          </span>
           <span class="spacer" />
+          <input v-model="q" class="filter" type="search" placeholder="搜索名称 / 主机 / 库…"
+            aria-label="搜索数据库连接" />
+          <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <RefreshBtn :disabled="busy" sm @click="load" />
         </div>
         <!-- 横滚只发生在表格上：卡片已改 overflow:hidden，否则窄屏横滚会把工具条一起带走 -->
@@ -518,6 +533,14 @@ async function exportCsv() {
                 <button v-if="canManage" class="btn-ghost btn-sm danger" :disabled="busy" @click="delTarget = c"><Icon name="trash" :size="13" /> 删除</button>
               </td>
             </tr>
+            <tr v-if="!connRows.length"><td colspan="7">
+              <EmptyState :title="`没有匹配「${q.trim()}」的连接`"
+                hint="换个关键词，或清空搜索查看全部连接。">
+                <template #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td></tr>
           </tbody>
         </table>
         </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -13,6 +13,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
+import { matchFields } from '@/composables/listSearch'
 
 /** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
 interface UserOut {
@@ -50,11 +51,21 @@ const userSortCols: SortColumn<UserOut>[] = [
   { key: 'mfa_enabled', dir: 'asc', compare: (a, b) => Number(a.mfa_enabled) - Number(b.mfa_enabled) },
   { key: 'last_login_at', dir: 'desc', compare: (a, b) => (a.last_login_at ?? 0) - (b.last_login_at ?? 0) },
 ]
+/**
+ * 列表本地检索：用户名 / 角色（含中文显示名）/ 权限范围都是表里可见的字段。
+ * 权限范围常是路径，搜「/srv」能快速找出被限制在该目录的用户。
+ */
+const q = ref('')
+const filteredUsers = computed(() => users.value.filter(u => matchFields(q.value, [
+  u.username, u.role, roleLabel(u.role), ...(u.allowed_roots ?? []),
+])))
 const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
   useTableControls<UserOut>({
-    rows: users, defaultSize: 100, defaultSort: { key: 'username', dir: 'asc' }, columns: userSortCols,
+    rows: filteredUsers, defaultSize: 100, defaultSort: { key: 'username', dir: 'asc' }, columns: userSortCols,
     persistKey: 'users.list',
   })
+/** 改搜索词回第一页 */
+watch(q, () => { page.value = 1 })
 
 /** 可分配的内置角色（owner 不可经 API 分配，故不在列）。 */
 const ROLES = ['admin', 'operator', 'viewer']
@@ -179,8 +190,14 @@ onMounted(() => { if (canManage.value) load() })
       <div v-else class="card flush toolbar-card">
         <div class="card-toolbar">
           <Icon name="users" :size="16" />
-          <span class="count">共 {{ users.length }} 个用户</span>
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filteredUsers.length }} / 共 {{ users.length }} 个用户</template>
+            <template v-else>共 {{ users.length }} 个用户</template>
+          </span>
           <span class="spacer" />
+          <input v-model="q" class="filter" type="search" placeholder="搜索用户名 / 角色…"
+            aria-label="搜索用户" />
+          <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <button class="btn-primary" :disabled="loading || notReady || !canManage"
         :title="canManage ? '' : '无 user.manage 权限'" @click="openCreate">
             <Icon name="user-plus" :size="14" /> 新建用户
@@ -226,7 +243,14 @@ onMounted(() => { if (canManage.value) load() })
             </tr>
             <!-- colspan 必须等于表头列数（用户名/角色/权限范围/状态/MFA/最后登录/操作 = 7）。
                  此前写 5，空列表时 EmptyState 只占前 5 列，最后一列留空。 -->
-            <tr v-if="!total"><td colspan="7"><EmptyState title="无用户" /></td></tr>
+            <tr v-if="!pageRows.length"><td colspan="7">
+              <EmptyState :title="q.trim() ? `没有匹配「${q.trim()}」的用户` : '无用户'"
+                :hint="q.trim() ? '换个关键词，或清空搜索查看全部用户。' : undefined">
+                <template v-if="q.trim()" #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td></tr>
           </tbody>
         </table>
         </div>

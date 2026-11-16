@@ -8,7 +8,7 @@
  * 2. 提交前用确认弹窗展示"本次将放行哪些端口 / 来源"，让用户看清再点（prepareApply 实现）。
  * 3. 后端在 apply 前会无条件做快照并在失败时回滚，UI 明确告知这一点。
  */
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +22,7 @@ import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
+import { matchFields } from '@/composables/listSearch'
 
 interface Rule {
   id: string; ports: string; protocol: string; action: string
@@ -49,11 +50,19 @@ const ruleSortCols: SortColumn<Rule>[] = [
 ]
 // 默认按端口升序：这张表的常见用途是查「某端口放没放行」，升序让同端口族（22/80/443、
 // 8000-8100）彼此相邻；同时给出稳定顺序，不必依赖后端每次返回的排列。
+// 规则表本地检索：端口 / 来源 / 备注 / 协议都是肉眼定位规则时用的字段。
+// 协议存的是枚举值，故同时匹配 label（用户会搜「tcp」「TCP」，也会搜中文显示名）。
+const q = ref('')
+const filteredRules = computed(() => rules.value.filter(r => matchFields(q.value, [
+  r.ports, r.source, r.comment, r.protocol, fwProtocolLabel(r.protocol),
+])))
 const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
   useTableControls<Rule>({
-    rows: rules, defaultSize: 100, defaultSort: { key: 'ports', dir: 'asc' }, columns: ruleSortCols,
+    rows: filteredRules, defaultSize: 100, defaultSort: { key: 'ports', dir: 'asc' }, columns: ruleSortCols,
     persistKey: 'firewall.rules',
   })
+/** 改搜索词回第一页 */
+watch(q, () => { page.value = 1 })
 
 const backend = ref('')
 const active = ref(false)
@@ -313,7 +322,18 @@ onMounted(() => { load(); loadFail2ban() })
           text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
       </section>
 
-      <div class="card flush" v-if="total">
+      <!-- 卡片按原始规则数渲染：搜不到时表体给独立空态，搜索框仍在，用户能就地清空 -->
+      <div class="card flush toolbar-card" v-if="rules.length">
+        <div class="card-toolbar">
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filteredRules.length }} / 共 {{ rules.length }} 条规则</template>
+            <template v-else>共 {{ rules.length }} 条规则</template>
+          </span>
+          <span class="spacer" />
+          <input v-model="q" class="filter" type="search" placeholder="搜索端口 / 来源 / 备注…"
+            aria-label="搜索防火墙规则" />
+          <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
+        </div>
         <div class="t-scroll">
         <table class="fixed" v-table-nav>
           <!-- 列宽（站点表范式）：来源为唯一弹性列；方向列窄屏隐藏（.col-opt，恒为入站/出站枚举）。 -->
@@ -350,13 +370,21 @@ onMounted(() => { load(); loadFail2ban() })
                 </button>
               </td>
             </tr>
+            <tr v-if="!pageRows.length"><td colspan="8">
+              <EmptyState :title="`没有匹配「${q.trim()}」的规则`"
+                hint="换个关键词，或清空搜索查看全部规则。">
+                <template #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td></tr>
           </tbody>
         </table>
         </div>
         <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
           @update:page="gotoPage" @update:size="changeSize" />
       </div>
-      <EmptyState v-else title="暂无规则">
+      <EmptyState v-else-if="!rules.length" title="暂无规则">
         <template #cta>
           <button class="btn-primary" :disabled="!canManage"
             :title="canManage ? '' : '无 firewall.manage 权限'" @click="focusAllow">放行第一个端口</button>

@@ -6,7 +6,7 @@
  * Windows/macOS 完全不同。所以 UI 只负责收集字符串，校验交给后端，
  * 并把后端返回的校验错误原样展示 —— 前端绝不自作聪明地"帮你解析"。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
@@ -22,6 +22,7 @@ import TablePager from '@/components/TablePager.vue'
 import { useModal } from '@/composables/useModal'
 import { toast } from '@/composables/useToast'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
+import { matchFields } from '@/composables/listSearch'
 
 interface Job {
   id: string; expr: string; command: string; user: string
@@ -44,11 +45,19 @@ const cronSortCols: SortColumn<Job>[] = [
   { key: 'last_run_at', dir: 'desc', compare: (a, b) => (a.last_run_at ?? 0) - (b.last_run_at ?? 0) },
   { key: 'next', dir: 'asc', compare: (a, b) => (a.next?.[0] ?? Number.MAX_SAFE_INTEGER) - (b.next?.[0] ?? Number.MAX_SAFE_INTEGER) },
 ]
+// 任务名（Job.id）/ 表达式 / 命令 / 执行用户都是表里可见的字段：
+// 搜「backup」找任务、搜「/opt/」找命令，比逐行扫表达式快得多。
+const q = ref('')
+const filteredJobs = computed(() => jobs.value.filter(j => matchFields(q.value, [
+  j.id, j.expr, j.command, j.user,
+])))
 const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
   useTableControls<Job>({
-    rows: jobs, defaultSize: 100, defaultSort: { key: 'id', dir: 'asc' }, columns: cronSortCols,
+    rows: filteredJobs, defaultSize: 100, defaultSort: { key: 'id', dir: 'asc' }, columns: cronSortCols,
     persistKey: 'cron.jobs',
   })
+/** 改搜索词回第一页 */
+watch(q, () => { page.value = 1 })
 const { error, loading, run } = useAsync()
 const note = ref('')
 const form = ref({ name: '', expr: '', command: '', user: 'root' })
@@ -240,8 +249,14 @@ async function triggerWebhook(j: Job) {
       <div class="card flush toolbar-card">
         <div class="card-toolbar">
           <Icon name="clock" :size="16" />
-          <span class="count">共 {{ jobs.length }} 个任务</span>
+          <span class="count">
+            <template v-if="q.trim()">找到 {{ filteredJobs.length }} / 共 {{ jobs.length }} 个任务</template>
+            <template v-else>共 {{ jobs.length }} 个任务</template>
+          </span>
           <span class="spacer" />
+          <input v-model="q" class="filter" type="search" placeholder="搜索名称 / 命令 / 表达式…"
+            aria-label="搜索计划任务" />
+          <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <RefreshBtn sm @click="load" />
         </div>
         <div class="t-scroll">
@@ -281,6 +296,14 @@ async function triggerWebhook(j: Job) {
           :title="canManage ? '' : '无 cron.manage 权限'" @click="del = j">删除</button>
               </td>
             </tr>
+            <tr v-if="!pageRows.length"><td colspan="7">
+              <EmptyState :title="`没有匹配「${q.trim()}」的任务`"
+                hint="换个关键词，或清空搜索查看全部任务。">
+                <template #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td></tr>
           </tbody>
         </table>
         </div>

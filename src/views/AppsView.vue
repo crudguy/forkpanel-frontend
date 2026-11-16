@@ -11,7 +11,7 @@
  * - 页内动作：`service.manage`
  * - 建反代站点还需 `webserver.manage` 能力位 + `site.manage` 权限（后端叠加校验）
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText, errorFieldDetail, ValidationError } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -29,6 +29,7 @@ import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { allFieldHints } from '@/composables/appsFieldGuide'
+import { matchFields } from '@/composables/listSearch'
 // dirnameOf 此前是本文件私有的第三份父目录实现（尾斜杠输入下会取到自身而非上级），
 // 统一走 composables/filePath 的 parentPath。
 import { parentPath } from '@/composables/filePath'
@@ -92,11 +93,21 @@ const appSortCols: SortColumn<AppInfo>[] = [
   { key: 'unit', dir: 'asc', compare: (a, b) => (a.unit ?? '').localeCompare(b.unit ?? '') },
   { key: 'enabled', dir: 'asc', compare: (a, b) => Number(a.enabled) - Number(b.enabled) },
 ]
+/**
+ * 列表本地检索：应用名 / 运行时 / 端口 / 域名 / 单元都是用户定位应用时实际看的值，
+ * 全部纳入匹配。纯前端过滤，不发请求——应用是本机托管的有限集合，即时反馈更划算。
+ */
+const q = ref('')
+const filteredApps = computed(() => apps.value.filter(a => matchFields(q.value, [
+  a.name, a.runtime_label, String(a.port ?? ''), ...(a.domains ?? []), a.unit, a.state,
+])))
 const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
   useTableControls<AppInfo>({
-    rows: apps, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: appSortCols,
+    rows: filteredApps, defaultSize: 100, defaultSort: { key: 'name', dir: 'asc' }, columns: appSortCols,
     persistKey: 'apps.list',
   })
+/** 改搜索词回第一页：否则「搜到 2 条却停在第 5 页」会先空一屏再被夹回来 */
+watch(q, () => { page.value = 1 })
 
 // 系统用户列表（运行用户下拉的真实数据源）：打开应用表单时拉取，失败则退回手填。
 const systemUsers = ref<{ name: string; uid: number; login_allowed: boolean }[]>([])
@@ -374,8 +385,14 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     <div v-if="loading && !apps.length" class="skeleton box" />
     <div v-else-if="apps.length" class="card flush toolbar-card">
       <div class="card-toolbar">
-        <span class="count">共 {{ apps.length }} 个应用</span>
+        <span class="count">
+          <template v-if="q.trim()">找到 {{ filteredApps.length }} / 共 {{ apps.length }} 个应用</template>
+          <template v-else>共 {{ apps.length }} 个应用</template>
+        </span>
         <span class="spacer" />
+        <input v-model="q" class="filter" type="search" placeholder="搜索名称 / 域名 / 运行时…"
+          aria-label="搜索应用" />
+        <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />
         <RefreshBtn :disabled="loading || busyId !== null" @click="load()" />
         <button class="btn-primary" :disabled="(!canManage || !webSupported) || busyId !== null"
@@ -442,6 +459,14 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
               </button>
             </td>
           </tr>
+          <tr v-if="!pageRows.length"><td colspan="8">
+            <EmptyState :title="`没有匹配「${q.trim()}」的应用`"
+              hint="换个关键词，或清空搜索查看全部应用。">
+              <template #cta>
+                <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+              </template>
+            </EmptyState>
+          </td></tr>
         </tbody>
       </table>
       </div>

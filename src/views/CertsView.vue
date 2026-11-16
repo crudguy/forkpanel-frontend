@@ -10,7 +10,7 @@
  * - 菜单可见用 `site.view`（证书归属站点，恒可达）；页内动作按 `ssl.manage` 置灰。
  * - SSL 真正可用的判据在 `composables/sslGate.ts`（与站点表单同一份），本页不重写规则。
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText, isUnsupported } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -30,6 +30,7 @@ import { sslGate } from '@/composables/sslGate'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
+import { matchFields } from '@/composables/listSearch'
 
 const auth = useAuthStore()
 const certs = ref<Cert[]>([])
@@ -88,11 +89,21 @@ const certSortCols: SortColumn<Cert>[] = [
   { key: 'days_left', dir: 'asc', compare: (a, b) => (a.days_left ?? 0) - (b.days_left ?? 0) },
   { key: 'auto_renew', dir: 'asc', compare: (a, b) => Number(a.auto_renew) - Number(b.auto_renew) },
 ]
+/**
+ * 列表本地检索：域名是证书的主键，站点名由域名反查得到——两者都纳入，
+ * 这样「按站点找它名下所有证书」与「按域名找单张」都能一次输入完成。
+ */
+const q = ref('')
+const filteredCerts = computed(() => certs.value.filter(c => matchFields(q.value, [
+  c.domain, siteOf(c.domain), certSourceLabel(c.source),
+])))
 const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize, gotoPage, isSorted } =
   useTableControls<Cert>({
-    rows: certs, defaultSize: 100, defaultSort: { key: 'days_left', dir: 'asc' }, columns: certSortCols,
+    rows: filteredCerts, defaultSize: 100, defaultSort: { key: 'days_left', dir: 'asc' }, columns: certSortCols,
     persistKey: 'certs.list',
   })
+/** 改搜索词回第一页 */
+watch(q, () => { page.value = 1 })
 
 // 根证书（全局动作，始终可达——零站点也能进）
 function downloadCa() { window.location.href = API.certs.ca() }
@@ -205,8 +216,14 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
 
     <div v-else-if="certs.length" class="card flush toolbar-card">
       <div class="card-toolbar">
-        <span class="count">共 {{ certs.length }} 张证书</span>
+        <span class="count">
+          <template v-if="q.trim()">找到 {{ filteredCerts.length }} / 共 {{ certs.length }} 张证书</template>
+          <template v-else>共 {{ certs.length }} 张证书</template>
+        </span>
         <span class="spacer" />
+        <input v-model="q" class="filter" type="search" placeholder="搜索域名 / 站点…"
+          aria-label="搜索证书" />
+        <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         <HelpBtn title="证书说明" aria-label="证书说明" :expanded="helpOpen" @click="helpOpen = true" />
         <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
         <button class="btn-ghost btn-sm" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
@@ -264,6 +281,14 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
               </button>
             </td>
           </tr>
+          <tr v-if="!pageRows.length"><td colspan="7">
+            <EmptyState :title="`没有匹配「${q.trim()}」的证书`"
+              hint="换个关键词，或清空搜索查看全部证书。">
+              <template #cta>
+                <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+              </template>
+            </EmptyState>
+          </td></tr>
         </tbody>
       </table>
       </div>
