@@ -53,14 +53,13 @@ function downloadCa() {
         </button>
       </div>
       <p class="modal-lead">
-        面板自签的站点证书，全部由<b>本机这一张根 CA</b> 签发。浏览器只信任「已装进信任库的根 CA」，
-        所以直接访问会提示「不受信任 / 非私密连接」——这是证书链原理，不是面板坏了。
-        <b>导入一次</b>即可：这张 CA 签发的全部本地站点（含以后新建的）都直接受信，无需再点「继续前往」。
+        面板自签的站点证书都由<b>本机这一张根证书</b>签发。浏览器只信任已装入信任库的根证书，
+        直接访问会提示「非私密连接」，<b>不是面板故障</b>。<b>导入一次</b>即可：这张根证书签发的本地站点（含以后新建的）都会自动受信。
       </p>
       <!-- 公共 .hint-note.is-warn（此前 .ca-warn 私有复刻了一版警告样式） -->
       <p class="hint-note is-warn">
         <Icon name="alert" :size="14" class="ic" />
-        <span>根证书仅用于本机开发。<b>不要</b>把它装到不受你控制的机器上——装上等于信任该 CA 签发的任何证书。</span>
+        <span>根证书仅用于本机开发。<b>不要</b>装到不受你控制的机器上——装上等于信任它签发的所有证书。</span>
       </p>
 
       <div class="ca-actions">
@@ -70,7 +69,7 @@ function downloadCa() {
       <div class="ca-steps">
         <div class="ca-step">
           <div class="ca-step-h">① 下载</div>
-          <p class="dim">点上方按钮，浏览器会保存 <code>forkpanel-local-ca.crt</code>（PEM 格式的 X.509 证书）。</p>
+          <p class="dim">点上方按钮下载 <code>forkpanel-local-ca.crt</code>。</p>
         </div>
         <div class="ca-step">
           <div class="ca-step-h">② 装入信任库</div>

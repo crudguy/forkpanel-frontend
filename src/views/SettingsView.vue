@@ -452,11 +452,7 @@ onMounted(async () => {
               <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
             </button>
           </div>
-          <p class="sec-note">「测试连接」只请求<strong>已保存的 API Endpoint</strong>：
-            已配置模型时向 <code class="mono">/v1/chat/completions</code> 发起一次最小对话验证
-            （更权威，避免部分服务商对 <code class="mono">/v1/models</code> 误报 401）；
-            未配置模型时退回 <code class="mono">/v1/models</code> 列表。改动 Endpoint 后请先保存。
-            密钥框<strong>留空即使用已保存的密钥</strong>测试当前配置；填入新密钥则优先用填入的（先测后存）。</p>
+          <p class="sec-note">「测试连接」只请求<strong>已保存的接口地址</strong>：填了模型会发一次最简对话验证，没填则读取模型列表。改动地址后请先保存。密钥框<strong>留空即用已保存的密钥</strong>测试；填入新密钥则优先测试新值（先测后存）。</p>
         </template>
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>
@@ -516,26 +512,22 @@ onMounted(async () => {
         <div v-if="report.deployment.localhost_only" class="reach-hint">
           <div class="rh-head"><Icon name="globe" :size="15" /> 为什么局域网里其他设备连不上？</div>
           <p>
-            面板以 root 运行，且本构建的 <code class="mono">serve</code> 永远是明文 HTTP（不提供 HTTPS）。
-            两者叠加时，监听非回环地址等于把 root 操作入口明文放到网络上，登录口令可被嗅探。
-            所以默认（也是推荐）策略是<b>只监听回环</b>，由外部手段提供访问通道。
+            面板以 root 运行且只提供明文 HTTP，监听所有网卡等于把管理入口和口令暴露在网络上。
+            因此默认（也是推荐）<b>只监听本机</b>，通过外部通道访问。
           </p>
           <ul>
             <li>
-              <b>临时远程（推荐，零改配置）</b>：建 SSH 本地端口转发
+              <b>临时远程（推荐，无需改配置）</b>：建立 SSH 端口转发
               <code class="mono">ssh -L &lt;端口&gt;:127.0.0.1:&lt;端口&gt; &lt;user&gt;@&lt;server&gt;</code>，
-              然后浏览器访问 <code class="mono">http://127.0.0.1:&lt;端口&gt;</code>。
+              再访问 <code class="mono">http://127.0.0.1:&lt;端口&gt;</code>。
             </li>
             <li>
-              <b>长期对外</b>：用「公网访问」向导或站点反代——面板仍绑回环，由 nginx 终结 TLS，
-              面板自身零暴露面；即便反代配错，SSH 隧道这条应急入口依然存在。
+              <b>长期对外</b>：用「公网访问」向导或站点反代，由外部服务终结 HTTPS，面板仍只监听本机。
             </li>
             <li>
-              <b>确需局域网直连</b>：编辑
-              <code class="mono">/etc/forkpanel/config.toml</code>，把 <code class="mono">[server]</code>
-              下的 <code class="mono">localhost_only</code> 设为 <code class="mono">false</code>、
-              <code class="mono">bind</code> 设为 <code class="mono">"0.0.0.0"</code>，
-              再执行 <code class="mono">systemctl restart panel</code>。
+              <b>确需局域网直连</b>：编辑 <code class="mono">/etc/forkpanel/config.toml</code>，把 <code class="mono">[server]</code> 下的
+              <code class="mono">localhost_only</code> 设为 <code class="mono">false</code>、<code class="mono">bind</code> 设为
+              <code class="mono">"0.0.0.0"</code>，再执行 <code class="mono">systemctl restart panel</code>。
               <b>只改 bind 不生效</b>（会被 localhost_only 覆盖）。仅在可信内网使用。
             </li>
           </ul>

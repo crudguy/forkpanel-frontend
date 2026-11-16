@@ -12,8 +12,8 @@ import DirectoriesPanel from '@/components/DirectoriesPanel.vue'
 <template>
   <div class="dirs-view">
     <p class="intro dim">
-      以下路径来自面板运行时的实际布局（改过配置里的 <code>[paths]</code> 会同步反映）。
-      面板<b>不安装</b> Web 服务器与数据库：nginx 由系统包管理器提供，数据存于内嵌 SQLite。
+      以下路径来自面板的实际布局，修改配置后会自动同步。
+      面板<b>不负责安装</b> Web 服务器与数据库，数据保存在内置数据库中。
     </p>
     <DirectoriesPanel />
   </div>

@@ -239,7 +239,7 @@ async function triggerWebhook(j: Job) {
         <p v-if="previewExpr === form.expr" class="tip">
           下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
         </p>
-        <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
+        <p class="tip">按当前平台的 cron 格式填写；格式有误会在下方原样提示。</p>
       </section>
 
       <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
@@ -354,7 +354,7 @@ async function triggerWebhook(j: Job) {
               <input type="checkbox" v-model="editForm.enabled" :disabled="editBusy" /><i />
             </span>
           </label>
-          <p class="tip">表达式格式由当前平台决定，校验错误将原样返回。</p>
+          <p class="tip">按当前平台的 cron 格式填写；格式有误会在下方原样提示。</p>
           <p v-if="previewExpr === editForm.expr" class="tip">
             下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
           </p>

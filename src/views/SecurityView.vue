@@ -327,7 +327,7 @@ async function doDisable() {
                 </div>
               </div>
               <p class="warn-tip">
-                以下恢复码<b>只显示这一次</b>，请立即保存——手机丢失时它们是唯一的登录途径。
+                以下恢复码<b>只显示这一次</b>，请立即保存。手机丢失时，它们是唯一的登录途径。
               </p>
               <ul class="codes">
                 <li v-for="c in mfaEnrolling.recovery_codes" :key="c" class="mono">{{ c }}</li>
@@ -377,7 +377,7 @@ async function doDisable() {
         </div>
         <!-- 内联 style 一律收进公共类（.modal-lead）：散落的 style 属性无法统一维护 -->
         <p class="modal-lead">
-          关闭需出示第二因子，否则一个被劫持的会话就能顺手关掉账户的 MFA。
+          关闭时需验证第二因子，防止会话被劫持后账户被关闭。
         </p>
         <p v-if="mfaDisableError" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ mfaDisableError }}</span>

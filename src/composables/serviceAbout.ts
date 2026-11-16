@@ -109,6 +109,6 @@ export function serviceAbout(description: string | null | undefined, unitName: s
     /** 尾部提示：面板没有这个单元的人工说明时给出下一步该看什么 */
     hint: meaningful
       ? ''
-      : `「${unitName}」不是面板托管的软件，面板没有它的用途说明。你仍可以在这里启停、看日志、改配置。`,
+      : `面板没有「${unitName}」的用途说明。你仍可在这里启停、看日志、改配置。`,
   }
 }

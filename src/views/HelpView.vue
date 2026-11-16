@@ -24,13 +24,13 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
 <template>
   <PageLayout>
     <p class="intro dim">
-      欢迎使用 ForkPanel。这里汇总常用操作、模块说明与排障提示；侧边栏底部「帮助」可随时回到本页。
+      这里汇总常用操作、模块说明与常见问题，可随时从侧边栏「帮助」回到本页。
     </p>
 
     <!-- 常用操作：新手最常问的「这件事在哪做」，直达对应页面 -->
     <section class="card">
       <div class="sec-head"><Icon name="bolt" :size="16" /> 常用操作</div>
-      <p class="lead dim">按当前账号权限列出可直接进入的入口；未列出的模块要么没有对应权限，要么这台机器暂不支持。</p>
+      <p class="lead dim">只列出当前账号可以进入的入口。</p>
       <div class="quick-grid">
         <RouterLink v-for="t in quick" :key="t.to" :to="t.to" class="quick">
           <Icon :name="t.icon" :size="18" class="quick-ico" />
@@ -49,7 +49,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
     <!-- 模块速览：标签/图标/顺序直接取自导航项，这里只补一句说明 -->
     <section class="card">
       <div class="sec-head"><Icon name="list" :size="16" /> 模块速览</div>
-      <p class="lead dim">侧边栏各模块的一句说明；灰着的菜单把鼠标悬停上去，会显示具体原因。</p>
+      <p class="lead dim">把鼠标悬停在灰色菜单上，可查看不可用原因。</p>
       <div class="mod-grid">
         <div v-for="m in MODULE_DOCS" :key="m.to" class="mod">
           <Icon :name="m.icon" :size="18" class="mod-ico" />
@@ -80,9 +80,9 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
     <section class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 账户与安全</div>
       <ul class="faq-list">
-        <li>面板采用<strong>基于角色的访问控制（RBAC）</strong>：不同角色看到的菜单与可执行的操作用权限点区分，遵循最小权限原则。</li>
-        <li>修改登录密码在「设置」页完成；建议为每位管理员分配独立账户，而不是共用一个账号。</li>
-        <li>登录会话与操作审计可被管理员查看，请妥善保管自己的账户。</li>
+        <li>面板按角色分配权限，不同角色看到的菜单和可做的操作不同。</li>
+        <li>在「设置」页修改登录密码；建议每位管理员使用独立账号。</li>
+        <li>请妥善保管账号，操作记录可供管理员查看。</li>
       </ul>
     </section>
 
@@ -90,9 +90,9 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
     <section class="card">
       <div class="sec-head"><Icon name="archive" :size="16" /> 备份与恢复</div>
       <ul class="faq-list">
-        <li>面板内置备份（SQLite 在线备份 + tar 打包），建议<strong>定期建立备份计划</strong>，而不是等出事再补救。</li>
-        <li>修改关键配置（站点、防火墙、计划任务）前，可先手动执行一次备份，便于回滚。</li>
-        <li>从产物恢复会覆盖现有数据，需要手输确认词；<strong>面板自身的库</strong>不能在线恢复，须停服后在服务器上用命令行处理。</li>
+        <li>建议<strong>定期建立备份计划</strong>，不要等出问题再补救。</li>
+        <li>修改站点、防火墙等重要配置前，可先手动备份以便回滚。</li>
+        <li>恢复备份会覆盖现有数据，需输入确认词；面板自身的数据需在服务器上恢复。</li>
       </ul>
     </section>
 
@@ -100,10 +100,10 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
     <section class="card risk">
       <div class="sec-head"><Icon name="alert" :size="16" /> 安全提示</div>
       <ul class="faq-list">
-        <li><strong>终端是高危操作面</strong>：直接执行系统命令，误操作可能影响整台服务器。请确认命令无误，优先使用对应功能模块而不是手敲命令。</li>
-        <li><strong>公网访问会向外部开放服务</strong>：开启前务必确认防火墙白名单与 TLS 已配置，避免把管理端口直接暴露到公网。</li>
-        <li><strong>防火墙规则变更可能影响现有连接</strong>：修改入站 / 出站规则时谨慎，避免把自己挡在服务器之外。</li>
-        <li>遵循最小权限：仅在需要时授予管理类权限，日常巡检使用只读角色即可。</li>
+        <li><strong>终端可直接执行系统命令</strong>，误操作可能影响整台服务器，请优先使用对应功能页面。</li>
+        <li>开放公网访问前，请确认访问白名单与 HTTPS 已配置，避免暴露管理端口。</li>
+        <li>修改防火墙规则要谨慎，避免阻断自己的连接。</li>
+        <li>按需授予管理权限，日常巡检使用只读账号即可。</li>
       </ul>
     </section>
 

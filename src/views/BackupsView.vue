@@ -505,7 +505,7 @@ const selName = ref('')
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
-          <label class="chk" title="AES-256-GCM 加密产物。主密钥在 /var/lib/forkpanel/master.key 且不落库——丢失后备份无法恢复，请先确认已单独备份主密钥。开启远端副本时此项为必填（明文备份不得落到第三方存储）">
+          <label class="chk" title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">
             <input v-model="form.encrypt" type="checkbox" /> 静态加密
           </label>
           <label>cron（可空）
@@ -517,14 +517,12 @@ const selName = ref('')
         <RemoteTargetForm v-model="form.remote" :disabled="!canManage" />
 
         <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
-          text="静态加密采用 AES-256-GCM，主密钥不落库——丢失后备份将永远无法解密，请先单独备份主密钥。" />
+          text="主密钥不存入数据库，请单独备份。丢失后，加密的备份将永远无法解密。" />
         <p class="tip">
-          产物落在面板备份根目录之下（相对路径，防越界）。可选<b>远端副本</b>（WebDAV / S3 兼容）：凭据加密存储且<b>永不回显</b>；远端上传失败<b>不会</b>让本地备份变成失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。<b>开启远端副本时必须同时开启静态加密</b>：明文整库落到第三方存储，bucket 误公开即整库外泄，故后端会直接拒绝该组合。
+          产物保存在面板备份目录下。可选<b>远端副本</b>（兼容 WebDAV / S3）：凭据加密存储且不再显示；远端上传失败不会让本地备份判为失败，但计划会标记「部分成功」并推送通知。<b>开启远端副本时必须同时开启静态加密</b>，明文备份不得落到第三方存储，否则后端会拒绝。
         </p>
         <p class="tip">
-          数据库连接按引擎导出：SQLite 复制库文件（<code>.db</code>），MySQL / PostgreSQL 用
-          <code>mysqldump</code> / <code>pg_dump</code>（<code>.sql</code>）。恢复走同一套 provider
-          （覆盖前自动给当前库留快照）；SQL 转储只能校验"非空"，不会连库做语义校验。
+          数据库连接按引擎导出：SQLite 复制库文件，MySQL / PostgreSQL 用命令行工具导出为 SQL 文件。恢复前会自动为当前库留一份快照；SQL 文件只校验是否为空，不做内容校验。
         </p>
       </section>
 
@@ -639,7 +637,7 @@ const selName = ref('')
           <label>保留份数（1-365）
             <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
           </label>
-          <label class="chk" title="AES-256-GCM 加密产物。主密钥不落库，丢失后备份无法恢复">
+          <label class="chk" title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密">
             <input v-model="editPlan.encrypt" type="checkbox" /> 静态加密
           </label>
           <label class="chk">
@@ -798,13 +796,13 @@ const selName = ref('')
     <!-- 完整说明收进帮助抽屉（A6）：不占用页面流，头部「?」随时可查。
          浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
     <HelpDrawer :open="helpOpen" title="备份说明" @close="helpOpen = false">
-      <p>备份计划把面板数据或站点文件定期落盘，可选远端副本（WebDAV / S3 兼容）做异地容灾。</p>
-      <h4>加密与主密钥</h4>
-      <p><code>静态加密</code><b>默认开启</b>：产物用 AES-256-GCM 加密，拷贝离机也不会直接泄露整站配置与审计明细。<b>主密钥不落库</b>——一旦丢失，备份将永远无法解密，所以开启的同时必须把主密钥导出到<b>异地离线介质</b>（<code>panel key export</code> + <code>panel key check</code> 验证）。确实要明文产物时，在新建计划里取消勾选即可。</p>
+      <p>备份计划把面板数据或站点文件定期保存到本地，也可另存一份到远端（兼容 WebDAV / S3）做异地容灾。</p>
+      <h4>加密与密钥</h4>
+      <p>备份<b>默认加密</b>，即使文件被拷走也不会直接泄露内容。<b>主密钥不存入数据库——一旦丢失，备份将永远无法解密</b>，请务必导出并保存到异地（用 <code>panel key export</code> 导出、<code>panel key check</code> 验证）。确实需要明文产物时，在新建计划里取消勾选即可。</p>
       <h4>远端副本</h4>
-      <p>凭据加密存储且<b>永不回显</b>。远端上传失败<b>不会</b>让本地备份判为失败，但计划会标记 <code>partial</code> 并推一条通知——本地那份是真的，异地那份没成也必须看得见。</p>
+      <p>凭据加密存储且<b>不再显示</b>。远端上传失败<b>不会</b>让本地备份判为失败，但计划会标记「部分成功」并推送通知，方便你及时发现。</p>
       <h4>恢复</h4>
-      <p>从产物恢复是<b>高危</b>后续操作，需要手输确认词，确认前请看清将覆盖的目标。</p>
+      <p>从备份恢复是<b>高危操作</b>，需手输确认词，确认前请看清将覆盖的目标。</p>
     </HelpDrawer>
   </div>
 </template>

@@ -64,15 +64,15 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
         </button>
       </div>
       <p class="modal-lead">
-        等价于 <code>docker pull</code>：按 <b>仓库:标签</b> 从 registry 拉取（默认 <code>latest</code>）。
-        已有同名同标签镜像会被更新为本地的另一层。拉取是网络下载 + 写盘操作，仅容器管理权限可执行。
+        按 <b>仓库:标签</b> 拉取镜像（标签默认 <code>latest</code>），同名同标签会被更新。
+        拉取需要下载和写盘，仅容器管理权限可执行。
       </p>
 
       <div class="fields">
         <label class="req">
           <span>镜像引用</span>
           <input v-model="image" type="text" placeholder="如 nginx:1.27-alpine 或 library/alpine:latest" autocomplete="off" @keyup.enter="confirm" />
-          <p class="hint">支持 <code>repo:tag</code>、<code>repo</code>（默认 latest）、或带仓库域名的完整引用（如 <code>ccr.ccs.tencentyun.com/.../...:tag</code>）。不得含空白或 shell 元字符。</p>
+          <p class="hint">支持「仓库:标签」、仅仓库名（默认 latest）或带域名的完整地址。不得含空格或特殊字符。</p>
         </label>
       </div>
 

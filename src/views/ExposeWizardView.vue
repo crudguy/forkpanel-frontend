@@ -175,7 +175,7 @@ onMounted(load)
   <div class="expose-view">
     <EmptyState v-if="!auth.supported(CAP.EXPOSE_MANAGE) && !status?.supported"
       title="当前环境不支持公网暴露向导"
-      hint="公网暴露需要 nginx、expose-public.sh 脚本，且面板以 root 运行。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口见「设置 → 部署配置」或安装输出。"
+      hint="此功能需要相应的 Web 服务器、脚本和 root 权限。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口见「设置 → 部署配置」。"
       :reason="capReason ?? status?.unsupported_reason ?? undefined" />
     <!-- ⚠️ 整页置灰由 `capabilitySync.test.ts` 钉住（后端 apply/remove 双侧已接
          ensure_supported），故此处**不**降级成"进了页面再说"——但必须给出替代
@@ -218,11 +218,10 @@ onMounted(load)
       <section v-if="status?.exposed" class="card">
         <div class="sec-head"><Icon name="globe" :size="16" /> 公网访问已开启</div>
         <p class="tip">
-          面板当前通过 nginx 反向代理对外提供访问，来源受限。<b>撤销</b>后会退回到只监听
-          回环地址，SSH 隧道照常可用。
+          面板当前通过反向代理对外提供访问，来源受限。<b>撤销</b>后会退回只监听本机，SSH 隧道照常可用。
         </p>
         <RiskBanner level="warn" title="撤销前请确认你还有别的入口"
-          text="撤销会移除本页写入的 nginx 配置与 systemd drop-in。如果你此刻正是通过这个公网域名操作面板，撤销后当前页面会失效——请先准备好 SSH 隧道或本机访问。" />
+          text="撤销会移除本页写入的配置。如果你此刻正是通过这个公网域名操作面板，撤销后当前页面会失效，请先准备好 SSH 隧道或本机访问。" />
         <div class="row">
           <button class="btn-ghost danger" :disabled="busy || !canManage"
             :title="canManage ? '' : '无 system.manage 权限'"
@@ -234,12 +233,8 @@ onMounted(load)
       <section v-else-if="status" class="card">
         <div class="sec-head"><Icon name="network" :size="16" /> 开启公网访问</div>
         <p class="tip">
-          面板默认只监听 <code>127.0.0.1</code>。开启后会由 nginx 反向代理对外提供访问，
-          并用防火墙把来源限制在你填写的网段内。
-        </p>
-        <p class="tip">
-          <b>不需要</b>把 <code>bind</code> 改成 <code>0.0.0.0</code>：nginx 就在本机，
-          反代到回环端口照样能对外服务，面板自身则始终零暴露面。
+          面板默认只监听 <code>127.0.0.1</code>。开启后由反向代理对外提供访问，
+          并用防火墙把来源限制在你填写的网段内，面板自身不直接暴露。
         </p>
 
         <div class="form">
@@ -254,8 +249,7 @@ onMounted(load)
             <textarea v-model="allowText" rows="3"
               placeholder="203.0.113.10&#10;198.51.100.0/24" />
             <span class="hint">
-              一行一个，IPv4 或 IPv4/CIDR。<b>名单之外的请求一律拒绝</b>——这是唯一的闸门，
-              请把掩码写小而不是图省事填 <code>0.0.0.0/0</code>（脚本会直接拒绝）。
+              一行一个，填 IP 或网段。<b>名单之外的请求一律拒绝</b>，请把范围写小；填 <code>0.0.0.0/0</code>（放行所有）会被拒绝。
             </span>
           </label>
 

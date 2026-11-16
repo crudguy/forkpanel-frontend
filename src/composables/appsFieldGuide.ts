@@ -44,51 +44,51 @@ export function runtimeFieldHints(key: string): FieldHint[] {
   switch (key) {
     case 'node':
       return [
-        { field: FIELD_LABELS.workdir, what: '放 package.json 的目录，如 /opt/blog（须已存在，可用「浏览…」选）' },
-        { field: FIELD_LABELS.execStart, what: 'node server.js --port 3000（也可只写 node，参数另在下方环境变量里给）' },
-        { field: FIELD_LABELS.port, what: 'Node 自己 listen 的端口，如 3000；面板据此生成反代到 127.0.0.1:3000' },
+        { field: FIELD_LABELS.workdir, what: '放 package.json 的目录，如 /opt/blog（须已存在，可用「浏览」选）' },
+        { field: FIELD_LABELS.execStart, what: '如 node server.js --port 3000；参数也可写在下方环境变量里' },
+        { field: FIELD_LABELS.port, what: '程序监听的端口，如 3000；面板据此配置域名访问' },
       ]
     case 'go':
       return [
-        { field: FIELD_LABELS.workdir, what: '跟着二进制走没必要，填放运行所需文件（配置/模板）的目录，如 /opt/app' },
-        { field: FIELD_LABELS.execStart, what: '二进制路径，如 /opt/app/server；Go 只在编译时需要，服务器上不必装 Go' },
-        { field: FIELD_LABELS.port, what: '程序里监听的端口，如 8080；面板据此生成反代' },
+        { field: FIELD_LABELS.workdir, what: '放配置、模板等运行所需文件的目录，如 /opt/app' },
+        { field: FIELD_LABELS.execStart, what: '二进制文件路径，如 /opt/app/server；服务器无需安装 Go' },
+        { field: FIELD_LABELS.port, what: '程序监听的端口，如 8080' },
       ]
     case 'rust':
       return [
-        { field: FIELD_LABELS.workdir, what: '放运行所需文件（配置/静态资源）的目录，如 /opt/app' },
-        { field: FIELD_LABELS.execStart, what: '/opt/app/target/release/app（或 cargo run --release，但生产别用 cargo run）' },
-        { field: FIELD_LABELS.port, what: '程序里监听的端口，如 8080' },
+        { field: FIELD_LABELS.workdir, what: '放配置、静态资源等运行所需文件的目录，如 /opt/app' },
+        { field: FIELD_LABELS.execStart, what: '编译产物路径，如 /opt/app/target/release/app；生产环境用编译产物，不用 cargo run' },
+        { field: FIELD_LABELS.port, what: '程序监听的端口，如 8080' },
       ]
     case 'java':
       return [
-        { field: FIELD_LABELS.workdir, what: '放 jar 的目录，如 /opt/myapp（jar 路径相对它）' },
+        { field: FIELD_LABELS.workdir, what: '放 jar 的目录，如 /opt/myapp（jar 路径写相对路径）' },
         { field: FIELD_LABELS.execStart, what: 'java -jar app.jar；要调内存写成 java -Xmx512m -jar app.jar' },
-        { field: FIELD_LABELS.port, what: 'Spring Boot 默认 8080；用 server.port 改过就填改后的值' },
+        { field: FIELD_LABELS.port, what: '默认 8080；改过配置就填改后的端口' },
       ]
     case 'python':
       return [
         { field: FIELD_LABELS.workdir, what: '放 manage.py / main.py 的目录，如 /opt/myapp；venv 也建在这里' },
         { field: FIELD_LABELS.execStart, what: 'gunicorn app:app -b 127.0.0.1:8000（Django 用 project.wsgi:application）' },
-        { field: FIELD_LABELS.port, what: '与 -b 里写的端口一致，如 8000' },
+        { field: FIELD_LABELS.port, what: '与上方命令里写的端口一致，如 8000' },
       ]
     case 'dotnet':
       return [
-        { field: FIELD_LABELS.workdir, what: 'publish 产物的目录，如 /opt/myapp（不是源码目录）' },
+        { field: FIELD_LABELS.workdir, what: '发布产物的目录，如 /opt/myapp（不是源码目录）' },
         { field: FIELD_LABELS.execStart, what: 'dotnet MyApp.dll' },
-        { field: FIELD_LABELS.port, what: 'Kestrel 监听的端口，如 5000；也可在 launchSettings 里配' },
+        { field: FIELD_LABELS.port, what: '程序监听的端口，如 5000' },
       ]
     case 'php':
       return [
         { field: FIELD_LABELS.workdir, what: '项目根目录，如 /var/www/laravel（须已存在）' },
-        { field: FIELD_LABELS.execStart, what: '常驻型应用才用得上（如 php artisan serve）；普通 PHP 建站请直接用「网站」页的 PHP 类型' },
-        { field: FIELD_LABELS.port, what: '常驻进程自己监听的端口，如 8000；走 php-fpm 的站点不需要启动命令，端口由 Web 服务器转进 fpm，这里可留空' },
+        { field: FIELD_LABELS.execStart, what: '仅常驻型应用需要，如 php artisan serve；普通建站请用「网站」页的 PHP 类型' },
+        { field: FIELD_LABELS.port, what: '常驻进程监听的端口，如 8000；普通站点留空即可' },
       ]
     case 'custom':
       return [
-        { field: FIELD_LABELS.workdir, what: '启动命令的工作目录，命令里用相对路径时以它为准，如 /opt/app' },
+        { field: FIELD_LABELS.workdir, what: '启动命令的工作目录，如 /opt/app（命令用相对路径时以它为准）' },
         { field: FIELD_LABELS.execStart, what: '完整启动命令，如 ./run.sh 或 /usr/bin/python3 main.py' },
-        { field: FIELD_LABELS.port, what: '服务实际监听的端口，如 3000；确实不监听 TCP（如只跑定时任务）才留空' },
+        { field: FIELD_LABELS.port, what: '服务监听的端口，如 3000；不监听端口（如只跑定时任务）才留空' },
       ]
     default:
       // 运行时还没选：不猜，返回空数组让上层不渲染这一段。
@@ -103,9 +103,9 @@ export function runtimeFieldHints(key: string): FieldHint[] {
  * 自动建反代站点），这里只补**最常填错**的那一点，不重复表单已有文案。
  */
 export const COMMON_FIELD_HINTS: FieldHint[] = [
-  { field: FIELD_LABELS.name, what: '小写字母 / 数字 / 连字符，如 my-blog；它同时决定 systemd 单元名与默认运行用户' },
-  { field: FIELD_LABELS.runUser, what: '留空即由面板建 site-my-blog 这样的账号（禁止登录）；手填则必须是本机已存在的账号，填错会报错' },
-  { field: FIELD_LABELS.domains, what: '填了才会自动建反代站点，如 blog.example.com；域名须已解析到本机并放行 80/443' },
+  { field: FIELD_LABELS.name, what: '小写字母、数字、连字符，如 my-blog；同时用作服务名和默认运行用户' },
+  { field: FIELD_LABELS.runUser, what: '留空则由面板建名为 site-my-blog 的账号（禁止登录）；手填须是本机已有账号' },
+  { field: FIELD_LABELS.domains, what: '填了才自动建站点，如 blog.example.com；域名须已解析到本机并放行 80/443' },
 ]
 
 /** 把两组指引拼起来，供模板一次渲染。空运行时返回空数组。 */

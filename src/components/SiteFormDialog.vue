@@ -673,8 +673,8 @@ function confSpecChanged(): boolean {
       <div class="hint-note" :class="{ 'is-warn': !!editing }">
         <Icon name="info" :size="15" class="ic" />
         <span>{{ editing
-          ? '保存后立即生效：取消勾选会从 Web 服务器移除该站点配置并重载，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
-          : '保存即下发：站点会立即对外服务。取消勾选则只登记站点、不下发配置。' }}</span>
+          ? '保存后立即生效：取消勾选会移除该站点配置，站点随即停止对外服务；重新勾选则按当前设置重新下发。'
+          : '保存即生效：站点会立即对外服务。取消勾选则只登记站点、不下发配置。' }}</span>
       </div>
       </section>
       <section class="sector" id="sec-routing">
@@ -690,8 +690,8 @@ function confSpecChanged(): boolean {
         <Icon name="info" :size="14" class="ic" />
         <span>启动命令 <b>{{ curTpl.startCmd }}</b>（{{ curTpl.typical }}）<template
           v-if="curTpl.runtimePkg && runtimeDetectable">；系统包 <b :class="{ 'is-warn': tplRuntimeMissing }">{{
-          curTpl.runtimePkg }}{{ tplRuntimeMissing ? ' 未装，可到「软件」页装' : ' 已装' }}</b></template>。
-          模板只预填反代目标，<b>不会创建应用进程</b>——进程请到「服务」页托管（systemd），或用「容器」页跑 Docker。</span>
+          curTpl.runtimePkg }}{{ tplRuntimeMissing ? ' 未装，可到「软件」页安装' : ' 已装' }}</b></template>。
+          模板只预填转发目标，<b>不会创建应用进程</b>——进程请到「服务」页托管，或用「容器」页运行。</span>
       </p>
       <label v-if="form.kind === 'proxy'" class="blk full" :class="{ 'has-err': fieldErrs.upstreams }" data-f="upstreams"
         title="上游服务地址，逗号分隔可负载均衡；格式 http://127.0.0.1:3000">后端（逗号分隔）
@@ -1092,8 +1092,7 @@ function confSpecChanged(): boolean {
       <!-- 「启用」开关已上移到「基础」分区（见 sec-basic）：它是站点级全局属性，
            摆在弹窗最底部、Nginx 原文编辑器之后，既不属于任何导航分区也找不到。 -->
       <p class="tip">
-        保存前会先跑一次 nginx 语法校验，失败不会影响正在运行的配置；反代后端只接受
-        <code>http(s)://host:port</code>，WAF 与站点配置同一次下发。
+        保存前会校验配置语法，校验失败不会影响正在运行的站点；反代后端只接受 <code>http(s)://地址:端口</code>。
       </p>
       <!-- 操作条吸底：弹窗比视口高时，按钮不会随内容滚走，矮窗口下也点得到。
            错误条**不再**挤在这里——它已上移到弹窗顶部吸顶（见上方 .form-msg），

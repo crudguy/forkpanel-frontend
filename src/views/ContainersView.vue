@@ -354,18 +354,17 @@ watch(() => route.query.tab, (v) => {
 
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」与页签同排靠右 -->
     <HelpDrawer :open="helpOpen" title="容器说明" @close="helpOpen = false">
-      <p>面板提供容器的<b>列举 / 镜像 / 创建 / 生命周期（启停 / 重启 / 删除）/ 安装 / 加组 / 备注 / 网络列举 / 卷列举 / Compose 项目列举</b>等操作。</p>
-      <h4>能力边界</h4>
-      <p><b>创建容器已开放（有边界）</b>：走 <code>docker create</code>，默认不启动；不放特权开关、敏感宿主挂载（如 <code>/</code>、<code>docker.sock</code>）被后端拒绝，需手输确认词「创建容器」。等价宿主级代码执行的能力已尽量收敛。</p>
-      <p><b>日志查看已开放</b>：每行「日志」按钮查看容器最近 N 行输出（<code>docker logs</code> 只读快照，不带实时跟随——实时跟随会挂死请求，UI 用「自动刷新」轮询近似），需 <code>container.view</code>。</p>
-      <p><b>编辑资源限制已开放（仅三项）</b>：容器行「编辑」可改 CPU 配额 / 内存上限 / 重启策略（<code>docker update</code>，<b>不会重启容器</b>；CPU / 内存是热改 cgroup，重启策略只影响下次退出），需 <code>container.manage</code>。弹窗会先读出<b>当前值</b>再让你改，留空表示「这项不动」。<b>镜像 / 端口映射 / 环境变量 / 卷挂载 / 启动命令创建后不可修改</b>——Docker 没有对应命令，要改只能删容器重建；同样地，<b>把限制改回「不限制」也做不到</b>（<code>docker update</code> 传 0 会被静默忽略：rc=0 而值不变），要彻底去掉限制也只能重建容器。</p>
-      <p><b>资源用量快照已开放</b>：「资源」Tab 展示每个容器的 CPU / 内存 / 网络 IO / 磁盘 IO / PIDs（<code>docker stats --no-stream</code> 一次性快照，非流式——流式会把请求挂死），默认 3s 自动刷新、可手动关掉或点「立即刷新」，需 <code>container.view</code>。数字是 docker 的原始格式化串，未做二次解析。</p>
-      <p><b>拉取镜像已开放</b>：镜像页「拉取 / 更新镜像」按 <code>仓库:标签</code> 从 registry 拉取；失败通常是宿主网络到 registry 不可达（可配 <code>/etc/docker/daemon.json</code> 的 registry-mirrors）。镜像页顶部还有一份<b>常用镜像清单</b>（内置在面板里、<b>不联网校验</b>，只给镜像名不给版本号——写死的 tag 会过时），点「拉取」会预填名字、tag 请在弹窗里确认。<b>删除镜像已开放</b>：镜像表每行可「删除」（<code>docker rmi</code>，<b>不带 <code>-f</code></b>）；被容器引用的镜像会被拒绝，请先到「容器」Tab 删除相关容器，删除后如需再用须重新拉取。</p>
-      <p><b>网络列举已开放</b>：「网络」Tab 展示全部 Docker 网络（<code>docker network ls --no-trunc</code>，只读，需 <code>container.view</code>）。驱动 / 作用域为 docker 原始串（bridge / host / overlay / macvlan；local / swarm / global），未做翻译；ID 列展示短值，悬停可见完整 64 位。网络清单变化频率低，该 Tab <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除网络、容器接入 / 断开网络（改网络连通性影响面大，请直接用 docker CLI）。</p>
-      <p><b>卷列举已开放</b>：「卷」Tab 展示全部 Docker 卷（<code>docker volume ls</code>，只读，需 <code>container.view</code>）。宿主机挂载路径是卷数据在磁盘上的实际位置（<code>/var/lib/docker/volumes/&lt;名称&gt;/_data</code>），可用于排查磁盘占用。该 Tab 与「网络」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>仍不提供</b>：创建 / 删除卷（删除卷 = 其内数据一并丢失，请直接用 docker CLI）。</p>
-      <p><b>Compose 项目列举已开放</b>：「Compose」Tab 展示全部 Docker Compose 项目（<code>docker compose ls --all --format json</code>，只读，需 <code>container.view</code>）。状态为 compose 的组合语义串（<code>running(1)</code> / <code>exited(2)</code>，括号内为容器数），未做翻译；配置文件列是该项目的 compose 文件绝对路径（多个 <code>-f</code> 时为逗号分隔）。清单<b>含已停止项目</b>（<code>--all</code>，与「容器」Tab 含已停止容器同口径），与「网络 / 卷」一样 <b>不自动轮询</b>，需要时手动点「刷新」。<b>生命周期写操作已开放</b>：{{ COMPOSE_ACTIONS_TEXT }} / 停止并清理（down，需手输项目名；<b>永不传 <code>-v</code></b>，否则会删除该项目的命名卷）。<b>仍不提供</b>：项目级日志（<code>docker compose logs</code> 未接，请用 CLI）。</p>
-      <h4>删除语义</h4>
-      <p>删除容器<b>不会</b>自动强制：运行中的容器会拒绝删除，请先「停止」再删除。</p>
+      <p>在这里管理容器、镜像、网络和 Compose 项目。查看类操作只需「查看」权限，启停、创建等写操作需要「管理」权限。</p>
+      <h4>容器</h4>
+      <p>可列举、创建、启停、重启和删除容器，并添加备注。创建时<b>默认不启动</b>，不开放特权模式，敏感宿主目录挂载会被拒绝，需手输确认词。<b>删除不会强制</b>：运行中的容器要先停止才能删除。</p>
+      <p>每行「日志」可看最近的只读输出快照（不实时跟随，可用「自动刷新」轮询）。「编辑」可改 CPU、内存上限和重启策略，<b>不会重启容器</b>，留空表示不改该项。<b>镜像、端口映射、环境变量、卷挂载和启动命令创建后无法修改，把限额改回「不限」也做不到</b>——这些都要删掉容器重建。</p>
+      <p>「资源」页展示 CPU / 内存 / 网络 / 磁盘 IO 等用量，为一次性快照，默认每 3 秒刷新，可手动关闭或立即刷新。</p>
+      <h4>镜像</h4>
+      <p>可按「仓库:标签」拉取镜像；拉取失败通常是服务器连不上镜像源。页面顶部有一份<b>常用镜像清单</b>，点「拉取」会预填名称、标签请在弹窗里确认（清单不联网校验，标签以弹窗为准）。删除镜像时，被容器引用的会被拒绝，请先删掉相关容器；删后如需再用须重新拉取。</p>
+      <h4>网络与卷</h4>
+      <p>这两页是只读清单，变化少、不自动刷新，需要时手动点「刷新」。卷的「挂载路径」是数据在磁盘上的实际位置，可用于排查占用。<b>面板不提供创建 / 删除网络和卷</b>——删卷会连同数据一起丢失，需要请用命令行操作。</p>
+      <h4>Compose 项目</h4>
+      <p>项目清单含已停止的项目，同样需要手动刷新。可执行 {{ COMPOSE_ACTIONS_TEXT }} 以及「停止并清理」（需手输项目名）。<b>清理不会删除命名卷</b>，容器内的数据仍然保留。暂不提供项目级日志。</p>
     </HelpDrawer>
 
 

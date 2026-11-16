@@ -62,7 +62,7 @@ const rows = computed(() => {
             <div class="hd-pkg mono">{{ info.name }}</div>
           </div>
           <span v-if="info.external" class="badge badge-warn nowrap"
-                title="官方仓库通常不含此包，需先在目标机配置第三方软件源，否则安装会失败">需配源</span>
+                title="系统软件源通常不含此包，需先配置第三方软件源，否则安装会失败">需配源</span>
           <span class="spacer" />
           <button class="hd-x" type="button" aria-label="关闭" @click="emit('close')">
             <Icon name="close" :size="16" />
@@ -77,8 +77,7 @@ const rows = computed(() => {
             </template>
           </dl>
           <p class="foot dim">
-            文中端口均为软件默认值，实际以你的配置为准。安装 / 升级 / 卸载在「软件」页完成，
-            启停与日志在「服务」页。
+            文中端口为软件默认值，实际以你的配置为准。安装、升级、卸载在「软件」页，启停和日志在「服务」页。
           </p>
         </div>
 

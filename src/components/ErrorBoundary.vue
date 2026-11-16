@@ -72,8 +72,7 @@ async function copy() {
     </div>
     <p class="eb-msg">{{ err }}</p>
     <p class="eb-hint">
-      这是前端渲染异常，通常由后端返回的数据形状与预期不符引起。可以重试或刷新；
-      若反复出现，请把下面这条错误的完整信息（含浏览器控制台栈）反馈给维护者。
+      页面渲染出现异常，可先重试或刷新。若反复出现，请把下面的完整错误信息反馈给维护者。
     </p>
     <p class="eb-path">当前路由：<code>{{ route.fullPath }}</code></p>
     <div class="eb-actions">

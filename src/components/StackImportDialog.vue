@@ -124,9 +124,9 @@ function cancel() { emit('cancel') }
       </div>
 
       <p class="modal-lead">
-        粘贴外部 <code>docker-compose.yml</code>（可选 <code>.env</code>）。面板只抽取
-        <b>镜像 / 端口 / 环境变量 / 卷 / 重启 / 内存上限</b> 这些受支持字段，其余字段会列出并忽略，
-        <b>特权模式、宿主敏感挂载、host 网络等不会进入编排</b>。
+        粘贴 <code>docker-compose.yml</code>（可选 <code>.env</code>）。面板只保留
+        <b>镜像、端口、环境变量、卷、重启、内存上限</b> 等支持的字段，其余会列出并忽略；
+        <b>特权模式、敏感挂载、host 网络等不会进入编排</b>。
       </p>
 
       <label>
