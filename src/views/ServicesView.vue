@@ -182,7 +182,9 @@ const CATEGORIES: { key: string; label: string; pkgs: string[] }[] = [
   { key: 'web', label: 'Web 服务', pkgs: ['nginx', 'caddy', 'apache2', 'haproxy'] },
   { key: 'db', label: '数据库', pkgs: ['mariadb-server', 'postgresql'] },
   { key: 'cache', label: '缓存', pkgs: ['redis', 'memcached', 'valkey-server'] },
-  { key: 'runtime', label: '运行环境', pkgs: ['php-fpm', 'nodejs', 'default-jdk', 'golang-go', 'cargo'] },
+  // 运行时 = 程序跑起来必须在场的；编译工具 = 构建期用，服务器跑已编译好的程序不需要（勿再合回一类）
+  { key: 'runtime', label: '运行时', pkgs: ['php-fpm', 'nodejs'] },
+  { key: 'devtools', label: '编译开发工具', pkgs: ['default-jdk', 'golang-go', 'cargo'] },
   { key: 'storage', label: '存储', pkgs: ['minio'] },
   { key: 'monitor', label: '监控', pkgs: ['prometheus', 'grafana', 'netdata'] },
   { key: 'sec', label: '安全', pkgs: ['certbot', 'fail2ban', 'ufw'] },
@@ -715,7 +717,7 @@ async function doConfirmed() {
       </div>
     </div>
 
-    <!-- 软件 Tab：按运维类别分组（Web/数据库/缓存/运行环境/安全），靠任务流/手动刷新 -->
+    <!-- 软件 Tab：按运维类别分组（Web/数据库/缓存/运行时/编译开发工具/安全），靠任务流/手动刷新 -->
     <div v-else>
       <EmptyState v-if="!auth.supported(CAP.PACKAGE_INSTALL)"
         title="当前环境不支持软件包管理"
