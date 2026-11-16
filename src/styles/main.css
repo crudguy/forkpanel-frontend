@@ -195,6 +195,10 @@
   --c-text-mute: #8a909b;
   --c-hover: #f1f3f6;
   --c-active: rgba(255, 90, 54, 0.10);
+  /* 页签条 / 分段控件底：暗色用的 --bg-inset 是半透明黑，浅色若沿用会在白底上
+     叠成深灰（实测 rgba(0,0,0,.22)），和 --c-text-dim 的未选中页签名糊成一片。
+     这里只给 seg 家族换浅冷灰，不动其它 inset 表面（代码块、详情行等）。 */
+  --seg-bg: #e9edf3;
 
   --c-primary: #ff5a36;
   --c-primary-2: #ff7a4c;
