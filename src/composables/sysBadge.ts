@@ -14,6 +14,8 @@
  * - 两者皆无：外层 v-if 保证不渲染，兜底文案只为防 null。
  */
 
+import { distroLabel } from './systemLabel'
+
 export interface BadgeHealth {
   cpu: number
   mem: number
@@ -37,13 +39,13 @@ export function sysBadgeTip(health: BadgeHealth | null, platform: BadgePlatform 
   if (!health && !platform) return '系统状态'
   if (!health) {
     const p = platform!
-    return `${p.distro || p.os}${p.kernel ? ' · ' + p.kernel : ''} · ${p.init}｜${BADGE_CTA}`
+    return `${distroLabel(p.distro) || p.os}${p.kernel ? ' · ' + p.kernel : ''} · ${p.init}｜${BADGE_CTA}`
   }
   const d = Math.floor(health.uptime / 86400)
   const hr = Math.floor((health.uptime % 86400) / 3600)
   const up = health.uptime >= 86400 ? `${d} 天 ${hr} 小时` : `${hr} 小时`
   const env = platform
-    ? `${platform.distro || platform.os} · ${platform.arch}`
+    ? `${distroLabel(platform.distro) || platform.os} · ${platform.arch}`
       + `${platform.kernel ? ' · ' + platform.kernel : ''} · ${platform.init}`
     : ''
   return `CPU ${health.cpu.toFixed(1)}% · 内存 ${health.mem.toFixed(1)}% · 磁盘 ${health.disk.toFixed(1)}%`

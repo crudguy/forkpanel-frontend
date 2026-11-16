@@ -16,6 +16,7 @@ import SkeletonCard from '@/components/SkeletonCard.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { cpuTone, type MetricTone } from '@/composables/metricTone'
 import { bkTile, ctTile, siteTile, svcTile } from '@/composables/dashboardStatus'
+import { systemLabel } from '@/composables/systemLabel'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -436,7 +437,7 @@ async function loadStatus() {
 const sysInfo = computed(() => {
   const p = auth.platform
   return [
-    { k: '发行版', v: p?.distro || p?.os || '—' },
+    { k: '系统', v: systemLabel(p) },
     { k: '内核', v: p?.kernel || '—' },
     { k: '架构', v: p?.arch || '—' },
     { k: '初始化', v: p?.init || '—' },

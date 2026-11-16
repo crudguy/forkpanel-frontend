@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/composables/usePolling'
 import { whyDisabledForPath } from '@/composables/navPolicy'
 import { sysBadgeTip } from '@/composables/sysBadge'
+import { distroLabel } from '@/composables/systemLabel'
 import { toast } from '@/composables/useToast'
 import { themeMode, setTheme, cycleTheme, THEME_OPTIONS } from '@/composables/theme'
 import { api, errorText } from '@/api/client'
@@ -248,7 +249,7 @@ async function logout() {
              端点为何 501），概览在侧栏首项、指标条→概览属冗余快捷方式；
              早年「胶囊挨着主题切换」的偏好由本次合并让位（用户裁决合并优先）。 -->
         <RouterLink v-if="auth.platform || (healthOk && health)" to="/settings#caps" class="health" :title="healthTip">
-          <span v-if="auth.platform" class="ht">{{ auth.platform.distro || auth.platform.os }} · {{ auth.platform.arch }}</span>
+          <span v-if="auth.platform" class="ht">{{ distroLabel(auth.platform.distro) || auth.platform.os }} · {{ auth.platform.arch }}</span>
           <span v-if="healthOk && health" class="hbars">
             <span class="hb" :class="htone(health.cpu)"><i :style="{ width: hpct(health.cpu) }" /></span>
             <span class="hb" :class="htone(health.mem)"><i :style="{ width: hpct(health.mem) }" /></span>
