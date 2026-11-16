@@ -95,6 +95,8 @@ interface Overview {
   tier: string
   /** 采样已降频（低配保护），UI 需提示 */
   degraded: boolean
+  /** 公网出口 IP（panel init 探测一次写入；未探测到为 null，仅展示） */
+  public_ip: string | null
 }
 
 const ov = ref<Overview | null>(null)
@@ -443,6 +445,7 @@ const sysInfo = computed(() => {
     { k: '初始化', v: p?.init || '—' },
     { k: '档位', v: auth.me?.tier || '—' },
     { k: '运行时长', v: ov.value?.uptime_sec != null ? fmtUptime(ov.value.uptime_sec) : '—' },
+    { k: '公网 IP', v: ov.value?.public_ip || '—' },
   ]
 })
 
