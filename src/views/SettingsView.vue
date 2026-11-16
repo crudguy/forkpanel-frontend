@@ -22,6 +22,7 @@ import { useRoute } from 'vue-router'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import TabBar from '@/components/TabBar.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
 import Icon from '@/components/Icon.vue'
@@ -70,12 +71,21 @@ async function approvePublicIp() {
   }
 }
 
+// 页签：按权限过滤后展示，默认落在「AI 接入」（本页重点配置）。
+// 用 v-show 而非 v-if 承载内容：切换只改可见性，表单输入、测试连接结果、
+// 表格分页/排序等状态原地保留（组件卸载会丢 DOM 焦点与滚动位置）。
+type SettingsTab = 'llm' | 'maint' | 'roles' | 'caps'
+const activeTab = ref<SettingsTab>(route.hash === '#caps' ? 'caps' : 'llm')
+function setTab(v: string) { activeTab.value = v as SettingsTab }
+
 // 深链定位（topbar 系统徽标胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
 // 内容补上后锚点会被顶偏，故在数据就绪后再定位一次。
+// 能力矩阵现在位于独立页签：必须先切签再滚，否则锚点处于 display:none 滚不动。
 function scrollToHash() {
   const id = route.hash ? route.hash.slice(1) : ''
   if (!id) return
+  if (id === 'caps') activeTab.value = 'caps'
   requestAnimationFrame(() => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   })
@@ -157,6 +167,24 @@ const rolePerms = ref<string[]>([])
 const roleBusy = ref(false)
 const roleErr = ref('')
 const canRoles = computed(() => auth.can('user.manage'))
+
+// 可见页签随权限收敛；当前签若因权限变化消失，退回第一个可见签（能力矩阵恒在）。
+const visibleTabs = computed(() => {
+  const ts: { value: SettingsTab; label: string; icon: string }[] = []
+  if (canManage.value) {
+    ts.push({ value: 'llm', label: 'AI 接入', icon: 'sparkles' })
+    ts.push({ value: 'maint', label: '面板维护', icon: 'gear' })
+  }
+  if (canRoles.value) ts.push({ value: 'roles', label: '角色权限', icon: 'users' })
+  ts.push({ value: 'caps', label: '能力矩阵', icon: 'shield' })
+  return ts
+})
+// immediate 必需：权限不足的用户可见签只有「能力矩阵」，而 activeTab 初值是 'llm'
+// ——不立即跑一次的话四个 section 全被 v-show 隐藏，整页空白（首屏只渲染一次，
+// 之后也没有任何东西会触发这个 watch）。
+watch(visibleTabs, (ts) => {
+  if (!ts.some((t) => t.value === activeTab.value)) activeTab.value = ts[0]?.value ?? 'caps'
+}, { immediate: true })
 
 // 全站表格约定：角色表是记录列表（自定义角色会随使用增长），接客户端分页 + 表头排序。
 // 默认按角色名升序（主标识列）；权限数按条数降序（先看权限多的），来源按显示文本升序。
@@ -348,9 +376,13 @@ onMounted(async () => {
 
 <template>
   <div>
+    <div v-if="visibleTabs.length > 1" class="tabs-row">
+      <TabBar :tabs="visibleTabs" :model-value="activeTab" @change="setTab" />
+    </div>
+
     <!-- ── 面板设置（仅 settings.manage 可见）── -->
     <template v-if="canManage">
-      <section class="card">
+      <section v-show="activeTab === 'llm'" class="card">
         <div class="sec-head"><Icon name="sparkles" :size="16" /> AI 助手 · LLM 接入</div>
         <!-- 诚实文案（P0-2 改写）：叙事层**已接线**，但独立开关缺省关。
              改之前这里写的是"尚未接线"（那时后端确实没有消费点）；现在反过来了：
@@ -429,7 +461,7 @@ onMounted(async () => {
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>
 
-      <section v-if="report" class="card">
+      <section v-if="report" v-show="activeTab === 'maint'" class="card">
         <div class="sec-head"><Icon name="gear" :size="16" /> 面板维护</div>
         <p class="sec-sub">
           重启、升级与公网 IP 核准是本页仅有的系统级操作；部署级参数（监听、会话、审计、备份等）
@@ -514,7 +546,7 @@ onMounted(async () => {
 
     <!-- 能力矩阵：功能模块的开关状态总览（菜单为什么置灰、功能为什么 501），
          挂在锚点 #caps 上，topbar 系统徽标一键直达。 -->
-    <section id="caps" class="card">
+    <section id="caps" v-show="activeTab === 'caps'" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
       <table class="fixed" v-table-nav>
         <!-- 列宽：原因为唯一弹性列（ellipsis + title 悬停）。 -->
@@ -535,7 +567,7 @@ onMounted(async () => {
     </section>
 
     <!-- 角色管理（RBAC，需 user.manage） -->
-    <section v-if="canRoles" class="card">
+    <section v-if="canRoles" v-show="activeTab === 'roles'" class="card">
       <div class="sec-head"><Icon name="users" :size="16" /> 角色与权限（RBAC）</div>
       <p class="sec-note">
         内置角色的权限由<strong>代码</strong>定义，不可改也不可删。自定义角色的权限必须是

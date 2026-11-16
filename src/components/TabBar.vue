@@ -49,6 +49,10 @@ const route = useRoute()
        border: none; border-radius: var(--seg-item-radius); background: none;
        font-family: inherit; font-size: var(--fs-13-5);
        color: var(--seg-fg); text-decoration: none; cursor: pointer;
+       /* 标签是页签名，必须整词可读：窄屏下若允许换行，"AI 接入"会被折成
+          「AI / 接入」两行、页签条高度翻倍且各项高低不齐。不换行 + 外层
+          .tabs-slot 的 overflow-x:auto（容器自带）＝整条横向滚动。 */
+       white-space: nowrap; flex: none;
        transition: color .15s ease, background .15s ease; }
 .tab:hover { color: var(--c-text); }
 .tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); font-weight: 600; }

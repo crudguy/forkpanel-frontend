@@ -30,6 +30,7 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
+import TabBar from '@/components/TabBar.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 
@@ -130,6 +131,17 @@ function systemDownloadUrl(name: string) { return API.backups.systemDownload(nam
 function artifactDownloadUrl(planId: number, name: string) { return API.backups.artifactDownload(planId, name) }
 const { error, loading, run } = useAsync()
 const busy = ref(false)
+
+// 页签：计划管理（新建/列表/产物/编辑）是日常操作，放默认签；系统自动备份是只读巡检，
+// 独立成签后不再夹在列表与产物之间。v-show 保状态，切回时表单/分页/选中产物不丢。
+type BackupTab = 'plans' | 'system'
+const tab = ref<BackupTab>('plans')
+const BACKUP_TABS: { value: BackupTab; label: string; icon: string }[] = [
+  { value: 'plans', label: '备份计划', icon: 'disk' },
+  { value: 'system', label: '系统备份', icon: 'shield' },
+]
+function setTab(v: string) { tab.value = v as BackupTab }
+
 /** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
 const createSec = ref<HTMLElement | null>(null)
 function scrollToCreate() {
@@ -461,8 +473,10 @@ const selName = ref('')
       :reason="auth.capabilities[CAP.BACKUP_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
+      <div class="tabs-row"><TabBar :tabs="BACKUP_TABS" :model-value="tab" @change="setTab" /></div>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
+      <div class="tab-pane" v-show="tab === 'plans'">
       <section class="card" ref="createSec">
         <!-- 说明按钮挂在这里而非列表卡顶栏：它讲的是"备份"这项能力，而新建卡常驻，
              列表卡在零计划时不渲染——挂到列表上会随空列表一起消失。 -->
@@ -723,6 +737,9 @@ const selName = ref('')
 
       <!-- 系统自动备份：面板库的每日快照。放在链外独立区块，零计划时也照常显示
            （否则"面板在悄悄备份"这件事只在有计划时才可见，本末倒置）。 -->
+      </div><!-- /备份计划签 -->
+
+      <div class="tab-pane" v-show="tab === 'system'">
       <section class="card">
         <div class="sec-head">
           <Icon name="disk" :size="16" /> 系统自动备份
@@ -761,6 +778,7 @@ const selName = ref('')
         <TablePager :total="sysTotal" :page="sysPage" :size="sysSize" :page-count="sysPageCount"
           @update:page="sysGotoPage" @update:size="sysChangeSize" />
       </section>
+      </div><!-- /系统备份签 -->
     </template>
 
     <!-- 删除计划（审计 U5：window.confirm → ConfirmDialog） -->

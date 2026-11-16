@@ -33,6 +33,7 @@ import SqlConsole from '@/components/SqlConsole.vue'
 import { toast } from '@/composables/useToast'
 import InlineRemark from '@/components/InlineRemark.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
+import TabBar from '@/components/TabBar.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TablePager from '@/components/TablePager.vue'
 import SortTh from '@/components/SortTh.vue'
@@ -95,6 +96,16 @@ const busy = ref(false)
 const helpOpen = ref(false)
 /** 打开 SQL 控制台的连接（null = 关闭） */
 const sqlConn = ref<Conn | null>(null)
+
+// 页签：连接管理（登记/列表/备份/恢复）为默认签；库→表→行浏览与只读 SQL 控制台
+// 内容深、操作多级，独立成签。用 v-show 承载，切回时下钻层级与查询结果不丢。
+type DbTab = 'conns' | 'data'
+const tab = ref<DbTab>('conns')
+const DB_TABS: { value: DbTab; label: string; icon: string }[] = [
+  { value: 'conns', label: '连接管理', icon: 'database' },
+  { value: 'data', label: '数据浏览', icon: 'search' },
+]
+function setTab(v: string) { tab.value = v as DbTab }
 /** 空表单。port/user/password 仅 mysql/postgres 需要（口令后端 AES 加密、永不回显）。 */
 function emptyForm() {
   return { name: '', engine: 'sqlite', host: '127.0.0.1', port: '', user: '', password: '', default_db: '' }
@@ -289,6 +300,7 @@ const bCrumbs = computed(() => dbCrumbs(browseInput.value))
 let browseSeq = 0
 async function openBrowse(c: Conn) {
   error.value = ''
+  tab.value = 'data'
   const seq = ++browseSeq
   browse.value = {
     conn: c, dbs: [], db: '', schemas: [], schema: '',
@@ -358,7 +370,7 @@ async function pickTable(table: string, page = 1) {
   } catch (e) { if (seq === browseSeq) { error.value = errorText(e); b.data = null } }
 }
 
-function closeBrowse() { browseSeq++; browse.value = null }
+function closeBrowse() { browseSeq++; browse.value = null; tab.value = 'conns' }
 
 /** 导出当前表为 CSV。
  *
@@ -395,8 +407,10 @@ async function exportCsv() {
       :reason="auth.capabilities[CAP.DBMS_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
+      <div class="tabs-row"><TabBar :tabs="DB_TABS" :model-value="tab" @change="setTab" /></div>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
+      <div class="tab-pane" v-show="tab === 'conns'">
       <section class="card" id="db-create-card">
         <!-- 说明按钮挂在常驻的新增卡上：列表卡在零连接时不渲染，挂上去会随空列表消失 -->
         <div class="sec-head">
@@ -519,7 +533,9 @@ async function exportCsv() {
           </button>
         </template>
       </EmptyState>
+      </div><!-- /连接管理签 -->
 
+      <div class="tab-pane" v-show="tab === 'data'">
       <!-- 只读浏览面板 -->
       <section class="card" v-if="browse">
         <div class="sec-head">
@@ -637,6 +653,8 @@ async function exportCsv() {
         <!-- 选了表但没取到行：单独说，不占用"这一层没有对象"那句话 -->
         <p v-else-if="browse.table" class="dim">正在读取「{{ browse.table }}」的数据…</p>
       </section>
+      <EmptyState v-else title="尚未打开数据浏览" hint="在「连接管理」里点连接的「浏览」，逐层查看库、表与数据。" />
+      </div><!-- /数据浏览签 -->
     </template>
 
     <SqlConsole v-if="sqlConn" :conn="sqlConn" @close="sqlConn = null" />

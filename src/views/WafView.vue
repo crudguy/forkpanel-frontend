@@ -41,6 +41,7 @@ import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
+import TabBar from '@/components/TabBar.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
@@ -54,6 +55,18 @@ import { wafCoverage } from '@/composables/wafPresentation'
 
 const auth = useAuthStore()
 const route = useRoute()
+
+// 页签：站点防护是日常配置入口（默认签）；模板与日志是低频巡检，独立成签后不再
+// 夹在长表之间。v-show 保状态：未应用的站点草稿、模板表单、日志筛选切回都还在。
+type WafTab = 'sites' | 'templates' | 'events'
+const tab = ref<WafTab>('sites')
+const WAF_TABS: { value: WafTab; label: string; icon: string }[] = [
+  { value: 'sites', label: '站点防护', icon: 'shield' },
+  { value: 'templates', label: '策略模板', icon: 'list' },
+  { value: 'events', label: '日志与告警', icon: 'bell' },
+]
+function setTab(v: string) { tab.value = v as WafTab }
+
 const sites = ref<Site[]>([])
 /** 从 ?site=<name> 定位到的站点行：编辑弹窗跳过来时高亮并滚到视野内 */
 const focusSiteId = ref<number | null>(null)
@@ -142,6 +155,10 @@ async function focusFromQuery() {
   const name = typeof route.query.site === 'string' ? route.query.site.trim() : ''
   const hit = name ? sites.value.find(s => s.name === name) : undefined
   focusSiteId.value = hit?.id ?? null
+  // 只有带 ?site= 的深链才切签；无该参数时不得动页签——否则任何一次站点重载
+  // （刷新 / 应用后回填）都会把正在看「策略模板」「日志与告警」的用户弹回站点签。
+  if (!name) return
+  tab.value = 'sites'   // 目标行在站点签，先切签再滚
   if (!hit) return
   await nextTick()
   document.querySelector('.row-focus')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -438,6 +455,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       <button class="btn-ghost btn-sm err-retry" type="button" @click="load()">重试</button>
     </p>
 
+    <div class="tabs-row"><TabBar :tabs="WAF_TABS" :model-value="tab" @change="setTab" /></div>
+
+    <div class="tab-pane" v-show="tab === 'sites'">
     <!-- 首屏必须先给骨架：请求还在飞就渲染「暂无…」会让"没有"和"没加载出来"长得一样 -->
     <div v-if="loading && !sites.length" class="skeleton box" />
     <EmptyState v-else-if="!sites.length && !error" title="暂无站点"
@@ -546,7 +566,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           @update:page="gotoSitePage" @update:size="changeSiteSize" />
       </div>
     </template>
+      </div><!-- /站点防护签 -->
 
+      <div class="tab-pane" v-show="tab === 'templates'">
     <!-- 策略模板（026）：与站点解耦的 WAF+访问控制预设，可套用到站点。
          与 Sites/Apps 同构：有模板才渲染工具栏卡；无模板走视图级空态（#cta 提供新建入口） -->
     <div v-if="templates.length" class="card flush toolbar-card">
@@ -606,7 +628,9 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <button class="btn-primary" @click="openCreateTpl"><Icon name="plus" :size="14" /> 新建模板</button>
       </template>
     </EmptyState>
+      </div><!-- /策略模板签 -->
 
+      <div class="tab-pane" v-show="tab === 'events'">
     <!-- 威胁日志 / 拦截事件（027）：后台每分钟采集开日志站点的 403/405/429 -->
     <div class="card flush toolbar-card">
       <div class="card-toolbar">
@@ -683,6 +707,8 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <p class="evt-note">近「时间窗」内单站拦截数超过「阈值」即推送一条站内通知（在顶栏铃铛 / 通知中心查看）；同站每窗至多一条，不刷屏。仅采集开了独立 access log 的站点。</p>
       </div>
     </div>
+
+      </div><!-- /日志与告警签 -->
 
     <!-- 完整说明收进帮助抽屉（A6）；「?」在站点列表卡顶栏。浮层放链尾。 -->
     <HelpDrawer :open="helpOpen" title="WAF 说明" @close="helpOpen = false">

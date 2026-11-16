@@ -453,6 +453,17 @@ td button { vertical-align: middle; }
    → 顶层块间距契约不一致。抽到全局后四页都引用同一份。 */
 .view { display: flex; flex-direction: column; gap: 14px; }
 
+/* 本地页签的内容面板（配合 components/TabBar.vue 的受控模式）。
+   面板**只承载可见性**（`v-show`），不得生成自己的盒子：一旦是普通 block，
+   面板内的卡片就从「父级 flex 的直接子项」降级为「块内子元素」——
+   `.view` 的 14px gap 对它们失效，实测顶层卡片间距从 14px 变 0px。
+   用 display:contents 让子元素仍按父级布局参与排列，切换前后间距/流式布局
+   与改造前逐像素一致；隐藏时 v-show 的内联 `display:none` 优先级更高，照常生效。 */
+.tab-pane { display: contents; }
+/* 页签条容器（受控模式）：窄屏让这一条自身横滚，不把整页撑出横向滚动条。
+   四页（设置/备份/数据库/WAF）共用，别再各写一份 max-width/overflow/margin。 */
+.tabs-row { max-width: 100%; overflow-x: auto; margin-bottom: 12px; }
+
 /* ── 卡片顶栏工具条 ── */
 /* 范式见 ProcessesView（.procs-toolbar + .card.flush.procs-card）：把「刷新 / 新建」
    这类页面级动作收进它操作的那张卡片顶部，与下方表格合成一个统一的表头区，
