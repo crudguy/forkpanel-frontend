@@ -8,7 +8,7 @@
  *   关时后端不外发任何诊断数据（diagnose 回退纯规则报告），与未配置同路
  * - 角色与权限（RBAC）：创建/删除自定义角色；「我的权限」徽章并入本卡作参照
  *   （创建角色的规则 = 权限必须是自身权限的子集，徽章就是那个"自身权限"）
- * - 面板维护：重启 / 检查更新 / 执行升级（owner 门控）+ localhost_only 可达性引导
+ * - 面板维护：重启 / 检查更新 / 执行升级 / 核准公网 IP（owner 门控）+ localhost_only 可达性引导
  * - 能力矩阵（#caps）：功能模块开关状态总览（只读），topbar 系统徽标深链唯一落点
  *
  * 已移除的只读展示（勿复活，守卫 SettingsView.refocus.test.ts 钉住）：
@@ -46,6 +46,29 @@ const upgradeErr = ref('')
 const upgradeOpen = ref(false)
 const upgrading = ref(false)
 const canCheckUpdate = computed(() => auth.can('system.manage'))
+
+// ── 公网出口 IP（核准） ──
+// 值来自 config.toml [info]（init 探测一次写入）；「核准 IP」重新探测并写回。
+// owner 专属（写 config.toml，与重启同档）；admin 看得到值但看不到按钮。
+const pubIp = ref<string | null>(null)
+const pubIpBusy = ref(false)
+const pubIpErr = ref('')
+const canApproveIp = computed(() => auth.can('system.manage') && auth.me?.role === 'owner')
+
+async function approvePublicIp() {
+  if (pubIpBusy.value) return
+  pubIpBusy.value = true
+  pubIpErr.value = ''
+  try {
+    const r = await api.post<{ public_ip: string }>(API.system.publicIp(), {})
+    pubIp.value = r.public_ip
+    toast(`已核准公网 IP：${r.public_ip}`)
+  } catch (e) {
+    pubIpErr.value = errorText(e)
+  } finally {
+    pubIpBusy.value = false
+  }
+}
 
 // 深链定位（topbar 系统徽标胶囊直达 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
@@ -315,6 +338,10 @@ onMounted(async () => {
   await load()
   // 角色列表需要 user.manage；loadRoles 内部自判权限，非管理员直接跳过
   await loadRoles()
+  // 公网 IP：只读展示（GET 失败静默显示「—」，不打红整页）
+  api.get<{ public_ip: string | null }>(API.system.publicIp())
+    .then((r) => { pubIp.value = r.public_ip })
+    .catch(() => {})
   scrollToHash()
 })
 </script>
@@ -405,7 +432,7 @@ onMounted(async () => {
       <section v-if="report" class="card">
         <div class="sec-head"><Icon name="gear" :size="16" /> 面板维护</div>
         <p class="sec-sub">
-          重启与升级是本页仅有的系统级操作；部署级参数（监听、会话、审计、备份等）
+          重启、升级与公网 IP 核准是本页仅有的系统级操作；部署级参数（监听、会话、审计、备份等）
           在面板内<strong>不可改</strong>，需按下方提示编辑 config.toml 后重启生效——
           那类只读数值不再在此罗列，安装落点见「系统 → 目录」页。
         </p>
@@ -426,6 +453,17 @@ onMounted(async () => {
           </button>
           <span class="dim tiny">{{ installation?.can_restart ? '重启会中断当前连接；服务恢复后页面自动刷新。' : '仅 owner 可重启面板。' }}</span>
         </div>
+        <!-- 公网 IP：展示性事实（config.toml [info]）；「核准 IP」重新探测一次并写回。
+             owner 专属——写的是面板自身部署文件，与重启同档；admin 只读值。 -->
+        <div class="restart-row">
+          <span class="dim tiny">公网 IP</span>
+          <code class="mono">{{ pubIp || '—' }}</code>
+          <button v-if="canApproveIp" class="btn-ghost btn-sm" type="button"
+            :disabled="pubIpBusy" @click="approvePublicIp">
+            {{ pubIpBusy ? '核准中…' : '核准 IP' }}
+          </button>
+        </div>
+        <p v-if="pubIpErr" class="sec-note">核准失败：{{ pubIpErr }}</p>
         <!-- 检查更新反馈：只在点过「检查更新」后出现（操作反馈，不是常驻系统信息）。 -->
         <p v-if="checkingUpgrade" class="sec-note">检查中…</p>
         <p v-else-if="upgradeErr" class="sec-note">检查失败：{{ upgradeErr }}</p>

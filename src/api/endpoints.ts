@@ -34,6 +34,8 @@ export const API = {
   system: {
     capabilities: () => '/api/v1/system/capabilities',
     overview: () => '/api/v1/system/overview',
+    /** 当前核准的公网出口 IP；POST = 重新探测并核准写回（owner + system.manage）。 */
+    publicIp: () => '/api/v1/system/public-ip',
     users: () => '/api/v1/system/users',
     directories: () => '/api/v1/system/directories',
     /** 重启面板（owner + system.manage）。202 = job 已交给 PID 1；
