@@ -11,7 +11,7 @@
  * - 页内动作：`service.manage`
  * - 建反代站点还需 `webserver.manage` 能力位 + `site.manage` 权限（后端叠加校验）
  */
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { api, errorText, errorFieldDetail, ValidationError } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
@@ -157,6 +157,84 @@ const modalBox = ref<HTMLElement | null>(null)
 // 内部再调 close() 做状态清理。
 const { close: modalClose } = useModal(() => modalOpen.value, modalBox, close)
 
+/**
+ * 弹窗内的分区导航：与「新增网站」弹窗同款——左侧 rail 点按滚动到分区，滚动时
+ * 反向高亮；分区内有字段级错误时 rail 亮红点，用户切到别的分区仍找得到问题在哪。
+ * 段名必须如实对应段内字段——此前站点弹窗曾因「安全与性能」里塞着自定义片段这类
+ * 名实不符的项，找东西只能靠猜。
+ */
+const modalBody = ref<HTMLElement | null>(null)
+const navSections = [
+  { id: 'sec-basic', label: '基础' },
+  { id: 'sec-process', label: '进程配置' },
+  { id: 'sec-hosting', label: '网站托管' },
+  { id: 'sec-env', label: '环境变量' },
+] as const
+/** 字段 → 所属分区。字段级错误映射回 rail；env${i} 按前缀归入环境变量段。 */
+const FIELD_SEC: Record<string, string> = {
+  name: 'sec-basic', runtime: 'sec-basic', port: 'sec-basic',
+  workdir: 'sec-process', exec_start: 'sec-process', run_user: 'sec-process',
+  domains: 'sec-hosting',
+}
+function fieldSection(key: string): string {
+  return FIELD_SEC[key] ?? (key.startsWith('env') ? 'sec-env' : '')
+}
+const secErrs = computed<Record<string, boolean>>(() => {
+  const m: Record<string, boolean> = {}
+  for (const k of Object.keys(fieldErrs.value)) {
+    const sec = fieldSection(k)
+    if (sec) m[sec] = true
+  }
+  return m
+})
+const activeSec = ref<string>(navSections[0].id)
+/** 点导航后短暂锁住高亮：末尾分区下方内容不足，scrollTo 会被浏览器夹到最大
+ *  滚动位置，onBodyScroll 据此又把高亮弹回上一个分区——用户点了却像没点中。 */
+let navLockUntil = 0
+function scrollToSec(id: string) {
+  const body = modalBody.value
+  if (!body) return
+  const el = body.querySelector<HTMLElement>('#' + id)
+  if (!el) return
+  body.scrollTo({ top: Math.max(0, el.offsetTop - 14), behavior: 'smooth' })
+  activeSec.value = id
+  navLockUntil = Date.now() + 600
+}
+function onBodyScroll() {
+  if (Date.now() < navLockUntil) return
+  const body = modalBody.value
+  if (!body) return
+  const top = body.scrollTop + 28
+  let cur: string = navSections[0].id
+  for (const s of navSections) {
+    const el = body.querySelector<HTMLElement>('#' + s.id)
+    if (el && el.offsetTop <= top) cur = s.id
+  }
+  activeSec.value = cur
+}
+/** 字段出错（前端校验或后端 detail.field）时滚到对应分区并聚焦输入框，不让用户自己找。 */
+function revealField(key: string) {
+  const sec = fieldSection(key)
+  if (sec) activeSec.value = sec
+  // 与点导航同理：错误定位滚动的落点未必等于出错分区顶部，锁住高亮别被弹回去
+  navLockUntil = Date.now() + 600
+  nextTick(() => {
+    const body = modalBody.value
+    const el = body?.querySelector<HTMLElement>(`[data-f="${key}"]`)
+    if (!body || !el) return
+    body.scrollTo({ top: Math.max(0, el.offsetTop - 40), behavior: 'smooth' })
+    el.querySelector<HTMLElement>('input, select, textarea')?.focus()
+  })
+}
+/** 每次打开都从第一段顶部开始：上次停在哪段不该带进新的一次编辑。 */
+watch(modalOpen, (v) => {
+  if (!v) return
+  nextTick(() => {
+    modalBody.value?.scrollTo({ top: 0 })
+    activeSec.value = navSections[0].id
+  })
+})
+
 async function load(silent = false) {
   await run(
     async () => { apps.value = (await api.get<AppInfo[]>(API.apps.list())) ?? [] },
@@ -272,7 +350,12 @@ async function save() {
       if (/[\r\n=]/.test(row.k)) { errs[`env${i}`] = '变量名不能含换行或 ='; continue }
       if (/[\r\n]/.test(row.v)) errs[`env${i}`] = '变量值不能含换行'
     }
-    if (Object.keys(errs).length) { fieldErrs.value = errs; throw new ValidationError('请修正标红的字段') }
+    const firstBad = Object.keys(errs)[0]
+    if (firstBad) {
+      fieldErrs.value = errs
+      revealField(firstBad)
+      throw new ValidationError('请修正标红的字段')
+    }
 
     const payload = {
       runtime: form.value.runtime,
@@ -306,6 +389,7 @@ async function save() {
     const f = errorFieldDetail(e)
     if (f?.field) {
       fieldErrs.value = { ...fieldErrs.value, [f.field]: f.reason || errorText(e) }
+      revealField(f.field)
     }
     showErr(errorText(e))
   } finally {
@@ -488,149 +572,181 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
     <!-- 新建 / 编辑弹窗 -->
     <Teleport to="body">
     <div v-if="modalOpen" class="mask" @click.self="modalClose">
-      <div ref="modalBox" class="modal wide" role="dialog" aria-modal="true">
+      <div ref="modalBox" class="modal wide app-modal" role="dialog" aria-modal="true">
         <div class="modal-head">
           <h3 class="modal-title">{{ editing ? `编辑应用 ${editing.name}` : '新建应用' }}</h3>
           <button class="modal-close" type="button" aria-label="关闭" @click="modalClose">
             <Icon name="close" :size="16" />
           </button>
-        </div>
-
-        <p v-if="editing" class="hint-note">
-          <Icon name="info" :size="14" class="ic" />
-          <span>应用名<b>不支持修改</b>——它同时是 systemd 单元名片段与反代站点名，改名等于换单元 + 换站点。</span>
-        </p>
-
-        <!-- 通用错误条：sticky 吸顶（弹窗内容比视口高时，底部条会滚出视野） -->
-        <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
-          <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
-        </p>
-
-        <label class="blk" data-f="name">
-          名称
-          <input v-model="form.name" :disabled="!!editing" placeholder="my-blog" />
-          <span v-if="fieldErrs.name" class="field-err">{{ fieldErrs.name }}</span>
-        </label>
-
-        <label class="blk" data-f="runtime">
-          运行时
-          <select v-model="form.runtime" @change="onRuntimeChange">
-            <option value="" disabled>请选择…</option>
-            <option v-for="r in runtimes" :key="r.key" :value="r.key">{{ r.label }}</option>
-          </select>
-          <span v-if="fieldErrs.runtime" class="field-err">{{ fieldErrs.runtime }}</span>
-        </label>
-
-        <!-- 运行时说明：先讲「它是干什么的 / 什么时候该选它」（用户选运行时真正
-             需要的决策信息），再讲「启动命令 / 构建步骤 / 系统包状态」这些操作细节。
-             顺序刻意如此：原先这些内容挤在一行里，用户要先跳过一堆命令才能读到
-             「典型框架」，等于把最有用的信息埋了。 -->
-        <div v-if="curRuntime" class="hint-note rt-note">
-          <Icon name="info" :size="14" class="ic" />
-          <span>
-            <b class="rt-purpose">{{ curRuntime.purpose }}</b>
-            <br />什么时候选它：{{ curRuntime.choose_when }}
-            <br /><span class="rt-dim">典型框架 {{ curRuntime.typical }}；</span>启动命令 <b>{{ curRuntime.default_exec || '（需自行填写）' }}</b>。
-            <template v-if="curRuntime.runtime_pkg && pkgDetectable">系统包
-              <b :class="{ 'is-warn': !installedPkgs.has(curRuntime.runtime_pkg) }">
-                {{ curRuntime.runtime_pkg }}{{ installedPkgs.has(curRuntime.runtime_pkg) ? ' 已装' : ' 未装，可到「软件」页装' }}
-              </b>。</template>
-            <br /><span class="rt-dim">构建步骤：{{ curRuntime.build_hint }}</span>
-          </span>
-        </div>
-
-        <!-- 各输入框填什么：后端只下发「这运行时是什么 / 何时选」，缺「这几个框各填什么」。
-             用户选完运行时对着五个输入框仍在猜，尤其「工作目录须已存在」与「启动命令写
-             程序名还是绝对路径」——后端的字段错误要提交后才出现，事前没有提示。 -->
-        <div v-if="fieldHints.length" class="hint-note fg-note">
-          <Icon name="edit" :size="14" class="ic" />
-          <span>
-            <b>照这个填</b>（共 {{ fieldHints.length }} 项）
-            <span v-for="(h, i) in fieldHints" :key="h.field" class="fg-item">
-              <span v-if="i > 0" class="fg-sep">·</span><b class="fg-f">{{ h.field }}</b>{{ '：' }}{{ h.what }}
-            </span>
-          </span>
-        </div>
-
-        <label class="blk full" :class="{ 'has-err': fieldErrs.workdir }" data-f="workdir">
-          工作目录（绝对路径，须已存在）
-          <div class="dir-row">
-            <input v-model="form.workdir" placeholder="/opt/blog" :aria-invalid="!!fieldErrs.workdir"
-              @input="clearFieldErr('workdir')" />
-            <button type="button" class="btn-ghost btn-sm" @click="openWorkdirPicker">
-              <Icon name="folder" :size="13" /> 浏览…
-            </button>
-          </div>
-          <span v-if="fieldErrs.workdir" class="field-err">{{ fieldErrs.workdir }}</span>
-        </label>
-
-        <label class="blk full" :class="{ 'has-err': fieldErrs.exec_start }" data-f="exec_start">
-          启动命令（systemd ExecStart）
-          <div class="dir-row">
-            <input v-model="form.execStart" placeholder="app 或 /opt/blog/app"
-              :aria-invalid="!!fieldErrs.exec_start" @input="clearFieldErr('exec_start')" />
-            <button type="button" class="btn-ghost btn-sm" @click="openExecPicker">
-              <Icon name="file" :size="13" /> 浏览…
-            </button>
-          </div>
-          <span class="hint-inline">支持「程序名」（如 <code>node</code>）或绝对路径（如 <code>/opt/blog/app</code>）；
-            带参数时写 <code>node server.js --port 3000</code>，浏览只选程序本体。</span>
-          <span v-if="fieldErrs.exec_start" class="field-err">{{ fieldErrs.exec_start }}</span>
-        </label>
-
-        <label class="blk" data-f="port">
-          监听端口
-          <input v-model.number="form.port" type="number" min="1" max="65535" placeholder="3000" />
-          <span v-if="fieldErrs.port" class="field-err">{{ fieldErrs.port }}</span>
-        </label>
-
-        <label class="blk" data-f="run_user">
-          运行用户
-          <input v-model="form.runUser" placeholder="留空则自动分配 site-&lt;应用名&gt;" list="app-run-user-suggest" />
-          <datalist id="app-run-user-suggest">
-            <option v-for="u in systemUsers" :key="u.name" :value="u.name"
-              :label="`${u.name} (uid ${u.uid})${u.login_allowed ? '' : ' · 禁止登录'}`" />
-          </datalist>
-          <span class="hint-inline">留空由面板创建 <b>系统用户</b> <code>site-&lt;应用名&gt;</code>
-            （禁止登录），应用不再以 root 运行；下拉列出本机真实系统账户，也可手填任意已存在账号，
-            填错名字会报错而不会凭空建号。</span>
-          <span v-if="fieldErrs.run_user" class="field-err">{{ fieldErrs.run_user }}</span>
-        </label>
-
-        <label class="blk full" data-f="domains">
-          域名（逗号分隔，面板据此自动建反代站点）
-          <input v-model="form.domains" placeholder="blog.example.com, www.blog.example.com" />
-          <span v-if="fieldErrs.domains" class="field-err">{{ fieldErrs.domains }}</span>
-        </label>
-
-        <div class="blk full row-inline">
-          <input id="app-env-toggle" v-model="form.enabled" type="checkbox" style="width: auto" />
-          <span>托管（勾选 = 装 systemd 单元 + 下发反代站点；取消 = 撤站点并删单元）</span>
-        </div>
-
-        <div class="blk full row-inline">
-          <input id="app-restart" v-model="form.autoRestart" type="checkbox" style="width: auto" />
-          <span>崩溃自动重启（systemd Restart=always）</span>
-        </div>
-
-        <!-- 环境变量：刻意做成「键值对列表」而非 textarea ——
-             面板**不加密存储**这些值，一 textarea 反而容易让人误以为可以放密码。 -->
-        <div class="blk full env-box">
-          <div class="env-head">
-            <span>环境变量（可选）</span>
-            <button class="btn-ghost btn-sm" @click="addEnvRow"><Icon name="plus" :size="13" /> 添加</button>
-          </div>
-          <p class="env-warn">
-            <Icon name="alert" :size="13" class="ic" />
-            <span>面板<b>不加密</b>存储环境变量，<b>请勿放密码 / 密钥</b>。敏感配置请在应用代码里读自己的配置文件。</span>
+          <!-- 通用错误条放进标题行：与「新增网站」同款——标题行整体吸顶，
+               滚到任何分区都看得见，也不会和第二个 sticky 元素互相盖。 -->
+          <p v-if="formError" :key="'fe' + errSeq" class="err-bar form-msg" role="alert">
+            <Icon name="alert" :size="15" class="ic" /><span>{{ formError }}</span>
           </p>
-          <div v-for="(row, i) in form.env" :key="i" class="env-row">
-            <input v-model="row.k" placeholder="KEY" @input="clearFieldErr(`env${i}`)" />
-            <input v-model="row.v" placeholder="值" @input="clearFieldErr(`env${i}`)" />
-            <button class="btn-ghost btn-sm" title="删除该行" @click="removeEnvRow(i)">
-              <Icon name="trash" :size="13" />
-            </button>
-            <span v-if="fieldErrs[`env${i}`]" class="field-err">{{ fieldErrs[`env${i}`] }}</span>
+        </div>
+
+        <div class="modal-mid">
+          <nav class="nav-rail" aria-label="配置分区">
+            <button v-for="s in navSections" :key="s.id" type="button" class="nav-item"
+              :class="{ active: activeSec === s.id, 'has-err': secErrs[s.id] }"
+              :title="secErrs[s.id] ? '该分区内有字段未填对' : s.label"
+              @click="scrollToSec(s.id)">{{ s.label }}<i v-if="secErrs[s.id]" class="nav-dot" aria-hidden="true" /></button>
+          </nav>
+
+          <div ref="modalBody" class="modal-body" @scroll="onBodyScroll">
+            <!-- ① 基础：这是什么应用、跑在哪个端口。关键三项集中在首屏。 -->
+            <section class="sector" id="sec-basic">
+              <h4 class="sector-h">基础<small>名称 · 运行时 · 端口</small></h4>
+              <p v-if="editing" class="hint-note">
+                <Icon name="info" :size="14" class="ic" />
+                <span>应用名<b>不支持修改</b>——它同时是 systemd 单元名片段与反代站点名，改名等于换单元 + 换站点。</span>
+              </p>
+
+              <label class="blk" :class="{ 'has-err': fieldErrs.name }" data-f="name">
+                名称
+                <input v-model="form.name" :disabled="!!editing" placeholder="my-blog"
+                  :aria-invalid="!!fieldErrs.name" @input="clearFieldErr('name')" />
+                <span v-if="fieldErrs.name" class="field-err">{{ fieldErrs.name }}</span>
+              </label>
+
+              <label class="blk" :class="{ 'has-err': fieldErrs.runtime }" data-f="runtime">
+                运行时
+                <select v-model="form.runtime" :aria-invalid="!!fieldErrs.runtime" @change="onRuntimeChange">
+                  <option value="" disabled>请选择…</option>
+                  <option v-for="r in runtimes" :key="r.key" :value="r.key">{{ r.label }}</option>
+                </select>
+                <span v-if="fieldErrs.runtime" class="field-err">{{ fieldErrs.runtime }}</span>
+              </label>
+
+              <!-- 运行时说明：先讲「它是干什么的 / 什么时候该选它」（用户选运行时真正
+                   需要的决策信息），再讲「启动命令 / 构建步骤 / 系统包状态」这些操作细节。
+                   顺序刻意如此：原先这些内容挤在一行里，用户要先跳过一堆命令才能读到
+                   「典型框架」，等于把最有用的信息埋了。 -->
+              <div v-if="curRuntime" class="hint-note rt-note">
+                <Icon name="info" :size="14" class="ic" />
+                <span>
+                  <b class="rt-purpose">{{ curRuntime.purpose }}</b>
+                  <br />什么时候选它：{{ curRuntime.choose_when }}
+                  <br /><span class="rt-dim">典型框架 {{ curRuntime.typical }}；</span>启动命令 <b>{{ curRuntime.default_exec || '（需自行填写）' }}</b>。
+                  <template v-if="curRuntime.runtime_pkg && pkgDetectable">系统包
+                    <b :class="{ 'is-warn': !installedPkgs.has(curRuntime.runtime_pkg) }">
+                      {{ curRuntime.runtime_pkg }}{{ installedPkgs.has(curRuntime.runtime_pkg) ? ' 已装' : ' 未装，可到「软件」页装' }}
+                    </b>。</template>
+                  <br /><span class="rt-dim">构建步骤：{{ curRuntime.build_hint }}</span>
+                </span>
+              </div>
+
+              <!-- 各输入框填什么：后端只下发「这运行时是什么 / 何时选」，缺「这几个框各填什么」。
+                   用户选完运行时对着五个输入框仍在猜，尤其「工作目录须已存在」与「启动命令写
+                   程序名还是绝对路径」——后端的字段错误要提交后才出现，事前没有提示。 -->
+              <div v-if="fieldHints.length" class="hint-note fg-note">
+                <Icon name="edit" :size="14" class="ic" />
+                <span>
+                  <b>照这个填</b>（共 {{ fieldHints.length }} 项）
+                  <span v-for="(h, i) in fieldHints" :key="h.field" class="fg-item">
+                    <span v-if="i > 0" class="fg-sep">·</span><b class="fg-f">{{ h.field }}</b>{{ '：' }}{{ h.what }}
+                  </span>
+                </span>
+              </div>
+
+              <label class="blk" :class="{ 'has-err': fieldErrs.port }" data-f="port">
+                监听端口
+                <input v-model.number="form.port" type="number" min="1" max="65535" placeholder="3000"
+                  :aria-invalid="!!fieldErrs.port" @input="clearFieldErr('port')" />
+                <span v-if="fieldErrs.port" class="field-err">{{ fieldErrs.port }}</span>
+              </label>
+            </section>
+
+            <!-- ② 进程配置：进程怎么起、以什么身份起、崩了要不要拉起来。 -->
+            <section class="sector" id="sec-process">
+              <h4 class="sector-h">进程配置<small>工作目录 · 启动命令 · 运行用户</small></h4>
+
+              <label class="blk full" :class="{ 'has-err': fieldErrs.workdir }" data-f="workdir">
+                工作目录（绝对路径，须已存在）
+                <div class="dir-row">
+                  <input v-model="form.workdir" placeholder="/opt/blog" :aria-invalid="!!fieldErrs.workdir"
+                    @input="clearFieldErr('workdir')" />
+                  <button type="button" class="btn-ghost btn-sm" @click="openWorkdirPicker">
+                    <Icon name="folder" :size="13" /> 浏览…
+                  </button>
+                </div>
+                <span v-if="fieldErrs.workdir" class="field-err">{{ fieldErrs.workdir }}</span>
+              </label>
+
+              <label class="blk full" :class="{ 'has-err': fieldErrs.exec_start }" data-f="exec_start">
+                启动命令（systemd ExecStart）
+                <div class="dir-row">
+                  <input v-model="form.execStart" placeholder="app 或 /opt/blog/app"
+                    :aria-invalid="!!fieldErrs.exec_start" @input="clearFieldErr('exec_start')" />
+                  <button type="button" class="btn-ghost btn-sm" @click="openExecPicker">
+                    <Icon name="file" :size="13" /> 浏览…
+                  </button>
+                </div>
+                <span class="hint-inline">支持「程序名」（如 <code>node</code>）或绝对路径（如 <code>/opt/blog/app</code>）；
+                  带参数时写 <code>node server.js --port 3000</code>，浏览只选程序本体。</span>
+                <span v-if="fieldErrs.exec_start" class="field-err">{{ fieldErrs.exec_start }}</span>
+              </label>
+
+              <label class="blk" :class="{ 'has-err': fieldErrs.run_user }" data-f="run_user">
+                运行用户
+                <input v-model="form.runUser" placeholder="留空则自动分配 site-&lt;应用名&gt;" list="app-run-user-suggest"
+                  :aria-invalid="!!fieldErrs.run_user" @input="clearFieldErr('run_user')" />
+                <datalist id="app-run-user-suggest">
+                  <option v-for="u in systemUsers" :key="u.name" :value="u.name"
+                    :label="`${u.name} (uid ${u.uid})${u.login_allowed ? '' : ' · 禁止登录'}`" />
+                </datalist>
+                <span class="hint-inline">留空由面板创建 <b>系统用户</b> <code>site-&lt;应用名&gt;</code>
+                  （禁止登录），应用不再以 root 运行；下拉列出本机真实系统账户，也可手填任意已存在账号，
+                  填错名字会报错而不会凭空建号。</span>
+                <span v-if="fieldErrs.run_user" class="field-err">{{ fieldErrs.run_user }}</span>
+              </label>
+
+              <div class="blk full row-inline">
+                <input id="app-restart" v-model="form.autoRestart" type="checkbox" style="width: auto" />
+                <span>崩溃自动重启（systemd Restart=always）</span>
+              </div>
+            </section>
+
+            <!-- ③ 网站托管：域名与托管开关是一对——「托管」开着就必须有域名，放同段才讲得通。 -->
+            <section class="sector" id="sec-hosting">
+              <h4 class="sector-h">网站托管<small>域名 · 反代站点</small></h4>
+
+              <label class="blk full" :class="{ 'has-err': fieldErrs.domains }" data-f="domains">
+                域名（逗号分隔，面板据此自动建反代站点）
+                <input v-model="form.domains" placeholder="blog.example.com, www.blog.example.com"
+                  :aria-invalid="!!fieldErrs.domains" @input="clearFieldErr('domains')" />
+                <span v-if="fieldErrs.domains" class="field-err">{{ fieldErrs.domains }}</span>
+              </label>
+
+              <div class="blk full row-inline">
+                <input id="app-env-toggle" v-model="form.enabled" type="checkbox" style="width: auto" />
+                <span>托管（勾选 = 装 systemd 单元 + 下发反代站点；取消 = 撤站点并删单元）</span>
+              </div>
+            </section>
+
+            <!-- ④ 环境变量：刻意做成「键值对列表」而非 textarea ——
+                 面板**不加密存储**这些值，一 textarea 反而容易让人误以为可以放密码。 -->
+            <section class="sector" id="sec-env">
+              <h4 class="sector-h">环境变量<small>可选</small></h4>
+              <div class="blk full env-box">
+                <div class="env-head">
+                  <span>环境变量（可选）</span>
+                  <button class="btn-ghost btn-sm" @click="addEnvRow"><Icon name="plus" :size="13" /> 添加</button>
+                </div>
+                <p class="env-warn">
+                  <Icon name="alert" :size="13" class="ic" />
+                  <span>面板<b>不加密</b>存储环境变量，<b>请勿放密码 / 密钥</b>。敏感配置请在应用代码里读自己的配置文件。</span>
+                </p>
+                <div v-for="(row, i) in form.env" :key="i" class="env-row" :data-f="'env' + i">
+                  <input v-model="row.k" placeholder="KEY" @input="clearFieldErr(`env${i}`)" />
+                  <input v-model="row.v" placeholder="值" @input="clearFieldErr(`env${i}`)" />
+                  <button class="btn-ghost btn-sm" title="删除该行" @click="removeEnvRow(i)">
+                    <Icon name="trash" :size="13" />
+                  </button>
+                  <span v-if="fieldErrs[`env${i}`]" class="field-err">{{ fieldErrs[`env${i}`] }}</span>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -700,13 +816,14 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .hint-inline code { font-size: var(--fs-12); padding: 0 3px; border-radius: var(--radius-chip);
   background: var(--c-surface-2); border: 1px solid var(--c-border); }
 /* 5 个操作按钮必须**单行**：已抽到公共 .col-actions（main.css），此处不再私有重抄 */
-.modal > label.has-err input,
-.modal > label.has-err select { border-color: var(--c-danger); }
+/* 字段红框：字段已搬进 .modal-body 的分区，旧的 `.modal > label` 直接子选择器
+   随结构重构失效——判据必须指向被检查的那份 DOM，不能留一条恒不命中的死规则。 */
+.app-modal .modal-body .blk.has-err input,
+.app-modal .modal-body .blk.has-err select { border-color: var(--c-danger); }
 
-/* 通用错误条吸顶：须为 grid 首项 + 负上边距抵消 .modal 的 padding，底色不透明 */
-.modal > .form-msg {
-  grid-column: 1 / -1; position: sticky; top: 0; z-index: 3; margin: 0;
-}
+/* 通用错误条放进标题行：标题行本身吸顶，这里只管排布（独占第二行），
+   不再另起一个 sticky 元素与它互相盖。 */
+.app-modal > .modal-head > .form-msg { flex-basis: 100%; margin: 8px 0 0; }
 /* .err-bar / .field-err 已提到 main.css 公共规则（此前这里与 SitesView 各抄一份，
    且此处少了抖动动画和图标配色，两条错误条长得不一样） */
 
@@ -723,4 +840,72 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 .env-row .field-err { flex-basis: 100%; }
 
 .is-warn { color: var(--c-warn); }
+
+/* ── 应用弹窗：左侧分区导航 + 右部分区滚动 ──────────────────────────────
+   与「新增网站」弹窗（SiteFormDialog）同款交互：rail 点按平滑滚到分区、滚动
+   反向高亮、出错分区亮红点。派生式样挂在 .app-modal 上，不改站点弹窗的样式域。
+   ⚠️ 分区内的字段**不要搬进子组件**：跨列 grid-column 靠本组件 scoped 的 `>`
+   选择器，Vue 3.5 不给子组件根节点补父级 data-v，搬走后跨列规则静默全废。 */
+.modal.wide.app-modal {
+  width: min(1080px, 100%);
+  height: min(90vh, 900px);
+  max-height: 96vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+  padding: 0;
+  /* 公共 .modal-head/.modal-foot 用这两个变量的负值外扩补背景；padding 归零后
+     必须同步归零，否则标题行被推出容器、被 overflow:hidden 裁掉。 */
+  --modal-py: 0;
+  --modal-px: 0;
+  overflow: hidden;
+}
+.modal.wide.app-modal > .modal-head { grid-row: 1; margin: 0; padding: 14px 22px 12px;
+  border-bottom: 1px solid var(--c-border); }
+.modal.wide.app-modal > .modal-mid { grid-row: 2; display: flex; min-height: 0; }
+.modal.wide.app-modal > .modal-foot { grid-row: 3; position: static; margin: 0; padding: 12px 22px;
+  background: var(--c-surface-2); border-top: 1px solid var(--c-border); }
+.modal.wide.app-modal > .modal-foot .modal-actions { position: static; margin: 0; padding: 0;
+  border-top: 0; background: none; }
+.app-modal .nav-rail {
+  width: 176px; flex: none; overflow-y: auto; border-right: 1px solid var(--c-border);
+  padding: 14px 10px; background: var(--c-surface-2);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.app-modal .nav-item {
+  position: relative; display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer;
+  padding: 8px 10px; border-radius: var(--radius-xs);
+  font: inherit; font-size: var(--fs-13); color: var(--c-text);
+}
+.app-modal .nav-item:hover { background: var(--c-hover); }
+.app-modal .nav-item.active { background: var(--c-primary-soft); color: var(--c-primary); font-weight: 600; }
+.app-modal .nav-item.has-err { color: var(--c-danger); }
+.app-modal .nav-dot { position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--c-danger); }
+.app-modal .modal-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto;
+  position: relative; padding: 18px 22px 8px; }
+.app-modal .modal-body .sector { max-width: 900px; margin: 0 auto 22px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px; row-gap: 14px; align-items: start; }
+.app-modal .modal-body .sector + .sector { border-top: 1px solid var(--c-border); padding-top: 20px; }
+/* main.css 的 `.modal .blk { margin: 12px 0 }` 是简写：只覆盖 bottom 会让 top
+   与 row-gap 叠加成 26px（设计值 14），故整条 margin 归零。 */
+.app-modal .modal-body .sector > .blk { margin: 0; }
+.app-modal .modal-body .sector > .blk.full,
+.app-modal .modal-body .sector > .row-inline,
+.app-modal .modal-body .sector > .hint-note,
+.app-modal .modal-body .sector > .env-box { grid-column: 1 / -1; }
+.app-modal .modal-body .sector-h { grid-column: 1 / -1; margin: 0; color: var(--c-text);
+  font-size: var(--fs-14); font-weight: 700; }
+.app-modal .modal-body .sector-h small { margin-left: 8px; font-size: var(--fs-12);
+  font-weight: 400; color: var(--c-text-dim); }
+/* 窄窗（横向空间被 rail 吃掉）与矮窗（纵向双层滚动路径太长）：rail 转顶部横向页签 */
+@media (max-width: 720px), (max-height: 600px) {
+  .modal.wide.app-modal > .modal-mid { flex-direction: column; }
+  .app-modal .nav-rail { width: auto; flex: none; flex-direction: row; overflow-x: auto;
+    border-right: 0; border-bottom: 1px solid var(--c-border); padding: 8px 10px; }
+  .app-modal .nav-item { width: auto; white-space: nowrap; padding: 6px 12px; }
+  .app-modal .modal-body .sector { grid-template-columns: 1fr; }
+}
 </style>

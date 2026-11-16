@@ -76,6 +76,8 @@ export const UI_GUARDS = [
   'check-radius-wildcard.mjs',
   // 2026-11-16 曲线平滑：9 条数据曲线必须全部走统一平滑实现，禁止退回 polyline 直连
   'check-smooth-charts.mjs',
+  // 2026-11-16 新建应用弹窗：分区声明 / 模板 section / 事件接线 / 错误映射必须一致
+  'check-app-modal-nav.mjs',
   // 2026-11-13 全局兜底：main.ts 必须真挂 unhandledrejection / error（只写模块不算接线）
   'check-global-errors.mjs',
 ]
