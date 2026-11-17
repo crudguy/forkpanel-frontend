@@ -209,8 +209,8 @@ export interface WafTemplate {
   updated_at: number
 }
 
-/** 拦截事件（027，威胁日志）。⚠ 无规则归因：WAF/敏感文件/IP 黑名单都返回同色 403，只记状态码；
- *  且仅采集「开了独立 access log」的站点。 */
+/** 拦截事件（027，威胁日志）。`rule` 为命中的规则归因（033）：
+ *  渲染器写入 nginx 变量 `$fw_hit`，采集端映射成中文标签；旧日志/未开 access log 的站点为空串。 */
 export interface BlockEvent {
   id: number
   site: string
@@ -221,6 +221,8 @@ export interface BlockEvent {
   status: number
   referer: string
   user_agent: string
+  /** 原始归因标记（如 `waf_sqli`）；空串＝未归因 */
+  rule: string
 }
 
 export interface Site {

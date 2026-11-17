@@ -405,6 +405,27 @@ function evtStatusLabel(st: number): string {
   return String(st)
 }
 
+/** 归因标记 → 中文规则名。与后端 `rule_label()` 同口径；
+ *  未知标记原样透出（不吞成「未归因」），空串才是真未归因。 */
+const RULE_LABELS: Record<string, string> = {
+  waf_ua: '恶意 UA',
+  waf_sqli: 'SQL 注入',
+  waf_xss: 'XSS',
+  waf_trav: '路径穿越',
+  waf_noua: '空 UA',
+  waf_method: '非常见方法',
+  waf_hidden: '隐藏文件',
+  waf_repo: '版本库目录',
+  waf_backup: '备份文件',
+  waf_path: '敏感路径',
+  ip_allow: 'IP 白名单外',
+  ip_deny: 'IP 黑名单'
+}
+function evtRuleLabel(rule: string): string {
+  if (!rule) return '未归因'
+  return RULE_LABELS[rule] ?? rule
+}
+
 /** 加载拦截事件（append=true 时翻页续接）。筛选：站点 / 状态码。 */
 async function loadEvents() {
   evtLoading.value = true; evtError.value = ''
@@ -688,18 +709,18 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <button class="btn-ghost btn-sm" :disabled="evtLoading" @click="loadEvents()">筛选</button>
       </div>
       <p class="evt-note">
-        仅采集<b>开了独立 access log</b>的站点{{ sitesWithoutLog ? `（当前 ${sitesWithoutLog} 个站点未开，不会出现在此）` : '' }}；
-        且<b>无法区分是哪条规则</b>——WAF / 敏感文件 / IP 黑名单都返回 403。要开启某站日志，到「网站 → 编辑站点」打开独立日志。
+        仅采集<b>开了独立 access log</b>的站点{{ sitesWithoutLog ? `（当前 ${sitesWithoutLog} 个站点未开，不会出现在此）` : '' }}。
+        要开启某站日志，到「网站 → 编辑站点」打开独立日志。
       </p>
       <p v-if="evtError" class="err-bar" role="alert"><Icon name="alert" :size="15" class="ic" /><span>{{ evtError }}</span></p>
       <div v-if="events.length" class="t-scroll">
         <table class="fixed" aria-label="拦截事件" v-table-nav>
           <colgroup>
-            <col class="w-ets" /><col class="w-etsite" /><col class="w-etip" /><col class="w-etm" /><col class="w-eturi" /><col class="w-etst" /><col class="w-etua" />
+            <col class="w-ets" /><col class="w-etsite" /><col class="w-etip" /><col class="w-etm" /><col class="w-eturi" /><col class="w-etst" /><col class="w-etrule" /><col class="w-etua" />
           </colgroup>
           <thead><tr>
             <th scope="col">时间</th><th scope="col">站点</th><th scope="col">来源 IP</th>
-            <th scope="col" class="col-opt">方法</th><th scope="col">路径</th><th scope="col">状态</th><th scope="col" class="col-opt">UA</th>
+            <th scope="col" class="col-opt">方法</th><th scope="col">路径</th><th scope="col">状态</th><th scope="col">命中规则</th><th scope="col" class="col-opt">UA</th>
           </tr></thead>
           <tbody>
             <tr v-for="e in events" :key="e.id">
@@ -709,6 +730,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td class="col-opt mono">{{ e.method }}</td>
               <td class="mono ellipsis" :title="e.uri">{{ e.uri }}</td>
               <td><span class="badge" :class="e.status === 429 ? 'badge-info' : 'badge-danger'">{{ e.status }} {{ evtStatusLabel(e.status) }}</span></td>
+              <td class="ellipsis" :title="e.rule || '未归因'">{{ evtRuleLabel(e.rule) }}</td>
               <td class="mono dim ellipsis col-opt" :title="e.user_agent">{{ e.user_agent }}</td>
             </tr>
           </tbody>
@@ -966,5 +988,6 @@ col.w-etip { width: 120px; }
 col.w-etm { width: 60px; }
 col.w-eturi { width: auto; }
 col.w-etst { width: 116px; }
+col.w-etrule { width: 104px; }
 col.w-etua { width: 150px; }
 </style>
