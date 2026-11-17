@@ -40,9 +40,16 @@ fi
 echo "  · 扫描自检：契约 $contract_n 条 / 前端 $frontend_n 条"
 
 echo "== [A] 前端静态调用路径必须已在契约声明 =="
+# ⚠ 用关联数组做精确查找，不用 `echo "$CONTRACT" | grep -qxF "$p"`：
+# 后者在 set -o pipefail 下，grep -q 命中即退会让 echo 收到 SIGPIPE（141），
+# 把「已声明」误判成「未声明」——偶发假红且「红了就重跑」会掩盖真问题。
+declare -A CONTRACT_SET=()
+while IFS= read -r cp; do
+  [ -n "$cp" ] && CONTRACT_SET["$cp"]=1
+done <<< "$CONTRACT"
 MISSING=""
 for p in $FRONTEND; do
-  if ! echo "$CONTRACT" | grep -qxF "$p"; then MISSING="$MISSING $p"; fi
+  if [ -z "${CONTRACT_SET[$p]+x}" ]; then MISSING="$MISSING $p"; fi
 done
 if [ -n "$MISSING" ]; then
   fail "前端调用了契约未声明的路径：$MISSING"
