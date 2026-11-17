@@ -27,10 +27,6 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-// AI 助手顶栏入口（C9）：门控与侧边栏同口径（METRICS_READ 能力位 + system.view 权限点），
-// 不可用即隐藏整钮——避免"点过去才发现 501"。
-const assistOk = computed(() => whyDisabledForPath(auth, '/assistant') === null)
-
 // 表格密度（B8）：全站共享偏好，放用户菜单里——它是"看的方式"，不是某一页的
 // 功能，塞进某个视图的工具条会让用户以为只影响那一页。主题与时区同处此菜单。
 const { density, setDensity } = useTableDensity()
@@ -257,15 +253,6 @@ async function logout() {
           <Icon name="clock" :size="13" /> {{ runningTasks }}
         </RouterLink>
 
-        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与通知同款的纯图标钮，
-             用户很难从一个 ✦ 判断它是 AI 助手。改为品牌色胶囊 + 文字标签，让入口
-             「显而易见」（呼应本次重设计的首要目标）；窄屏隐藏文字只留图标，避免挤压标题。
-             门控 assistOk 与侧栏 /assistant 同口径（METRICS_READ + system.view）。 -->
-        <RouterLink v-if="assistOk" :to="{ name: 'assistant', query: { ctx: (route.meta.title as string) || undefined } }"
-          class="ai-entry" title="AI 助手：基于当前页上下文的诊断与建议">
-          <Icon name="sparkles" :size="16" />
-          <span class="ai-label">AI 助手</span>
-        </RouterLink>
 
         <RouterLink v-if="notifOk" :to="{ name: 'notifications' }" class="btn-icon ghost bell"
           :aria-label="unread ? `通知，${unread} 条未读` : '通知'"
@@ -501,18 +488,6 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 }
 .ver-chip:hover { color: var(--c-text); background: var(--c-hover); border-color: var(--c-border-strong); }
 
-/* AI 助手顶栏入口：品牌色胶囊 + 文字，与搜索/通知的纯图标钮区分开，
-   让「问 AI」在任意页面都一眼可见（C9 强化）。 */
-.ai-entry {
-  display: inline-flex; align-items: center; gap: 6px; flex: none;
-  height: 34px; padding: 0 12px; border-radius: 999px;
-  color: var(--c-primary); background: var(--c-primary-soft);
-  border: 1px solid color-mix(in srgb, var(--c-primary) 38%, transparent);
-  font-size: var(--fs-12-5); font-weight: 600; text-decoration: none;
-  transition: background .15s ease, border-color .15s ease;
-}
-.ai-entry:hover { background: color-mix(in srgb, var(--c-primary) 18%, transparent); border-color: var(--c-primary); }
-
 /* ══ 响应式（从宽到窄；宽度断点全站只有 1200 / 900 / 720 / 480 四档）══════════
    900 = 侧栏「常驻 → 抽屉」的分界，与 SideNav 自身媒体查询同档。 */
 
@@ -527,12 +502,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .health { display: none; }
 }
 
-/* <=900：侧栏转抽屉（汉堡出现），AI 入口退化为纯图标（原先只在 <=720 才收，
-   但顶栏在 768 就已经装不下：固定项 694 + 间距 126 + 内边距 44 = 864 > 758，
-   于是整页横向滚动 843px——断点选 720 是凭感觉，实际分界在 900）。 */
+/* <=900：侧栏转抽屉（汉堡出现），与 SideNav 自身媒体查询同档。
+   本档原先还把顶栏 AI 胶囊收成纯图标（768 下固定项 694 + 间距 126 + 内边距
+   44 = 864 > 758 会横向滚动），该入口已删，现在只剩汉堡。 */
 @media (max-width: 900px) {
   .hamburger { display: inline-flex; align-items: center; justify-content: center; }
-  .ai-label { display: none; }
-  .ai-entry { padding: 0 9px; }
 }
 </style>

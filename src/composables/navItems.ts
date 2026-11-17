@@ -63,7 +63,8 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view', group: '运维' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '运维' },
-  // —— 系统：低频管理区（顶栏另有常驻 AI 助手按钮，侧栏保留兜底入口）——
+  // —— 系统：低频管理区（AI 助手唯一入口；顶栏重复胶囊已移除，
+  //    「解释上一页」改由路由守卫自动带 ctx，不依赖入口形态）——
   { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: ALWAYS_CAP, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: ALWAYS_CAP, perm: 'settings.manage', group: '系统' },

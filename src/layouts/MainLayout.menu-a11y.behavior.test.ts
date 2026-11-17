@@ -41,7 +41,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
   const router = createRouter({
     history: createMemoryHistory(),
-    // 顶栏按名字引用这几条路由（通知 / AI / 设置 / 登录），缺一条 RouterLink 就会抛错
+    // 顶栏按名字引用这几条路由（通知 / 设置 / 登录），缺一条 RouterLink 就会抛错
     routes: [
       { path: '/', name: 'dashboard', component: Dummy, meta: { title: '概览' } },
       { path: '/notifications', name: 'notifications', component: Dummy },

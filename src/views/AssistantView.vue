@@ -15,6 +15,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import { fmtKib, fmtUptime, type AssistantReport, type AssistantFinding, type AssistantMode, type LlmStatus } from '@/api/types'
 import { assistantMode, shouldShowDiagnostics, type AskSource } from '@/utils/assistantMode'
+import { pageContextTitle } from '@/composables/assistantContext'
 import Icon from '@/components/Icon.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -23,14 +24,11 @@ const router = useRouter()
 const route = useRoute()
 const canOpen = computed(() => auth.can('system.view'))
 
-/** 随页上下文（C9）：从顶栏 AI 入口跳过来时带 ?ctx=<当前页标题>，
- *  用作提问前缀，让"解释这个页面"一句话就能问。后端 diagnose 不消费 ctx
- *  （纯前端偏好增强），但带上页面名用户更容易把问题说清、关键词路由也更准。 */
-const ctxPage = computed(() => {
-  const c = typeof route.query.ctx === 'string' ? route.query.ctx.trim() : ''
-  // 只接受顶栏传的页面标题：截断长度，避免任意链接注入超长文本 / 指令前缀
-  return c && c !== 'AI 助手' ? c.slice(0, 40) : ''
-})
+/** 随页上下文：路由守卫在进入本页时自动带上 ?ctx=<来源页标题>，用作提问前缀，
+ *  让「解释这个页面」一句话就能问。后端 diagnose 不消费 ctx（纯前端偏好增强），
+ *  但带上页面名用户更容易把问题说清、关键词路由也更准。
+ *  口径与注入侧共用 pageContextTitle，避免两边各写一份过滤/截断规则。 */
+const ctxPage = computed(() => pageContextTitle(route.query.ctx))
 function askAboutPage() {
   if (ctxPage.value) ask(`解释一下「${ctxPage.value}」这个页面：它负责什么、常见问题有哪些`, 'page')
 }

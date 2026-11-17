@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { whyDisabledForPath, navGuardDecision } from '@/composables/navPolicy'
 import { toast } from '@/composables/useToast'
+import { withAssistantContext } from '@/composables/assistantContext'
 import LoginView from '@/views/LoginView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 
@@ -114,7 +115,7 @@ router.afterEach((to) => {
   document.title = page ? `${page} - ${APP_TITLE}` : APP_TITLE
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   if (!to.meta.requiresAuth) return true
   const auth = useAuthStore()
   if (!auth.loggedIn) {
@@ -134,5 +135,8 @@ router.beforeEach(async (to) => {
     toast(`无法打开该页面：${why}`, 'err')
     return decision
   }
-  return true
+  // 侧栏成为 /assistant 唯一入口后，「解释上一页」改由路由层自动续上：
+  // 从任意页进来都带 ?ctx=来源页标题。纯函数已挡住「已带 ctx」，
+  // 重定向重跑本守卫时不会无限循环。
+  return withAssistantContext(to, from) ?? true
 })
