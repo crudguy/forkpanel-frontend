@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
-  isThemeMode, getTheme, setTheme, applyTheme, cycleTheme,
+  isThemeMode, getTheme, setTheme, applyTheme,
   themeMode, THEME_OPTIONS,
 } from './theme'
 
@@ -75,18 +75,7 @@ describe('setTheme / applyTheme', () => {
   })
 })
 
-describe('cycleTheme / THEME_OPTIONS', () => {
-  it('按 深→浅→跟随系统→深 循环，每档都真的落到 DOM', () => {
-    for (const want of ['light', 'system', 'dark']) {
-      cycleTheme()
-      expect(themeMode.value).toBe(want)
-      expect(localStorage.getItem(KEY)).toBe(want)
-      expect(document.documentElement.dataset.theme).toBe(
-        want === 'system' ? 'light' : want,
-      )
-    }
-  })
-
+describe('THEME_OPTIONS', () => {
   it('三态选项完备，system 不许被删掉（假控制的回归点）', () => {
     expect(THEME_OPTIONS.map((o) => o.value)).toEqual(['dark', 'light', 'system'])
     for (const o of THEME_OPTIONS) {

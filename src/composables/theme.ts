@@ -3,8 +3,11 @@
  * 写 localStorage('panel-theme')，并同步到 <html data-theme>。
  *
  * 与 useTablePrefs 同款范式：模块级单例 ref + 选项常量 + 白名单校验。
- * 顶栏快捷钮、用户菜单、登录页三处都读同一份选中态；各持一份 ref 就会出现
+ * 用户菜单、登录页两处都读同一份选中态；各持一份 ref 就会出现
  * 「A 处切了、B 处还显示旧选中态」，而 DOM 主题其实已经是新的。
+ *
+ * 入口只保留「直接选一档」这一种形态：顶栏那个「循环到下一档」的快捷钮已删
+ * （2026-11-17）——三态循环等于盲切，用户无法指定目标档，与菜单里的同一偏好重复。
  */
 import { ref } from 'vue'
 
@@ -34,7 +37,7 @@ export function getTheme(): ThemeMode {
   }
 }
 
-/** 模块级单例：三处 UI 共享；切主题只经 setTheme / cycleTheme 写入。 */
+/** 模块级单例：两处 UI 共享；切主题只经 setTheme 写入。 */
 export const themeMode = ref<ThemeMode>(getTheme())
 
 /** jsdom / 老浏览器没有 matchMedia：缺它时按暗色解析，不让启动崩。 */
@@ -59,12 +62,6 @@ export function setTheme(mode: ThemeMode) {
     /* 隐私模式 / 配额满：写不进去时本次会话仍生效（已 apply），不打扰用户 */
   }
   applyTheme()
-}
-
-/** 顶栏快捷钮：按 THEME_OPTIONS 的顺序循环（深 → 浅 → 跟随系统 → 深）。 */
-export function cycleTheme() {
-  const i = THEME_OPTIONS.findIndex((o) => o.value === themeMode.value)
-  setTheme(THEME_OPTIONS[(i + 1) % THEME_OPTIONS.length].value)
 }
 
 if (typeof window !== 'undefined') {

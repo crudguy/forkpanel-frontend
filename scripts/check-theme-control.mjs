@@ -9,9 +9,9 @@
  * 判据（全部指向被检查的那份文件，断言前剔注释）：
  *   ① THEME_OPTIONS 恰好三态且含 system，每项 icon 都在 Icon.vue 的图标表里
  *   ② getTheme 走白名单校验且 dark 兜底；setTheme 更新单例并 apply；
- *      cycleTheme 基于选项表循环；themeMode 全局只定义一份
- *   ③ MainLayout 不得回退成二态（无 toggleTheme / 无二态三元），且快捷钮与
- *      用户菜单分段控件都接在同一个 setTheme / cycleTheme 上
+ *      themeMode 全局只定义一份；cycleTheme（盲切快捷钮专用）不得复活
+ *   ③ MainLayout 里主题入口**恰好一处**（用户菜单三段控件）：不得回退二态，
+ *      也不得再加回顶栏循环快捷钮（三态循环无法指定目标档，纯重复）
  *   ④ LoginView 有三态入口，且控件在 .login 根层、所有 v-if 表单之外
  *      （缩进层级 + 全模板次数 == 根层级次数，只数标签会恒绿）
  *
@@ -117,10 +117,9 @@ if (!setBlock || !/isThemeMode\(mode\)/.test(setBlock) ||
     !/themeMode\.value\s*=\s*mode/.test(setBlock) || !/applyTheme\(\)/.test(setBlock)) {
   errors.push('setTheme 没有「校验 + 更新单例 + 重新应用」三件套：UI 选中态会与 DOM 分叉')
 }
-const cycleBlock = blockAt(themeTs, 'function cycleTheme')
-if (!cycleBlock || !/THEME_OPTIONS/.test(cycleBlock) || !/setTheme\(/.test(cycleBlock)) {
-  errors.push('cycleTheme 不是按 THEME_OPTIONS 循环（会退化成写死二态）')
-}
+// cycleTheme 的唯一消费方（顶栏循环快捷钮）已删：留着它就是无消费方的死导出，
+// 还会诱导人再造一个「循环」入口。要恢复循环交互，须同时改本守卫与该行注释。
+if (/cycleTheme/.test(themeTs)) errors.push('theme.ts 又出现 cycleTheme：消费方已删，属死代码')
 const modeDefs = themeTs.match(/export const themeMode\s*=\s*ref</g) ?? []
 if (modeDefs.length !== 1) errors.push(`themeMode 单例定义 ${modeDefs.length} 处（应为 1）`)
 for (const [name, code] of [['MainLayout.vue', layout], ['LoginView.vue', login]]) {
@@ -129,12 +128,15 @@ for (const [name, code] of [['MainLayout.vue', layout], ['LoginView.vue', login]
   }
 }
 
-// ③ 顶栏与用户菜单接线，且不得回退二态
+// ③ 主题入口恰好一处（用户菜单）。本类问题的退化方式就是「再加一个入口」，
+//    「接上了 setTheme」对重复入口完全无感 ⇒ 必须数次数，不能只断言存在。
 if (/toggleTheme/.test(layout)) errors.push('MainLayout 又出现 toggleTheme：三态会被打回二态假控制')
 if (/\?\s*'light'\s*:\s*'dark'/.test(layout)) errors.push('MainLayout 又出现二态三元切换')
-if (!layout.includes('@click="cycleTheme"')) errors.push('顶栏快捷钮没接 cycleTheme')
-if (!layout.includes('v-for="o in THEME_OPTIONS"')) errors.push('用户菜单的主题分段控件没遍历 THEME_OPTIONS')
-if (!layout.includes('@click="setTheme(o.value)"')) errors.push('用户菜单的主题按钮没接 setTheme')
+if (/cycleTheme/.test(layout)) errors.push('顶栏循环快捷钮被加回来了：三态循环无法指定目标档，与菜单里的同一偏好重复')
+const writePts = (layout.match(/@click="setTheme\(o\.value\)"/g) ?? []).length
+if (writePts !== 1) errors.push(`MainLayout 的主题写入点 ${writePts} 处（应为 1）：多出来的就是重复入口`)
+const segLoops = (layout.match(/v-for="o in THEME_OPTIONS"/g) ?? []).length
+if (segLoops !== 1) errors.push(`MainLayout 的 THEME_OPTIONS 分段控件 ${segLoops} 处（应为 1）`)
 if (!layout.includes('id="theme-mode-label"')) errors.push('用户菜单缺「主题」分组标签')
 if (!/themeMode\s*===\s*o\.value/.test(layout)) errors.push('用户菜单没用共享 themeMode 表达选中态')
 
@@ -155,7 +157,7 @@ if (errors.length) {
 }
 console.log('== 主题控制接线守卫 ==')
 console.log('  ✓ [1] THEME_OPTIONS 恰好三态含 system，图标名有效')
-console.log('  ✓ [2] 白名单校验 / 单例 / setTheme / cycleTheme 链路齐备')
-console.log('  ✓ [3] 顶栏与用户菜单都接三态，无二态残留')
+console.log('  ✓ [2] 白名单校验 / 单例 / setTheme 链路齐备，cycleTheme 未复活')
+console.log('  ✓ [3] 主题入口恰好一处（用户菜单），无二态 / 无顶栏循环钮')
 console.log('  ✓ [4] 登录页三态入口在 .login 根层、v-if 表单之外')
 console.log('PASS：主题控制三态接线完整')

@@ -13,7 +13,7 @@ import { whyDisabledForPath } from '@/composables/navPolicy'
 import { sysBadgeTip } from '@/composables/sysBadge'
 import { distroLabel } from '@/composables/systemLabel'
 import { toast } from '@/composables/useToast'
-import { themeMode, setTheme, cycleTheme, THEME_OPTIONS } from '@/composables/theme'
+import { themeMode, setTheme, THEME_OPTIONS } from '@/composables/theme'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { roleLabel, CAP } from '@/api/types'
@@ -92,11 +92,9 @@ const SUBTITLES: Record<string, string> = {
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 
-// 主题：选中态来自 composables/theme 的模块级单例，顶栏快捷钮与用户菜单的
-// 三态分段控件共用它——不再各持一份 ref（各持一份会互相覆盖选中态）。
-const currentTheme = computed(() =>
-  THEME_OPTIONS.find((o) => o.value === themeMode.value) ?? THEME_OPTIONS[0],
-)
+// 主题：选中态直接读 composables/theme 的模块级单例。唯一入口在用户菜单的三态
+// 分段控件（登录页另有一处，属不同上下文）；原先顶栏还有一个「切到下一档」快捷钮，
+// 同一状态两个入口、且目标档位不可指定，已删（2026-11-17）。
 
 const userMenu = ref(false)
 const pwdOpen = ref(false)
@@ -251,7 +249,7 @@ async function logout() {
           <Icon name="clock" :size="13" /> {{ runningTasks }}
         </RouterLink>
 
-        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与通知/主题同款的纯图标钮，
+        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与通知同款的纯图标钮，
              用户很难从一个 ✦ 判断它是 AI 助手。改为品牌色胶囊 + 文字标签，让入口
              「显而易见」（呼应本次重设计的首要目标）；窄屏隐藏文字只留图标，避免挤压标题。
              门控 assistOk 与侧栏 /assistant 同口径（METRICS_READ + system.view）。 -->
@@ -266,14 +264,6 @@ async function logout() {
           <Icon name="bell" :size="18" />
           <span v-if="unread" class="badge-dot">{{ unread > 99 ? '99+' : unread }}</span>
         </RouterLink>
-
-        <!-- 快捷钮按 THEME_OPTIONS 顺序循环三态；精确选择在下方用户菜单里。
-             两处都只经 setTheme / cycleTheme 写同一份 themeMode，不会不同步。 -->
-        <button class="btn-icon ghost" type="button"
-          :title="`主题：${currentTheme.label}（点击切换到下一档）`"
-          :aria-label="`切换主题，当前${currentTheme.label}`" @click="cycleTheme">
-          <Icon :name="currentTheme.icon" :size="18" />
-        </button>
 
         <!-- 真实 button + aria-expanded（审计 U12）：此前 div+click 不可键盘聚焦，
              CSS 写了 [aria-expanded] 选择器却从不设置，键盘用户打不开菜单。
@@ -515,11 +505,11 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    900 = 侧栏「常驻 → 抽屉」的分界，与 SideNav 自身媒体查询同档。 */
 
 /* <=1200：顶栏收起系统徽标胶囊。
-   实测（真机 getBoundingClientRect，1920/1440/1024/1180/768 五档）：顶栏固定项
-   = 徽标 172 + 维护簇 181 + 搜索 34 + AI 89 + 通知 34 + 主题 34 + 用户 113 = 657，
-   加 9 个 14px 间距与 44 左右内边距 ≈ 827；再算上 234px 侧栏，视口低于约 1061 时
-   标题块只能拿到 0 宽（1024 实测 `.title` 宽度 = 0，页面标题整块消失）。
-   徽标是纯信息展示（点它才进能力矩阵），窄屏让位给标题；能力矩阵侧栏仍有入口。 */
+   档位来自 2026-11-05 真机实测（1920/1440/1024/1180/768 五档）：当时固定项 657px
+   = 徽标 172 + 维护簇 181 + 搜索 34 + AI 89 + 通知 34 + 主题 34 + 用户 113，
+   1024 下 `.title` 实测被压到 0 宽。此后删掉搜索（f09db3e）与主题（2026-11-17）
+   两个重复入口，共省 96px，余量因此改善；但徽标是纯信息展示（点它才进能力矩阵），
+   窄屏仍优先让位给标题，故保留本档，断点未重新量取。 */
 @media (max-width: 1200px) {
   .health { display: none; }
 }
