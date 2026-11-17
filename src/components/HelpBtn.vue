@@ -9,7 +9,7 @@
  *     不与主操作争夺注意力；橙色保留给状态/操作色，默认不用于帮助。
  *   - 悬浮：淡填充（--c-hover）+ 图标提亮到 --c-text；打开态（expanded）同悬浮色，
  *     让按钮成为 toggle 而非单纯 open。
- * 注意：不要改全局 `.btn-icon`（顶栏命令面板/通知/主题、进程 act-* 都在用），
+ * 注意：不要改全局 `.btn-icon`（顶栏通知/主题、进程 act-* 都在用），
  * 圆形/静音只靠本组件加的 `.help-btn` 修饰类生效。
  */
 import Icon from '@/components/Icon.vue'

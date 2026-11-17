@@ -122,7 +122,7 @@ router.beforeEach(async (to) => {
     try { await auth.loadMe() } catch { return { name: 'login', query: { redirect: to.fullPath } } }
     if (!auth.loggedIn) return { name: 'login', query: { redirect: to.fullPath } }
   }
-  // F-09：深链 / 命令面板进来的页面也过同一套 cap+perm 判据。
+  // F-09：深链进来的页面也过同一套 cap+perm 判据。
   // 决策本身是纯函数（navGuardDecision），这里只负责取状态 + 给可见反馈。
   const why = whyDisabledForPath(auth, to.path)
   const decision = navGuardDecision({

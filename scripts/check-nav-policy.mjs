@@ -26,7 +26,6 @@ const FILES = [
   'src/composables/navPolicy.ts',
   'src/composables/navItems.ts',
   'src/components/SideNav.vue',
-  'src/components/CommandPalette.vue',
   'src/layouts/MainLayout.vue',
   'src/views/LogCenterView.vue',
   'src/views/TaskCenterView.vue',
@@ -38,14 +37,15 @@ for (const f of FILES) {
   must(existsSync(join(ROOT, f)), '0', `${f} 存在且可读`)
   if (existsSync(join(ROOT, f))) src[f] = read(f)
 }
-must(Object.keys(src).length >= 8, '0', `活性自检 ≥8/${FILES.length}：读入 ${Object.keys(src).length} 个文件`)
+// 全部读入才算活性成立（任一缺失/读空即红），避免「读到一个子集就恒真」
+must(Object.keys(src).length === FILES.length, '0',
+  `活性自检 ${Object.keys(src).length}/${FILES.length} 个文件全部读入`)
 must(strip(src['src/composables/navPolicy.ts'] ?? '').includes('export function whyDisabledForPath'), '0',
   '活性自检：navPolicy.ts 确实是判据源（含 whyDisabledForPath 定义）')
 
 // ── [1] 每个消费者都必须真的调用同一判据 ──
 const CONSUMERS = {
   'src/components/SideNav.vue': 'whyDisabledForPath(',
-  'src/components/CommandPalette.vue': 'whyDisabledForPath(',
   'src/layouts/MainLayout.vue': 'whyDisabledForPath(',
   'src/views/LogCenterView.vue': 'whyDisabledForPath(',
   'src/views/TaskCenterView.vue': 'whyDisabledForPath(',

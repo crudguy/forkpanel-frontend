@@ -1,16 +1,16 @@
 /**
  * 路由可达性判据的**唯一事实源**（F-05 / F-09）。
  *
- * 此前四套口径各写一份：侧栏用 `NAV_ITEMS` 的 cap+perm、Tab 容器把
- * `METRICS_READ` 当恒真兜底、页面自己只看 perm、命令面板对非导航路径一律
+ * 此前几套口径各写一份：侧栏用 `NAV_ITEMS` 的 cap+perm、Tab 容器把
+ * `METRICS_READ` 当恒真兜底、页面自己只看 perm、非导航路径一律
  * `return true`。结果是「Tab 可见但点进去无权限」（审计 Tab 用 METRICS_READ，
- * 页面却要 LOGS_READ）与「没 system.view 的人能从命令面板进通知页」。
+ * 页面却要 LOGS_READ）与「没 system.view 的人能进通知页」。
  *
  * 现在：
- * - 顶层导航页的门控仍由 `NAV_ITEMS` 定义（侧栏/命令面板共用）；
+ * - 顶层导航页的门控仍由 `NAV_ITEMS` 定义（侧栏共用）；
  * - 非导航页与 Tab 子路由在 `EXTRA_GATES` 里显式声明，**取值对齐对应视图
  *   与后端 `perm::*`**（见 routes/audit.rs / notifications.rs / tasks.rs）；
- * - 侧栏、Tab、顶栏、命令面板、路由守卫全部走 `whyDisabledForPath()`。
+ * - 侧栏、Tab、顶栏、路由守卫全部走 `whyDisabledForPath()`。
  *
  * ⚠ 路径用逐级回退匹配：`/services/nginx` 继承 `/services` 的门控。
  * ⚠ 未登记路径返回 null = 「该路由没有声明门控」，保持放行；不要把它当成
@@ -31,7 +31,7 @@ type AuthStore = ReturnType<typeof useAuthStore>
 
 /** 非导航页 / Tab 子路由的门控。键是完整路径，值对齐页面与后端 require()。 */
 const EXTRA_GATES: Record<string, NavGate> = {
-  // 命令面板的「打开通知」是唯一非导航快捷操作；页面本身要求 system.view
+  // 通知页不是导航项；页面本身要求 system.view
   '/notifications': { cap: null, perm: 'system.view' },
   // 审计 Tab：页面用 enabled(LOGS_READ, 'audit.view')，不能再用 METRICS_READ 兜底
   '/logs/audit': { cap: CAP.LOGS_READ, perm: 'audit.view' },

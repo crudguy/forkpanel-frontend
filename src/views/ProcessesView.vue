@@ -368,7 +368,7 @@ th.acts-col, td.acts-col { text-align: right; }
    撑成整行最重的一块；28 与 HelpBtn 的 sm 档同尺寸，表格里更服帖。
    静止态透明底 + 32% 同色描边：436 行若每行都顶着实心红黄圆，危险色就失去信号
    意义（满屏警报 = 没有警报），只有 hover / 键盘聚焦时才点亮底色与描边。
-   注意：**不改全局 .btn-icon**（顶栏命令面板 / 通知 / 主题都在用），只在本页收窄。 */
+   注意：**不改全局 .btn-icon**（顶栏通知 / 主题都在用），只在本页收窄。 */
 .acts-col .btn-icon {
   width: 28px; height: 28px; padding: 0;
   background: transparent;

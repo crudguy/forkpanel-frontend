@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
-import CommandPalette from '@/components/CommandPalette.vue'
 import TopbarMaintenance from '@/components/TopbarMaintenance.vue'
 import Icon from '@/components/Icon.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
@@ -40,9 +39,6 @@ const TIME_MODE_OPTIONS: { value: TimeMode; label: string; hint: string }[] = [
   { value: 'local', label: '本地', hint: '跟随浏览器时区（默认）' },
   { value: 'utc', label: 'UTC', hint: '绝对时间按 UTC 显示，便于跨时区核对' },
 ]
-
-// 命令面板（A11）开关：由全局 ⌘K / Ctrl+K 与顶栏搜索按钮唤起
-const paletteOpen = ref(false)
 
 // 移动端抽屉：路由切换即收起（审计 R1），避免停留在非当前页时抽屉仍开着
 watch(() => route.path, () => { if (navDrawerOpen.value) closeNav() })
@@ -198,17 +194,6 @@ const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')
 // 两种形态（有/无 metrics 读数）都在 sysBadge.test.ts 真跑断言。
 const healthTip = computed(() => sysBadgeTip(health.value, auth.platform))
 
-// 命令面板：全局 ⌘K / Ctrl+K 唤起（评估报告 A11）。即便焦点在终端输入框也照常触发，
-// 因为这是面板级快捷键，不应被页面内输入框吞掉。
-function onPaletteKey(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    paletteOpen.value = !paletteOpen.value
-  }
-}
-onMounted(() => window.addEventListener('keydown', onPaletteKey))
-onUnmounted(() => window.removeEventListener('keydown', onPaletteKey))
-
 async function logout() {
   userMenu.value = false
   try {
@@ -266,11 +251,7 @@ async function logout() {
           <Icon name="clock" :size="13" /> {{ runningTasks }}
         </RouterLink>
 
-        <button class="btn-icon ghost" type="button" title="命令面板（Ctrl / ⌘ + K）" @click="paletteOpen = true">
-          <Icon name="search" :size="18" />
-        </button>
-
-        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与「搜索」同款的纯图标钮，
+        <!-- AI 助手顶栏常驻入口（C9；2026-10-29 强化）：原先只是与通知/主题同款的纯图标钮，
              用户很难从一个 ✦ 判断它是 AI 助手。改为品牌色胶囊 + 文字标签，让入口
              「显而易见」（呼应本次重设计的首要目标）；窄屏隐藏文字只留图标，避免挤压标题。
              门控 assistOk 与侧栏 /assistant 同口径（METRICS_READ + system.view）。 -->
@@ -381,8 +362,6 @@ async function logout() {
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
     <!-- 全站唯一的浮层提示宿主（脱离文档流，不影响任何页面布局） -->
     <ToastHost />
-    <!-- 命令面板：全局 ⌘K / Ctrl+K 唤起，顶栏搜索按钮亦可触发 -->
-    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
   </div>
 </template>
 

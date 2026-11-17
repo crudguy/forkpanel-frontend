@@ -61,21 +61,6 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
       </div>
     </section>
 
-    <!-- 快捷键：与 layouts/MainLayout.vue 的实际监听保持一致 -->
-    <section class="card">
-      <div class="sec-head"><Icon name="key" :size="16" /> 快捷键</div>
-      <ul class="kbd-list">
-        <li>
-          <kbd>⌘ K</kbd><span class="kbd-or">/</span><kbd>Ctrl K</kbd>
-          <span class="dim">打开命令面板，搜索并跳转任意页面</span>
-        </li>
-        <li>
-          <kbd>Esc</kbd>
-          <span class="dim">关闭弹层、抽屉或命令面板</span>
-        </li>
-      </ul>
-    </section>
-
     <!-- 账户与安全 -->
     <section class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 账户与安全</div>
@@ -157,16 +142,6 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled))
 
 .lead { margin: -6px 0 14px; font-size: var(--fs-12-5); line-height: 1.6; }
 .empty-tip { margin: 10px 0 0; font-size: var(--fs-13); }
-
-.kbd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.kbd-list li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13-5); flex-wrap: wrap; }
-kbd {
-  font-family: var(--mono); font-size: var(--fs-12);
-  background: var(--c-surface-2); border: 1px solid var(--c-border);
-  border-bottom-width: 2px; border-radius: var(--radius-chip); padding: 2px 8px; color: var(--c-text);
-}
-.kbd-or { color: var(--c-text-mute); }
-.kbd-list .dim { font-size: var(--fs-12-5); }
 
 .faq-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 9px; }
 .faq-list li { font-size: var(--fs-13); line-height: 1.65; color: var(--c-text); }

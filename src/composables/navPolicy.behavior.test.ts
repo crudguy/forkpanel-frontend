@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
-// F-05 / F-09：侧栏、Tab、顶栏、命令面板、路由守卫必须共用同一套 cap+perm 判据。
-// 判据本身用真 Pinia store 测；命令面板用真挂载验「搜得到/搜不到」。
+// F-05 / F-09：侧栏、Tab、顶栏、路由守卫必须共用同一套 cap+perm 判据。
+// 判据本身用真 Pinia store 测。
 import { describe, it, expect } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { mountView, capsAllOk, type Mounted } from '@/test/mount'
+import { capsAllOk } from '@/test/mount'
 import { CAP, type CapabilityMap } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_ITEMS } from './navItems'
 import { gateForPath, whyDisabledForPath, navGuardDecision } from './navPolicy'
-import CommandPalette from '@/components/CommandPalette.vue'
 
 const ALL_PERMS = [
   'system.view', 'system.manage', 'site.view', 'service.view', 'db.view',
@@ -121,31 +120,5 @@ describe('F-09 非导航路径不再一律放行', () => {
     expect(whyDisabledForPath(
       store(capsAllOk(), ALL_PERMS.filter((p) => p !== 'system.view')), '/notifications',
     )).toBe('权限不足')
-  })
-
-  it('命令面板真挂载：无 system.view 时搜不到「打开通知」', async () => {
-    const m: Mounted = await mountView({
-      component: CommandPalette,
-      props: { open: true },
-      perms: ALL_PERMS.filter((p) => p !== 'system.view'),
-      caps: capsAllOk(),
-    })
-    const items = [...document.querySelectorAll('.pal li')].map((li) => li.textContent ?? '')
-    expect(items.some((t) => t.includes('打开通知'))).toBe(false)
-    // 活性自检：面板本身确实渲染了内容，不是「一个 li 都没有」的假绿
-    expect(items.length).toBeGreaterThan(0)
-    m.fake.assertClean(); m.cleanup()
-  })
-
-  it('命令面板真挂载：有 system.view 时「打开通知」可见', async () => {
-    const m: Mounted = await mountView({
-      component: CommandPalette,
-      props: { open: true },
-      perms: ALL_PERMS,
-      caps: capsAllOk(),
-    })
-    const items = [...document.querySelectorAll('.pal li')].map((li) => li.textContent ?? '')
-    expect(items.some((t) => t.includes('打开通知'))).toBe(true)
-    m.fake.assertClean(); m.cleanup()
   })
 })

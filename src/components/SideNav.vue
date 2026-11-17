@@ -43,7 +43,7 @@ interface NavItem extends Item { off: string | null }
 
 const auth = useAuthStore()
 
-// 菜单项定义抽到 navItems.ts（与命令面板 A11 共用单一事实源），此处只算禁用原因。
+// 菜单项定义抽到 navItems.ts（单一事实源），此处只算禁用原因。
 // 可见性 = 后端能力矩阵(cap) AND RBAC 权限点(perm)，**禁止** isLinux / navigator.platform
 // 之类平台判断。新模块 cap 复用既有常量兜底（明细类用 METRICS_READ），仅 perm 区分可见性。
 const items = computed<NavItem[]>(() =>
