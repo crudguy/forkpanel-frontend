@@ -270,15 +270,16 @@ usePolling({ fn: () => { if (canSys.value) void checkUpgrade() }, ms: 12 * 60 * 
     <!-- 重启下拉（面板 / 系统） -->
     <div v-if="canRestart" class="restart-wrap">
       <button ref="restartBtn" type="button" class="m-btn" :aria-expanded="restartMenu"
-        aria-haspopup="menu" title="重启面板应用或整台服务器" @click="toggleRestartMenu">
+        aria-controls="restart-menu" title="重启面板应用或整台服务器" @click="toggleRestartMenu">
         <Icon name="restart" :size="15" />
         <span>重启</span>
         <Icon name="chevron" :size="13" class="caret" />
       </button>
 
       <Teleport to="body">
-        <div v-if="restartMenu" class="backdrop" @click="restartMenu = false" />
-        <div v-if="restartMenu" class="menu" :style="restartPos">
+        <div v-if="restartMenu" class="backdrop" aria-hidden="true" @click="restartMenu = false" />
+        <div v-if="restartMenu" id="restart-menu" class="menu" :style="restartPos"
+          role="group" aria-label="重启选项">
           <button class="mi" @click="restartMenu = false; restartOpen = true">
             <Icon name="restart" :size="16" /> 重启面板
             <span class="mi-sub">仅重启面板服务，不停机</span>

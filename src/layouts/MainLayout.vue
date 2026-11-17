@@ -99,7 +99,7 @@ const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 const userMenu = ref(false)
 const pwdOpen = ref(false)
 function openPwdDialog() {
-  userMenu.value = false
+  closeUserMenu()
   pwdOpen.value = true
 }
 
@@ -123,6 +123,15 @@ function toggleUserMenu() {
   // 先量后开：否则首帧菜单会先落在 (0,0) 再跳到位
   if (!userMenu.value) placeUserMenu()
   userMenu.value = !userMenu.value
+}
+// 关闭只有这一条路径：遮罩点击 / Esc / 选完菜单项都走它。
+function closeUserMenu() { userMenu.value = false }
+// Esc：焦点此时可能已经在菜单里的某个按钮上，关掉后必须交还触发钮，否则焦点
+// 落到 body，键盘用户得从头 Tab 一遍（@keydown.escape 只挂在触发钮上时，
+// 焦点进了菜单就再按不到了）。
+function onUserMenuEsc() {
+  closeUserMenu()
+  userBtn.value?.focus()
 }
 function onWinResize() { if (userMenu.value) placeUserMenu() }
 onMounted(() => window.addEventListener('resize', onWinResize))
@@ -193,7 +202,7 @@ const htone = (x: number) => (x >= 88 ? 'danger' : x >= 70 ? 'warn' : 'ok')
 const healthTip = computed(() => sysBadgeTip(health.value, auth.platform))
 
 async function logout() {
-  userMenu.value = false
+  closeUserMenu()
   try {
     // 等后端真的把会话作废：失败时停在原页并提示，不要再抛一个未处理的
     // Promise rejection，也不要在会话仍有效时把人送到登录页。
@@ -272,10 +281,10 @@ async function logout() {
           <button
             ref="userBtn"
             type="button" class="user"
-            :aria-expanded="userMenu" aria-haspopup="menu"
+            :aria-expanded="userMenu" aria-controls="user-menu"
             :aria-label="`用户菜单（${auth.me?.user ?? ''}）`"
             @click="toggleUserMenu"
-            @keydown.escape="userMenu = false"
+            @keydown.escape="onUserMenuEsc"
           >
             <span class="avatar">{{ initial }}</span>
             <span class="uname">{{ auth.me?.user }}</span>
@@ -290,8 +299,9 @@ async function logout() {
                移到 body 下就与页面结构无关（同 ColumnPicker 的处置）。菜单随之脱离
                absolute 锚点，改 fixed + 由 placeUserMenu() 按触发按钮实测下发坐标。 -->
           <Teleport to="body">
-            <div v-if="userMenu" class="backdrop" @click="userMenu = false" />
-            <div v-if="userMenu" class="menu" :style="menuPos">
+            <div v-if="userMenu" class="backdrop" aria-hidden="true" @click="closeUserMenu" />
+            <div v-if="userMenu" id="user-menu" class="menu" :style="menuPos"
+              role="group" aria-label="用户菜单" @keydown.escape="onUserMenuEsc">
               <div class="menu-head">
                 <span class="avatar sm">{{ initial }}</span>
                 <div>

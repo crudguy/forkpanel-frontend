@@ -27,6 +27,8 @@ export const UI_GUARDS = [
   'check-modal.mjs',
   'check-icon-names.mjs',
   'check-overlay-teleport.mjs',
+  // 2026-11-17 弹层 ARIA：haspopup="menu" 却没有 role="menu" 的承诺与实现不符
+  'check-popup-aria.mjs',
   'check-subtitles.mjs',
   'check-hint-note.mjs',
   'check-load-binding.mjs',
