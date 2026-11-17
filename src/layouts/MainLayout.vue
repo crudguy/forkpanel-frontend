@@ -144,11 +144,14 @@ const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
 // 顶栏只负责轮询与补拉：60s 一轮（非关键路径，失败静默）+ 路由变化补一次。
 const notifications = useNotificationsStore()
 const unread = computed(() => notifications.unread)
+// 铃铛只给能进通知页的人：没有 system.view 的角色既不显示入口，也不每 60s
+// 打一次注定 403 的请求（此前静默失败，既浪费请求又让人以为铃铛是坏的）。
+const notifOk = computed(() => whyDisabledForPath(auth, '/notifications') === null)
 // 60s 一轮；隐藏暂停 / 卸载清理交给 usePolling（原先未读计数不暂停，后台标签
 // 也每分钟打一次——那是漏迁移，不是刻意行为）。首屏仍需立即取一次。
-watch(() => route.path, () => { void notifications.refresh() })
-usePolling({ fn: () => notifications.refresh(), ms: 60_000 })
-onMounted(() => { void notifications.refresh() })
+watch(() => route.path, () => { if (notifOk.value) void notifications.refresh() })
+usePolling({ fn: () => notifications.refresh(), ms: 60_000, enabled: () => notifOk.value })
+onMounted(() => { if (notifOk.value) void notifications.refresh() })
 
 // ── 系统健康徽标（A12）：CPU/内存/磁盘迷你条 + 运行中任务数 ──
 // 数据源 /system/overview（与概览同口径）+ /tasks（运行中计数）；15s 轮询，
@@ -264,10 +267,13 @@ async function logout() {
           <span class="ai-label">AI 助手</span>
         </RouterLink>
 
-        <RouterLink :to="{ name: 'notifications' }" class="btn-icon ghost bell"
+        <RouterLink v-if="notifOk" :to="{ name: 'notifications' }" class="btn-icon ghost bell"
+          :aria-label="unread ? `通知，${unread} 条未读` : '通知'"
           :title="unread ? `未读通知 ${unread} 条` : '通知'">
           <Icon name="bell" :size="18" />
-          <span v-if="unread" class="badge-dot">{{ unread > 99 ? '99+' : unread }}</span>
+          <!-- 徽标只做视觉提示：它的数字会成为链接的可访问名（AX 实测变成 "1"），
+               故用 aria-hidden 挡掉，名字由上面的 aria-label 统一给出。 -->
+          <span v-if="unread" class="badge-dot" aria-hidden="true">{{ unread > 99 ? '99+' : unread }}</span>
         </RouterLink>
 
         <!-- 真实 button + aria-expanded（审计 U12）：此前 div+click 不可键盘聚焦，
@@ -399,7 +405,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .bell { position: relative; color: var(--c-text-dim); }
 .bell:hover { color: var(--c-text); }
-.badge-dot { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
+.badge-dot { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
              padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: var(--c-on-accent);
              font-size: var(--fs-12); line-height: 17px; text-align: center; font-weight: 500;
              box-shadow: 0 0 0 2px var(--c-surface); }

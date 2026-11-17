@@ -48,7 +48,7 @@ beforeEach(async () => {
   await router.isReady()
 
   const auth = useAuthStore()
-  auth.me = { user: 'admin', role: 'owner', permissions: ['*'], allowed_roots: ['/'], tier: 'standard' }
+  auth.me = { user: 'admin', role: 'owner', permissions: ['system.view'], allowed_roots: ['/'], tier: 'standard' }
   auth.capabilities = {}
 
   host = document.createElement('div')
@@ -78,6 +78,9 @@ describe('顶栏通知徽标：共享 store 接线', () => {
     await nextTick()
     expect(badge()?.textContent).toBe('3')
     expect(bell()?.getAttribute('title')).toBe('未读通知 3 条')
+    // 徽标数字不能变成链接的可访问名；aria-label 才是稳定名字（AX 实测曾变成 "1"）
+    expect(badge()?.getAttribute('aria-hidden')).toBe('true')
+    expect(bell()?.getAttribute('aria-label')).toBe('通知，3 条未读')
 
     notifications.setUnread(0)
     await nextTick()
@@ -90,5 +93,13 @@ describe('顶栏通知徽标：共享 store 接线', () => {
     notifications.setUnread(120)
     await nextTick()
     expect(badge()?.textContent).toBe('99+')
+    expect(bell()?.getAttribute('aria-label')).toBe('通知，120 条未读')
+  })
+
+  it('没有 system.view 的角色看不到铃铛（也不会每 60s 打一次 403）', async () => {
+    const auth = useAuthStore()
+    auth.me = { user: 'viewer', role: 'viewer', permissions: [], allowed_roots: ['/'], tier: 'standard' }
+    await nextTick()
+    expect(document.querySelector('.bell')).toBeNull()
   })
 })
