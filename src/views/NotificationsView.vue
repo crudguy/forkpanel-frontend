@@ -17,6 +17,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { fmtDateTime, notifLevelLabel } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationsStore } from '@/stores/notifications'
 
 interface NotificationItem {
   id: number
@@ -29,9 +30,11 @@ interface NotificationItem {
 }
 
 const auth = useAuthStore()
+// 未读数与其他页面（顶栏铃铛）共用同一份状态：这里改完，徽标立即跟着变。
+const notifications = useNotificationsStore()
 const canView = computed(() => auth.can('system.view'))
 const items = ref<NotificationItem[]>([])
-const unread = ref(0)
+const unread = computed(() => notifications.unread)
 const { loading, error, run } = useAsync()
 
 async function load() {
@@ -39,8 +42,7 @@ async function load() {
     items.value = (await api.get<NotificationItem[]>(API.notifications.list(), {
       params: { limit: 100 },
     })) ?? []
-    const r = await api.get<{ count: number }>(API.notifications.unreadCount())
-    unread.value = r.count
+    await notifications.refresh()
   })
 }
 
@@ -51,7 +53,9 @@ async function markRead(n: NotificationItem) {
   try {
     await api.post(API.notifications.markRead(n.id))
     n.read = true
-    unread.value = Math.max(0, unread.value - 1)
+    // 乐观更新共享未读数（顶栏徽标同一帧消失），再向后端对账一次。
+    notifications.setUnread(unread.value - 1)
+    void notifications.refresh()
   } catch (e) {
     error.value = errorText(e)
   } finally { markingId.value = null }
@@ -60,6 +64,7 @@ async function markRead(n: NotificationItem) {
 async function readAll() {
   try {
     await api.post(API.notifications.readAll())
+    notifications.setUnread(0)
     await load()
   } catch (e) {
     error.value = errorText(e)
@@ -73,6 +78,8 @@ async function remove(n: NotificationItem) {
   try {
     await api.del(API.notifications.remove(n.id))
     delTarget.value = null
+    // 删掉一条未读后徽标要立刻减一，不能等页面重新加载（顶栏与这里共用 store）。
+    if (!n.read) notifications.setUnread(unread.value - 1)
     await load()
   } catch (e) {
     error.value = errorText(e)
@@ -137,11 +144,8 @@ onMounted(() => { if (canView.value) load() })
 .item.crit { border-left-color: var(--c-danger); }
 .item.warn { border-left-color: var(--c-warn); }
 .item.info { border-left-color: var(--c-cyan); }
-/* 后端级别取值是 info/warn/error（见 types.ts 的 notifLevelLabel），
-   此前只定义了 crit/warn/info——error 级通知左边框无色，看不出是错误。
-   crit 保留以兼容旧数据。 */
-.item.error { border-left-color: var(--c-danger); }
-.item.crit { border-left-color: var(--c-danger); }
+/* 级别取值是 info/warn/crit（与 openapi 一致，见 types.ts 的 NOTIF_LEVEL_LABEL）。
+   crit 即「错误」，用危险色左边框。不要再写 .error —— 后端已用编译期枚举禁止该值。 */
 .lvl { font-size: var(--fs-12); color: var(--c-text-dim); }
 .item.read { opacity: .55; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }

@@ -8,6 +8,7 @@ import TopbarMaintenance from '@/components/TopbarMaintenance.vue'
 import Icon from '@/components/Icon.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationsStore } from '@/stores/notifications'
 import { usePolling } from '@/composables/usePolling'
 import { whyDisabledForPath } from '@/composables/navPolicy'
 import { sysBadgeTip } from '@/composables/sysBadge'
@@ -138,21 +139,16 @@ onMounted(() => window.addEventListener('resize', onWinResize))
 onUnmounted(() => window.removeEventListener('resize', onWinResize))
 const initial = computed(() => (auth.me?.user || '?').slice(0, 1).toUpperCase())
 
-// 通知未读数：原先只有「通知」页内部才显示，备份失败/恢复失败这类"必须知道"的事件
-// 在其余任意页面都完全静默。这里在 topbar 常驻铃铛把信号放出来：轮询 60s
-// （非关键路径，失败静默）+ 路由变化补一次（看完通知回来立刻更新）。
-const unread = ref(0)
-async function loadUnread() {
-  try {
-    const r = await api.get<{ count: number }>(API.notifications.unreadCount())
-    unread.value = r.count
-  } catch { /* 静默重试：未读数取不到不影响任何操作 */ }
-}
-watch(() => route.path, loadUnread)
+// 通知未读数：与通知页共用 `useNotificationsStore`——页面里标记已读/全部已读/
+// 删除后徽标立即跟着变（此前两边各持一份 ref，最长 60s 才能自愈）。
+// 顶栏只负责轮询与补拉：60s 一轮（非关键路径，失败静默）+ 路由变化补一次。
+const notifications = useNotificationsStore()
+const unread = computed(() => notifications.unread)
 // 60s 一轮；隐藏暂停 / 卸载清理交给 usePolling（原先未读计数不暂停，后台标签
 // 也每分钟打一次——那是漏迁移，不是刻意行为）。首屏仍需立即取一次。
-usePolling({ fn: loadUnread, ms: 60_000 })
-onMounted(loadUnread)
+watch(() => route.path, () => { void notifications.refresh() })
+usePolling({ fn: () => notifications.refresh(), ms: 60_000 })
+onMounted(() => { void notifications.refresh() })
 
 // ── 系统健康徽标（A12）：CPU/内存/磁盘迷你条 + 运行中任务数 ──
 // 数据源 /system/overview（与概览同口径）+ /tasks（运行中计数）；15s 轮询，

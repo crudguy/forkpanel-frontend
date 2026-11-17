@@ -947,8 +947,24 @@ export const cronKindLabel = enumLabel({
   script: '脚本', backup: '备份', cert_renew: '证书续期', internal: '内部任务',
 })
 
-/** 通知级别（后端对非法值归一为 warn）。 */
-export const notifLevelLabel = enumLabel({ info: '信息', warn: '警告', error: '错误' })
+/** 通知级别（与 openapi `Notification.level` 枚举一致：info / warn / crit）。 */
+export type NotifLevel = 'info' | 'warn' | 'crit'
+
+/** 级别 → 中文。用 `Record<NotifLevel, string>` 而不是 enumLabel 的
+ *  `Record<string, string>`：少写一个级别（此前漏了 crit）会在 `vue-tsc` 报错，
+ *  而不是让界面把 `crit` 原样显示成英文。 */
+export const NOTIF_LEVEL_LABEL: Record<NotifLevel, string> = {
+  info: '信息', warn: '警告', crit: '错误',
+}
+
+/** 未知级别回退原值（历史数据/未来新级别不丢信息，也不假装认识）。
+ *  用 typeof 判字符串而不是直接 `?? v`：`NOTIF_LEVEL_LABEL['toString']` 会命中原型链，
+ *  返回一个函数并在界面上渲染成源码。 */
+export const notifLevelLabel = (v: string | null | undefined): string => {
+  if (v == null || v === '') return '—'
+  const label = NOTIF_LEVEL_LABEL[v as NotifLevel]
+  return typeof label === 'string' ? label : v
+}
 
 /** 审计结果。`queued` = 已入队（异步任务类写操作），`denied` = 被权限/只读拒绝。 */
 export const auditResultLabel = enumLabel({

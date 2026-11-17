@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   fmtSize, fmtKib, fmtUptime, fmtDateTime, fmtDate, fmtTime, fmtAgo, certLevel,
+  NOTIF_LEVEL_LABEL, notifLevelLabel,
 } from './types'
 
 afterEach(() => { vi.useRealTimers() })
@@ -124,5 +125,32 @@ describe('certLevel', () => {
     expect(certLevel(0)).toBe('bad')
     // 已过期（后端可能给负值）同样按最紧急处理，而不是落进某个中间档
     expect(certLevel(-1)).toBe('bad')
+  })
+})
+
+/**
+ * 通知级别词表必须与 openapi 的 `Notification.level`（info/warn/crit）逐项一致。
+ *
+ * 历史 bug：这里写的是 info/warn/error，后端落库是 crit —— `crit` 在界面上
+ * 原样显示成英文，而后端一处 `level:"error"` 又被静默降级成 warn。两边都不报错，
+ * 只有用户看到「警告/ crit」这种半中半英的错级别。后端已改成编译期枚举，
+ * 前端这侧用 `Record<NotifLevel,string>` + 本用例把词表钉住。
+ */
+describe('通知级别词表', () => {
+  it('三个契约值都有中文，不多不少', () => {
+    expect(Object.keys(NOTIF_LEVEL_LABEL).sort()).toEqual(['crit', 'info', 'warn'])
+    expect(notifLevelLabel('info')).toBe('信息')
+    expect(notifLevelLabel('warn')).toBe('警告')
+    expect(notifLevelLabel('crit')).toBe('错误')
+  })
+
+  it('空值给破折号，未知值回退原值（不静默吞掉）', () => {
+    expect(notifLevelLabel(null)).toBe('—')
+    expect(notifLevelLabel(undefined)).toBe('—')
+    expect(notifLevelLabel('')).toBe('—')
+    expect(notifLevelLabel('legacy')).toBe('legacy')
+    // 原型链上的键不能被当成级别（否则界面上会渲染出函数源码）
+    expect(notifLevelLabel('toString')).toBe('toString')
+    expect(notifLevelLabel('constructor')).toBe('constructor')
   })
 })
