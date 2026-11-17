@@ -138,13 +138,11 @@ onMounted(() => { if (canView.value) load() })
     <p v-if="error" class="err-bar">{{ error }}</p>
     <p v-if="!canView" class="muted">当前账号无通知查看权限（需要 system.view）。</p>
     <p v-if="canView && loading" class="muted">加载中…</p>
+    <!-- 空态不再放「刷新」：右上角工具行已有同一个 load() 入口，
+         两处并存只是重复按钮（与其它页空态只放「新建/清空搜索」不同）。 -->
     <EmptyState v-if="canView && !loading && !error && !items.length"
       title="暂无通知"
-      hint="备份失败、恢复失败等需要人工处置的事件会出现在这里">
-      <template #cta>
-        <RefreshBtn :disabled="loading" @click="load" />
-      </template>
-    </EmptyState>
+      hint="备份失败、恢复失败等需要人工处置的事件会出现在这里" />
 
     <ul v-if="canView" class="list">
       <li v-for="n in items" :key="n.id" class="item" :class="['lv-' + n.level, { read: n.read }]">

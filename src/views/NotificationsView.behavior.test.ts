@@ -58,6 +58,9 @@ const button = (text: string) =>
 const anyButton = (text: string) =>
   Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
     .find((b) => b.textContent?.includes(text))
+const refreshButtons = () =>
+  Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+    .filter((b) => b.textContent?.trim() === '刷新')
 
 describe('通知页：级别、来源、正文', () => {
   it('crit 显示「错误」而不是英文原值；来源中文化；正文星号不外露', async () => {
@@ -240,6 +243,40 @@ describe('通知页：分页与失败态', () => {
       await m.flush()
       expect(document.querySelector('.err-bar')?.textContent).toContain('后端炸了')
       expect(document.body.textContent).not.toContain('暂无通知')
+      m.fake.assertClean()
+    } finally { m.cleanup() }
+  })
+})
+
+describe('通知页：刷新入口唯一', () => {
+  // 空态里曾额外放一个 RefreshBtn，与右上角工具行那个都调 load()：
+  // 用户看到两个一模一样的按钮，点哪个都一样。jsdom 不求值 CSS，
+  // 只能靠真挂载数 DOM 才能挡住「又加回来」。
+  it('空态只有右上角一个刷新，点击它重拉列表', async () => {
+    const m = await mountView({
+      component: NotificationsView, perms: PERMS,
+      routes: { [API.notifications.list()]: () => [], [API.notifications.unreadCount()]: { count: 0 } },
+    })
+    try {
+      await m.flush()
+      expect(document.querySelector('.empty')).not.toBeNull()
+      expect(refreshButtons()).toHaveLength(1)
+      expect(document.querySelector('.tools-row')?.contains(refreshButtons()[0])).toBe(true)
+
+      refreshButtons()[0].click()
+      await m.flush()
+      expect(m.fake.count(API.notifications.list(), 'GET')).toBe(2)
+      m.fake.assertClean()
+    } finally { m.cleanup() }
+  })
+
+  it('有列表时也只有一个刷新', async () => {
+    const be = backend()
+    const m = await mountView({ component: NotificationsView, perms: PERMS, routes: be.routes })
+    try {
+      await m.flush()
+      expect(rows()).toHaveLength(2)
+      expect(refreshButtons()).toHaveLength(1)
       m.fake.assertClean()
     } finally { m.cleanup() }
   })
