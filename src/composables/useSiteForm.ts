@@ -105,6 +105,7 @@ export const BACKEND_FIELD: Record<string, { key: string; msg: string }> = {
   'waf.profile': { key: 'wafProfile', msg: 'WAF 档位不合法' },
   'waf.rate_per_sec': { key: 'wafRate', msg: '限速取值不合法' },
   'waf.burst': { key: 'wafBurst', msg: '突发桶取值不合法' },
+  'waf.conn_max': { key: 'wafConnMax', msg: '并发连接数取值不合法' },
   custom_conf: { key: 'customConf', msg: '自定义片段不合法' },
 }
 
@@ -122,7 +123,7 @@ export function emptyForm() {
     // 多路由表。**新建时给一条 `/` 静态兜底**——不是默认值，是必要条件：
     // 缺兜底的路由表会被后端拒（漏掉的路径会落到别的站点去，用户无从预期）。
     routes: [newRoute('/', 'static')] as RouteRow[],
-    wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0,
+    wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0, wafConnMax: 0,
     // 自定义配置片段（019）：插在主 server 块尾部（所有 location 之后），随保存并应用
     // 重新渲染下发；仅 owner 可改（后端 403 + 64KiB 双护栏）。空串 = 不使用。
     customConf: '',
@@ -152,6 +153,8 @@ export function wafPayload(f: SiteForm) {
   // burst 只在限速且有值时下发：不限速却带 burst 会被后端 400（"配了但没生效"
   // 属于静默失败，后端刻意拒绝）；缺省时让后端按 rate×2 计算。
   if (f.wafRate > 0 && f.wafBurst > 0) p.burst = f.wafBurst
+  // 并发连接数与限速正交：0 = 不限，但照样下发让后端能覆盖旧值
+  p.conn_max = f.wafConnMax
   return p
 }
 
@@ -243,6 +246,7 @@ export function confSpecNow(f: SiteForm): string {
     f.wafProfile,
     f.wafRate,
     f.wafBurst,
+    f.wafConnMax,
     f.routes.map(rowToRoute),
     // 019：片段也是渲染输出的一部分（插在 server 块尾）——不进指纹的话，手动站点
     // 只改片段后保存不会弹二选一、磁盘文件静默不动（后端 018 起指纹同款含它）。

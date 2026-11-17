@@ -215,7 +215,7 @@ async function doDelete() {
   finally { busy.value = false }
 }
 
-// ── fail2ban 入侵防御（独立能力位 fail2ban.manage 门控；nftables 后端下恒不支持）──
+// ── fail2ban 入侵防御（独立能力位 fail2ban.manage 门控；按 fail2ban-client 是否安装判定，与防火墙后端正交）──
 interface Jail {
   name: string; enabled: boolean
   currently_failed: number; total_failed: number; banned: number
@@ -425,7 +425,7 @@ onMounted(() => { load(); loadFail2ban() })
 
     </template>
 
-    <!-- fail2ban 入侵防御：独立能力位 fail2ban.manage 门控（nftables 下恒不支持）；未装时 f2b.available=false 走空态。
+    <!-- fail2ban 入侵防御：独立能力位 fail2ban.manage 门控（按 fail2ban-client 是否安装判定，与防火墙后端正交）；未装时 f2b.available=false 走空态。
          必须在「防火墙不支持」的 v-else 之外——它是独立能力位，不能让防火墙后端缺失把它一起隐藏。 -->
     <section class="card f2b" v-if="auth.supported(CAP.FAIL2BAN)">
       <div class="sec-head"><Icon name="shield" :size="16" /> fail2ban 入侵防御

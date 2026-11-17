@@ -91,6 +91,7 @@ const siteWafSortCols: SortColumn<Site>[] = [
   { key: 'profile', dir: 'asc', compare: (a, b) => wafProfileLabel(drafts.value[a.id]?.profile ?? '').localeCompare(wafProfileLabel(drafts.value[b.id]?.profile ?? '')) },
   { key: 'rate', dir: 'desc', compare: (a, b) => (drafts.value[a.id]?.rate ?? 0) - (drafts.value[b.id]?.rate ?? 0) },
   { key: 'burst', dir: 'desc', compare: (a, b) => (drafts.value[a.id]?.burst ?? 0) - (drafts.value[b.id]?.burst ?? 0) },
+  { key: 'conn', dir: 'desc', compare: (a, b) => (drafts.value[a.id]?.conn ?? 0) - (drafts.value[b.id]?.conn ?? 0) },
   { key: 'ip', dir: 'asc', compare: (a, b) => (drafts.value[a.id]?.ipAllow.trim() ? '1' : '0').localeCompare(drafts.value[b.id]?.ipAllow.trim() ? '1' : '0') },
 ]
 const {
@@ -110,6 +111,7 @@ const tplSortCols: SortColumn<WafTemplate>[] = [
   { key: 'profile', dir: 'asc', compare: (a, b) => wafProfileLabel(a.waf_profile).localeCompare(wafProfileLabel(b.waf_profile)) },
   { key: 'rate', dir: 'desc', compare: (a, b) => (a.rate_per_sec ?? 0) - (b.rate_per_sec ?? 0) },
   { key: 'burst', dir: 'desc', compare: (a, b) => (a.burst ?? 0) - (b.burst ?? 0) },
+  { key: 'conn', dir: 'desc', compare: (a, b) => (a.conn_max ?? 0) - (b.conn_max ?? 0) },
   { key: 'ipa', dir: 'asc', compare: (a, b) => showIps(a.ip_allow ?? []).localeCompare(showIps(b.ip_allow ?? [])) },
   { key: 'ipd', dir: 'asc', compare: (a, b) => (a.ip_deny ?? []).join(', ').localeCompare((b.ip_deny ?? []).join(', ')) },
 ]
@@ -285,24 +287,24 @@ function applyHint(s: Site): string {
 }
 
 // ─────────────────────────── 策略模板（026） ───────────────────────────
-interface TplForm { name: string; profile: string; rate: number; burst: number; ipAllow: string; ipDeny: string }
+interface TplForm { name: string; profile: string; rate: number; burst: number; conn: number; ipAllow: string; ipDeny: string }
 
 const tplModalOpen = ref(false)
 const editingTplId = ref<number | null>(null)
-const tplForm = ref<TplForm>({ name: '', profile: 'basic', rate: 0, burst: 0, ipAllow: '', ipDeny: '' })
+const tplForm = ref<TplForm>({ name: '', profile: 'basic', rate: 0, burst: 0, conn: 0, ipAllow: '', ipDeny: '' })
 const tplSaving = ref(false)
 const tplError = ref('')
 
 function openCreateTpl() {
   editingTplId.value = null
-  tplForm.value = { name: '', profile: 'basic', rate: 0, burst: 0, ipAllow: '', ipDeny: '' }
+  tplForm.value = { name: '', profile: 'basic', rate: 0, burst: 0, conn: 0, ipAllow: '', ipDeny: '' }
   tplError.value = ''
   tplModalOpen.value = true
 }
 function openEditTpl(t: WafTemplate) {
   editingTplId.value = t.id
   tplForm.value = {
-    name: t.name, profile: t.waf_profile, rate: t.rate_per_sec, burst: t.burst,
+    name: t.name, profile: t.waf_profile, rate: t.rate_per_sec, burst: t.burst, conn: t.conn_max ?? 0,
     ipAllow: showIps(t.ip_allow ?? []), ipDeny: showIps(t.ip_deny ?? []),
   }
   tplError.value = ''
@@ -317,6 +319,7 @@ async function saveTpl() {
     profile: tplForm.value.profile,
     rate_per_sec: tplForm.value.rate || 0,
     burst: tplForm.value.burst || 0,
+    conn_max: tplForm.value.conn || 0,
     ip_allow: tplForm.value.ipAllow,
     ip_deny: tplForm.value.ipDeny,
   }
@@ -507,7 +510,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <div class="t-scroll">
         <table class="fixed" aria-label="站点 WAF 与访问控制配置" v-table-nav>
           <colgroup>
-            <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfip" /><col class="w-wfacts" />
+            <col class="w-wfname" /><col class="w-wfdom" /><col class="w-wfkind" /><col class="w-wfon" /><col class="w-wfprof" /><col class="w-wfrate" /><col class="w-wfburst" /><col class="w-wfconn" /><col class="w-wfip" /><col class="w-wfacts" />
           </colgroup>
           <thead>
             <tr>
@@ -518,6 +521,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <SortTh label="档位" :active="isSiteSorted('profile')" :dir="siteSortDir" @sort="toggleSiteSort('profile')" />
               <SortTh label="CC 限速" :active="isSiteSorted('rate')" :dir="siteSortDir" @sort="toggleSiteSort('rate')" />
               <SortTh class="col-opt" label="突发桶" :active="isSiteSorted('burst')" :dir="siteSortDir" @sort="toggleSiteSort('burst')" />
+              <SortTh class="col-opt" label="连接数" :active="isSiteSorted('conn')" :dir="siteSortDir" @sort="toggleSiteSort('conn')" />
               <SortTh class="col-opt" label="访问控制" :active="isSiteSorted('ip')" :dir="siteSortDir" @sort="toggleSiteSort('ip')" />
               <th scope="col">操作</th>
             </tr>
@@ -551,6 +555,13 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
                   type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 突发桶`"
                   :disabled="!canApply || !drafts[s.id].rate"
                   :title="drafts[s.id].rate > 0 ? '0 = 由后端按 rate×2 计算' : '需先启用限速'" />
+                <span v-else-if="drafts[s.id].on && isCaddy" class="dim">—</span>
+                <span v-else class="dim">—</span>
+              </td>
+              <td class="col-opt">
+                <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].conn"
+                  type="number" min="0" max="10000" class="num" :aria-label="`${s.name} 并发连接数上限`"
+                  :disabled="!canApply" title="每 IP 同时存活的连接数上限；0 = 不限（与限速正交）" />
                 <span v-else-if="drafts[s.id].on && isCaddy" class="dim">—</span>
                 <span v-else class="dim">—</span>
               </td>
@@ -606,7 +617,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
       <div class="t-scroll">
         <table class="fixed" aria-label="WAF 策略模板" v-table-nav>
           <colgroup>
-            <col class="w-tname" /><col class="w-tprof" /><col class="w-trate" /><col class="w-tburst" /><col class="w-tipa" /><col class="w-tipd" /><col class="w-tacts" />
+            <col class="w-tname" /><col class="w-tprof" /><col class="w-trate" /><col class="w-tburst" /><col class="w-tconn" /><col class="w-tipa" /><col class="w-tipd" /><col class="w-tacts" />
           </colgroup>
           <thead>
             <tr>
@@ -614,6 +625,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <SortTh label="档位" :active="isTplSorted('profile')" :dir="tplSortDir" @sort="toggleTplSort('profile')" />
               <SortTh label="CC 限速" :active="isTplSorted('rate')" :dir="tplSortDir" @sort="toggleTplSort('rate')" />
               <SortTh class="col-opt" label="突发桶" :active="isTplSorted('burst')" :dir="tplSortDir" @sort="toggleTplSort('burst')" />
+              <SortTh class="col-opt" label="连接数" :active="isTplSorted('conn')" :dir="tplSortDir" @sort="toggleTplSort('conn')" />
               <SortTh class="col-opt" label="IP 白" :active="isTplSorted('ipa')" :dir="tplSortDir" @sort="toggleTplSort('ipa')" />
               <SortTh class="col-opt" label="IP 黑" :active="isTplSorted('ipd')" :dir="tplSortDir" @sort="toggleTplSort('ipd')" />
               <th scope="col">操作</th>
@@ -625,6 +637,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
               <td>{{ wafProfileLabel(t.waf_profile) }}</td>
               <td class="num">{{ t.rate_per_sec || '不限速' }}</td>
               <td class="num col-opt">{{ t.rate_per_sec ? (t.burst || 'rate×2') : '—' }}</td>
+              <td class="num col-opt">{{ t.conn_max ? t.conn_max : '—' }}</td>
               <td class="mono dim ellipsis col-opt" :title="showIps(t.ip_allow ?? [])">
                 {{ (t.ip_allow ?? []).length ? showIps(t.ip_allow ?? []) : '—' }}
               </td>
@@ -783,6 +796,10 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
           <input v-model.number="tplForm.burst" type="number" min="0" max="10000"
             :disabled="tplSaving || !tplForm.rate" :title="tplForm.rate ? '' : '需先设限速'" />
         </label>
+        <label class="blk">并发连接数（0 = 不限）
+          <input v-model.number="tplForm.conn" type="number" min="0" max="10000" :disabled="tplSaving"
+            title="每 IP 同时存活的连接数上限；与限速正交" />
+        </label>
         <label class="blk">IP 白名单
           <input v-model="tplForm.ipAllow" class="mono" placeholder="192.168.1.10, 10.0.0.0/24" spellcheck="false"
             :disabled="tplSaving || !!tplForm.ipDeny.trim()"
@@ -877,14 +894,15 @@ col.w-wfname { width: auto; }
 /* 固定列总和按「控件实宽 + 单元格内边距 26px」定，务必留够余量给唯一的
    弹性列（站点名）：此前总和 1044px > 1280 视口容器 1000px，弹性列被压成 0，
    站点名整列不可见。现总和 882px，1280 下站点名可拿 ~118px。 */
-col.w-wfdom { width: 160px; }
-col.w-wfkind { width: 56px; }
+col.w-wfdom { width: 150px; }
+col.w-wfkind { width: 52px; }
 col.w-wfon { width: 52px; }
 col.w-wfprof { width: 92px; }
-col.w-wfrate { width: 118px; }
-col.w-wfburst { width: 118px; }
-col.w-wfip { width: 200px; }
-col.w-wfacts { width: 86px; }
+col.w-wfrate { width: 106px; }
+col.w-wfburst { width: 106px; }
+col.w-wfconn { width: 96px; }
+col.w-wfip { width: 165px; }
+col.w-wfacts { width: 80px; }
 /* 模板表列宽（中小屏 <1440）：名称为唯一弹性列；IP 列等宽；操作列容 3 个文字按钮。
    宽屏走下方媒体档的 7 条定宽，避免名称列独吞 898px。
    ⚠ 基础档必须排在 @media **之前**：scoped 编译后二者特异性相同、谁在后谁赢，
@@ -893,8 +911,9 @@ col.w-tname { width: auto; }
 col.w-tprof { width: 80px; }
 col.w-trate { width: 96px; }
 col.w-tburst { width: 96px; }
-col.w-tipa { width: 150px; }
-col.w-tipd { width: 150px; }
+col.w-tconn { width: 88px; }
+col.w-tipa { width: 130px; }
+col.w-tipd { width: 130px; }
 col.w-tacts { width: 170px; }
 /* ── 宽屏列宽（>=1440）：站点表 9 列、模板表 7 列全按「内容 / 控件实宽」给定宽 ──
    table-layout:fixed 下 Chrome 会把容器余量按这些宽度**等比**分给每一列
@@ -905,24 +924,26 @@ col.w-tacts { width: 170px; }
    分别 1136 / 1140px，均 <= 1440 视口下实测容器 1160px，否则这一档就会横向滚动；
    <1440 沿用上面的「唯一弹性列」布局——中小屏余量本就少，硬铺理想宽反而撑出横滚。 */
 @media (min-width: 1440px) {
-  col.w-wfname { width: 180px; }
-  col.w-wfdom { width: 200px; }
+  col.w-wfname { width: 156px; }
+  col.w-wfdom { width: 180px; }
   col.w-wfkind { width: 64px; }
   col.w-wfon { width: 56px; }
   col.w-wfprof { width: 104px; }
   col.w-wfrate { width: 120px; }
   col.w-wfburst { width: 120px; }
-  col.w-wfip { width: 200px; }
+  col.w-wfconn { width: 108px; }
+  col.w-wfip { width: 160px; }
   col.w-wfacts { width: 92px; }
 
   /* 策略模板表同档 7 列全定宽：与站点表共用同一断点和同一套等比放大逻辑，
      两张表的列宽密度保持一致。 */
-  col.w-tname { width: 260px; }
+  col.w-tname { width: 200px; }
   col.w-tprof { width: 90px; }
   col.w-trate { width: 110px; }
   col.w-tburst { width: 110px; }
-  col.w-tipa { width: 200px; }
-  col.w-tipd { width: 200px; }
+  col.w-tconn { width: 100px; }
+  col.w-tipa { width: 170px; }
+  col.w-tipd { width: 170px; }
   col.w-tacts { width: 170px; }
 }
 /* 操作列下限（审计 U-窄屏）：已抽到公共 .col-actions（main.css），此处不再私有重抄 */

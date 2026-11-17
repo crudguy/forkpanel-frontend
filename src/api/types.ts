@@ -201,6 +201,8 @@ export interface WafTemplate {
   waf_profile: string
   rate_per_sec: number
   burst: number
+  /** 每 IP 并发连接数上限；0 = 不限 */
+  conn_max: number
   ip_allow: string[]
   ip_deny: string[]
   created_at: number
@@ -239,6 +241,8 @@ export interface Site {
   /** CC 限速（次/秒）；null = 不限速 */
   waf_rate_per_sec: number | null
   waf_burst: number | null
+  /** 每 IP 并发连接数上限；null = 不限 */
+  waf_conn_max: number | null
   /** 反代后端列表（kind=proxy 时存在）；static/php 为 null */
   upstreams: string[] | null
   /** php-fpm 目标（kind=php 时存在）；其余为 null */

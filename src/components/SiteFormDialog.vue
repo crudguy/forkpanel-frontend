@@ -153,6 +153,7 @@ function initForm(s: Site | null) {
     wafProfile: s.waf_profile ?? 'basic',
     wafRate: s.waf_rate_per_sec ?? 0,
     wafBurst: s.waf_burst ?? 0,
+    wafConnMax: s.waf_conn_max ?? 0,
     // 自定义片段回填（019）：null / 缺失一律落空串，textarea 里就是干净的空白。
     customConf: s.custom_conf ?? '',
     // 高级配置回填（020）：库里都有 DEFAULT，缺失时回落到与后端相同的默认值
@@ -238,7 +239,7 @@ const FIELD_SEC: Record<string, string> = {
   name: 'sec-basic', domains: 'sec-basic', root: 'sec-basic',
   upstreams: 'sec-routing', fpm: 'sec-routing',
   redirectTarget: 'sec-routing', redirectCode: 'sec-routing', routes: 'sec-routing',
-  wafProfile: 'sec-secure', wafRate: 'sec-secure', wafBurst: 'sec-secure',
+  wafProfile: 'sec-secure', wafRate: 'sec-secure', wafBurst: 'sec-secure', wafConnMax: 'sec-secure',
   customConf: 'sec-secure', authUser: 'sec-secure', authPass: 'sec-secure',
 }
 /** 分区是否有字段级错误：rail 上对应项亮红点，用户切到别的分区后仍知道哪儿没改对。 */
@@ -833,6 +834,14 @@ function confSpecChanged(): boolean {
               :disabled="!webSupported || !form.wafRate || isCaddy" :aria-invalid="!!fieldErrs.wafBurst"
               @input="clearFieldErr('wafBurst')" />
             <span v-if="fieldErrs.wafBurst" :key="'wb' + errSeq" class="field-err">{{ fieldErrs.wafBurst }}</span>
+          </label>
+          <!-- 并发连接数与限速正交：不限速时也生效，故不置灰于 wafRate。 -->
+          <label :class="{ 'has-err': fieldErrs.wafConnMax, 'is-dim': isCaddy }" data-f="wafConnMax"
+            :title="isCaddy ? caddyNoop : '单客户端同时存活的连接数上限；0 = 不限。防慢连接/长轮询挤占'">并发连接数（0 = 不限）
+            <input v-model.number="form.wafConnMax" type="number" min="0" max="10000"
+              :disabled="!webSupported || isCaddy" :aria-invalid="!!fieldErrs.wafConnMax"
+              @input="clearFieldErr('wafConnMax')" />
+            <span v-if="fieldErrs.wafConnMax" :key="'wc' + errSeq" class="field-err">{{ fieldErrs.wafConnMax }}</span>
           </label>
         </template>
         <!-- IP 名单与 WAF 开关相互独立：必须留在 v-if="form.wafOn" 之外，

@@ -20,6 +20,8 @@ export interface Draft {
   profile: string
   rate: number
   burst: number
+  /** 每 IP 并发连接数上限；0 = 不限。与 rate 正交（不限速也能限连接数）。 */
+  conn: number
   ipAllow: string
   ipDeny: string
 }
@@ -47,6 +49,7 @@ export function toDraft(s: Site): Draft {
     profile: s.waf_profile ?? 'basic',
     rate: s.waf_rate_per_sec ?? 0,
     burst: s.waf_burst ?? 0,
+    conn: s.waf_conn_max ?? 0,
     ipAllow: showIps(s.ip_allow ?? []),
     ipDeny: showIps(s.ip_deny ?? []),
   }
@@ -68,7 +71,8 @@ export function draftDirty(s: Site, d: Draft | undefined): boolean {
   if (normIp(d.ipDeny) !== (s.ip_deny ?? []).join(',')) return true
   return d.on && (d.profile !== (s.waf_profile ?? 'basic')
     || d.rate !== (s.waf_rate_per_sec ?? 0)
-    || d.burst !== (s.waf_burst ?? 0))
+    || d.burst !== (s.waf_burst ?? 0)
+    || d.conn !== (s.waf_conn_max ?? 0))
 }
 
 /**
@@ -95,6 +99,7 @@ export function siteBase(s: Site) {
  * 草稿 → `waf` 段。
  * 关闭时只发 `{ enabled: false }`（其余字段对关闭态无意义，且省得后端收到矛盾值）。
  * `burst` 仅在限速时下发：不限速却带 burst 会被后端 400。
+ * `conn_max` 恒下发（正交于 rate）：0 也要发，否则清空旧值会失效。
  */
 export function draftWafSeg(d: Draft) {
   if (!d.on) return { enabled: false }
@@ -103,6 +108,7 @@ export function draftWafSeg(d: Draft) {
     profile: d.profile,
     rate_per_sec: d.rate,
     ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
+    conn_max: d.conn || 0,
   }
 }
 
@@ -114,6 +120,7 @@ export function templateWafSeg(t: WafTemplate) {
     profile: t.waf_profile,
     rate_per_sec: rate,
     ...(rate > 0 && t.burst > 0 ? { burst: t.burst } : {}),
+    conn_max: t.conn_max || 0,
   }
 }
 
@@ -165,6 +172,7 @@ export function applyBaseline(s: Site): string {
     waf_profile: s.waf_profile ?? null,
     waf_rate_per_sec: s.waf_rate_per_sec ?? null,
     waf_burst: s.waf_burst ?? null,
+    waf_conn_max: s.waf_conn_max ?? null,
     ip_allow: [...(s.ip_allow ?? [])].sort(),
     ip_deny: [...(s.ip_deny ?? [])].sort(),
   })

@@ -159,8 +159,8 @@ const probeSplit = takeMedia(PROBE_MEDIA, WIDE_RE)
 check(probeSplit.rest.includes('width:auto') && !probeSplit.rest.includes('180px'), '[13a] 媒体块提取把基础档与宽屏档分开')
 check(probeSplit.block.includes('180px'), '[13b] 媒体块提取能取到宽屏档声明体')
 
-const EXPECT_COLS = ['w-wfdom', 'w-wfkind', 'w-wfon', 'w-wfprof', 'w-wfrate', 'w-wfburst', 'w-wfip', 'w-wfacts']
-const TPL_COLS = ['w-tprof', 'w-trate', 'w-tburst', 'w-tipa', 'w-tipd', 'w-tacts']
+const EXPECT_COLS = ['w-wfdom', 'w-wfkind', 'w-wfon', 'w-wfprof', 'w-wfrate', 'w-wfburst', 'w-wfconn', 'w-wfip', 'w-wfacts']
+const TPL_COLS = ['w-tprof', 'w-trate', 'w-tburst', 'w-tconn', 'w-tipa', 'w-tipd', 'w-tacts']
 const colDefs = parseCols(baseCss, 'w-wf')
 const foundCols = colDefs.map((c) => c.cls).sort()
 const wantCols = [...EXPECT_COLS].sort()
@@ -177,10 +177,10 @@ const tplColgroup = colgroups[1] ?? ''
 const used = [...siteColgroup.matchAll(/class="(w-[a-z]+)"/g)].map((m) => m[1])
 const tplUsed = [...tplColgroup.matchAll(/class="(w-[a-z]+)"/g)].map((m) => m[1])
 check(colgroups.length === 3, `[16a] WAF 页恰好 3 组 colgroup（站点 / 模板 / 事件），当前 ${colgroups.length}`)
-check(used.length === 9 && used.includes('w-wfname') && EXPECT_COLS.every((c) => used.includes(c)),
-  `[16] 站点表 colgroup 用齐 ${used.length} 列（含弹性列与 8 条固定列）`)
-check(tplUsed.length === 7 && tplUsed.includes('w-tname') && TPL_COLS.every((c) => tplUsed.includes(c)),
-  `[16b] 模板表 colgroup 用齐 ${tplUsed.length} 列（含弹性列与 6 条固定列）`)
+check(used.length === 10 && used.includes('w-wfname') && EXPECT_COLS.every((c) => used.includes(c)),
+  `[16] 站点表 colgroup 用齐 ${used.length} 列（含弹性列与 9 条固定列）`)
+check(tplUsed.length === 8 && tplUsed.includes('w-tname') && TPL_COLS.every((c) => tplUsed.includes(c)),
+  `[16b] 模板表 colgroup 用齐 ${tplUsed.length} 列（含弹性列与 7 条固定列）`)
 const tplBaseDefs = parseCols(baseCss, 'w-t')
 const tplBaseSum = tplBaseDefs.reduce((n, c) => n + c.px, 0)
 check(tplBaseDefs.length === TPL_COLS.length && TPL_COLS.every((c) => tplBaseDefs.some((d) => d.cls === c)),
@@ -214,16 +214,16 @@ const SITE_WIDE = { nameCol: 'w-wfname', nameMax: 200, minCol: 'w-wfdom', minVal
 const TPL_WIDE = { nameCol: 'w-tname', nameMax: 300, minCol: 'w-tacts', minVal: 164, minWhy: '3 个按钮折行', minAny: 80 }
 const wideProblems = violationsFor(wideCss, used, 'w-wf', SITE_WIDE)
 check(wideProblems.length === 0,
-  `[17] 宽屏档站点表 9 列理想宽守恒${wideProblems.length ? `：${wideProblems.join('、')}` : ''}`)
+  `[17] 宽屏档站点表 10 列理想宽守恒${wideProblems.length ? `：${wideProblems.join('、')}` : ''}`)
 const wideDefs = parseCols(wideCss, 'w-wf')
-check(wideDefs.length === 9, `[18] 宽屏档站点表恰好 ${wideDefs.length} 列定义（含站点名，不再有 auto 弹性列）`)
+check(wideDefs.length === 10, `[18] 宽屏档站点表恰好 ${wideDefs.length} 列定义（含站点名，不再有 auto 弹性列）`)
 check(wideDefs.find((c) => c.cls === 'w-wfname')?.px <= 200, '[19] 宽屏档站点名列有固定上限，不再吸收全部余量')
 
 const tplProblems = violationsFor(wideCss, tplUsed, 'w-t', TPL_WIDE)
 check(tplProblems.length === 0,
-  `[23] 宽屏档模板表 7 列理想宽守恒${tplProblems.length ? `：${tplProblems.join('、')}` : ''}`)
+  `[23] 宽屏档模板表 8 列理想宽守恒${tplProblems.length ? `：${tplProblems.join('、')}` : ''}`)
 const tplWideDefs = parseCols(wideCss, 'w-t')
-check(tplWideDefs.length === 7, `[24] 宽屏档模板表恰好 ${tplWideDefs.length} 列定义（含名称列，不再有 auto 弹性列）`)
+check(tplWideDefs.length === 8, `[24] 宽屏档模板表恰好 ${tplWideDefs.length} 列定义（含名称列，不再有 auto 弹性列）`)
 check(tplWideDefs.find((c) => c.cls === 'w-tname')?.px <= 300, '[25] 宽屏档模板表名称列有固定上限，不再吸收全部余量')
 
 // 列宽放大会同步放大单元格：IP 输入必须跟着伸，否则宽屏留白、窄屏被裁
@@ -231,16 +231,24 @@ const ipWidth = ruleFor(baseCss, /^\.ip$/)?.body ?? ''
 check(/width\s*:\s*calc\([^)]*100%[^)]*\)/.test(ipWidth), '[20] .ip 用 calc(100%) 随列宽伸缩，不写死 84px')
 
 // 负向自检：把宽屏档改回旧语义（名称列 auto / 总和超上限 / 操作列压窄）必须能被同一套判据判红
-const BAD_AUTO = wideCss.replace(/col\.w-wfname\s*\{\s*width:\s*180px\s*;?\s*\}/, 'col.w-wfname { width: auto; }')
+// ⚠ 负向变异**不得钉死具体 px**：列宽会随新列加入而重排（如 031/032 加「连接数」列时
+// 站点名 180→156）。写死 180px 后变异不再命中，`replace` 原样返回 ⇒ `!==` 为假 ⇒
+// 这条负向**恒红且与被测代码无关**。改为「按列名取当前渲染值」再变异。
+function mutateWidth(css, col, replacement) {
+  const def = parseCols(css, col.split('-')[0] + '-').find((c) => c.cls === col)
+  if (!def) return css
+  return css.replace(new RegExp(`col\\.${col}\\s*\\{\\s*width:\\s*${def.px}px\\s*;?\\s*\\}`), `col.${col} { width: ${replacement}; }`)
+}
+const BAD_AUTO = mutateWidth(wideCss, 'w-wfname', 'auto')
 check(BAD_AUTO !== wideCss && violationsFor(BAD_AUTO, used, 'w-wf', SITE_WIDE).length > 0,
   '[21] 负向：宽屏站点名退回 width:auto（旧语义）能判红')
-const BAD_SUM = wideCss.replace(/col\.w-wfdom\s*\{\s*width:\s*200px\s*;?\s*\}/, 'col.w-wfdom { width: 400px; }')
+const BAD_SUM = mutateWidth(wideCss, 'w-wfdom', '400px')
 check(BAD_SUM !== wideCss && violationsFor(BAD_SUM, used, 'w-wf', SITE_WIDE).some((v) => v.includes('总和')),
   '[22] 负向：宽屏站点表总和超出 1440 容器能判红')
-const BAD_TPL_AUTO = wideCss.replace(/col\.w-tname\s*\{\s*width:\s*260px\s*;?\s*\}/, 'col.w-tname { width: auto; }')
+const BAD_TPL_AUTO = mutateWidth(wideCss, 'w-tname', 'auto')
 check(BAD_TPL_AUTO !== wideCss && violationsFor(BAD_TPL_AUTO, tplUsed, 'w-t', TPL_WIDE).length > 0,
   '[26] 负向：宽屏模板名退回 width:auto（旧语义）能判红')
-const BAD_TPL_ACTS = wideCss.replace(/col\.w-tacts\s*\{\s*width:\s*170px\s*;?\s*\}/, 'col.w-tacts { width: 120px; }')
+const BAD_TPL_ACTS = mutateWidth(wideCss, 'w-tacts', '120px')
 check(BAD_TPL_ACTS !== wideCss && violationsFor(BAD_TPL_ACTS, tplUsed, 'w-t', TPL_WIDE).some((v) => v.includes('w-tacts')),
   '[27] 负向：模板表操作列压到 120px（按钮折行）能判红')
 

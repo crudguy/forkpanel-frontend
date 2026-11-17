@@ -82,6 +82,7 @@ const site = (p: Partial<Site> = {}): Site =>
     waf_profile: 'basic',
     waf_rate_per_sec: 0,
     waf_burst: 0,
+    waf_conn_max: 0,
     upstreams: null,
     fpm: null,
     ip_allow: null,
@@ -94,6 +95,7 @@ const draft = (p: Partial<Draft> = {}): Draft => ({
   profile: 'basic',
   rate: 0,
   burst: 0,
+  conn: 0,
   ipAllow: '',
   ipDeny: '',
   ...p,
@@ -105,6 +107,7 @@ const tpl = (p: Partial<WafTemplate> = {}): WafTemplate => ({
   waf_profile: 'basic',
   rate_per_sec: 0,
   burst: 0,
+  conn_max: 0,
   ip_allow: [],
   ip_deny: [],
   created_at: 0,
@@ -144,11 +147,12 @@ describe('showIps：展示口径（逗号空格）', () => {
 
 describe('toDraft：站点现值 → 草稿', () => {
   it('null 字段落到类型默认值（不是 undefined）', () => {
-    expect(toDraft(site({ waf_profile: null, waf_rate_per_sec: null, waf_burst: null }))).toEqual({
+    expect(toDraft(site({ waf_profile: null, waf_rate_per_sec: null, waf_burst: null, waf_conn_max: null }))).toEqual({
       on: false,
       profile: 'basic',
       rate: 0,
       burst: 0,
+      conn: 0,
       ipAllow: '',
       ipDeny: '',
     })
@@ -254,19 +258,19 @@ describe('draftWafSeg：草稿 → waf 段', () => {
   it('★ 不限速（rate=0）时不下发 burst，即使 burst 有值', () => {
     // 反例：不限速却带 burst 会被后端 400（那属于"配了但没生效"，后端刻意拒绝）。
     expect(draftWafSeg(draft({ rate: 0, burst: 20 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0,
     })
   })
 
   it('★ 限速且 burst>0 时下发 burst', () => {
     expect(draftWafSeg(draft({ rate: 50, burst: 100 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 50, burst: 100,
+      enabled: true, profile: 'basic', rate_per_sec: 50, burst: 100, conn_max: 0,
     })
   })
 
   it('限速但 burst=0 时不发 burst（交后端按 rate×2 算）', () => {
     expect(draftWafSeg(draft({ rate: 50, burst: 0 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 50,
+      enabled: true, profile: 'basic', rate_per_sec: 50, conn_max: 0,
     })
   })
 })
@@ -274,13 +278,13 @@ describe('draftWafSeg：草稿 → waf 段', () => {
 describe('templateWafSeg：模板 → waf 段（套用即强制开启）', () => {
   it('恒为 enabled:true（套用就是"把该站设成模板值"）', () => {
     expect(templateWafSeg(tpl({ waf_profile: 'strict', rate_per_sec: 10, burst: 20 }))).toEqual({
-      enabled: true, profile: 'strict', rate_per_sec: 10, burst: 20,
+      enabled: true, profile: 'strict', rate_per_sec: 10, burst: 20, conn_max: 0,
     })
   })
 
   it('★ 不限速时不发 burst', () => {
     expect(templateWafSeg(tpl({ rate_per_sec: 0, burst: 30 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0,
     })
   })
 })
