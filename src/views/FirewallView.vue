@@ -268,6 +268,38 @@ async function unban(jail: string, ip: string) {
   finally { unbanBusy.value = null }
 }
 
+// jail 封禁参数（运行期值；面板不写 jail.local，重启后回落）
+interface JailParams {
+  jail: string; maxretry: number; bantime: number; findtime: number; persistent: boolean
+}
+const paramsJail = ref<string | null>(null)
+const paramsDraft = ref({ maxretry: 5, bantime: 600, findtime: 600 })
+const paramsBusy = ref(false)
+const paramsError = ref('')
+
+async function openParams(j: Jail) {
+  if (paramsJail.value === j.name) { paramsJail.value = null; return }
+  paramsError.value = ''
+  paramsBusy.value = true
+  try {
+    const r = await api.get<JailParams>(API.firewall.fail2banParams(j.name))
+    paramsDraft.value = { maxretry: r.maxretry, bantime: r.bantime, findtime: r.findtime }
+    paramsJail.value = j.name
+  } catch (e) { f2bError.value = errorText(e) }
+  finally { paramsBusy.value = false }
+}
+
+async function saveParams(j: Jail) {
+  paramsBusy.value = true
+  paramsError.value = ''
+  try {
+    await api.post(API.firewall.fail2banParamsSave(), { jail: j.name, ...paramsDraft.value })
+    toast(`已更新 jail「${j.name}」的封禁参数`)
+    paramsJail.value = null
+  } catch (e) { paramsError.value = errorText(e) }
+  finally { paramsBusy.value = false }
+}
+
 onMounted(() => { load(); loadFail2ban() })
 </script>
 
@@ -410,12 +442,25 @@ onMounted(() => { load(); loadFail2ban() })
               <span class="mono f2b-name">{{ j.name }}</span>
               <span class="f2b-stats dim">失败 {{ j.currently_failed }} / 累计 {{ j.total_failed }} · 封禁 {{ j.banned }}</span>
               <span class="spacer" />
+              <button class="btn-ghost btn-sm" type="button" :disabled="!canF2b || paramsBusy"
+                :title="`配置 ${j.name} 的封禁参数`" @click="openParams(j)">
+                {{ paramsJail === j.name ? '收起' : '参数' }}
+              </button>
               <label class="switch-row">
                 <span class="switch">
                   <input type="checkbox" :checked="j.enabled" :disabled="!canF2b || jailBusy === j.name"
                     @change="toggleJail(j, $event)" /><i />
                 </span>
               </label>
+            </div>
+            <div v-if="paramsJail === j.name" class="f2b-params">
+              <label>失败次数 <input v-model.number="paramsDraft.maxretry" type="number" min="1" max="10000" /></label>
+              <label>封禁秒数 <input v-model.number="paramsDraft.bantime" type="number" min="1" max="2592000" /></label>
+              <label>统计窗口 <input v-model.number="paramsDraft.findtime" type="number" min="1" max="2592000" /></label>
+              <button class="btn-primary btn-sm" type="button" :disabled="!canF2b || paramsBusy"
+                @click="saveParams(j)">保存</button>
+              <p class="tip">仅运行期生效；重启 fail2ban 后回落 jail.local。</p>
+              <p v-if="paramsError" class="err" role="alert">{{ paramsError }}</p>
             </div>
             <div class="f2b-ips" v-if="j.banned_ips.length">
               <span class="dim tiny">已封禁：</span>
@@ -475,6 +520,10 @@ col.w-fwacts { width: 100px; }
 .f2b-name { font-weight: 600; font-size: var(--fs-13); }
 .f2b-stats { font-size: var(--fs-12); }
 .f2b-ips { margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.f2b-params { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--c-border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.f2b-params label { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.f2b-params input { width: 96px; }
+.f2b-params .tip { flex-basis: 100%; margin: 0; }
 .ip-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--c-border-strong); border-radius: 999px; background: var(--c-bg); font-size: var(--fs-12); }
 .ip-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; color: var(--c-text-dim); cursor: pointer; }
 .ip-x:hover:not(:disabled) { background: var(--c-danger-soft); color: var(--c-danger); }

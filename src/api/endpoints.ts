@@ -318,6 +318,8 @@ export const API = {
     fail2ban: () => '/api/v1/firewall/fail2ban',
     fail2banJail: () => '/api/v1/firewall/fail2ban/jail',
     fail2banUnban: () => '/api/v1/firewall/fail2ban/unban',
+    fail2banParams: (jail: string) => `/api/v1/firewall/fail2ban/params?jail=${encodeURIComponent(jail)}`,
+    fail2banParamsSave: () => '/api/v1/firewall/fail2ban/params',
   },
 
   security: {
