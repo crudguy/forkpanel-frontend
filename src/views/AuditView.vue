@@ -87,24 +87,41 @@ function toTs(s: string): number | undefined {
 }
 
 let loadSeq = 0
+
+/**
+ * 组装筛选参数。**列表与导出共用**——两边各写一份必然漂移，用户会拿着
+ * 导出的 CSV 与页面上的列表对不上，取证时这是最糟糕的一类不一致。
+ */
+function filterParams(): Record<string, any> {
+  const since = toTs(f.value.since)
+  const until = toTs(f.value.until)
+  const params: Record<string, any> = {}
+  if (f.value.actor.trim()) params.actor = f.value.actor.trim()
+  if (f.value.action.trim()) params.action = f.value.action.trim()
+  if (f.value.result) params.result = f.value.result
+  if (f.value.q.trim()) params.q = f.value.q.trim()
+  if (since != null) params.since = since
+  if (until != null) params.until = until
+  return params
+}
+
+/** 时间窗反了要拦下；返回错误文案，合法返回 null */
+function timeWindowError(): string | null {
+  const since = toTs(f.value.since)
+  const until = toTs(f.value.until)
+  return since != null && until != null && since > until
+    ? '起始时间不能晚于截止时间'
+    : null
+}
+
 async function load() {
   const seq = ++loadSeq
   await run(async () => {
     expanded.value = null
-    const since = toTs(f.value.since)
-    const until = toTs(f.value.until)
     // 客户端先拦一次（服务端也会校验，这里是即时反馈，省一次往返）
-    if (since != null && until != null && since > until) {
-      error.value = '起始时间不能晚于截止时间'
-      return
-    }
-    const params: Record<string, any> = { page: page.value, page_size: pageSize.value }
-    if (f.value.actor.trim()) params.actor = f.value.actor.trim()
-    if (f.value.action.trim()) params.action = f.value.action.trim()
-    if (f.value.result) params.result = f.value.result
-    if (f.value.q.trim()) params.q = f.value.q.trim()
-    if (since != null) params.since = since
-    if (until != null) params.until = until
+    const twErr = timeWindowError()
+    if (twErr) { error.value = twErr; return }
+    const params: Record<string, any> = { page: page.value, page_size: pageSize.value, ...filterParams() }
 
     const r = await api.get<{ items: AuditEntry[]; page: number; page_size: number; total: number }>(API.audit(), { params })
     if (seq !== loadSeq) return   // 已有更新的筛选/翻页在途，丢弃本次结果
@@ -141,6 +158,78 @@ function prettyDetail(s?: string | null): string {
   if (!s) return ''
   try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s }
 }
+
+// ── 导出 CSV ──
+//
+// 走 `api.download` 而不是 `window.open`：后者拿不到 4xx 响应体，
+// 无权限/参数错误时会变成"点了没反应"，用户只能反复点击。
+const exporting = ref(false)
+async function exportCsv() {
+  const twErr = timeWindowError()
+  if (twErr) { error.value = twErr; return }
+  exporting.value = true
+  error.value = ''
+  try {
+    // 与服务端上限一致：导出不翻页，按当前筛选条件取全量（后端硬顶 5 万行）
+    const blob = await api.download(API.auditExport(), { params: filterParams() })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    // 文件名由后端 Content-Disposition 决定时浏览器会用它；这里给个兜底名，
+    // 因为 download 拿到的是 Blob，创建 a 标签必须自带 download 属性。
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    // 必须撤销：objectURL 不撤会一直占着这份 Blob 的内存直到页面卸载
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    exporting.value = false
+  }
+}
+
+// ── 哈希链校验 ──
+//
+// 三种结果必须区分清楚，尤其 `not_chained`（有库但尚未上链）不能被说成"通过"：
+// 那会让运维误以为历史记录也受保护。
+type ChainState = { status: string; checked: number; unchained: number; broken_at_id: number | null; reason: string | null }
+const chain = ref<ChainState | null>(null)
+const verifying = ref(false)
+async function verifyChain() {
+  verifying.value = true
+  error.value = ''
+  try {
+    chain.value = await api.get<ChainState>(API.auditVerify())
+  } catch (e) {
+    chain.value = null
+    error.value = errorText(e)
+  } finally {
+    verifying.value = false
+  }
+}
+
+/** 校验结论的展示口径（纯函数，便于测试） */
+function chainLabel(c: ChainState): string {
+  if (c.status === 'intact') {
+    return c.unchained > 0
+      ? `链完整（已校验 ${c.checked} 条；另有 ${c.unchained} 条为启用前历史，未上链）`
+      : `链完整（已校验 ${c.checked} 条）`
+  }
+  if (c.status === 'broken') {
+    return `发现篡改：id=${c.broken_at_id} — ${c.reason ?? ''}`
+  }
+  return '尚未上链（无带链值的记录）'
+}
+function chainClass(c: ChainState) {
+  // 用全局 `.badge-*` 药丸类（彩色底），而不是 `.b-ok/.b-bad` 这类纯文字色工具类——
+  // 后者配 `.badge` 只会得到灰底彩字，不是项目约定的状态徽章样式。
+  if (c.status === 'intact') return 'badge-ok'
+  if (c.status === 'broken') return 'badge-danger'
+  return 'badge-warn'
+}
+
 
 onMounted(load)
 </script>
@@ -182,7 +271,18 @@ onMounted(load)
              页面级 page-head 横条，工具条紧贴它操作的表；横滚交给内部 .t-scroll。 -->
         <div class="card flush toolbar-card">
           <div class="card-toolbar">
+            <!-- 校验结论贴在这里而非弹窗：它是"历史有没有被动过"的常驻结论，
+                 弹窗关掉就没了，而这张表本身就是要被反复核对的材料 -->
+            <span v-if="chain" class="badge chain-chip" :class="chainClass(chain)" :title="chainLabel(chain)">
+              {{ chainLabel(chain) }}
+            </span>
             <span class="spacer" />
+            <button class="btn-ghost btn-sm" :disabled="verifying" @click="verifyChain">
+              <Icon name="shield" :size="14" /> {{ verifying ? '校验中…' : '校验完整性' }}
+            </button>
+            <button class="btn-ghost btn-sm" :disabled="exporting || total === 0" @click="exportCsv">
+              <Icon name="download" :size="14" /> {{ exporting ? '导出中…' : '导出 CSV' }}
+            </button>
             <button class="btn-ghost btn-sm" :disabled="loading" @click="reset"><Icon name="refresh" :size="14" /> 重置</button>
             <RefreshBtn :disabled="loading" sm @click="load" />
           </div>
@@ -271,6 +371,9 @@ onMounted(load)
   margin: 0; padding: 8px 10px; border-radius: var(--radius-sm);
   background: var(--c-bg); border: 1px solid var(--c-border);
   font-size: var(--fs-12); white-space: pre-wrap; word-break: break-all; flex: 1; }
+
+/* 校验结论徽标：结论可能较长（含条数与说明），允许换行但别撑破工具条 */
+.chain-chip { white-space: normal; max-width: 46ch; line-height: 1.45; }
 
 /* 结果徽标 */
 .b-ok { color: var(--c-ok); }

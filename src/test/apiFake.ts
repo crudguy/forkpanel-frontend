@@ -68,6 +68,38 @@ function isFakeError(v: unknown): v is FakeErrorResponse {
     && (v as { __fakeError?: unknown }).__fakeError === true
 }
 
+/**
+ * 非 JSON 的原始响应（CSV 导出等）。`api.download` 读的是 `res.blob()`，
+ * 走 `json()` 会得到一个内容被 JSON 包裹的假 CSV——测试看似通过，实际验证的
+ * 不是真实字节流。
+ */
+export interface FakeRawResponse {
+  __fakeRaw: true
+  status: number
+  contentType: string
+  body: string
+  /** 额外响应头（如 `x-capped: 1`） */
+  headers?: Record<string, string>
+}
+
+export function fakeRaw(
+  body: string,
+  opts: { status?: number; contentType?: string; headers?: Record<string, string> } = {},
+): FakeRawResponse {
+  return {
+    __fakeRaw: true,
+    status: opts.status ?? 200,
+    contentType: opts.contentType ?? 'text/csv; charset=utf-8',
+    body,
+    headers: opts.headers,
+  }
+}
+
+function isFakeRaw(v: unknown): v is FakeRawResponse {
+  return typeof v === 'object' && v !== null
+    && (v as { __fakeRaw?: unknown }).__fakeRaw === true
+}
+
 export interface ApiFake {
   calls: FakeCall[]
   /** 未登记请求（必须为空） */
@@ -120,6 +152,12 @@ export function installApiFake(routes: Record<string, FakeRoute>): ApiFake {
       ? (route as (ctx: FakeCall) => unknown)({ url, method, body })
       : route
     if (isFakeError(data)) return json(data.body, data.status)
+    if (isFakeRaw(data)) {
+      return new Response(data.body, {
+        status: data.status,
+        headers: { 'Content-Type': data.contentType, ...(data.headers ?? {}) },
+      })
+    }
     return json({ data }, 200)
   }
 

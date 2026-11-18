@@ -394,6 +394,10 @@ export const API = {
   },
 
   audit: () => '/api/v1/audit',
+  /** 审计导出：与 `audit()` 同参数，返回 CSV 附件 */
+  auditExport: () => '/api/v1/audit/export',
+  /** 审计哈希链校验：确认历史记录未被改动 */
+  auditVerify: () => '/api/v1/audit/verify',
 
   // 内置 Web 终端（WebSocket 升级，非 REST）。WS 地址由前端按当前 location 构造，
   // 不走本文件的字面量（避免把 ws(s)://host 写死）；这里的声明仅为契约门禁兜底。
