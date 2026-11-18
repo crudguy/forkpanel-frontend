@@ -96,6 +96,7 @@ const draft = (p: Partial<Draft> = {}): Draft => ({
   rate: 0,
   burst: 0,
   conn: 0,
+  observe: false,
   ipAllow: '',
   ipDeny: '',
   ...p,
@@ -153,6 +154,7 @@ describe('toDraft：站点现值 → 草稿', () => {
       rate: 0,
       burst: 0,
       conn: 0,
+      observe: false,
       ipAllow: '',
       ipDeny: '',
     })
@@ -214,6 +216,21 @@ describe('draftDirty：是否有未应用的改动', () => {
   it('★ 草稿缺失（未加载/站点刚被删）判为不脏，不拿 undefined 去取属性', () => {
     expect(draftDirty(site(), undefined)).toBe(false)
   })
+
+  it('★ 观察模式切换必须判脏（否则勾了不出「应用」按钮）', () => {
+    // 反例：漏比 observe 的话，用户在站点弹窗里改了观察模式、
+    // 本页草稿与库值不一致却显示"无改动"，按钮永远置灰 —— 改动永远下发不出去。
+    const on = site({ waf_enabled: true, waf_observe: false })
+    expect(draftDirty(on, draft({ observe: true }))).toBe(true)
+    const obs = site({ waf_enabled: true, waf_observe: true })
+    expect(draftDirty(obs, draft({ observe: false }))).toBe(true)
+    expect(draftDirty(obs, draft({ observe: true }))).toBe(false)
+  })
+
+  it('★ WAF 关着时观察模式的差异不算脏（关着不会下发 observe）', () => {
+    const off = site({ waf_enabled: false, waf_observe: false })
+    expect(draftDirty(off, draft({ on: false, observe: true }))).toBe(false)
+  })
 })
 
 describe('siteBase：apply 体公共字段（漏传会清空反代/PHP 后端）', () => {
@@ -258,34 +275,49 @@ describe('draftWafSeg：草稿 → waf 段', () => {
   it('★ 不限速（rate=0）时不下发 burst，即使 burst 有值', () => {
     // 反例：不限速却带 burst 会被后端 400（那属于"配了但没生效"，后端刻意拒绝）。
     expect(draftWafSeg(draft({ rate: 0, burst: 20 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0, observe: false,
     })
   })
 
   it('★ 限速且 burst>0 时下发 burst', () => {
     expect(draftWafSeg(draft({ rate: 50, burst: 100 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 50, burst: 100, conn_max: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 50, burst: 100, conn_max: 0, observe: false,
     })
   })
 
   it('限速但 burst=0 时不发 burst（交后端按 rate×2 算）', () => {
     expect(draftWafSeg(draft({ rate: 50, burst: 0 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 50, conn_max: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 50, conn_max: 0, observe: false,
     })
+  })
+
+  it('★ observe 必须恒下发，不能因"后端省略=保留"就省掉', () => {
+    // 省略的后果不是数据被清空，而是本页的勾选框变成**只看不改的假控件**：
+    // 用户勾上观察模式、点应用、界面回读仍是关的。这类"配置项假控制"比没做更糟。
+    // draftWafSeg 的关闭分支只返回 { enabled:false }，TS 无法静态确定 observe 存在，
+    // 故用 toMatchObject 断言键与值（同样精确，不会把断言放宽）
+    expect(draftWafSeg(draft({ observe: true }))).toMatchObject({ observe: true })
+    expect(draftWafSeg(draft({ observe: false }))).toMatchObject({ observe: false })
   })
 })
 
 describe('templateWafSeg：模板 → waf 段（套用即强制开启）', () => {
   it('恒为 enabled:true（套用就是"把该站设成模板值"）', () => {
     expect(templateWafSeg(tpl({ waf_profile: 'strict', rate_per_sec: 10, burst: 20 }))).toEqual({
-      enabled: true, profile: 'strict', rate_per_sec: 10, burst: 20, conn_max: 0,
+      enabled: true, profile: 'strict', rate_per_sec: 10, burst: 20, conn_max: 0, observe: false,
     })
   })
 
   it('★ 不限速时不发 burst', () => {
     expect(templateWafSeg(tpl({ rate_per_sec: 0, burst: 30 }))).toEqual({
-      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0,
+      enabled: true, profile: 'basic', rate_per_sec: 0, conn_max: 0, observe: false,
     })
+  })
+
+  it('★ 套用模板一律 observe:false（模板不携带观察模式）', () => {
+    // 观察模式是"该站当下"的调试意图。若跟着模板走，一次套用就会把某次调试
+    // 状态复制到所有站点，静默把它们全部降级成"只记不拦"。
+    expect(templateWafSeg(tpl({})).observe).toBe(false)
   })
 })
 
@@ -377,6 +409,11 @@ describe('applyBaseline / hasConflict：应用前的草稿冲突检测', () => {
     const base = site()
     const after = { ...base, enabled: false, conf_stale: true, last_applied_at: 1700000000 } as Site
     expect(hasConflict(base, after)).toBe(false)
+  })
+
+  it('★ 别处改了观察模式要判冲突（拿旧 s 去 apply 会把它覆盖回去）', () => {
+    const base = site({ waf_observe: false })
+    expect(hasConflict(base, site({ waf_observe: true }))).toBe(true)
   })
 
   it('IP 名单只换顺序不算冲突（语义未变，不该逼用户刷新）', () => {

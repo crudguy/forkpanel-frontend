@@ -124,6 +124,8 @@ export function emptyForm() {
     // 缺兜底的路由表会被后端拒（漏掉的路径会落到别的站点去，用户无从预期）。
     routes: [newRoute('/', 'static')] as RouteRow[],
     wafOn: false, wafProfile: 'basic', wafRate: 0, wafBurst: 0, wafConnMax: 0,
+    // 观察模式（P1-6a）：命中只记日志不拦截。默认关闭——默认值不替用户放宽防护。
+    wafObserve: false,
     // 自定义配置片段（019）：插在主 server 块尾部（所有 location 之后），随保存并应用
     // 重新渲染下发；仅 owner 可改（后端 403 + 64KiB 双护栏）。空串 = 不使用。
     customConf: '',
@@ -155,6 +157,8 @@ export function wafPayload(f: SiteForm) {
   if (f.wafRate > 0 && f.wafBurst > 0) p.burst = f.wafBurst
   // 并发连接数与限速正交：0 = 不限，但照样下发让后端能覆盖旧值
   p.conn_max = f.wafConnMax
+  // 观察模式必须**显式下发**：后端"省略 = 保留现值"，不下发等于用户关不掉它。
+  p.observe = f.wafObserve
   return p
 }
 

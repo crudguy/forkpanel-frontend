@@ -22,6 +22,15 @@ export interface Draft {
   burst: number
   /** 每 IP 并发连接数上限；0 = 不限。与 rate 正交（不限速也能限连接数）。 */
   conn: number
+  /**
+   * 观察模式（P1-6a）：命中只记日志、不返回 403。
+   *
+   * ⚠ 必须进草稿并**恒下发**（`draftWafSeg` 里 `observe: d.observe`，不给兜底）。
+   * 后端 `observe` 省略 = 保留现值；本页 apply 又带 IP 名单等**期望状态**覆盖。
+   * 一旦这里写成"省略"，用户在别处切的观察模式虽不会被误关，但本页的勾选框
+   * 就成了**只看不改的假控件**——改了没生效，比没有这个开关更糟。
+   */
+  observe: boolean
   ipAllow: string
   ipDeny: string
 }
@@ -50,6 +59,7 @@ export function toDraft(s: Site): Draft {
     rate: s.waf_rate_per_sec ?? 0,
     burst: s.waf_burst ?? 0,
     conn: s.waf_conn_max ?? 0,
+    observe: !!s.waf_observe,
     ipAllow: showIps(s.ip_allow ?? []),
     ipDeny: showIps(s.ip_deny ?? []),
   }
@@ -72,7 +82,8 @@ export function draftDirty(s: Site, d: Draft | undefined): boolean {
   return d.on && (d.profile !== (s.waf_profile ?? 'basic')
     || d.rate !== (s.waf_rate_per_sec ?? 0)
     || d.burst !== (s.waf_burst ?? 0)
-    || d.conn !== (s.waf_conn_max ?? 0))
+    || d.conn !== (s.waf_conn_max ?? 0)
+    || d.observe !== !!s.waf_observe)
 }
 
 /**
@@ -100,6 +111,7 @@ export function siteBase(s: Site) {
  * 关闭时只发 `{ enabled: false }`（其余字段对关闭态无意义，且省得后端收到矛盾值）。
  * `burst` 仅在限速时下发：不限速却带 burst 会被后端 400。
  * `conn_max` 恒下发（正交于 rate）：0 也要发，否则清空旧值会失效。
+ * `observe` 同样恒下发：后端"省略 = 保留"，不下发就等于本页的开关是假控件。
  */
 export function draftWafSeg(d: Draft) {
   if (!d.on) return { enabled: false }
@@ -109,10 +121,16 @@ export function draftWafSeg(d: Draft) {
     rate_per_sec: d.rate,
     ...(d.rate > 0 && d.burst > 0 ? { burst: d.burst } : {}),
     conn_max: d.conn || 0,
+    observe: d.observe,
   }
 }
 
-/** 模板 → `waf` 段。套用即**强制开启**并把该站设成模板值。`rate` 空值当 0。 */
+/**
+ * 模板 → `waf` 段。套用即**强制开启**并把该站设成模板值。`rate` 空值当 0。
+ *
+ * `observe` 恒 false：模板只存"拦截强度"，观察模式是**该站当下**的调试意图；
+ * 跟着模板套用会把某次调试状态复制到之后所有站点，静默降低它们的防护。
+ */
 export function templateWafSeg(t: WafTemplate) {
   const rate = t.rate_per_sec || 0
   return {
@@ -121,6 +139,7 @@ export function templateWafSeg(t: WafTemplate) {
     rate_per_sec: rate,
     ...(rate > 0 && t.burst > 0 ? { burst: t.burst } : {}),
     conn_max: t.conn_max || 0,
+    observe: false,
   }
 }
 
@@ -173,6 +192,7 @@ export function applyBaseline(s: Site): string {
     waf_rate_per_sec: s.waf_rate_per_sec ?? null,
     waf_burst: s.waf_burst ?? null,
     waf_conn_max: s.waf_conn_max ?? null,
+    waf_observe: !!s.waf_observe,
     ip_allow: [...(s.ip_allow ?? [])].sort(),
     ip_deny: [...(s.ip_deny ?? [])].sort(),
   })

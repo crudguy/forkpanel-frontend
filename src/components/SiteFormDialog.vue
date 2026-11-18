@@ -154,6 +154,7 @@ function initForm(s: Site | null) {
     wafRate: s.waf_rate_per_sec ?? 0,
     wafBurst: s.waf_burst ?? 0,
     wafConnMax: s.waf_conn_max ?? 0,
+    wafObserve: !!s.waf_observe,
     // 自定义片段回填（019）：null / 缺失一律落空串，textarea 里就是干净的空白。
     customConf: s.custom_conf ?? '',
     // 高级配置回填（020）：库里都有 DEFAULT，缺失时回落到与后端相同的默认值
@@ -842,6 +843,14 @@ function confSpecChanged(): boolean {
               :disabled="!webSupported || isCaddy" :aria-invalid="!!fieldErrs.wafConnMax"
               @input="clearFieldErr('wafConnMax')" />
             <span v-if="fieldErrs.wafConnMax" :key="'wc' + errSeq" class="field-err">{{ fieldErrs.wafConnMax }}</span>
+          </label>
+          <!-- 观察模式：命中只记日志、不返回 403。必须先看日志再决定开不开拦截，
+               否则一条误杀规则上线即打挂业务。仅约束 WAF 关键词/UA/方法类规则，
+               敏感文件与 IP 名单/限速不受影响（属硬性硬化底线）。 -->
+          <label class="inline" data-f="wafObserve"
+            :title="isCaddy ? caddyNoop : '命中只记入威胁日志、不返回 403。仅影响 WAF 关键词/UA/方法类规则；敏感文件与备份路径拦截、IP 名单、限速与并发限制仍照常生效'">
+            <input type="checkbox" v-model="form.wafObserve" :disabled="!webSupported || isCaddy" />
+            观察模式（只记日志，不拦截）
           </label>
         </template>
         <!-- IP 名单与 WAF 开关相互独立：必须留在 v-if="form.wafOn" 之外，

@@ -556,13 +556,17 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
                 <input type="checkbox" v-model="drafts[s.id].on" :aria-label="`${s.name} 启用 WAF`"
                   :disabled="!canApply" :title="applyHint(s)" />
               </td>
-              <td>
+              <td class="prof-cell">
                 <select v-if="drafts[s.id].on" v-model="drafts[s.id].profile" :aria-label="`${s.name} 防护档位`"
                   :disabled="!canApply">
                   <option value="basic">基础</option>
                   <option value="strict">严格</option>
                 </select>
-                <span v-else class="dim">—</span>
+                <!-- 观察模式标记：只读展示当前档位的生效方式（拦截 / 只记日志）。
+                     不在这里改——切换观察模式要配合看威胁日志，入口在站点弹窗。 -->
+                <span v-if="drafts[s.id].on && drafts[s.id].observe" class="badge badge-warn"
+                  :title="`${s.name} 处于观察模式：命中只记入威胁日志，不返回 403`">观察</span>
+                <span v-else-if="!drafts[s.id].on" class="dim">—</span>
               </td>
               <td>
                 <input v-if="drafts[s.id].on && !isCaddy" v-model.number="drafts[s.id].rate"
@@ -900,6 +904,13 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 .ip { width: calc((100% - 6px) / 2); }
 .ip-cell { white-space: nowrap; }
 .ip-cell > input + input { margin-left: 6px; }
+/* 档位格：select + 观察标记并排。**不能用 flex**——td 失去 table-cell 身份后
+   行高与弹性列会一起塌（同 main.css 里那条 td 禁 flex 的纪律），用 nowrap + margin。 */
+.prof-cell { white-space: nowrap; }
+.prof-cell > select { width: calc(100% - 34px); }
+/* 观察标记复用全局 badge-warn 药丸：不另造一套配色，跨页观感才一致。
+   字号用 --fs-12（全站最小字号档，没有 --fs-11）。 */
+.prof-cell > .badge { margin-left: 6px; vertical-align: middle; font-size: var(--fs-12); padding: 0 5px; }
 /* ?site=<name> 定位行：编辑弹窗跳过来时给出落点，避免在一长串站点里找 */
 .row-focus > td { background: var(--c-primary-soft); }
 .row-focus > td:first-child { box-shadow: inset 3px 0 0 var(--c-primary); }
@@ -915,15 +926,16 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 col.w-wfname { width: auto; }
 /* 固定列总和按「控件实宽 + 单元格内边距 26px」定，务必留够余量给唯一的
    弹性列（站点名）：此前总和 1044px > 1280 视口容器 1000px，弹性列被压成 0，
-   站点名整列不可见。现总和 882px，1280 下站点名可拿 ~118px。 */
+   站点名整列不可见。现总和 842px（含档位列的观察标记位），1280 下站点名可拿 ~158px。
+   ⚠ 再加列/加宽前先按此口径重算：1280 视口容器 1000px 是硬上限。 */
 col.w-wfdom { width: 150px; }
-col.w-wfkind { width: 52px; }
+col.w-wfkind { width: 46px; }
 col.w-wfon { width: 52px; }
-col.w-wfprof { width: 92px; }
-col.w-wfrate { width: 106px; }
-col.w-wfburst { width: 106px; }
-col.w-wfconn { width: 96px; }
-col.w-wfip { width: 165px; }
+col.w-wfprof { width: 114px; }
+col.w-wfrate { width: 100px; }
+col.w-wfburst { width: 100px; }
+col.w-wfconn { width: 90px; }
+col.w-wfip { width: 160px; }
 col.w-wfacts { width: 80px; }
 /* 模板表列宽（中小屏 <1440）：名称为唯一弹性列；IP 列等宽；操作列容 3 个文字按钮。
    宽屏走下方媒体档的 7 条定宽，避免名称列独吞 898px。
@@ -948,13 +960,13 @@ col.w-tacts { width: 170px; }
 @media (min-width: 1440px) {
   col.w-wfname { width: 156px; }
   col.w-wfdom { width: 180px; }
-  col.w-wfkind { width: 64px; }
+  col.w-wfkind { width: 58px; }
   col.w-wfon { width: 56px; }
-  col.w-wfprof { width: 104px; }
-  col.w-wfrate { width: 120px; }
-  col.w-wfburst { width: 120px; }
+  col.w-wfprof { width: 122px; }
+  col.w-wfrate { width: 114px; }
+  col.w-wfburst { width: 114px; }
   col.w-wfconn { width: 108px; }
-  col.w-wfip { width: 160px; }
+  col.w-wfip { width: 152px; }
   col.w-wfacts { width: 92px; }
 
   /* 策略模板表同档 7 列全定宽：与站点表共用同一断点和同一套等比放大逻辑，
