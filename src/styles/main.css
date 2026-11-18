@@ -486,7 +486,7 @@ td button { vertical-align: middle; }
    搜索框归右侧动作簇，不夹在计数与 spacer 之间、不居中；计数文本占左侧独立槽。
    FilesView 是显式例外：其 tools-actions 整组换行（≥1401 display:contents /
    ≤1400 基准宽 140），拆出筛选框会破坏布局，详见 FilesView scoped 注释。 */
-.card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
+.card-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--c-border); }
 .card-toolbar .icon { color: var(--c-primary); }
 .card-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
 /* 卡片工具条里的「小节标题」槽（WAF 多卡页把图标 + 标题前置在工具条内，

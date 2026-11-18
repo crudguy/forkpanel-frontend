@@ -1037,7 +1037,7 @@ th.sortable.on { color: var(--c-primary); }
      此前这里写死 -22，并留了一整段「若修好顺序 bug 须同步本行」的警告——
      那个耦合本身就是缺陷，现在由变量消掉了。 */
 .fp-head-row { position: sticky; top: var(--topbar-h); z-index: 20; background: var(--c-bg);
-  margin-top: calc(-1 * var(--content-pt)); margin-bottom: 0; padding: 24px 2px 14px; }
+  margin-top: calc(-1 * var(--content-pt)); margin-bottom: 0; padding: 16px 2px 10px; }
 .drop-mask {
   position: fixed; inset: 0; z-index: 60;
   display: flex; align-items: center; justify-content: center;

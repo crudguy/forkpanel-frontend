@@ -311,7 +311,7 @@ async function doKill() {
 .card.flush.procs-card { overflow: hidden; }
 /* 表头工具条：与 thead 合成统一表头区，下边线与 thead 的上沿相接，
    视觉上是一整块"表头"而非悬浮条 + 卡片列头两层。 */
-.procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-border); }
+.procs-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--c-border); }
 .procs-toolbar .icon { color: var(--c-primary); }
 .procs-toolbar .count { font-weight: 600; font-size: var(--fs-14); }
 /* 搜索框：flex 允许收缩，窄屏时先让输入框变窄而不是把刷新按钮挤出去 */
