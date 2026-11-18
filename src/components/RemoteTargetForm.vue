@@ -22,6 +22,8 @@ const props = defineProps<{
   disabled?: boolean
   /** 该计划是否**已存**凭据（只用来改提示文案；凭据值本身永远拿不到） */
   hasSecret?: boolean
+  /** 并入宿主的 .row 表单行（display:contents）；「改远端」那处保持独立分区 */
+  inline?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [RemoteConfig] }>()
@@ -32,7 +34,7 @@ function set<K extends keyof RemoteConfig>(k: K, v: RemoteConfig[K]) {
 </script>
 
 <template>
-  <div class="remote">
+  <div class="remote" :class="{ inline }">
     <label>远端副本
       <select :value="modelValue.kind" :disabled="disabled"
         @change="set('kind', ($event.target as HTMLSelectElement).value as RemoteConfig['kind'])">
@@ -87,4 +89,7 @@ function set<K extends keyof RemoteConfig>(k: K, v: RemoteConfig[K]) {
 .remote label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .remote label.wide { flex: 1 1 280px; }
 .remote input, .remote select { font-size: var(--fs-13); }
+/* 并入宿主 .row 时根盒子不生成，内部 label 直接成为表单行的 flex item，
+   随父级 flex-wrap 自然折行，不再独占一行；「改远端」那处不加 inline，保持独立分区。 */
+.remote.inline { display: contents; }
 </style>

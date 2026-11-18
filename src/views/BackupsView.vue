@@ -511,10 +511,9 @@ const selName = ref('')
           <label>cron（可空）
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
+          <RemoteTargetForm v-model="form.remote" :disabled="!canManage" inline />
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
-
-        <RemoteTargetForm v-model="form.remote" :disabled="!canManage" />
 
         <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
           text="主密钥不存入数据库，请单独备份。丢失后，加密的备份将永远无法解密。" />
@@ -814,10 +813,11 @@ const selName = ref('')
 .tip code { font-size: var(--fs-12); }
 /* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行。
    ⚠ .row 父容器是 align-items:flex-end（为了让「添加」按钮与输入框底边齐），
-   而 .chk 只有单行高（19px vs 普通字段 62px），不干预就会被按底边对齐、
-   沉到输入框那一行，比相邻字段名低 ~43px。align-self:flex-start 让它回到
-   字段名这一行，与其它 label 的第一行齐平（与 SettingsView .chk-inline 同思路）。 */
-.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; align-self: flex-start; }
+   而 .chk 只有单行高（19px vs 普通字段 62px）：不干预会被按底边钉死（沉底），
+   align-self:flex-start 又会悬在字段名行、下方空一片。正解是 stretch——把
+   label 拉到与其它字段同高，内部 align-items:center 让复选框落在「控件行」
+   的垂直中心，与旁边的输入框齐平，这才是视觉上真正的协同。 */
+.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; align-self: stretch; }
 .chk input { width: auto; }
 /* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
