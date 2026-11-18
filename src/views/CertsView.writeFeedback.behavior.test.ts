@@ -31,6 +31,9 @@ function mount(routes: Record<string, FakeRoute>): Promise<Mounted> {
       [API.certs.list()]: [CERT],
       [API.sites.list()]: [SITE],
       [API.certs.renewSweep()]: { last_at: 0, last_queued: 0, next_at: 0 },
+      // 证书页现在还会拉 DNS 凭据（dns-01 的前提）。不登记会被 assertClean 抓到——
+      // 这正是该断言的意义：新增请求必须显式出现在假件里。
+      [API.dns.creds()]: { items: [] },
       ...routes,
     },
   })

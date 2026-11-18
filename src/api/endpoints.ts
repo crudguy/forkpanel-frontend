@@ -331,6 +331,18 @@ export const API = {
     sshPort: () => '/api/v1/security/ssh-port',
   },
 
+  /**
+   * DNS 提供商凭据（dns-01 的前提）。
+   *
+   * GET 列表 / PUT upsert（按 provider 唯一，前端不必关心记录 id）/
+   * DELETE 按 provider；check 用**已存**凭据复验，不要求用户重填 token。
+   */
+  dns: {
+    creds: () => '/api/v1/dns/credentials',
+    cred: (provider: string) => `/api/v1/dns/credentials/${enc(provider)}`,
+    check: (provider: string) => `/api/v1/dns/credentials/${enc(provider)}/check`,
+  },
+
   cron: {
     jobs: () => '/api/v1/cron/jobs',
     job: (id: string) => `/api/v1/cron/jobs/${enc(id)}`,

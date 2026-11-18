@@ -128,6 +128,8 @@ describe('证书页搜索', () => {
           { id: 1, name: 'blog-site', domains: ['blog.example.org'] },
         ],
         [API.certs.renewSweep()]: { last_at: 0, last_queued: 0, next_at: 0 },
+        // 证书页挂载时会拉 DNS 凭据（dns-01 的前提）；不登记会被 assertClean 抓到
+        [API.dns.creds()]: { items: [] },
       },
     })
     const input = searchInput(m.host, '搜索证书')

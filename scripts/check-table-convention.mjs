@@ -52,6 +52,7 @@ const REGISTRY = [
   R('views/WafView.vue', 3, { note: '站点/模板表接；拦截事件按页服务端取（接口无总数），事件流不做表头排序' }),
   R('components/containers/ComposeTab.vue', 3, { note: '编排 / 项目 / 下钻容器三张表各自独立分页' }),
   R('components/containers/ContainersTab.vue', 1),
+  R('components/DnsCredSection.vue', 1, { pager: false, sort: false, client: false, note: 'DNS 凭据表：按 provider 唯一，行数上限等于「支持的提供商数」（当前 1 行，可预见的将来也只有个位数），分页与表头排序都没有意义' }),
   R('components/containers/ImagesTab.vue', 1),
   R('components/containers/NetworksTab.vue', 1),
   R('components/containers/StatsTab.vue', 1, { pager: false, sort: false, client: false, note: '实时指标快照：每 3s 整表重采样，分页/排序会破坏「同一时刻对照」的语义' }),

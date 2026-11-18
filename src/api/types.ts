@@ -911,6 +911,42 @@ export const certSourceLabel = enumLabel({
   acme: 'ACME 签发', selfsigned: '自签', manual: '手动上传',
 })
 
+/**
+ * DNS 提供商凭据（`GET /dns/credentials` 的一项）。
+ *
+ * ⚠ `secret_masked` **永远是掩码**，接口不存在返回明文的路径——拿到明文就等于
+ * 拿到该域名所在 zone 的 DNS 控制权。所以编辑表单的 token 输入框必须留空表示
+ * 「保持原值」，不能回填。
+ *
+ * `usable=false` 表示库里密文解不开（典型原因：主密钥被更换），此时该凭据
+ * **不可用于签发**，界面要引导重填而不是让用户选中后撞一个看不懂的错。
+ */
+export interface DnsCred {
+  id: number
+  provider: string
+  /** 展示名由后端给，前端不自己维护映射（两处文案不一致时以这里为准）。 */
+  provider_label: string
+  label: string
+  secret_masked: string
+  /** 留空 = 由后端自动探测域名所属 zone。 */
+  zone_hint: string
+  usable: boolean
+  /** 上次校验时间戳；0 = 从未校验。 */
+  last_check_at: number
+  last_check_ok: boolean
+  last_check_msg: string
+  created_at: number
+  updated_at: number
+}
+
+/** 凭据校验结果（`POST /dns/credentials/{provider}/check`）。 */
+export interface DnsCredCheck {
+  ok: boolean
+  message: string
+  zones: string[]
+  checked_at: number
+}
+
 /** 自动续期扫描状态（`GET /certs/renew-sweep`）。CertsView 与 SitesView 都要拉
  *  （SitesView 还要往下传给站点编辑弹窗展示「上次/下次扫描」），此前两处各声明一份
  *  同名字段完全相同的 interface——改字段就要改两处，故提到这里与 `Cert` 同处。 */

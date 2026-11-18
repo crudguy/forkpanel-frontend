@@ -16,7 +16,7 @@ import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import {
   CAP, certLevel, certSourceLabel, fmtDate,
-  type Cert, type RenewSweep, type Site,
+  type Cert, type RenewSweep, type Site, type DnsCred,
 } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
@@ -25,8 +25,10 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
+import DnsCredSection from '@/components/DnsCredSection.vue'
 import { toast } from '@/composables/useToast'
 import { sslGate } from '@/composables/sslGate'
+import { dns01Gate, providerLabel } from '@/composables/dnsCred'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
@@ -67,7 +69,8 @@ async function load(silent = false) {
     catch { /* 扫描状态缺失不阻断证书列表 */ }
   }, undefined, { silent })
 }
-onMounted(load)
+// 证书列表与 DNS 凭据**并行各自加载**：凭据失败不该把证书页打成错误态。
+onMounted(() => { void load(); void loadDnsCreds() })
 
 /** 反查域名所属站点名（一个域名一行，多域名站点会重复出现）。 */
 function siteOf(domain: string): string {
@@ -151,14 +154,44 @@ async function doDeleteCert() {
 }
 
 // 申请证书（选站点 + 方式 + email）。证书绑定 domain，故须先选站点。
-const sslModal = ref<{ siteId: number; method: 'self-signed' | 'http-01'; email: string } | null>(null)
+// dns-01 额外需要 dns_provider（由 dnsGate 解析：只有一家可用时自动选中）。
+const sslModal = ref<{
+  siteId: number
+  method: 'self-signed' | 'http-01' | 'dns-01'
+  email: string
+  dnsProvider: string
+} | null>(null)
 const sslBox = ref<HTMLElement | null>(null)
+/**
+ * 已配置的 DNS 凭据（dns-01 的前提）。
+ *
+ * 独立加载 + **独立失败隔离**：凭据拉不到时只让 dns-01 不可用，
+ * 不能连带把证书列表打成错误页（那会让「证书页坏了」的错觉盖住真实原因）。
+ */
+const dnsCreds = ref<DnsCred[]>([])
+const dnsCredsErr = ref('')
+async function loadDnsCreds() {
+  dnsCredsErr.value = ''
+  try {
+    const r = await api.get<{ items: DnsCred[] }>(API.dns.creds())
+    dnsCreds.value = r?.items ?? []
+  } catch (e) {
+    dnsCreds.value = []
+    dnsCredsErr.value = errorText(e)
+  }
+}
+const dnsCredSection = ref<{ reload: () => Promise<void> } | null>(null)
+/** dns-01 在弹窗内的前置判定 */
+const sslDnsGate = computed(() =>
+  dns01Gate(dnsCreds.value, sslModal.value?.dnsProvider ?? ''),
+)
 function openApply() {
   const first = sites.value[0]
   sslModal.value = {
     siteId: first ? first.id : 0,
     method: selfSignedSupported.value ? 'self-signed' : 'http-01',
     email: '',
+    dnsProvider: '',
   }
 }
 async function execSsl() {
@@ -166,10 +199,21 @@ async function execSsl() {
   if (!m || !m.siteId) return
   const site = sites.value.find(s => s.id === m.siteId)
   if (!site) return
+  // ACME 必须有邮箱（http-01 与 dns-01 同一个账户）；缺了就明确报，不代填假地址
+  const isAcme = m.method === 'http-01' || m.method === 'dns-01'
+  if (isAcme && !m.email.trim()) { error.value = 'ACME 签发需要账户邮箱'; return }
+  // dns-01 缺凭据时提交，后端只会回"未找到凭据"——用户据此不知该去哪配。
+  // 所以在请求之前就把缺口说出来。
+  if (m.method === 'dns-01' && !sslDnsGate.value.ok) { error.value = sslDnsGate.value.reason; return }
   busy.value = true; error.value = ''
   try {
     await api.post(API.sites.sslApply(site.id),
-      { domains: site.domains, method: m.method, email: m.method === 'http-01' ? m.email.trim() : undefined })
+      {
+        domains: site.domains,
+        method: m.method,
+        email: isAcme ? m.email.trim() : undefined,
+        dns_provider: m.method === 'dns-01' ? (sslDnsGate.value.resolved || undefined) : undefined,
+      })
     toast(m.method === 'self-signed'
       ? `已为 ${site.name} 签发面板自签证书`
       : `已提交 ${site.name} 的 ACME 签发任务`)
@@ -297,6 +341,14 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
         @update:page="gotoPage" @update:size="changeSize" />
     </div>
 
+    <!-- DNS 凭据（dns-01 的前提）。放在列表之下：它是低频配置项，
+         不该抢在证书列表前面；但必须与本页同屏，用户配完能立刻去申请。 -->
+    <p v-if="dnsCredsErr" class="err-bar" role="alert">
+      <Icon name="alert" :size="15" class="ic" /><span>DNS 凭据读取失败：{{ dnsCredsErr }}</span>
+      <button class="btn-ghost btn-sm err-retry" type="button" @click="loadDnsCreds">重试</button>
+    </p>
+    <DnsCredSection ref="dnsCredSection" :can-manage="canSsl" @changed="loadDnsCreds" />
+
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在列表卡顶栏 -->
     <HelpDrawer :open="helpOpen" title="证书说明" @close="helpOpen = false">
       <p>证书按站点管理：单个站点的申请与查看在「网站 → 编辑站点」里完成；本页汇总<b>所有站点</b>的证书，便于统一查看到期时间和续期。</p>
@@ -330,14 +382,37 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
             <input type="radio" value="http-01" v-model="sslModal.method" :disabled="!sslSupported" />
             <span><b>ACME http-01</b><br /><span class="dim">可信证书，需公网 80 端口可达 + certbot</span></span>
           </label>
+          <!-- dns-01：内网机 / 只开 443 / 域名暂未指向本机时唯一可行。
+               凭据没配好时不置灰——灰掉会让用户完全不知道有这个选项；
+               点进来看到"先去配凭据"的指引比一个灰单选更有用。 -->
+          <label :class="{ on: sslModal.method === 'dns-01' }">
+            <input type="radio" value="dns-01" v-model="sslModal.method" />
+            <span><b>ACME dns-01</b><br /><span class="dim">用 DNS TXT 证明归属，<b>不要求 80 可达</b>；需先配 DNS 凭据</span></span>
+          </label>
         </div>
-        <label v-if="sslModal.method === 'http-01'" class="blk">邮箱（ACME 注册）
+        <!-- 有凭据才给选择器；没凭据时下面那条提示已把该做的事说清 -->
+        <label v-if="sslModal.method === 'dns-01' && dnsCreds.some(c => c.usable)" class="blk">DNS 提供商
+          <select v-model="sslModal.dnsProvider">
+            <option value="">自动（唯一可用的一家）</option>
+            <option v-for="c in dnsCreds.filter(x => x.usable)" :key="c.provider" :value="c.provider">
+              {{ providerLabel(c.provider) }}{{ c.label ? `（${c.label}）` : '' }}
+            </option>
+          </select>
+        </label>
+        <label v-if="sslModal.method === 'http-01' || sslModal.method === 'dns-01'" class="blk">邮箱（ACME 注册）
           <input v-model="sslModal.email" type="email" placeholder="ops@example.com" autocomplete="email" />
         </label>
+        <!-- dns-01 前置缺口：用户在这个弹窗里唯一的线索，必须可见 -->
+        <p v-if="sslModal.method === 'dns-01' && !sslDnsGate.ok" class="dns-gate" role="status">
+          <Icon name="alert" :size="14" class="ic" /><span>{{ sslDnsGate.reason }}</span>
+        </p>
         <div class="modal-foot">
           <div class="modal-actions">
             <button class="btn-ghost" @click="closeSslModal">取消</button>
-            <button class="btn-primary" :disabled="busy || !sslModal.siteId || (sslModal.method === 'http-01' && !sslModal.email.trim())"
+            <button class="btn-primary"
+              :disabled="busy || !sslModal.siteId
+                || ((sslModal.method === 'http-01' || sslModal.method === 'dns-01') && !sslModal.email.trim())
+                || (sslModal.method === 'dns-01' && !sslDnsGate.ok)"
               @click="execSsl">申请</button>
           </div>
         </div>
@@ -391,5 +466,14 @@ table.fixed { table-layout: fixed; width: 100%; }
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .radios label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--fs-13); }
 .radios label.on { border-color: var(--c-primary); background: var(--c-active); }
+/* dns-01 前置缺口提示（信息色=「还差一步」，与红底 .err-bar「做错了」区分）。
+   不新造 --c-warn-soft：main.css 没这个变量，自造会绕开全站配色基线。 */
+.dns-gate {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin: 2px 0 10px; padding: 8px 10px; font-size: var(--fs-12); line-height: 1.55;
+  border-radius: var(--radius-xs); color: var(--c-text);
+  background: var(--c-info-soft); border: 1px solid var(--c-border);
+}
+.dns-gate .ic { flex: none; margin-top: 1px; color: var(--c-info); }
 .skeleton.box { height: 160px; }
 </style>
