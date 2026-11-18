@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import SideNav from '@/components/SideNav.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import CommandPalette from '@/components/CommandPalette.vue'
 import TopbarMaintenance from '@/components/TopbarMaintenance.vue'
 import Icon from '@/components/Icon.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
@@ -26,6 +27,8 @@ import type { TimeMode } from '@/api/types'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+// 命令面板候选直接来自路由表（唯一事实源），不在组件里维护会漂移的清单
+const commandRoutes = router.getRoutes()
 
 // 表格密度（B8）：全站共享偏好，放用户菜单里——它是"看的方式"，不是某一页的
 // 功能，塞进某个视图的工具条会让用户以为只影响那一页。主题与时区同处此菜单。
@@ -351,6 +354,8 @@ async function logout() {
     <ChangePasswordDialog :open="pwdOpen" @close="pwdOpen = false" />
     <!-- 全站唯一的浮层提示宿主（脱离文档流，不影响任何页面布局） -->
     <ToastHost />
+    <!-- 全局命令面板：常驻根层，浮层自己 Teleport 到 body（不要挪进任何 v-if 块） -->
+    <CommandPalette :routes="commandRoutes" />
   </div>
 </template>
 
