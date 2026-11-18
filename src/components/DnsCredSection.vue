@@ -19,7 +19,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import type { DnsCred } from '@/api/types'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 import {
   DNS_PROVIDERS, providerLabel, credBadge, credCheckText, validateCredInput,
   stripErrorWrappers,
@@ -111,7 +111,7 @@ async function check(c: DnsCred) {
       r?.ok ? 'ok' : 'err')
     await load()
   } catch (e) {
-    toast(errorText(e), 'err')
+    toastError(e)
   } finally { busyProv.value = '' }
 }
 
@@ -123,7 +123,7 @@ async function remove(c: DnsCred) {
     await load()
     emit('changed')
   } catch (e) {
-    toast(errorText(e), 'err')
+    toastError(e)
   } finally { busyProv.value = '' }
 }
 

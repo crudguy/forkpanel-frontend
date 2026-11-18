@@ -21,7 +21,7 @@ import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useModal } from '@/composables/useModal'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 
 const auth = useAuthStore()
 
@@ -495,7 +495,7 @@ async function saveLayout(next: CardPref[]) {
     const r = await api.put<{ cards: CardPref[] }>(API.settings.dashboard(), { cards: next })
     if (r?.cards?.length) layout.value = r.cards
     toast('卡片布局已保存')
-  } catch (e) { toast(errorText(e), 'warn') }
+  } catch (e) { toastError(e, 'warn') }
 }
 /** 拖拽/勾选的底稿：尚无已存布局时以当前默认顺序为准 */
 function ensureLayout(): CardPref[] {

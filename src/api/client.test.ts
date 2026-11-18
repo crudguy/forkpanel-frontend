@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { api, ApiError, ValidationError, errorText, isUnsupported, errorFieldDetail } from './client'
+import { api, ApiError, ValidationError, errorText, errorCodeOf, errorCopyText, isUnsupported, errorFieldDetail } from './client'
 import { API } from './endpoints'
 
 /**
@@ -58,6 +58,30 @@ describe('errorText', () => {
   it('未知码：后端 message 含中文则透出，纯英文则兜底', () => {
     expect(errorText(new ApiError(99999, 500, '磁盘空间不足'))).toBe('磁盘空间不足')
     expect(errorText(new ApiError(99999, 500, 'internal server error'))).toBe('请求失败，请稍后重试')
+  })
+})
+
+describe('错误码可展示与可复制（外部分析第 0 组缺口）', () => {
+  it('errorCodeOf 只认 ApiError，不给非 HTTP 异常造 code', () => {
+    expect(errorCodeOf(new ApiError(10005, 409, 'conflict'))).toBe(10005)
+    expect(errorCodeOf(new ValidationError('字段有误'))).toBeUndefined()
+    expect(errorCodeOf(new TypeError('boom'))).toBeUndefined()
+    expect(errorCodeOf(null)).toBeUndefined()
+  })
+
+  it('errorCopyText = code + 用户文案 + 路由，且不泄露内部英文 message', () => {
+    const text = errorCopyText(new ApiError(10005, 409, 'conflict: site name exists'), '/sites')
+    expect(text).toBe('code=10005\n已有同名资源，请换一个名称\nroute: /sites')
+    expect(text).not.toContain('conflict:')
+  })
+
+  it('非 ApiError 不产生假 code', () => {
+    expect(errorCopyText(new ValidationError('域名格式不正确'))).toBe('域名格式不正确')
+    expect(errorCopyText(new TypeError('boom'))).toBe('请求失败，请稍后重试')
+  })
+
+  it('errorText 返回值完全不变：唯一闸门不能被新功能污染', () => {
+    expect(errorText(new ApiError(10002, 401, 'unauthorized'))).toBe('登录已过期，请重新登录')
   })
 })
 

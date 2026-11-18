@@ -11,6 +11,7 @@
  * 超出丢最旧，避免连点堆积把屏幕糊满。
  */
 import { reactive } from 'vue'
+import { errorCodeOf, errorCopyText, errorText } from '@/api/client'
 
 /**
  * 四态。**取值到此为止，不要再自造 kind**——每加一种就要给一种新配色/图标，
@@ -24,6 +25,10 @@ export interface ToastItem {
   id: number
   kind: ToastKind
   text: string
+  /** 机器可读错误码（只有来自 ApiError 的 err/warn 才有） */
+  code?: number
+  /** 可一键复制的完整排障信息；不含内部英文 message */
+  copyText?: string
 }
 
 /**
@@ -44,12 +49,20 @@ let seq = 0
  * @param kind 语义：ok 成功 / err 失败 / warn 警告 / info 中性提示
  * @returns 该条的 id，可用于提前 dismiss
  */
-export function toast(text: string, kind: ToastKind = 'ok'): number {
+export function toast(text: string, kind: ToastKind = 'ok', code?: number, copyText?: string): number {
   const id = ++seq
-  items.push({ id, kind, text })
+  items.push({ id, kind, text, ...(code === undefined ? {} : { code }), ...(copyText === undefined ? {} : { copyText }) })
   while (items.length > MAX) items.shift()
   window.setTimeout(() => dismiss(id), TTL[kind])
   return id
+}
+
+/**
+ * API 错误的统一入口：文案走唯一闸门 `errorText`，错误码与可复制信息单独带出。
+ * 调用方只需传原始异常，不必自己拼文案——否则 15 处调用各自拼一遍又会长出差异。
+ */
+export function toastError(e: unknown, kind: ToastKind = 'err'): number {
+  return toast(errorText(e), kind, errorCodeOf(e), errorCopyText(e))
 }
 
 /** 手动关闭（用户点击 toast 时调用）。 */

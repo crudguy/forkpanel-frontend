@@ -15,7 +15,7 @@
  * 由它统一负责（全站纪律，见 composables/usePolling.ts）。
  */
 import { computed, ref, watch } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CreateContainerDialog from '@/components/CreateContainerDialog.vue'
@@ -29,7 +29,7 @@ import { usePolling } from '@/composables/usePolling'
 import { useRowLoad } from '@/composables/useRowLoad'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { POPULAR_IMAGES, filterPopular, groupByCategory, isPulled } from '@/composables/popularImages'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 
 interface Image {
   id: string; repository: string; tag: string; size: string; created: string
@@ -110,7 +110,7 @@ async function onPull(image: string) {
     toast(`已拉取镜像 ${r.repository}:${r.tag}（可在「镜像」页查看）`)
     pullOpen.value = false
     await load()
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { pullBusy.value = false }
 }
 
@@ -151,7 +151,7 @@ async function onCreated(p: CreateContainerPayload) {
     const r = await api.post<{ id: string; name: string; state: string }>(API.containers.create(), p)
     toast(`已创建容器 ${r.name}（状态 ${r.state}，请到「容器」Tab 启动）`)
     createOpen.value = false
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { createBusy.value = false }
 }
 
@@ -170,7 +170,7 @@ async function doRemoveImage() {
   try {
     await api.del(API.containers.removeImage(key))
     toast(`已删除镜像 ${key}`)
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally {
     setActing(key, false)
     delTarget.value = null

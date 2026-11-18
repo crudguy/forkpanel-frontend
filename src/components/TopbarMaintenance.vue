@@ -21,7 +21,7 @@ import { API } from '@/api/endpoints'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 import { usePolling } from '@/composables/usePolling'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 import type { UpgradeCheck } from '@/api/types'
@@ -130,7 +130,7 @@ async function postUpgrade(version: string | null, label: string) {
     await waitForUpgrade(appVersion.value)
   } catch (e) {
     upgrading.value = false
-    toast(errorText(e), 'err')
+    toastError(e)
   }
 }
 async function doUpgrade() {

@@ -28,7 +28,7 @@ import type { SettingsReport, LlmTestResult, UpgradeCheck } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
@@ -345,7 +345,7 @@ async function doUpgrade() {
     await waitForUpgrade(installation.value?.app_version ?? '')
   } catch (e) {
     upgrading.value = false
-    toast(errorText(e), 'err')
+    toastError(e)
   }
 }
 

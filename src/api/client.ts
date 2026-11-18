@@ -282,3 +282,27 @@ export function errorText(e: unknown): string {
       return /[\u4e00-\u9fff]/.test(e.message) ? e.message : '请求失败，请稍后重试'
   }
 }
+
+/**
+ * 机器可读错误码（只有 ApiError 有；ValidationError / 运行时异常没有）。
+ *
+ * 与 `errorText` 刻意分开：后者是全站错误文案的唯一闸门、被几十条断言钉死，
+ * 直接往它返回值里塞 code 会改掉所有调用点的文案。这里只暴露 code 本身，
+ * 由 UI 决定怎么展示/复制（toast 徽标、错误边界的工单信息）。
+ */
+export function errorCodeOf(e: unknown): number | undefined {
+  return e instanceof ApiError ? e.code : undefined
+}
+
+/**
+ * 拼一条可直接贴进工单的排障信息：错误码 + 面向用户的文案 + 可选路由。
+ *
+ * ⚠ 只拼 `errorText(e)`，**绝不拼 `ApiError.message`**——后者是内部英文串
+ * （如 `conflict: site name exists`），泄露内部机制正是发布构建要避免的。
+ */
+export function errorCopyText(e: unknown, route?: string): string {
+  const code = errorCodeOf(e)
+  const lines = [code === undefined ? '' : `code=${code}`, errorText(e)]
+  if (route) lines.push(`route: ${route}`)
+  return lines.filter(Boolean).join('\n')
+}

@@ -25,7 +25,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import { useModal } from '@/composables/useModal'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { allFieldHints } from '@/composables/appsFieldGuide'
@@ -404,7 +404,7 @@ async function act(a: AppInfo, action: 'start' | 'stop' | 'restart') {
     await load(true)
     toast(`已${action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启'} ${a.name}`)
   } catch (e) {
-    toast(errorText(e), 'err')
+    toastError(e)
   } finally {
     busyId.value = null
   }
@@ -417,7 +417,7 @@ async function toggleEnabled(a: AppInfo, val: boolean) {
     await load(true)
     toast(val ? `已托管 ${a.name}（单元已装、反代站点已下发）` : `已停止托管 ${a.name}（撤下站点并删除单元）`)
   } catch (e) {
-    toast(errorText(e), 'err')
+    toastError(e)
     await load(true) // 失败时回滚开关的真实状态，不靠前端猜
   } finally {
     busyId.value = null
@@ -437,7 +437,7 @@ async function doRemove() {
     await load()
     toast(`已删除应用 ${a.name}`)
   } catch (e) {
-    toast(errorText(e), 'err')
+    toastError(e)
   } finally {
     busyId.value = null
   }

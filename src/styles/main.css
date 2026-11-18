@@ -857,6 +857,15 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 }
 .toast .ic { flex: none; margin-top: 1px; }
 .toast .tx { min-width: 0; word-break: break-word; }
+/* 机器可读错误码：点击复制 code + 用户文案，供贴进工单。徽标自身可点，
+   与整条 toast 的"点击关闭"用 @click.stop 隔离。 */
+.toast-code {
+  flex: none; align-self: center; margin-left: 2px; padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--c-danger) 45%, transparent);
+  border-radius: 999px; background: var(--c-surface); color: var(--c-text-dim);
+  font-family: var(--mono); font-size: var(--fs-12); cursor: pointer;
+}
+.toast-code:hover { color: var(--c-danger); border-color: var(--c-danger); }
 
 /* 四态：统一的「左边色条 + 图标色 + 柔底色」三重区分，色弱用户也能靠图标分辨 */
 .toast-ok { border-color: color-mix(in srgb, var(--c-ok) 45%, transparent); background: color-mix(in srgb, var(--c-ok-soft) 40%, var(--c-surface-2)); border-left: 3px solid var(--c-ok); }

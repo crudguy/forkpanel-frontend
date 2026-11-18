@@ -25,6 +25,7 @@
 import { onErrorCaptured, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import { errorCodeOf, errorCopyText } from '@/api/client'
 
 const props = defineProps<{
   /** 兜底标题，区分层级（布局崩 / 页面崩） */
@@ -33,9 +34,14 @@ const props = defineProps<{
 
 const err = ref('')
 const detail = ref('')
+/** 渲染异常里若有 ApiError，把机器可读错误码单独带出来供报工单 */
+const code = ref<number | undefined>()
+const raw = ref<unknown>()
 const retryKey = ref(0)
 
 onErrorCaptured((e: unknown) => {
+  raw.value = e
+  code.value = errorCodeOf(e)
   err.value = e instanceof Error ? e.message : String(e)
   // 栈只留在控制台/剪贴板，不铺在页面上（对用户无用，还会把布局撑乱）
   detail.value = e instanceof Error ? (e.stack ?? '') : ''
@@ -45,11 +51,13 @@ onErrorCaptured((e: unknown) => {
 
 // 切路由即清空：用户去别的页面就该能继续，不必先点"重试"
 const route = useRoute()
-watch(() => route.fullPath, () => { err.value = '' })
+watch(() => route.fullPath, () => { err.value = ''; code.value = undefined; raw.value = undefined })
 
 function retry() {
   err.value = ''
   detail.value = ''
+  code.value = undefined
+  raw.value = undefined
   retryKey.value += 1
 }
 function reload() {
@@ -57,7 +65,8 @@ function reload() {
 }
 /** 给用户一条能贴进工单的完整信息 */
 async function copy() {
-  const text = `${err.value}\n\nroute: ${route.fullPath}\n\n${detail.value}`
+  const base = errorCopyText(raw.value, route.fullPath)
+  const text = detail.value ? `${base}\n\n${detail.value}` : base
   try {
     await navigator.clipboard.writeText(text)
   } catch { /* 无剪贴板权限时静默：不要让兜底页自己再报错 */ }
@@ -71,6 +80,7 @@ async function copy() {
       <b>{{ props.title ?? '页面渲染出错' }}</b>
     </div>
     <p class="eb-msg">{{ err }}</p>
+    <p v-if="code !== undefined" class="eb-code">错误码：<code>{{ code }}</code>（已包含在复制内容中）</p>
     <p class="eb-hint">
       页面渲染出现异常，可先重试或刷新。若反复出现，请把下面的完整错误信息反馈给维护者。
     </p>
@@ -101,6 +111,8 @@ async function copy() {
   color: var(--c-text);
   word-break: break-word;
 }
+.eb-code { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); }
+.eb-code code { font-family: var(--mono); color: var(--c-danger); }
 .eb-hint { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.7; }
 .eb-path { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); }
 .eb-actions { display: flex; gap: 8px; margin-top: 14px; }

@@ -8,7 +8,7 @@
  * 父级不再认识「容器」这个 Tab 的任何状态——它只剩页头、TabBar、诊断分支与帮助抽屉。
  */
 import { computed, ref, watch } from 'vue'
-import { api, errorText } from '@/api/client'
+import { api } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { containerStateBadge, containerStateLabel } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -26,7 +26,7 @@ import { statusDetail } from '@/components/containers/containerStatus'
 import { usePolling } from '@/composables/usePolling'
 import { useRowLoad } from '@/composables/useRowLoad'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 
 interface Container {
   id: string; name: string; image: string; state: string
@@ -81,7 +81,7 @@ async function act(c: Container, op: 'start' | 'stop' | 'restart') {
   try {
     await api.post(API.containers[op](c.id), {})
     toast(`已${labels[op]}容器 ${c.name}`)
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { setActing(c.id, false); await load() }
 }
 
@@ -97,7 +97,7 @@ async function doRemove() {
   try {
     await api.del(API.containers.remove(c.id, force))
     toast(`已删除容器 ${c.name}`)
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { setActing(c.id, false); delForce.value = false; delTarget.value = null; await load() }
 }
 function onDelCancel() { delForce.value = false; delTarget.value = null }
@@ -127,7 +127,7 @@ async function onCreated(p: CreateContainerPayload) {
     toast(`已创建容器 ${r.name}（状态 ${r.state}，请在列表启动）`)
     createOpen.value = false
     await load()
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { createBusy.value = false }
 }
 
@@ -146,7 +146,7 @@ async function onEditLimits(payload: { cpu_quota?: number; mem_limit?: string; r
     toast(`已更新容器 ${c.name} 的资源限制（未重启容器）`)
     editTarget.value = null
     await load()
-  } catch (e) { toast(errorText(e), 'err') }
+  } catch (e) { toastError(e) }
   finally { editBusy.value = false }
 }
 function onEditCancel() { editTarget.value = null }
