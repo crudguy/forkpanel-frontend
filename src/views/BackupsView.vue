@@ -505,13 +505,13 @@ const selName = ref('')
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
-          <label class="chk" title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">
-            <input v-model="form.encrypt" type="checkbox" /> 静态加密
-          </label>
           <label>cron（可空）
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
           <RemoteTargetForm v-model="form.remote" :disabled="!canManage" inline />
+          <label class="chk" title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">
+            <input v-model="form.encrypt" type="checkbox" /> 静态加密
+          </label>
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
 
