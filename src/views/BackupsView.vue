@@ -812,8 +812,12 @@ const selName = ref('')
    字号走 main.css 公共 .tiny（--fs-12）——这里只补本处额外的两项。 */
 .tiny { margin-top: 2px; word-break: break-all; }
 .tip code { font-size: var(--fs-12); }
-/* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行 */
-.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; }
+/* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行。
+   ⚠ .row 父容器是 align-items:flex-end（为了让「添加」按钮与输入框底边齐），
+   而 .chk 只有单行高（19px vs 普通字段 62px），不干预就会被按底边对齐、
+   沉到输入框那一行，比相邻字段名低 ~43px。align-self:flex-start 让它回到
+   字段名这一行，与其它 label 的第一行齐平（与 SettingsView .chk-inline 同思路）。 */
+.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; align-self: flex-start; }
 .chk input { width: auto; }
 /* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
