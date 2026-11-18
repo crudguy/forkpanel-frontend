@@ -327,6 +327,8 @@ export const API = {
     baselineApply: () => '/api/v1/security/baseline/apply',
     sessions: () => '/api/v1/security/sessions',
     revokeSession: (id: string) => `/api/v1/security/sessions/${enc(id)}`,
+    /** SSH 端口：GET 读现状，PUT 修改（需确认词「确认改端口」） */
+    sshPort: () => '/api/v1/security/ssh-port',
   },
 
   cron: {

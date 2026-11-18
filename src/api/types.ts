@@ -245,6 +245,8 @@ export interface Site {
   waf_burst: number | null
   /** 每 IP 并发连接数上限；null = 不限 */
   waf_conn_max: number | null
+  /** WAF 观察模式（P1-6a）：命中只记日志不拦截；未启用 WAF 时恒 false */
+  waf_observe: boolean
   /** 反代后端列表（kind=proxy 时存在）；static/php 为 null */
   upstreams: string[] | null
   /** php-fpm 目标（kind=php 时存在）；其余为 null */

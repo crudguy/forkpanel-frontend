@@ -757,6 +757,14 @@ td.col-actions .btn-sm { padding: 4px 7px; }
   border: 1px solid var(--c-border); border-radius: var(--radius-xs);
   background: var(--c-surface); color: var(--c-text); font-size: var(--fs-14); font-family: inherit;
 }
+/* 弹窗里的复选框行（label + 说明文字横排）。与 .blk 的「标题在上、控件满宽」
+   区分开：勾选项的文字是**说明**而不是字段名，塞进 .blk 会被拆成上下两行、
+   且 input 被 `width:100%` 撑满整行，读起来像另一个字段。 */
+.modal .chk-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 10px 0; font-size: var(--fs-13); line-height: 1.55; color: var(--c-text-dim);
+}
+.modal .chk-row input { flex: none; margin: 2px 0 0; width: auto; }
 
 /* 底部操作条：统一「次按钮在左、主 / 危险按钮在最右」。
    危险动作一律用实心 .btn-danger（不再各处混用 .btn-primary.danger / .danger-btn /

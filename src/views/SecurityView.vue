@@ -26,6 +26,10 @@ import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
+import {
+  SSH_PORT_CONFIRM_WORD, validatePortInput, portSummary, riskNotice,
+  canSubmit, changeMessage, type SshPortState, type SshPortChange,
+} from '@/composables/sshPort'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -70,6 +74,72 @@ const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize,
 /** 区分「加载失败」与「动作失败」：前者不渲染汇总卡（否则显示风险 0），后者保留页面内容 */
 const loadFailed = ref(false)
 
+// ─────────────── SSH 端口（P1-7） ───────────────
+// 端口现状单独用一个 ref：它读的是 sshd 配置文件，与基线扫描失败互不牵连
+// （基线挂了不该连带把端口区也藏起来，反之亦然）。
+const sshPort = ref<SshPortState | null>(null)
+const sshPortErr = ref('')
+const editingPort = ref(false)
+const portInput = ref('')
+const portConfirm = ref('')
+const keepOld = ref(true)
+/** 弹窗内的错误位：页面级 error 会被 .mask 挡住 */
+const portDialogErr = ref('')
+const portBox = ref<HTMLElement | null>(null)
+const { close: closePort } = useModal(
+  () => editingPort.value, portBox,
+  () => { editingPort.value = false; portDialogErr.value = '' },
+)
+
+const portInvalid = computed(() => {
+  if (!editingPort.value) return ''
+  return validatePortInput(portInput.value, sshPort.value?.effective ?? null)
+})
+const portSubmittable = computed(() => canSubmit(
+  portInput.value, sshPort.value?.effective ?? null, portConfirm.value,
+))
+
+async function loadSshPort() {
+  sshPortErr.value = ''
+  try {
+    sshPort.value = await api.get<SshPortState>(API.security.sshPort())
+  }
+  // 单独失败只标这一块，不让整页进入错误态
+  catch (e) { sshPortErr.value = errorText(e) }
+}
+
+function askEditPort() {
+  portInput.value = String(sshPort.value?.effective ?? 22)
+  portConfirm.value = ''
+  portDialogErr.value = ''
+  keepOld.value = true
+  editingPort.value = true
+}
+
+async function submitPort() {
+  const msg = validatePortInput(portInput.value, sshPort.value?.effective ?? null)
+  if (msg) { portDialogErr.value = msg; return }
+  if (portConfirm.value.trim() !== SSH_PORT_CONFIRM_WORD) {
+    portDialogErr.value = `请输入确认词「${SSH_PORT_CONFIRM_WORD}」`
+    return
+  }
+  portDialogErr.value = ''
+  acting.value = true
+  try {
+    const r = await api.put<SshPortChange>(API.security.sshPort(), {
+      port: Number(portInput.value.trim()),
+      keep_old: keepOld.value,
+      confirm_token: portConfirm.value.trim(),
+    })
+    toast(changeMessage(r))
+    editingPort.value = false
+    await loadSshPort()
+  }
+  // 失败留在弹窗里：端口被占用之类的错误必须让用户在还能改输入的地方看到
+  catch (e) { portDialogErr.value = errorText(e) }
+  finally { acting.value = false }
+}
+
 async function load() {
   await run(async () => {
     // ⚠ 不得 `.catch(() => null)`：基线接口一旦失败，run 无法感知、error 永不设置，
@@ -82,6 +152,8 @@ async function load() {
     sessions.value = s?.sessions ?? []
     loadFailed.value = false
   }, (e) => { loadFailed.value = true; error.value = errorText(e) })
+  // 端口现状独立加载：它读的是 sshd 配置文件，与基线扫描是两件事
+  await loadSshPort()
 }
 onMounted(load)
 
@@ -253,7 +325,26 @@ async function doDisable() {
         </ul>
       </section>
 
-      <!-- ③ 账号：账号安全分区（活跃会话 + 两步验证 MFA） -->
+      <!-- ③ SSH 端口（P1-7）：改端口是最容易把自己锁在门外的操作 -->
+      <section class="card">
+        <div class="sec-head">
+          <Icon name="terminal" :size="16" /><span>SSH 端口</span>
+          <span class="spacer" />
+          <RefreshBtn :disabled="loading" sm @click="loadSshPort" />
+        </div>
+        <p v-if="sshPortErr" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ sshPortErr }}</span>
+        </p>
+        <template v-else>
+          <p class="muted port-sum">{{ portSummary(sshPort) }}</p>
+          <div v-if="sshPort?.sshd_present" class="ops-row">
+            <button class="btn-ghost btn-sm" :disabled="acting" @click="askEditPort">修改端口</button>
+            <span class="muted small">修改需二次确认；后端会先检查端口占用，写入后跑 sshd -t，不通过自动回滚</span>
+          </div>
+        </template>
+      </section>
+
+      <!-- ④ 账号：账号安全分区（活跃会话 + 两步验证 MFA） -->
       <div class="part">
         <div class="part-head">
           <Icon name="users" :size="15" /><span>账号安全</span>
@@ -396,6 +487,42 @@ async function doDisable() {
       </div>
     </div>
     </Teleport>
+    <!-- 修改 SSH 端口：高危写，需确认词 -->
+    <Teleport to="body">
+    <div v-if="editingPort" class="mask" @click.self="closePort">
+      <div ref="portBox" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="modal-title">修改 SSH 端口</h3>
+          <button class="modal-close" type="button" aria-label="关闭" @click="closePort">
+            <Icon name="close" :size="16" />
+          </button>
+        </div>
+        <p class="modal-lead">{{ riskNotice() }}</p>
+        <p v-if="portDialogErr" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ portDialogErr }}</span>
+        </p>
+        <label class="blk">新端口（1-65535）
+          <input v-model="portInput" inputmode="numeric" autocomplete="off" />
+        </label>
+        <p v-if="portInvalid" class="field-err">{{ portInvalid }}</p>
+        <label class="chk-row">
+          <input v-model="keepOld" type="checkbox" />
+          <span>过渡期同时保留旧端口 {{ sshPort?.effective }}（推荐：新端口连不上时可从这里回退）</span>
+        </label>
+        <label class="blk">输入「{{ SSH_PORT_CONFIRM_WORD }}」以确认
+          <input v-model="portConfirm" autocomplete="off" @keyup.enter="submitPort" />
+        </label>
+        <div class="modal-foot">
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="closePort">取消</button>
+            <button class="btn-danger" :disabled="acting || !portSubmittable" @click="submitPort">
+              {{ acting ? '提交中…' : '确认修改' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -459,4 +586,7 @@ col.w-srole { width: 100px; }
 col.w-sctime { width: 110px; }
 col.w-sidle { width: 80px; }
 col.w-sacts { width: 100px; }
+/* SSH 端口分区：现状摘要是长句，给它一个舒适的行高；不加宽度限制，
+   让它在宽屏下自然占满卡片（改端口说明本来就该一次读完）。 */
+.port-sum { margin: 0 0 10px; font-size: var(--fs-13); line-height: 1.65; word-break: break-word; }
 </style>

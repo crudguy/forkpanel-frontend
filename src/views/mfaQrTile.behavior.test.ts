@@ -31,6 +31,13 @@ function routesForEnroll() {
   return {
     [API.security.baseline()]: [],
     [API.security.sessions()]: { sessions: [] },
+    // SecurityView 挂载时会独立拉一次 SSH 端口现状（P1-7）。文件末尾的
+    // `assertClean()` 要求所有请求都登记过，所以这里必须补上——漏了会红，
+    // 这正是假件的用途（反过来：登记了却没用上不会红，那是另一类问题）。
+    [API.security.sshPort()]: {
+      effective: 22, explicit: false, source_file: '/etc/ssh/sshd_config',
+      configured: [22], sshd_present: true,
+    },
     [API.auth.mfaEnroll()]: ENROLL,
   }
 }
