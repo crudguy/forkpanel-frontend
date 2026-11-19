@@ -24,6 +24,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 import RemoteTargetForm from '@/components/RemoteTargetForm.vue'
+import BackupScheduleInput from '@/components/BackupScheduleInput.vue'
+import { scheduleDescription } from '@/composables/backupSchedule'
 import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -166,6 +168,10 @@ const editPlan = ref<{
   plan: Plan; cron: string; keep: number; encrypt: boolean; enabled: boolean; dest: string;
   remote: RemoteConfig
 } | null>(null)
+
+/** 表单下方的白话摘要：让「每天 03:00」可见，不必读懂表达式。 */
+const createScheduleText = computed(() => scheduleDescription(form.value.cron_expr))
+const editScheduleText = computed(() => editPlan.value ? scheduleDescription(editPlan.value.cron) : '')
 
 function openEditPlan(p: Plan) {
   error.value = ''
@@ -480,9 +486,7 @@ const selName = ref('')
             <input v-model="form.dest_dir" placeholder="plans（相对面板备份根）" />
           </label>
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
-          <label>cron（可空）
-            <input v-model="form.cron_expr" placeholder="留空=仅手动" />
-          </label>
+          <BackupScheduleInput v-model="form.cron_expr" inline />
           <RemoteTargetForm v-model="form.remote" :disabled="!canManage" inline />
           <label title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
             <span class="chk-ctl"><input v-model="form.encrypt" type="checkbox" /></span>
@@ -493,7 +497,7 @@ const selName = ref('')
         <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
           text="主密钥不存入数据库，请单独备份。丢失后，加密的备份将永远无法解密。" />
         <p class="tip">
-          产物保存在面板备份目录下。可选<b>远端副本</b>（兼容 WebDAV / S3）：凭据加密存储且不再显示；远端上传失败不会让本地备份判为失败，但计划会标记「部分成功」并推送通知。<b>开启远端副本时必须同时开启静态加密</b>，明文备份不得落到第三方存储，否则后端会拒绝。
+          <b>{{ createScheduleText }}</b>。产物保存在面板备份目录下。可选<b>远端副本</b>（兼容 WebDAV / S3）：凭据加密存储且不再显示；远端上传失败不会让本地备份判为失败，但计划会标记「部分成功」并推送通知。<b>开启远端副本时必须同时开启静态加密</b>，明文备份不得落到第三方存储，否则后端会拒绝。
         </p>
         <p class="tip">
           数据库连接按引擎导出：SQLite 复制库文件，MySQL / PostgreSQL 用命令行工具导出为 SQL 文件。恢复前会自动为当前库留一份快照；SQL 文件只校验是否为空，不做内容校验。
@@ -581,9 +585,7 @@ const selName = ref('')
         </div>
 
         <div class="row">
-          <label>cron（清空 = 仅手动）
-            <input v-model="editPlan.cron" placeholder="0 3 * * *" />
-          </label>
+          <BackupScheduleInput v-model="editPlan.cron" inline />
           <label>保留份数（1-365）
             <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
           </label>
@@ -600,7 +602,7 @@ const selName = ref('')
             :has-secret="editPlan.plan.remote_has_secret" inline />
         </div>
 
-        <p class="tip">改 cron / 启用立即生效，历史产物关联不变；远端副本与计划字段一次保存。</p>
+        <p class="tip"><b>{{ editScheduleText }}</b>。改执行时间 / 启用立即生效，历史产物关联不变；远端副本与计划字段一次保存。</p>
       </section>
 
       <section class="card" v-if="curArtifacts">
