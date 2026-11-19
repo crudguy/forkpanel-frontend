@@ -480,7 +480,7 @@ const selName = ref('')
           <span class="spacer" />
           <HelpBtn title="备份说明" aria-label="备份说明" :expanded="helpOpen" @click="helpOpen = true" />
         </div>
-        <div class="row">
+        <div class="row create-row">
           <label>类型
             <select v-model="form.kind">
               <option value="panel">面板数据（SQLite 在线备份）</option>
@@ -806,6 +806,10 @@ const selName = ref('')
    label 的三种对齐（贴底/贴顶/拉伸）都少了上面那行字段名，怎么挪都别扭。 */
 .chk-ctl { display: flex; align-items: center; height: 38px; }
 .chk-ctl input { width: auto; margin: 0; accent-color: var(--c-primary); }
+/* RiskBanner 默认 margin 是「0 0 14px」（上间距交给上游），其下一段 tip 也留
+   14px；这里给新建表单行补同量下间距，避免红条紧贴表单、上下节奏断裂。
+   只作用于新建区，编辑弹窗的 .row 后面不是 RiskBanner，不受影响。 */
+.create-row { margin-bottom: 14px; }
 /* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
    产物目录为唯一弹性列（可能很长），ellipsis 截断、完整值走 title。
