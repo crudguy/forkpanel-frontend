@@ -69,6 +69,9 @@ export const UI_GUARDS = [
   // 2026-11-19 表单控件宽高：.row 后代控件统一 38px；display:contents 内联组件的
   // label 须与 .row > label 同 flex 基值，否则 select/input 同行高低宽窄不一
   'check-form-control-size.mjs',
+  // 2026-11-19 文件页工具行等高：align-items:center 只管中心，控件自身高度不齐
+  // 仍会上下边参差；真机量得上传 38.4 / 帮助 34 / 显示隐藏 19.2，须钉死 38px 契约
+  'check-files-toolbar-height.mjs',
   // 2026-11-11 表格规范：每个含 <table> 的文件必须登记（接分页/排序 或 例外+理由），
   // 且不得再出现私有 .pager 样式——新加表格漏接是本类问题唯一的退化方式
   'check-table-convention.mjs',

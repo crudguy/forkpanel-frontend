@@ -931,6 +931,18 @@ function full(p: string) {
 .fp-head-row > .tools-row > .tools-actions > *:not(.fsearch) { flex-shrink: 0; }
 /* 面包屑不参与收缩：被压窄会内部折行（3 段路径也折成两行）。 */
 .fp-head-row > .tools-row > .crumbs { flex: 0 0 auto; }
+/* ── 工具行控件统一 38px 高（2026-11-19）──
+   align-items:center 只对齐几何中心，控件自身高度不齐时**上下边**仍参差。
+   真机量测（1366，getBoundingClientRect）：上传 38.4 / 筛选 36.8 / 帮助 34 /
+   图标态按钮 30~31 / 显示隐藏 19.2 —— 视觉上就是「有的靠上、有的靠下」。
+   统一 38px 让所有控件上下边与上传主按钮齐平（原生按钮 padding7+行高22.4+边框2
+   = 38.4，用 height 精确压到 38；上传长文件名让按钮横向变宽、不会折行溢出）。
+   ⚠ 帮助按钮是自定义组件，父 scoped 只能命中其根元素（带父 scopeId）；
+   同时给宽高，避免只给高变成 34×38 的椭圆。 */
+.fp-head-row > .tools-row > .tools-actions > .fsearch,
+.fp-head-row > .tools-row > .tools-actions > .hid,
+.fp-head-row > .tools-row > .tools-actions > button { height: 38px; }
+.fp-head-row > .tools-row > .tools-actions > .help-btn { width: 38px; height: 38px; }
 /* ≥1401（文字态）：动作组**不参与盒模型**（display:contents），子项直接成为工具行的
    flex 项 —— 几何与拆组前逐像素一致，只是多了一个可收缩的筛选框（260 → 120）来吸收
    1440 视口那 90px 缺口。
