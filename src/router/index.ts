@@ -28,7 +28,6 @@ export const router = createRouter({
           component: () => import('@/views/MonitorView.vue'),
           children: [
             { path: '', name: 'system', component: () => import('@/views/SystemView.vue'), meta: { title: '实时趋势' } },
-            { path: 'dirs', name: 'system-dirs', component: () => import('@/views/DirectoriesView.vue'), meta: { title: '目录与位置' } },
             { path: 'pro', name: 'system-pro', component: () => import('@/views/ProfessionalView.vue'), meta: { title: '专业快照' } },
             { path: 'procs', name: 'system-procs', component: () => import('@/views/ProcessesView.vue'), meta: { title: '进程管理' } },
           ],
@@ -86,6 +85,12 @@ export const router = createRouter({
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: '通知' } },
         { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue'), meta: { title: '终端' } },
         { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 助手' } },
+        // 「目录与位置」2026-11-19 从 /system 的 Tab 提升为系统域一级页：
+        // 它是部署事实（面板/数据/日志/Web 服务器落点），不是监控指标；同时
+        // 让帮助页「常用操作」可引用（那张表只认 NAV_ITEMS，不认非导航子路由）。
+        // 旧 /system/dirs 重定向兜住已有书签与 deep link。
+        { path: 'dirs', name: 'dirs', component: () => import('@/views/DirectoriesView.vue'), meta: { title: '目录与位置' } },
+        { path: 'system/dirs', redirect: '/dirs' },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
         { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue'), meta: { title: '帮助' } },
         { path: 'processes', redirect: '/system/procs' },

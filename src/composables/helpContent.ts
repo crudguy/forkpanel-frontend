@@ -57,6 +57,7 @@ const MODULE_DESC: Record<string, string> = {
   '/terminal': '内置终端，可直接在服务器执行命令，属高危操作。',
   '/assistant': '基于系统现状给出诊断建议，不自动执行。',
   '/users': '面板账号、角色与权限管理。',
+  '/dirs': '面板、数据、日志与 Web 服务器的实际落点，均来自运行时配置。',
   '/settings': '面板设置、运行状态与系统自检。',
   '/help': '常用操作、模块说明与常见问题（即本页）。',
 }
@@ -84,6 +85,7 @@ export const QUICK_TASKS: QuickTask[] = [
   { to: '/logs', title: '排查故障', desc: '先看系统日志定位时间，再看操作记录确认改动。' },
   { to: '/files', title: '改配置或传文件', desc: '用内置编辑器直接修改文本文件，改前先备份。' },
   { to: '/containers', title: '用编排跑服务', desc: '按项目启动、停止或重启服务，停止不会删除数据卷。' },
+  { to: '/dirs', title: '查面板装在哪 / 数据在哪', desc: '查看面板、数据、日志与 Web 服务器的实际落点，排障或迁移前先确认。' },
 ]
 
 /**

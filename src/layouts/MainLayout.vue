@@ -61,7 +61,7 @@ const SUBTITLES: Record<string, string> = {
   system: '实时资源趋势与历史走向',
   'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
   'system-procs': '服务器全部进程 · 表头可按 CPU / 内存 / 用户排序 · 重载 / 结束 / 立即终止需 system.manage 与信号能力（只读角色仅可查看）',
-  'system-dirs': '面板装到了哪 · 数据 / 日志 / Web 服务器 / 前端各在哪（与运行时实际落点一致）',
+  dirs: '面板装到了哪 · 数据 / 日志 / Web 服务器 / 前端各在哪（与运行时实际落点一致）',
   'system-expose': '默认只监听回环 · 需 system.manage 方可用向导配置域名反代 + 来源白名单（HTTPS 可选）',
   'services-software': '白名单软件的安装 / 卸载 / 升级 · 写操作需 package.manage（operator / viewer 不可用）',
   'services-units': '服务列表与状态概览 · 点行进详情页启停 / 看日志 / 改配置',

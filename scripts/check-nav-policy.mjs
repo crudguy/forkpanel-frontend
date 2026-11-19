@@ -65,9 +65,9 @@ for (const f of Object.keys(CONSUMERS)) {
   must(!/\bauth\.whyDisabled\(/.test(body), '2', `${f} 无裸 auth.whyDisabled 调用`)
 }
 
-// ── [3] 恒显语义：恰好 8 条，且只在定义处出现 METRICS_READ ──
+// ── [3] 恒显语义：恰好 9 条，且只在定义处出现 METRICS_READ ──
 const navItems = src['src/composables/navItems.ts'] ?? ''
-must((navItems.match(/cap: ALWAYS_CAP/g) ?? []).length === 8, '3', 'navItems.ts 恒显项恰好 8 条')
+must((navItems.match(/cap: ALWAYS_CAP/g) ?? []).length === 9, '3', 'navItems.ts 恒显项恰好 9 条')
 must((strip(navItems).match(/CAP\.METRICS_READ/g) ?? []).length === 1, '3',
   'navItems.ts 里 CAP.METRICS_READ 只在 ALWAYS_CAP 定义处出现 1 次')
 must(strip(navItems).includes('export const ALWAYS_CAP'), '3', 'ALWAYS_CAP 已导出')

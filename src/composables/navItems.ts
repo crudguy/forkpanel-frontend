@@ -19,7 +19,7 @@ import { CAP } from '@/api/types'
  * 这些页面此前直接写 `CAP.METRICS_READ`，读起来像「要指标能力才能进设置」，
  * 实则是把后端恒 supported 的能力位当占位符用。收成一个常量，语义就固定了。
  * ⚠ 不要换成一个前端自造的字符串：`auth.supported()` 查不到会返回 false，
- *   这 8 个入口会集体变灰（「配置项假控制」的典型形态）。
+ *   这 9 个入口会集体变灰（「配置项假控制」的典型形态）。
  */
 export const ALWAYS_CAP: string = CAP.METRICS_READ
 
@@ -67,6 +67,10 @@ export const NAV_ITEMS: NavDef[] = [
   //    「解释上一页」改由路由守卫自动带 ctx，不依赖入口形态）——
   { to: '/assistant', label: 'AI 助手', icon: 'sparkles', cap: ALWAYS_CAP, perm: 'system.view', group: '系统' },
   { to: '/users', label: '用户', icon: 'users', cap: CAP.USER_MANAGE, perm: 'user.manage', group: '系统' },
+  // 2026-11-19 从「主机监控」Tab 提升为系统组一级页：它回答「面板装到哪 /
+  // 数据 / 日志 / Web 服务器哪来的」，是部署事实而非监控指标；提升后帮助页的
+  // 「常用操作」也能引用它（那张表只认 NAV_ITEMS，不认非导航子路由）。
+  { to: '/dirs', label: '目录与位置', icon: 'map-pin', cap: ALWAYS_CAP, perm: 'system.view', group: '系统' },
   { to: '/settings', label: '设置', icon: 'gear', cap: ALWAYS_CAP, perm: 'settings.manage', group: '系统' },
   // —— 帮助：常驻入口，与概览/设置同用「恒显」能力位（system.view），
   //   不绑定任何业务模块能力，确保任意环境都能打开。

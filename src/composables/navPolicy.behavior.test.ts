@@ -57,9 +57,9 @@ describe('F-05 gateForPath：门控表的结构与回退', () => {
     expect(auth.supported(CAP.METRICS_READ)).toBe(false)
   })
 
-  it('NAV_ITEMS 每一条都能被 gateForPath 解释，且恒显项恰好 8 条', () => {
+  it('NAV_ITEMS 每一条都能被 gateForPath 解释，且恒显项恰好 9 条', () => {
     for (const n of NAV_ITEMS) expect(gateForPath(n.to), n.to).not.toBeNull()
-    expect(NAV_ITEMS.filter((n) => gateForPath(n.to)?.cap === null).length).toBe(8)
+    expect(NAV_ITEMS.filter((n) => gateForPath(n.to)?.cap === null).length).toBe(9)
   })
 })
 

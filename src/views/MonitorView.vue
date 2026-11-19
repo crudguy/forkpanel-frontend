@@ -7,6 +7,8 @@
  * - 三个子视图组件（SystemView/ProfessionalView/ProcessesView）零改动复用；
  *   旧路由 /professional、/processes 在路由表里重定向，老链接不断。
  * - 高亮用 route.path 精确比对，不用 router-link-active（'/' 概览项会是所有路径的前缀）。
+ * - 「目录与位置」2026-11-19 移出本容器，提升为侧栏「系统」组一级页 /dirs：
+ *   它是部署事实而非监控指标，与另外三个 Tab 不同域；旧路由重定向兜住老链接。
  */
 import TabBar from '@/components/TabBar.vue'
 
@@ -14,7 +16,6 @@ const tabs = [
   { to: '/system', label: '实时趋势' },
   { to: '/system/pro', label: '专业快照' },
   { to: '/system/procs', label: '进程管理' },
-  { to: '/system/dirs', label: '目录与位置' },
 ]
 </script>
 
