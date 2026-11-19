@@ -14,7 +14,7 @@
  * 状态语义：`last_result` 的 `partial` 表示**本地成功、远端上传失败**——
  * 本地那份是真的，所以不判为失败；但异地副本没成，必须让人一眼看见。
  */
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
@@ -142,11 +142,6 @@ const BACKUP_TABS: { value: BackupTab; label: string; icon: string }[] = [
 ]
 function setTab(v: string) { tab.value = v as BackupTab }
 
-/** 空态「新建计划」CTA：滚动并聚焦到新建表单（避免空态与表单之间来回找） */
-const createSec = ref<HTMLElement | null>(null)
-function scrollToCreate() {
-  nextTick(() => createSec.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-}
 /** 帮助抽屉（A6）：「新建备份计划」卡头的「?」打开，承载完整的备份约束说明 */
 const helpOpen = ref(false)
 const form = ref({
@@ -477,7 +472,7 @@ const selName = ref('')
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <div class="tab-pane" v-show="tab === 'plans'">
-      <section class="card" ref="createSec">
+      <section class="card">
         <!-- 说明按钮挂在这里而非列表卡顶栏：它讲的是"备份"这项能力，而新建卡常驻，
              列表卡在零计划时不渲染——挂到列表上会随空列表一起消失。 -->
         <div class="sec-head">
@@ -509,8 +504,8 @@ const selName = ref('')
             <input v-model="form.cron_expr" placeholder="留空=仅手动" />
           </label>
           <RemoteTargetForm v-model="form.remote" :disabled="!canManage" inline />
-          <label class="chk" title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">
-            <input v-model="form.encrypt" type="checkbox" /> 静态加密
+          <label title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
+            <span class="chk-ctl"><input v-model="form.encrypt" type="checkbox" /></span>
           </label>
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
@@ -591,12 +586,7 @@ const selName = ref('')
         <TablePager :total="planTotal" :page="planPage" :size="planSize" :page-count="planPageCount"
           @update:page="planGotoPage" @update:size="planChangeSize" />
       </div>
-      <EmptyState v-else title="暂无备份计划">
-        <template #cta>
-          <button class="btn-primary" :disabled="!canManage"
-            :title="canManage ? '' : '无 backup.manage 权限'" @click="scrollToCreate">新建计划</button>
-        </template>
-      </EmptyState>
+      <EmptyState v-else title="暂无备份计划" />
 
       <section class="card" v-if="editRemote">
         <div class="sec-head">
@@ -636,11 +626,11 @@ const selName = ref('')
           <label>保留份数（1-365）
             <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
           </label>
-          <label class="chk" title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密">
-            <input v-model="editPlan.encrypt" type="checkbox" /> 静态加密
+          <label title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密">静态加密
+            <span class="chk-ctl"><input v-model="editPlan.encrypt" type="checkbox" /></span>
           </label>
-          <label class="chk">
-            <input v-model="editPlan.enabled" type="checkbox" /> 启用
+          <label>启用
+            <span class="chk-ctl"><input v-model="editPlan.enabled" type="checkbox" /></span>
           </label>
           <label>输出目录（留空 = 不改）
             <input v-model="editPlan.dest" placeholder="plans" />
@@ -811,14 +801,11 @@ const selName = ref('')
    字号走 main.css 公共 .tiny（--fs-12）——这里只补本处额外的两项。 */
 .tiny { margin-top: 2px; word-break: break-all; }
 .tip code { font-size: var(--fs-12); }
-/* 勾选项：与其它 label（纵向排布）不同，需要横排才不会把文字挤到下一行。
-   ⚠ .row 父容器是 align-items:flex-end（为了让「添加」按钮与输入框底边齐），
-   而 .chk 只有单行高（19px vs 普通字段 62px）：不干预会被按底边钉死（沉底），
-   align-self:flex-start 又会悬在字段名行、下方空一片。正解是 stretch——把
-   label 拉到与其它字段同高，内部 align-items:center 让复选框落在「控件行」
-   的垂直中心，与旁边的输入框齐平，这才是视觉上真正的协同。 */
-.chk { flex-direction: row; align-items: center; gap: 5px; cursor: help; align-self: stretch; }
-.chk input { width: auto; }
+/* 勾选项与其它字段统一为两段式：字段名在上、控件在下。控件行 .chk-ctl 与
+   输入框同高（38px）且垂直居中放 checkbox——之前把 checkbox+文字塞进单行
+   label 的三种对齐（贴底/贴顶/拉伸）都少了上面那行字段名，怎么挪都别扭。 */
+.chk-ctl { display: flex; align-items: center; height: 38px; }
+.chk-ctl input { width: auto; margin: 0; accent-color: var(--c-primary); }
 /* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
    产物目录为唯一弹性列（可能很长），ellipsis 截断、完整值走 title。
