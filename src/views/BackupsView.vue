@@ -30,6 +30,7 @@ import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { DR_STEPS, stepCopyText, restoreKeyHint } from '@/composables/disasterReadiness'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import TabBar from '@/components/TabBar.vue'
@@ -146,6 +147,24 @@ function setTab(v: string) { tab.value = v as BackupTab }
 
 /** 帮助抽屉（A6）：「新建备份计划」卡头的「?」打开，承载完整的备份约束说明 */
 const helpOpen = ref(false)
+
+/**
+ * 灾备清单：只复制命令文本，面板不下发密钥本体。
+ * 复制失败必须说出来——静默失败会让人以为密钥副本已经存好了。
+ */
+async function copyStep(stepId: string) {
+  const step = DR_STEPS.find((s) => s.id === stepId)
+  if (!step) return
+  const text = stepCopyText(step)
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    toast('命令已复制，请在服务器上粘贴执行')
+  } catch {
+    toast('浏览器不允许自动复制，请手动选中命令复制', 'warn')
+  }
+}
+
 const form = ref({
   kind: 'panel', target: 'panel', dest_dir: 'plans',
   // 默认开启（G12）：产物一旦离机（U 盘 / 对象存储 / 换机器），未加密等于交出
@@ -389,15 +408,41 @@ async function loadRemote(plan: Plan) {
 
 /** 待确认恢复的产物（审计 U5：window.prompt → ConfirmDialog 确认词模式） */
 const restoreConfirm = ref<{ plan: Plan; name: string; fromRemote: boolean } | null>(null)
+/** 恢复前把「密钥对不对」讲清楚：只认产物后缀，不认计划配置（改过配置后老产物形态可能不同） */
+const restoreKeyWarn = computed(() =>
+  restoreConfirm.value
+    ? restoreKeyHint(restoreConfirm.value.name, restoreConfirm.value.plan.kind)
+    : null
+)
+/**
+ * 面板库恢复的离线指引（`kind=panel` 不支持在线恢复，后端诚实 501）。
+ *
+ * 用常驻弹窗而非 toast：这里面有三条**顺序不能错**的命令和一条"别做什么"的红线，
+ * toast 几秒就消失，用户抄到一半没了——而抄错顺序（比如先建了密钥）会让现场
+ * 看起来像"产物损坏"，把排查引到完全错误的方向。
+ */
+const panelRestoreHint = ref<{ name: string } | null>(null)
+const PANEL_RESTORE_CMDS = [
+  'sudo systemctl stop panel',
+  'sudo panel key check /mnt/usb/forkpanel-master.key',
+  'sudo panel restore-db <产物路径>',
+]
 function askRestore(plan: Plan, name: string, fromRemote = false) {
   error.value = ''
   // panel 库是面板自身运行中的库：在线覆盖会损坏 SQLite WAL —— 诚实拒绝，不给假按钮
   if (plan.kind === 'panel') {
-    toast(
-      '面板库不支持在线恢复：它是面板自身运行中的库，在线覆盖会损坏 SQLite WAL。请先停止 panel 服务，再执行 panel restore-db <产物路径>。', 'info')
+    panelRestoreHint.value = { name }
     return
   }
   restoreConfirm.value = { plan, name, fromRemote }
+}
+async function copyPanelRestore() {
+  try {
+    await navigator.clipboard.writeText(PANEL_RESTORE_CMDS.join('\n'))
+    toast('命令已复制，请在服务器上按顺序执行')
+  } catch {
+    toast('浏览器不允许自动复制，请手动选中命令复制', 'warn')
+  }
 }
 
 async function restoreFrom() {
@@ -458,6 +503,32 @@ const selName = ref('')
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
 
       <div class="tab-pane" v-show="tab === 'plans'">
+      <!-- 灾备清单常驻首屏并重点标记：最容易忘的不是"怎么备份"，而是
+           "备份了但没存密钥 / 没存异地副本"——那种备份在整机故障后等于没备份。 -->
+      <section class="card dr-card" aria-label="灾备就绪清单">
+        <div class="dr-head">
+          <Icon name="alert-circle" :size="17" />
+          <b>先做这三件事，否则备份救不了你</b>
+          <span class="badge badge-danger">重装前必做</span>
+        </div>
+        <p class="dr-lead">
+          备份成功 <b>≠</b> 能恢复。真正决定重装后能不能救回来的，是「备份产物 + 主密钥」两样都还在。
+          只做了本地备份、或密钥丢了，整机故障后都等于没有备份。
+        </p>
+        <ol class="dr-list">
+          <li v-for="s in DR_STEPS" :key="s.id" class="dr-step">
+            <div class="dr-text">
+              <b>{{ s.title }}<span v-if="s.conditional" class="dr-cond">（条件项）</span></b>
+              <span>{{ s.desc }}</span>
+              <div v-if="s.commands.length" class="dr-cmds">
+                <code v-for="c in s.commands" :key="c">{{ c }}</code>
+                <button class="btn-ghost btn-sm" type="button" @click="copyStep(s.id)">复制命令</button>
+              </div>
+            </div>
+          </li>
+        </ol>
+      </section>
+
       <section class="card">
         <!-- 说明按钮挂在这里而非列表卡顶栏：它讲的是"备份"这项能力，而新建卡常驻，
              列表卡在零计划时不渲染——挂到列表上会随空列表一起消失。 -->
@@ -494,8 +565,10 @@ const selName = ref('')
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
         </div>
 
-        <RiskBanner level="danger" title="主密钥一旦丢失无法恢复"
-          text="主密钥不存入数据库，请单独备份。丢失后，加密的备份将永远无法解密。" />
+        <!-- 只在真的勾了加密时才提示：常驻红条与页首灾备卡第②步讲的是同一件事，
+             读两遍反而都记不住；而没开加密的机器看到"主密钥丢了解不开"只会困惑。 -->
+        <RiskBanner v-if="form.encrypt" level="danger" title="这个计划会加密产物，主密钥必须单独存"
+          text="主密钥不存入数据库。丢失后，本计划的备份将永远无法解密——请按页首第 ② 步导出并验证异地副本。" />
         <p class="tip">
           <b>{{ createScheduleText }}</b>。产物保存在面板备份目录下。可选<b>远端副本</b>（兼容 WebDAV / S3）：凭据加密存储且不再显示；远端上传失败不会让本地备份判为失败，但计划会标记「部分成功」并推送通知。<b>开启远端副本时必须同时开启静态加密</b>，明文备份不得落到第三方存储，否则后端会拒绝。
         </p>
@@ -745,7 +818,42 @@ const selName = ref('')
       :open="!!restoreConfirm" danger title="从产物恢复（高危）"
       :detail="restoreConfirm ? `即将用${restoreConfirm.fromRemote ? '【远端副本】' : '【本地产物】'}「${restoreConfirm.name}」覆盖 ${restoreConfirm.plan.target} 的当前数据。任务内会自动先备份当前态（safety 快照，可从任务详情取回），但此操作仍不可逆。` : ''"
       confirm-word="覆盖恢复" @confirm="restoreFrom" @cancel="restoreConfirm = null"
-    />
+    >
+      <!-- 密钥后果与确认词同屏：只在输词那一刻讲清楚，才拦得住"先点了再说" -->
+      <div v-if="restoreKeyWarn" class="key-warn" :class="`is-${restoreKeyWarn.level}`" role="note">
+        <Icon name="alert-circle" :size="16" />
+        <div>
+          <b>{{ restoreKeyWarn.title }}</b>
+          <p>{{ restoreKeyWarn.text }}</p>
+        </div>
+      </div>
+    </ConfirmDialog>
+
+    <!-- 面板库不能在线恢复：给出停服后的完整离线步骤（顺序不能错） -->
+    <ConfirmDialog
+      :open="!!panelRestoreHint" title="面板库需要停服后离线恢复"
+      :detail="panelRestoreHint ? `产物：${panelRestoreHint.name}。面板自身的库正在被使用，在线覆盖会损坏它，因此这里不提供在线恢复按钮。请登服务器，按下面三步的顺序执行。` : ''"
+      confirm-word="我已知晓" @confirm="panelRestoreHint = null" @cancel="panelRestoreHint = null"
+    >
+      <div class="pr-wrap">
+        <div class="key-warn" role="note">
+          <Icon name="alert-circle" :size="16" />
+          <div>
+            <b>顺序不能错：先确认密钥，再恢复</b>
+            <p>第 2 步必须成功。若提示「主密钥解不开它」，说明当前密钥不是加密它那一代——此时<b>不要</b>新建一把密钥顶替，那会让现场看起来像「产物损坏」。请先找回异地副本或旧代 <code>master.key.bak-*</code>。</p>
+          </div>
+        </div>
+        <ol class="pr-steps">
+          <li>停掉服务，避免覆盖正在写入的库</li>
+          <li>用密钥副本验证：能解开库里的密文才算对</li>
+          <li>离线恢复：会先校验产物、给当前库留快照、原子替换</li>
+        </ol>
+        <div class="dr-cmds pr-cmds">
+          <code v-for="c in PANEL_RESTORE_CMDS" :key="c">{{ c }}</code>
+          <button class="btn-ghost btn-sm" type="button" @click="copyPanelRestore">复制命令</button>
+        </div>
+      </div>
+    </ConfirmDialog>
 
     <!-- 完整说明收进帮助抽屉（A6）：不占用页面流，头部「?」随时可查。
          浮层组件放链尾：**不得**插在 v-if / v-else 链中间（会打断相邻性，模板编译直接报错）。 -->
@@ -762,6 +870,51 @@ const selName = ref('')
 </template>
 
 <style scoped>
+/* 灾备清单：首屏常驻的高危提示。左侧色条 + danger 底色让它不像普通说明段落，
+   否则"必做"三个字会被一堆灰色 tip 淹没，小白用户根本不会停下来读。 */
+.dr-card { border-left: 3px solid var(--c-danger); background: var(--c-danger-soft); }
+.dr-head { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13);
+  font-weight: 600; color: var(--c-text); margin-bottom: 12px; }
+.dr-head .icon { color: var(--c-danger); flex: none; }
+.dr-head .badge { margin-left: auto; }
+.dr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.dr-step { display: flex; gap: 8px; }
+.dr-text { display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  font-size: var(--fs-13); line-height: 1.5; color: var(--c-text-dim); }
+.dr-text b { color: var(--c-text); }
+.dr-cond { font-weight: 400; color: var(--c-warn); }
+/* 「备份成功 ≠ 能恢复」这句是全卡的前提：不加粗突出，用户会直接跳到命令区抄命令。 */
+.dr-lead { margin: 0 0 12px; font-size: var(--fs-13); line-height: 1.55; color: var(--c-text); }
+.dr-lead b { color: var(--c-danger); }
+/* 命令**一条一行**：并排换行时后半条常被看漏（尤其 `panel key check <副本>`），
+   而那正是"确认副本真能开锁"的关键一步。复制按钮单独占行尾，不参与命令排列。 */
+.dr-cmds { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.dr-cmds .btn-ghost { align-self: flex-start; }
+.dr-cmds code { display: block; max-width: 100%; font-size: var(--fs-12); padding: 4px 8px;
+  border-radius: var(--radius-sm); background: var(--c-surface-2); color: var(--c-text);
+  word-break: break-all; }
+/* 恢复确认框里的密钥提示。slot 内容由本组件编译，scoped 选择器可命中。 */
+.key-warn { display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px;
+  border-radius: var(--radius-sm); border: 1px solid var(--c-danger);
+  background: var(--c-danger-soft); font-size: var(--fs-13); line-height: 1.5;
+  color: var(--c-text); }
+.key-warn.is-warn { border-color: color-mix(in srgb, var(--c-warn) 50%, transparent);
+  background: var(--c-warn-bg); }
+.key-warn .icon { flex: none; margin-top: 1px; color: var(--c-danger); }
+.key-warn.is-warn .icon { color: var(--c-warn); }
+.key-warn b { display: block; margin-bottom: 2px; }
+.key-warn p { margin: 0; color: var(--c-text-dim); }
+.key-warn code { font-size: var(--fs-12); }
+/* 弹窗的 .modal-extra 默认是横向 flex，块级内容会被挤成并列窄列（命令断成
+   `sudo syste / mctl stop`）。这里改为纵向堆叠，并让每块占满整宽。 */
+.pr-wrap { display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0; }
+.pr-wrap .key-warn { padding: 10px 12px; }
+.pr-wrap .key-warn > div { min-width: 0; }
+/* 面板库离线恢复的三步：序数词本身承载"顺序不能错"。 */
+.pr-steps { margin: 0; padding-left: 20px; font-size: var(--fs-13);
+  line-height: 1.7; color: var(--c-text-dim); }
+.pr-steps li { margin: 0 0 2px; }
+.pr-cmds { margin-top: 0; }
 /* 远端地址可能很长：允许断行，避免把整张表撑出横向滚动。
    字号走 main.css 公共 .tiny（--fs-12）——这里只补本处额外的两项。 */
 .tiny { margin-top: 2px; word-break: break-all; }
