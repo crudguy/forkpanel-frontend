@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { DR_STEPS, stepCopyText, restoreKeyHint } from './disasterReadiness'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  DR_STEPS, DR_EXPANDED_KEY, stepCopyText, restoreKeyHint,
+  loadDrExpanded, saveDrExpanded,
+} from './disasterReadiness'
 
 describe('灾备清单：三件事缺一不可', () => {
   it('恰好三步且 id 唯一', () => {
@@ -74,5 +77,60 @@ describe('恢复提示：按产物后缀而非计划配置判断', () => {
   it('空名按明文处理，不抛错', () => {
     expect(() => restoreKeyHint('', 'panel')).not.toThrow()
     expect(restoreKeyHint('', 'panel').encrypted).toBe(false)
+  })
+})
+
+describe('灾备卡折叠态：默认展开，只有主动收起才记住', () => {
+  function stubStore(initial: Record<string, string> = {}) {
+    const data = { ...initial }
+    const store = {
+      getItem: (k: string) => data[k] ?? null,
+      setItem: (k: string, v: string) => { data[k] = v },
+      removeItem: (k: string) => { delete data[k] },
+    }
+    vi.stubGlobal('localStorage', store)
+    return data
+  }
+
+  it('没有记录时默认展开（安全提示首次必须可见）', () => {
+    stubStore()
+    expect(loadDrExpanded()).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it("只有显式存 '0' 才是收起", () => {
+    stubStore({ [DR_EXPANDED_KEY]: '0' })
+    expect(loadDrExpanded()).toBe(false)
+    vi.unstubAllGlobals()
+  })
+
+  it("'1' 与任意其它值都视为展开（不因脏数据把提示藏起来）", () => {
+    stubStore({ [DR_EXPANDED_KEY]: '1' })
+    expect(loadDrExpanded()).toBe(true)
+    stubStore({ [DR_EXPANDED_KEY]: 'garbage' })
+    expect(loadDrExpanded()).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it('save 往返：收起后读到收起，展开后读到展开', () => {
+    const data = stubStore()
+    saveDrExpanded(false)
+    expect(data[DR_EXPANDED_KEY]).toBe('0')
+    expect(loadDrExpanded()).toBe(false)
+    saveDrExpanded(true)
+    expect(data[DR_EXPANDED_KEY]).toBe('1')
+    expect(loadDrExpanded()).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it('localStorage 不可用时不抛错，按展开降级', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('denied') },
+      setItem: () => { throw new Error('denied') },
+    })
+    expect(() => loadDrExpanded()).not.toThrow()
+    expect(loadDrExpanded()).toBe(true)
+    expect(() => saveDrExpanded(false)).not.toThrow()
+    vi.unstubAllGlobals()
   })
 })

@@ -30,7 +30,9 @@ import Icon from '@/components/Icon.vue'
 import HelpBtn from '@/components/HelpBtn.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import { DR_STEPS, stepCopyText, restoreKeyHint } from '@/composables/disasterReadiness'
+import {
+  DR_STEPS, stepCopyText, restoreKeyHint, loadDrExpanded, saveDrExpanded,
+} from '@/composables/disasterReadiness'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import TabBar from '@/components/TabBar.vue'
@@ -147,6 +149,17 @@ function setTab(v: string) { tab.value = v as BackupTab }
 
 /** 帮助抽屉（A6）：「新建备份计划」卡头的「?」打开，承载完整的备份约束说明 */
 const helpOpen = ref(false)
+
+/**
+ * 灾备卡可折叠，但**默认展开**：这是"重装后能不能救回来"的安全提示，
+ * 首次进页面必须看见；只有用户主动收起才写入 localStorage，刷新后保持。
+ * 收起时卡片头仍保留红色底 + 「重装前必做」徽章 + 摘要，不会整块消失。
+ */
+const drExpanded = ref(loadDrExpanded())
+function toggleDr() {
+  drExpanded.value = !drExpanded.value
+  saveDrExpanded(drExpanded.value)
+}
 
 /**
  * 灾备清单：只复制命令文本，面板不下发密钥本体。
@@ -510,23 +523,37 @@ const selName = ref('')
           <Icon name="alert-circle" :size="17" />
           <b>先做这三件事，否则备份救不了你</b>
           <span class="badge badge-danger">重装前必做</span>
+          <!-- 折叠按钮：箭头方向 + aria-expanded 双通道，读屏与视觉一致。
+               ⚠ 用 button 包 Icon，不能只给 Icon 挂 click（图标是 svg，点击热区不可靠）。 -->
+          <button class="dr-toggle" type="button" :aria-expanded="drExpanded"
+            :title="drExpanded ? '收起灾备清单' : '展开灾备清单（3 项必做）'"
+            @click="toggleDr">
+            <Icon name="chevron" :size="14" class="dr-caret" :class="{ rot: drExpanded }" />
+            <span>{{ drExpanded ? '收起' : '展开' }}</span>
+          </button>
         </div>
-        <p class="dr-lead">
-          备份成功 <b>≠</b> 能恢复。真正决定重装后能不能救回来的，是「备份产物 + 主密钥」两样都还在。
-          只做了本地备份、或密钥丢了，整机故障后都等于没有备份。
+        <!-- 收起时仍留一行摘要：让"有 3 件必做事"继续可见，而不是整块提示消失 -->
+        <p v-if="!drExpanded" class="dr-folded">
+          已收起。重装前需备好<b>产物异地副本 + 主密钥离线副本</b>（用自签证书还要存 CA 私钥）。
         </p>
-        <ol class="dr-list">
-          <li v-for="s in DR_STEPS" :key="s.id" class="dr-step">
-            <div class="dr-text">
-              <b>{{ s.title }}<span v-if="s.conditional" class="dr-cond">（条件项）</span></b>
-              <span>{{ s.desc }}</span>
-              <div v-if="s.commands.length" class="dr-cmds">
-                <code v-for="c in s.commands" :key="c">{{ c }}</code>
-                <button class="btn-ghost btn-sm" type="button" @click="copyStep(s.id)">复制命令</button>
+        <template v-if="drExpanded">
+          <p class="dr-lead">
+            备份成功 <b>≠</b> 能恢复。真正决定重装后能不能救回来的，是「备份产物 + 主密钥」两样都还在。
+            只做了本地备份、或密钥丢了，整机故障后都等于没有备份。
+          </p>
+          <ol class="dr-list">
+            <li v-for="s in DR_STEPS" :key="s.id" class="dr-step">
+              <div class="dr-text">
+                <b>{{ s.title }}<span v-if="s.conditional" class="dr-cond">（条件项）</span></b>
+                <span>{{ s.desc }}</span>
+                <div v-if="s.commands.length" class="dr-cmds">
+                  <code v-for="c in s.commands" :key="c">{{ c }}</code>
+                  <button class="btn-ghost btn-sm" type="button" @click="copyStep(s.id)">复制命令</button>
+                </div>
               </div>
-            </div>
-          </li>
-        </ol>
+            </li>
+          </ol>
+        </template>
       </section>
 
       <section class="card">
@@ -877,6 +904,19 @@ const selName = ref('')
   font-weight: 600; color: var(--c-text); margin-bottom: 12px; }
 .dr-head .icon { color: var(--c-danger); flex: none; }
 .dr-head .badge { margin-left: auto; }
+/* 折叠按钮：箭头默认朝右、展开转 90° 朝下（沿用 AuditView / SitesView 的 chevron 约定）。
+   ⚠ `.dr-head .icon` 会把按钮里的箭头也染成红色，这里局部盖回次要文字色。 */
+.dr-toggle { display: inline-flex; align-items: center; gap: 3px; flex: none;
+  padding: 3px 7px; border: 1px solid var(--c-border); border-radius: var(--radius-sm);
+  background: var(--c-glass); color: var(--c-text-dim); font-size: var(--fs-12);
+  line-height: 1.2; cursor: pointer; }
+.dr-toggle:hover { color: var(--c-text); border-color: var(--c-primary); }
+.dr-toggle .icon { color: var(--c-text-dim); flex: none; }
+.dr-caret { transition: transform .15s; }
+.dr-caret.rot { transform: rotate(90deg); }
+/* 收起后的单行摘要：比展开态轻，但仍点出"必做"，不让提示整块消失 */
+.dr-folded { margin: 0; font-size: var(--fs-13); line-height: 1.55; color: var(--c-text-dim); }
+.dr-folded b { color: var(--c-text); }
 .dr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .dr-step { display: flex; gap: 8px; }
 .dr-text { display: flex; flex-direction: column; gap: 4px; min-width: 0;

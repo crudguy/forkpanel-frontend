@@ -84,3 +84,27 @@ export function restoreKeyHint(name: string, kind: string): RestoreKeyHint {
       : '站点 / 数据库产物可直接恢复。注意面板库自身的密钥另算：若已更换，面板里的数据库连接、MFA、SSL 私钥仍会失效。',
   }
 }
+
+/** 灾备卡折叠态的持久化键。存 '0' = 用户主动收起，其余（含缺失）= 展开。 */
+export const DR_EXPANDED_KEY = 'backups.drExpanded'
+
+/**
+ * 读折叠态。**默认展开**：这是安全提示，首次访问必须看见；
+ * 只有用户主动收起才记为 false。读不到（隐私模式 / SSR / node 测试）一律按展开。
+ */
+export function loadDrExpanded(): boolean {
+  try {
+    return localStorage.getItem(DR_EXPANDED_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+/** 写折叠态。写失败（隐私模式 / 配额满）不影响本次会话的交互。 */
+export function saveDrExpanded(expanded: boolean): void {
+  try {
+    localStorage.setItem(DR_EXPANDED_KEY, expanded ? '1' : '0')
+  } catch {
+    /* 隐私模式 / 配额：本次会话仍生效，刷新后回默认展开 */
+  }
+}
