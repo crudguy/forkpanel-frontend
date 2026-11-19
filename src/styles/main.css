@@ -660,6 +660,14 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .row > label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); flex: 1; min-width: 140px; }
 .row > label input, .row > label select { width: 100%; }
+/* 行内控件统一 38px 高：原生 select 的 line-height:normal 与 input 的固定行高
+   会把同类控件撑成不同高度（备份计划实测 select 36/37px、input 39.2px）。
+   ⚠ 用后代选择器而非 `>`：display:contents 内联组件（如备份计划的时间选择、
+   远端目标）的子控件不是 .row 的直接子元素，但同样需要守这条高度契约。
+   垂直 padding 归零由固定 height 接管，否则 border-box 会把内容挤掉。 */
+.row input:not([type='checkbox']):not([type='radio']), .row select {
+  height: 38px; padding: 0 11px;
+}
 
 /* 目录选择行：输入框 + 「浏览…」按钮并排（站点根目录 / 应用工作目录复用）。
    提到全局，避免各视图各抄一份导致漂移。 */

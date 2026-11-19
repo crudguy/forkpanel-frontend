@@ -66,6 +66,9 @@ export const UI_GUARDS = [
   'check-waf-p2.mjs',
   // 2026-11-11 WAF 表格几何：td 禁用 display:flex / 筛选条宽度覆盖 / 固定列总和上限
   'check-waf-layout.mjs',
+  // 2026-11-19 表单控件宽高：.row 后代控件统一 38px；display:contents 内联组件的
+  // label 须与 .row > label 同 flex 基值，否则 select/input 同行高低宽窄不一
+  'check-form-control-size.mjs',
   // 2026-11-11 表格规范：每个含 <table> 的文件必须登记（接分页/排序 或 例外+理由），
   // 且不得再出现私有 .pager 样式——新加表格漏接是本类问题唯一的退化方式
   'check-table-convention.mjs',

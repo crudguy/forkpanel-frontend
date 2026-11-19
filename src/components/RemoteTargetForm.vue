@@ -88,8 +88,14 @@ function set<K extends keyof RemoteConfig>(k: K, v: RemoteConfig[K]) {
 .remote { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 10px; }
 .remote label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
 .remote label.wide { flex: 1 1 280px; }
-.remote input, .remote select { font-size: var(--fs-13); }
+/* 字号与宿主 .row > label 对齐（12px），避免 select/input 行高不同显得高低不齐。
+   高度由 main.css 的 .row 规则统一兜底。 */
 /* 并入宿主 .row 时根盒子不生成，内部 label 直接成为表单行的 flex item，
-   随父级 flex-wrap 自然折行，不再独占一行；「改远端」那处不加 inline，保持独立分区。 */
+   随父级 flex-wrap 自然折行，不再独占一行；「改远端」那处不加 inline，保持独立分区。
+   ⚠ display:contents 只改渲染层，`.row > label` 的 flex 契约命中不到子 label，
+   这里自己补齐；.wide（URL 字段）保留更宽的基值，不一起压成 140px。 */
 .remote.inline { display: contents; }
+/* 与全局 `.row > label`（flex:1 = 1 1 0%）同基值，避免内联字段比同行宽。
+   .wide（URL 字段）保留更宽基值，不一起压成 140px。 */
+.remote.inline label:not(.wide) { flex: 1; min-width: 140px; }
 </style>

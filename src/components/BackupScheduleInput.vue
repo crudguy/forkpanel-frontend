@@ -91,9 +91,15 @@ const timed = () => sched.value.mode === 'daily' || sched.value.mode === 'weekly
 /* 与 BackupsView 的 .row / RemoteTargetForm 同一套排布：label 纵向、自动换行。 */
 .sched { display: flex; flex-wrap: wrap; gap: 10px 14px; }
 .sched label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); }
-.sched input, .sched select { font-size: var(--fs-13); }
+/* 字号与宿主 .row > label 保持一致（12px）：13px 会让 select 的 line-height:normal
+   比同行 input 高出一截，看起来像没对齐。高度由 main.css 的 .row 规则统一兜底。 */
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
 .sched input[type='time'] { color-scheme: dark; }
-/* 并入宿主 .row：根盒子不生成，内部 label 直接成为表单行的 flex item。 */
+/* 并入宿主 .row：根盒子不生成，内部 label 直接成为 flex item。
+   ⚠ display:contents 只是渲染层合并，DOM 上级数没变 ⇒ 全局 `.row > label` 的
+   flex:1 / min-width 命中不到这里，必须自己补齐，否则同行控件宽窄不一。 */
 .sched.inline { display: contents; }
+/* flex 基值须与全局 `.row > label`（flex:1 = 1 1 0%）完全一致，只写 140px basis
+   会让内联字段比同行普通字段宽一截（实测 148 vs 140px）。min-width 兜窄屏。 */
+.sched.inline label { flex: 1; min-width: 140px; }
 </style>
