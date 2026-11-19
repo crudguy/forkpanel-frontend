@@ -586,7 +586,7 @@ const selName = ref('')
           <label>保留份数<input v-model.number="form.keep_count" type="number" min="1" max="365" /></label>
           <BackupScheduleInput v-model="form.cron_expr" inline />
           <RemoteTargetForm v-model="form.remote" :disabled="!canManage" inline />
-          <label title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
+          <label class="chk-field" title="加密备份产物，防止文件被拷走后泄露内容。主密钥不入库，请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
             <span class="chk-ctl"><input v-model="form.encrypt" type="checkbox" /></span>
           </label>
           <button class="btn-primary" :disabled="!canManage || busy || (form.kind !== 'panel' && !form.target.trim()) || !(Number(form.keep_count) >= 1 && Number.isInteger(Number(form.keep_count)))" @click="create">添加</button>
@@ -689,10 +689,10 @@ const selName = ref('')
           <label>保留份数（1-365）
             <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
           </label>
-          <label title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
+          <label class="chk-field" title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
             <span class="chk-ctl"><input v-model="editPlan.encrypt" type="checkbox" /></span>
           </label>
-          <label>启用
+          <label class="chk-field">启用
             <span class="chk-ctl"><input v-model="editPlan.enabled" type="checkbox" /></span>
           </label>
           <label>输出目录（留空 = 不改）
@@ -964,6 +964,10 @@ const selName = ref('')
    label 的三种对齐（贴底/贴顶/拉伸）都少了上面那行字段名，怎么挪都别扭。 */
 .chk-ctl { display: flex; align-items: center; height: 38px; }
 .chk-ctl input { width: auto; margin: 0; accent-color: var(--c-primary); }
+/* 复选框字段只有「字段名 + 一个小方框」，不需要跟输入/下拉一样宽。
+   给固定窄列，把横向空间让给真正需要宽度的字段；
+   ⚠ 覆盖全局 .row > label 的 flex:1 / min-width:140px，故 specificity 更高。 */
+.row > label.chk-field { flex: 0 0 96px; min-width: 0; }
 /* RiskBanner 默认 margin 是「0 0 14px」（上间距交给上游），其下一段 tip 也留
    14px；这里给新建表单行补同量下间距，避免红条紧贴表单、上下节奏断裂。
    只作用于新建区，编辑弹窗的 .row 后面不是 RiskBanner，不受影响。 */

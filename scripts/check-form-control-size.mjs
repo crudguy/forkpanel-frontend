@@ -16,6 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const MAIN = join(ROOT, 'src/styles/main.css')
 const SCHED = join(ROOT, 'src/components/BackupScheduleInput.vue')
 const REMOTE = join(ROOT, 'src/components/RemoteTargetForm.vue')
+const BACKUPS = join(ROOT, 'src/views/BackupsView.vue')
 
 function stripComments(s) {
   return s.replace(/\/\*[\s\S]*?\*\//g, '')
@@ -53,6 +54,13 @@ function inlineFlexOk(css, selRe) {
   return /flex\s*:\s*1\s*;/.test(r.body) && /min-width\s*:\s*140px\s*;/.test(r.body)
 }
 
+// 复选框字段是两段式「字段名 + 小方框」，固定窄列，不参与 flex 平分。
+function chkFieldOk(css) {
+  const r = ruleFor(css, /^\.row\s*>\s*label\.chk-field$/)
+  if (!r) return false
+  return /flex\s*:\s*0\s+0\s+96px\s*;/.test(r.body) && /min-width\s*:\s*0\s*;/.test(r.body)
+}
+
 let failed = false
 function check(ok, label) {
   if (ok) console.log(`  ✓ ${label}`)
@@ -80,6 +88,9 @@ check(inlineFlexOk(stripComments(PROBE_OK), /^\.sched\.inline label$/), '[3] inl
 check(!inlineFlexOk(stripComments(PROBE_BAD), /^\.sched\.inline label$/), '[4] inline flex 坏样本（1 1 140px）能被判红')
 check(!hasHeightContract('/* .row select { height:38px; padding:0 11px; } */'), '[5] 注释里的坏规则不参与判定')
 check(!hasHeightContract('.row > select { height:38px; padding:0 11px; }'), '[6] 直接子选择器变体被拒（须覆盖 display:contents 子控件）')
+check(chkFieldOk('.row > label.chk-field { flex:0 0 96px; min-width:0; }'), '[6a] chk-field 好样本能被解析检出')
+check(!chkFieldOk('.row > label.chk-field { flex:1; min-width:140px; }'), '[6b] chk-field 坏样本（未压缩）能被判红')
+check(('class="chk-field"'.repeat(2)).match(/class="chk-field"/g).length !== 3, '[6c] 模板挂类计数能识别漏挂（2 处判红）')
 
 // ── 真实文件 ──
 const mainCss = styleText(MAIN)
@@ -91,6 +102,12 @@ check(inlineFlexOk(remoteCss, /^\.remote\.inline label:not\(\.wide\)$/), '[9] Re
 // .wide（URL 字段）应保留更宽基值，不能被上面归一类一起压成 140px
 const wide = ruleFor(remoteCss, /^\.remote label\.wide$/)
 check(!!wide && /flex\s*:\s*1\s+1\s+280px/.test(wide.body ?? ''), '[10] RemoteTargetForm .wide 保留 280px 基值（URL 字段不被压窄）')
+// 复选框窄列：CSS 规则 + 模板接线（只有 CSS 没人挂 class = 静默失败）
+const backupsRaw = readFileSync(BACKUPS, 'utf8')
+const backupsCss = styleText(BACKUPS)
+const clsCount = (backupsRaw.match(/class="chk-field"/g) || []).length
+check(clsCount === 3, `[11] 3 个复选框字段均挂 chk-field（实测 ${clsCount}）`)
+check(chkFieldOk(backupsCss), '[12] BackupsView chk-field 固定 96px 窄列覆盖全局 flex:1')
 
 if (failed) process.exit(1)
 console.log('PASS：表单控件宽高契约全部通过')
