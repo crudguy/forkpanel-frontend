@@ -572,7 +572,6 @@ const selName = ref('')
           <Icon name="edit" :size="16" />
           编辑计划 #{{ editPlan.plan.id }}（{{ editPlan.plan.kind }}/{{ editPlan.plan.target }}）
           <span class="spacer" />
-          <HelpBtn title="备份说明" aria-label="备份说明" :expanded="helpOpen" @click="helpOpen = true" />
           <button class="btn-ghost btn-sm" :disabled="busy || !editPlan.remote.kind" @click="testRemote"
             title="用当前编辑的远端配置上传一个探针对象再删除，验证目标与凭据是否可用">
             <Icon name="bolt" :size="13" /> 测试连接
@@ -601,10 +600,7 @@ const selName = ref('')
             :has-secret="editPlan.plan.remote_has_secret" inline />
         </div>
 
-        <p class="tip">
-          改 cron / 启用立即生效，历史产物关联不变；远端副本与计划字段一次保存。
-          更多约束见本卡右上角的「备份说明」。
-        </p>
+        <p class="tip">改 cron / 启用立即生效，历史产物关联不变；远端副本与计划字段一次保存。</p>
       </section>
 
       <section class="card" v-if="curArtifacts">
