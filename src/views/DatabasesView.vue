@@ -3,7 +3,7 @@
  * 数据库管理。
  *
  * 能力边界：连接管理 + 备份任务 + **只读浏览**（库→表→行预览，分页）
- * + **只读 SQL 控制台**（SQLite 与 PostgreSQL）。
+ * + **只读 SQL 控制台**（仅 SQLite 与 PostgreSQL 有服务端只读护栏）。
  *
  * 关于 SQL 控制台：此前刻意不提供 Web SQL 终端（怕它变成任意写库的入口）。
  * 现在提供的是**只读**版本，且"只读"不靠前端判断——后端有服务端物理护栏：
@@ -13,9 +13,10 @@
  * 用户就白白用不上已能用的功能（置灰是前端单方面的承诺，后端没有任何东西
  * 阻止它失效）。MySQL 没有等价护栏，后端诚实 501。
  *
- * 引擎差异：SQLite 为面板内建引擎（浏览/控制台均已实装）；MySQL/PostgreSQL 需外部客户端，
- * 缺少外部客户端的连接由后端标记 `client_ready=false`，此处置灰。
- * 注意它**不代表连接可达**——只表示本机有没有 psql/mysqldump 这类工具。
+ * 引擎差异：SQLite 为面板内建引擎；其余引擎需本机安装对应客户端。缺客户端的连接由
+ * 后端标记 `client_ready=false`，此处置灰。注意它**不代表连接可达**——只表示本机
+ * 有没有 psql/mysqldump/mongosh 这类工具。
+ * 引擎清单、默认端口/账号、能力位全部来自后端 `/db/engines`，本文件不持有副本。
  */
 import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -62,6 +63,18 @@ interface Conn {
  * 而 `rows` 取不到时后端**如实**给 -1，绝非"负数行"，渲染前必须转换
  * （见 composables/dbBrowsePath.ts 的 `tableOptionLabel`）。
  */
+/**
+ * 引擎元数据由后端 `/db/engines` 下发，是本页引擎清单/默认值/能力位的唯一事实源。
+ * 前端**不得**再硬编码下拉项，也不得写 `mysql ? 3306 : 5432` 这类二元三元——
+ * 第 4 个引擎到来时那种写法会静默选错默认值，而 tsc/构建/单测全绿。
+ */
+interface EngineOption {
+  key: string; label: string
+  default_port: number | null; default_user: string | null
+  external: boolean; user_required: boolean
+  client_ready: boolean; readonly_sql: boolean
+  artifact_ext: string; schema_label: string
+}
 interface DbTableInfo { name: string; rows: number; engine: string | null; kind?: 'table' | 'view' }
 interface RowsData { columns: string[]; rows: (string | null)[][]; page: number; total: number }
 
@@ -70,6 +83,15 @@ const browseSize = ref(50)
 
 const auth = useAuthStore()
 const conns = ref<Conn[]>([])
+const engines = ref<EngineOption[]>([])
+/** 取引擎元数据；未命中时返回 undefined，调用处用可选链兜底而非猜引擎 */
+function engineOpt(key: string): EngineOption | undefined {
+  return engines.value.find(e => e.key === key)
+}
+/** 是否本地文件型引擎（唯一特例 SQLite）：判据来自后端的 external，不是引擎名查表 */
+function isLocalEngine(key: string): boolean { return engineOpt(key)?.external === false }
+/** 显示名：未加载/未知时原样显示 key，不冒充某个已知引擎 */
+function engineLabel(key: string): string { return engineOpt(key)?.label ?? key }
 
 // ── 连接表：排序 + 分页（项目规范）──
 // 名称/备注/引擎/主机/库按展示文本比；「客户端」徽标按就绪与否比（缺客户端的排前，
@@ -115,9 +137,9 @@ const DB_TABS: { value: DbTab; label: string; icon: string }[] = [
   { value: 'data', label: '数据浏览', icon: 'search' },
 ]
 function setTab(v: string) { tab.value = v as DbTab }
-/** 空表单。port/user/password 仅 mysql/postgres 需要（口令后端 AES 加密、永不回显）。 */
+/** 空表单。默认引擎取后端下发列表首项（SQLite）；口令后端 AES 加密、永不回显。 */
 function emptyForm() {
-  return { name: '', engine: 'sqlite', host: '127.0.0.1', port: '', user: '', password: '', default_db: '' }
+  return { name: '', engine: engines.value[0]?.key ?? 'sqlite', host: '127.0.0.1', port: '', user: '', password: '', default_db: '' }
 }
 const form = ref(emptyForm())
 
@@ -125,8 +147,17 @@ const form = ref(emptyForm())
 
 async function load() {
   await run(
-    async () => { conns.value = await api.get<Conn[]>(API.db.connections()) },
-    (e) => { conns.value = []; error.value = errorText(e) },
+    async () => {
+      // 引擎元数据与连接列表同源加载：下拉、默认端口/账号、能力位全部来自后端，
+      // 前端不再持有任何引擎清单副本。
+      const [list, meta] = await Promise.all([
+        api.get<Conn[]>(API.db.connections()),
+        api.get<{ engines: EngineOption[] }>(API.db.engines()),
+      ])
+      conns.value = list
+      engines.value = meta.engines
+    },
+    (e) => { conns.value = []; engines.value = []; error.value = errorText(e) },
   )
 }
 onMounted(load)
@@ -135,7 +166,7 @@ const canManage = computed(() => auth.enabled(CAP.DBMS_MANAGE, 'db.manage'))
 
 async function create() {
   busy.value = true; error.value = ''
-  const ext = form.value.engine !== 'sqlite'
+  const ext = !isLocalEngine(form.value.engine)
   // P2：外部引擎端口范围校验（仅当填写了端口时；留空走后端默认端口）
   if (ext && form.value.port !== '' && form.value.port != null) {
     const p = Number(form.value.port)
@@ -149,7 +180,7 @@ async function create() {
     await api.post(API.db.connections(), {
       name: form.value.name, engine: form.value.engine,
       host: form.value.host || undefined, default_db: form.value.default_db || undefined,
-      // 此前漏发 port/user/password：mysql/postgres 连接建出来必然不可用，且无编辑入口无法补救
+      // 此前漏发 port/user/password：远端连接建出来必然不可用，且无编辑入口无法补救
       port: ext && form.value.port ? Number(form.value.port) : undefined,
       user: ext && form.value.user ? form.value.user : undefined,
       password: ext && form.value.password ? form.value.password : undefined,
@@ -181,7 +212,7 @@ function openEdit(c: Conn) {
 
 async function saveEdit() {
   const c = editTarget.value; if (!c) return
-  const ext = editForm.value.engine !== 'sqlite'
+  const ext = !isLocalEngine(editForm.value.engine)
   if (ext && editForm.value.port !== '' && editForm.value.port != null) {
     const p = Number(editForm.value.port)
     if (!Number.isInteger(p) || p < 1 || p > 65535) { editError.value = '端口需为 1-65535 之间的整数'; return }
@@ -265,7 +296,7 @@ async function doRestore() {
 
 // ── 只读浏览：连接 → 库 →（schema）→ 表 → 行预览 ──
 //
-// 「库」的下一级在三个引擎里不是同一种东西（MySQL 库下直接是表；PG 库下是 schema；
+// 「库」的下一级在各引擎里不是同一种东西（MySQL/MariaDB 下直接是表；PG 下是 schema；
 // SQLite 的「库」其实是文件里的 catalog），所以 `schemas` 是**后端如实回答的结果**，
 // 空数组 = 该引擎没有这一层，而不是「这一层是空的」。层级判定与文案见
 // composables/dbBrowsePath.ts（那边有测试钉住"每层说每层的话"）。
@@ -412,7 +443,7 @@ async function exportCsv() {
   <div>
     <EmptyState v-if="!auth.supported(CAP.DBMS_MANAGE)"
       title="未检测到可用的数据库引擎"
-      hint="SQLite 为内建引擎；MySQL/PostgreSQL 需外部客户端"
+      hint="SQLite 为内建引擎；其余引擎需本机安装对应客户端工具"
       :reason="auth.capabilities[CAP.DBMS_MANAGE]?.reason ?? undefined" />
 
     <template v-else>
@@ -430,28 +461,32 @@ async function exportCsv() {
         <div class="row">
           <label>名称<input v-model="form.name" placeholder="myapp" /></label>
           <label>引擎
+            <!-- 选项/默认值来自后端 /db/engines：新增引擎无须改前端 -->
             <select v-model="form.engine">
-              <option value="sqlite">SQLite</option>
-              <option value="mysql">MySQL</option>
-              <option value="postgres">PostgreSQL</option>
+              <option v-for="e in engines" :key="e.key" :value="e.key">{{ e.label }}</option>
             </select>
           </label>
-          <label>主机<input v-model="form.host" :disabled="form.engine === 'sqlite'" /></label>
-          <template v-if="form.engine !== 'sqlite'">
-            <label>端口<input v-model="form.port" inputmode="numeric" :placeholder="form.engine === 'mysql' ? '3306' : '5432'" /></label>
-            <label>用户名<span style="color:var(--c-danger);margin-left:2px" title="MySQL/PostgreSQL 连接必须指定账号">*</span><input v-model="form.user" autocomplete="off" :placeholder="form.engine === 'mysql' ? 'root' : 'postgres'" /></label>
+          <label>主机<input v-model="form.host" :disabled="isLocalEngine(form.engine)" /></label>
+          <template v-if="!isLocalEngine(form.engine)">
+            <label>端口<input v-model="form.port" inputmode="numeric"
+              :placeholder="engineOpt(form.engine)?.default_port?.toString()" /></label>
+            <label>用户名
+              <span v-if="engineOpt(form.engine)?.user_required" style="color:var(--c-danger);margin-left:2px"
+                :title="`${engineLabel(form.engine)} 连接必须指定账号`">*</span>
+              <input v-model="form.user" autocomplete="off"
+                :placeholder="engineOpt(form.engine)?.default_user ?? undefined" /></label>
             <label>口令<input v-model="form.password" type="password" autocomplete="new-password" /></label>
           </template>
-          <label>{{ form.engine === 'sqlite' ? '数据库文件' : '库名' }}
-            <input v-model="form.default_db" :placeholder="form.engine === 'sqlite' ? '/path/to/app.db' : 'myapp'" />
+          <label>{{ isLocalEngine(form.engine) ? '数据库文件' : '库名' }}
+            <input v-model="form.default_db" :placeholder="isLocalEngine(form.engine) ? '/path/to/app.db' : 'myapp'" />
           </label>
-          <button class="btn-primary" :disabled="!canManage || busy || !form.name || (form.engine !== 'sqlite' && !form.user.trim())" @click="create">添加</button>
+          <button class="btn-primary" :disabled="!canManage || busy || !form.name || (!!engineOpt(form.engine)?.user_required && !form.user.trim())" @click="create">添加</button>
         </div>
       </section>
 
       <!-- 完整说明收进帮助抽屉（A6）：能力边界不再铺在页面上；「?」在「新增连接」卡头 -->
       <HelpDrawer :open="helpOpen" title="数据库说明" @close="helpOpen = false">
-        <p>SQLite 可浏览数据并执行只读 SQL；PostgreSQL 在本机装有客户端工具时同样开放；MySQL 需本机装有客户端工具，仅提供<b>备份与恢复</b>。出于安全考虑，面板不提供写入数据的入口。</p>
+        <p>面板支持 SQLite、MySQL、MariaDB、PostgreSQL、MongoDB、Redis、SQL Server、Oracle、ClickHouse 九种引擎。SQLite 为内建引擎，其余需本机安装对应客户端工具。各引擎的浏览、只读 SQL 与备份恢复能力不同，面板按实际可用性标注。出于安全考虑，面板不提供写入数据的入口。</p>
         <h4>关于只读</h4>
         <p>SQL 控制台只接受查询语句，写操作由<b>数据库本身</b>拒绝，而非仅靠界面限制。少数不影响数据的管理语句可能不受此约束，控制台内会如实标注。</p>
         <h4>客户端就绪不等于连接可用</h4>
@@ -499,7 +534,7 @@ async function exportCsv() {
                 <InlineRemark :model-value="c.remark" :editable="canManage"
                   :saver="(v) => saveRemark(c, v)" />
               </td>
-              <td>{{ c.engine }}</td>
+              <td>{{ engineLabel(c.engine) }}</td>
               <td class="mono">{{ c.host ?? '—' }}{{ c.port ? ':' + c.port : '' }}</td>
               <td class="dim mono ellipsis" :title="c.default_db ?? ''">{{ c.default_db ?? '—' }}</td>
               <td>
@@ -518,7 +553,7 @@ async function exportCsv() {
                 <button
                   class="btn-ghost btn-sm"
                   :disabled="busy || !c.readonly_sql"
-                  :title="c.readonly_sql ? '执行只读查询' : '该引擎没有服务端只读护栏，不开放自写 SQL（MySQL 暂不支持）'"
+                  :title="c.readonly_sql ? '执行只读查询' : '该引擎没有服务端只读护栏，不开放自写 SQL'"
                   @click="sqlConn = c"
                 ><Icon name="terminal" :size="13" /> SQL</button>
                 <button class="btn-ghost btn-sm" :disabled="!c.client_ready || !canManage || busy"
@@ -526,7 +561,7 @@ async function exportCsv() {
                 <button
                   class="btn-ghost btn-sm"
                   :disabled="!c.client_ready || !canManage || busy"
-                  :title="c.engine === 'sqlite' ? '从备份文件恢复（覆盖当前库）' : 'mysql/postgres 恢复需外部客户端，本环境不可用'"
+                  :title="isLocalEngine(c.engine) ? '从备份文件恢复（覆盖当前库）' : '该引擎恢复需外部客户端，本环境不可用'"
                   @click="openRestore(c)"
                 >恢复</button>
                 <button v-if="canManage" class="btn-ghost btn-sm" :disabled="busy" @click="openEdit(c)"><Icon name="edit" :size="13" /> 编辑</button>
@@ -563,7 +598,7 @@ async function exportCsv() {
       <section class="card" v-if="browse">
         <div class="sec-head">
           <Icon name="database" :size="16" /> 浏览：{{ browse.conn.name }}
-          <span class="badge">{{ browse.conn.engine }}</span>
+          <span class="badge">{{ engineLabel(browse.conn.engine) }}</span>
           <span class="spacer" />
           <button class="btn-ghost btn-sm" @click="closeBrowse">关闭</button>
         </div>
@@ -739,19 +774,18 @@ async function exportCsv() {
           <label>名称<input v-model="editForm.name" :disabled="editSaving" /></label>
           <label>引擎
             <select v-model="editForm.engine" :disabled="editSaving">
-              <option value="sqlite">SQLite</option>
-              <option value="mysql">MySQL</option>
-              <option value="postgres">PostgreSQL</option>
+              <option v-for="e in engines" :key="e.key" :value="e.key">{{ e.label }}</option>
             </select>
           </label>
-          <label>主机<input v-model="editForm.host" :disabled="editForm.engine === 'sqlite' || editSaving" /></label>
-          <template v-if="editForm.engine !== 'sqlite'">
-            <label>端口<input v-model="editForm.port" inputmode="numeric" :disabled="editSaving" /></label>
+          <label>主机<input v-model="editForm.host" :disabled="isLocalEngine(editForm.engine) || editSaving" /></label>
+          <template v-if="!isLocalEngine(editForm.engine)">
+            <label>端口<input v-model="editForm.port" inputmode="numeric"
+              :placeholder="engineOpt(editForm.engine)?.default_port?.toString()" :disabled="editSaving" /></label>
             <label>用户名<input v-model="editForm.user" autocomplete="off" placeholder="留空=不修改" :disabled="editSaving" /></label>
             <label>口令<input v-model="editForm.password" type="password" autocomplete="new-password"
               :placeholder="editTarget.has_password ? '已设口令，留空=不修改' : '未设口令'" :disabled="editSaving" /></label>
           </template>
-          <label>{{ editForm.engine === 'sqlite' ? '数据库文件' : '库名' }}
+          <label>{{ isLocalEngine(editForm.engine) ? '数据库文件' : '库名' }}
             <input v-model="editForm.default_db" :disabled="editSaving" />
           </label>
         </div>

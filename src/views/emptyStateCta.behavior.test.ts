@@ -77,7 +77,7 @@ describe('两个视图的空态 CTA 真的可用', () => {
   it('DatabasesView：暂无连接时 CTA 在 DOM 里，点击把焦点带回新增卡', async () => {
     m = await mountView({
       component: DatabasesView,
-      routes: { [API.db.connections()]: [] },
+      routes: { [API.db.connections()]: [], [API.db.engines()]: { engines: [] } },
       perms: PERMS,
     })
     expect(m.host.textContent).toContain('暂无连接')

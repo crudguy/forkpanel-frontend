@@ -164,7 +164,7 @@ describe('备份页：计划与系统备份分签', () => {
 
 // ── 数据库 ──────────────────────────────────────────────────────────────
 describe('数据库页：连接管理与数据浏览分签', () => {
-  const routes = { [API.db.connections()]: [] }
+  const routes = { [API.db.connections()]: [], [API.db.engines()]: { engines: [] } }
 
   it('默认「连接管理」；数据浏览签给出可操作的空态', async () => {
     m = await mountView({ component: DatabasesView, routes })

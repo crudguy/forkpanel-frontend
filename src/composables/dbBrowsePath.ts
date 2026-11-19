@@ -147,8 +147,9 @@ export function dbHint(level: DbLevel, i: DbLevelInput, engine: string): DbHint 
 
   switch (level) {
     case 'state': {
-      // 连接到的是「库」这一层。三种引擎的「库」不是同一种东西，措辞要能兼容：
-      // MySQL 的库就是库；PG 的库下面还有 schema；SQLite 是文件里的 catalog。
+      // 连接到的是「库」这一层。各引擎的「库」不是同一种东西，措辞要能兼容：
+      // MySQL/MariaDB 的库就是库；PG 的库下面还有 schema；SQLite 是文件里的 catalog；
+      // MongoDB 是 database；Redis 是 db index。
       // 连接级别的库清单本身由外部传入的 `dbs` 展示，这里只说下一步动作。
       return {
         key: 'pick-db',
@@ -171,9 +172,13 @@ export function dbHint(level: DbLevel, i: DbLevelInput, engine: string): DbHint 
         // 这里能确定：**查过了，这一层确实没有可预览的对象**。
         // 不同引擎给不同的下一步——说错了会让人去找一个不存在的入口。
         // 注意别再重复一句"没有表"：前半句已经说了，后半句只负责**下一步**。
+        // 只有 SQLite/PG 开放 SQL 控制台：对其它引擎说"去 SQL 控制台确认"
+        // 是把用户指向一个根本点不开的按钮。
         const next = engine === 'sqlite'
           ? '这是面板内建的 SQLite 文件；面板不提供建表入口，可用「SQL」控制台做只读查询'
-          : `可到「SQL」控制台确认${engine === 'postgres' ? '（注意本版只读 public）' : ''}`
+          : engine === 'postgres'
+            ? '可到「SQL」控制台确认（注意本版只读 public）'
+            : '可在上方切换库或层级确认；该引擎未开放自写 SQL 控制台'
         return {
           key: 'layer-empty',
           text: `「${i.schema || i.db}」下没有表或视图。${next}。`,

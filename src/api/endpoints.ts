@@ -197,6 +197,8 @@ export const API = {
   },
 
   db: {
+    /** 引擎元数据（下拉项/默认端口与账号/能力位）的唯一事实源，由后端下发 */
+    engines: () => '/api/v1/db/engines',
     connections: () => '/api/v1/db/connections',
     conn: (id: number) => `/api/v1/db/connections/${id}`,
     databases: (conn: number) => `/api/v1/db/${conn}/databases`,

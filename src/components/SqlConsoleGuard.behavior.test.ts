@@ -47,6 +47,13 @@ function sqlButtons(mounted: Mounted): HTMLButtonElement[] {
     .filter((b) => b.textContent?.trim() === 'SQL')
 }
 
+/** 新端点 /db/engines 的夹具：挂载 DatabasesView 时必须提供，否则 load() 整体失败 */
+const ENGINE_META = { engines: [{
+  key: 'sqlite', label: 'SQLite', default_port: null, default_user: null,
+  external: false, user_required: false, client_ready: true, readonly_sql: true,
+  artifact_ext: 'db', schema_label: 'catalog',
+}] }
+
 const CONNS: FakeConn[] = [
   conn({ id: 1, name: 'sqlite-open', engine: 'sqlite', readonly_sql: true }),
   conn({ id: 2, name: 'pg-closed', engine: 'postgres', readonly_sql: false }),
@@ -58,7 +65,7 @@ describe('SQL 控制台门控：后端 readonly_sql 决定按钮状态', () => {
   it('能力位为 true 才启用；同一种引擎两个值给出两个结果', async () => {
     m = await mountView({
       component: DatabasesView,
-      routes: { [API.db.connections()]: CONNS },
+      routes: { [API.db.connections()]: CONNS, [API.db.engines()]: ENGINE_META },
     })
     const btns = sqlButtons(m)
     expect(btns.length, '每个连接必须渲染一个 SQL 按钮（定位失效会静默空集）').toBe(CONNS.length)
@@ -69,7 +76,7 @@ describe('SQL 控制台门控：后端 readonly_sql 决定按钮状态', () => {
   it('置灰理由也由能力位驱动，同引擎不同能力位给出不同 title', async () => {
     m = await mountView({
       component: DatabasesView,
-      routes: { [API.db.connections()]: CONNS },
+      routes: { [API.db.connections()]: CONNS, [API.db.engines()]: ENGINE_META },
     })
     const btns = sqlButtons(m)
     expect(btns.length).toBe(CONNS.length)
@@ -82,7 +89,10 @@ describe('SQL 控制台门控：后端 readonly_sql 决定按钮状态', () => {
   it('能力位全关时一个按钮都不许能点', async () => {
     m = await mountView({
       component: DatabasesView,
-      routes: { [API.db.connections()]: CONNS.map((c) => ({ ...c, readonly_sql: false })) },
+      routes: {
+        [API.db.connections()]: CONNS.map((c) => ({ ...c, readonly_sql: false })),
+        [API.db.engines()]: ENGINE_META,
+      },
     })
     const btns = sqlButtons(m)
     expect(btns.length).toBe(CONNS.length)
