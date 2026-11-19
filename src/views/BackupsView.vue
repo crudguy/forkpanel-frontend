@@ -572,7 +572,9 @@ const selName = ref('')
           <Icon name="edit" :size="16" />
           编辑计划 #{{ editPlan.plan.id }}（{{ editPlan.plan.kind }}/{{ editPlan.plan.target }}）
           <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="busy || !editPlan.remote.kind" @click="testRemote">
+          <HelpBtn title="备份说明" aria-label="备份说明" :expanded="helpOpen" @click="helpOpen = true" />
+          <button class="btn-ghost btn-sm" :disabled="busy || !editPlan.remote.kind" @click="testRemote"
+            title="用当前编辑的远端配置上传一个探针对象再删除，验证目标与凭据是否可用">
             <Icon name="bolt" :size="13" /> 测试连接
           </button>
           <button class="btn-primary" :disabled="!canManage || busy" @click="saveEditPlan">保存</button>
@@ -586,7 +588,7 @@ const selName = ref('')
           <label>保留份数（1-365）
             <input v-model.number="editPlan.keep" type="number" min="1" max="365" />
           </label>
-          <label title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密">静态加密
+          <label title="加密备份产物。主密钥请单独备份，丢失后备份将无法解密。开启远端副本时此项必填">静态加密
             <span class="chk-ctl"><input v-model="editPlan.encrypt" type="checkbox" /></span>
           </label>
           <label>启用
@@ -595,15 +597,13 @@ const selName = ref('')
           <label>输出目录（留空 = 不改）
             <input v-model="editPlan.dest" placeholder="plans" />
           </label>
+          <RemoteTargetForm v-model="editPlan.remote" :disabled="!canManage"
+            :has-secret="editPlan.plan.remote_has_secret" inline />
         </div>
 
-        <RemoteTargetForm v-model="editPlan.remote" :disabled="!canManage"
-          :has-secret="editPlan.plan.remote_has_secret" />
-
         <p class="tip">
-          计划字段与远端副本<b>一次保存</b>；改 cron/启用无需删除重建，历史产物关联保持不变。
-          「测试连接」会用当前编辑的配置真的<b>上传探针对象再删掉</b>；凭据框为空表示<b>沿用已保存的凭据</b>
-          （要清空请把用户名也清空改为匿名访问）。开启远端副本必须同时勾选「静态加密」。
+          改 cron / 启用立即生效，历史产物关联不变；远端副本与计划字段一次保存。
+          更多约束见本卡右上角的「备份说明」。
         </p>
       </section>
 
