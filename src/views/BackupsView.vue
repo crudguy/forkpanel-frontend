@@ -159,21 +159,30 @@ watch(() => form.value.kind, (k) => {
   form.value.target = k === 'panel' ? 'panel' : ''
 })
 
-/** 正在编辑远端的计划（null = 面板关闭）。cfg 的 secret 恒为空初值：凭据不回显。 */
-const editRemote = ref<{ plan: Plan; cfg: RemoteConfig } | null>(null)
-
-// ── 计划字段编辑（审计 F15）：后端 PatchReq 早已支持 cron/保留份数/加密/启停，
-// 此前前端只有「改远端」入口——计划要改只能删了重建，丢历史产物关联。
+// ── 计划编辑（审计 F15）：cron/保留份数/加密/启停 + 远端副本一次改完。
+// 后端 PatchReq 本来就同时收这两组字段；拆成两个入口要来回切卡片，且
+// 「先取消加密、再开远端」在旧的两步流程里用旧 encrypt 校验，提示对不上。
 const editPlan = ref<{
-  plan: Plan; cron: string; keep: number; encrypt: boolean; enabled: boolean; dest: string
+  plan: Plan; cron: string; keep: number; encrypt: boolean; enabled: boolean; dest: string;
+  remote: RemoteConfig
 } | null>(null)
 
 function openEditPlan(p: Plan) {
   error.value = ''
+  const k = p.remote_kind === 'webdav' || p.remote_kind === 's3' ? p.remote_kind : ''
   editPlan.value = {
     plan: p,
     cron: p.cron_expr ?? '', keep: p.keep_count,
     encrypt: p.encrypt, enabled: p.enabled, dest: p.dest_dir,
+    remote: {
+      kind: k,
+      url: p.remote_url ?? '',
+      bucket: p.remote_bucket ?? '',
+      prefix: p.remote_prefix ?? '',
+      region: p.remote_region ?? '',
+      user: p.remote_user ?? '',
+      secret: '', // 永不回显；留空 = 沿用已存凭据
+    },
   }
 }
 
@@ -185,6 +194,12 @@ async function saveEditPlan() {
     error.value = '保留份数需为 1-365 之间的整数'
     return
   }
+  // 与创建同一条纪律：远端副本必须加密。后端也用**本次提交的 encrypt**校验
+  // （require_encryption_for_remote），所以这里拦下的提示与后端 400 语义一致。
+  if (e.remote.kind && !e.encrypt) {
+    error.value = '开启远端副本时必须勾选「静态加密」：明文备份会落到第三方存储（S3 / WebDAV）'
+    return
+  }
   busy.value = true; error.value = ''
   try {
     await api.patch(API.backups.patch(e.plan.id), {
@@ -194,8 +209,11 @@ async function saveEditPlan() {
       encrypt: e.encrypt,
       enabled: e.enabled,
       dest_dir: e.dest.trim() || undefined, // 留空 = 不改目标目录
+      // 计划字段与远端副本一次提交：后端 PatchReq 原生支持，且用本次的 encrypt
+      // 校验远端加密要求（旧的两步流程会用改前的 encrypt，提示对不上）。
+      remote: remotePayload(e.remote),
     })
-    toast(`已更新计划 #${e.plan.id}`)
+    toast(`已更新计划 #${e.plan.id}（含远端配置）`)
     editPlan.value = null
     await load()
   } catch (err) { error.value = errorText(err) }
@@ -294,60 +312,22 @@ async function create() {
   finally { busy.value = false }
 }
 
-/** 打开某个计划的远端配置（凭据框留空 = 不改动）。 */
-function openRemote(p: Plan) {
-  error.value = ''
-  const k = p.remote_kind === 'webdav' || p.remote_kind === 's3' ? p.remote_kind : ''
-  editRemote.value = {
-    plan: p,
-    cfg: {
-      kind: k,
-      url: p.remote_url ?? '',
-      bucket: p.remote_bucket ?? '',
-      prefix: p.remote_prefix ?? '',
-      region: p.remote_region ?? '',
-      user: p.remote_user ?? '',
-      secret: '', // 永不回显
-    },
-  }
-}
-
-async function saveRemote() {
-  if (!editRemote.value) return
-  const id = editRemote.value.plan.id
-  busy.value = true; error.value = ''
-  // 同上：这条路径是「先建本地计划、再补远端」，最容易绕过上面的新建校验
-  if (editRemote.value.cfg.kind && !editRemote.value.plan.encrypt) {
-    error.value = '该计划未开启静态加密：开启远端副本前请先在该计划的编辑里勾选「静态加密」（明文备份不得落到第三方存储）'
-    busy.value = false
-    return
-  }
-  try {
-    await api.patch(API.backups.patch(id), { remote: remotePayload(editRemote.value.cfg) })
-    toast(`已更新计划 #${id} 的远端配置${
-      editRemote.value.cfg.kind ? '；执行一次备份即可验证实际上传' : '（已关闭远端副本）'}`)
-    editRemote.value = null
-    await load()
-  } catch (e) { error.value = errorText(e) }
-  finally { busy.value = false }
-}
-
 /**
- * 连接自检。复用该计划已存的凭据（plan_id），因此"改了 URL 没重输密码"也能直接测。
- * 后端会真的 PUT 一个探针对象再删掉——比"能不能连上"更接近实际要用的能力。
+ * 连接自检（编辑面板内）。测的正是**当前编辑态**的远端配置：后端优先用本次
+ * 传入的 remote_secret，没重输则回退到该计划已存凭据（plan_id），因此
+ * "改了 URL 没重输密码"也能直接测。后端真的 PUT 探针对象再删掉。
  */
 async function testRemote() {
-  if (!editRemote.value) return
-  const id = editRemote.value.plan.id
+  const e = editPlan.value; if (!e) return
   busy.value = true; error.value = ''
   try {
     const r = await api.post<{ ok: boolean; probe_url: string }>(API.backups.testRemote(), {
-      plan_id: id,
-      remote: remotePayload(editRemote.value.cfg),
+      plan_id: e.plan.id,
+      remote: remotePayload(e.remote),
     })
     toast(`远端可用：探针对象 ${r.probe_url} 已上传并删除`)
-  } catch (e) {
-    error.value = `远端连接失败：${errorText(e)}`
+  } catch (err) {
+    error.value = `远端连接失败：${errorText(err)}`
   } finally { busy.value = false }
 }
 
@@ -575,7 +555,6 @@ const selName = ref('')
                 <button class="btn-ghost btn-sm" @click="showArtifacts(p)"><Icon name="list" :size="13" /> 产物</button>
                 <button class="btn-ghost btn-sm" :disabled="!canManage"
             :title="canManage ? '' : '无 backup.manage 权限'" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
-                <button class="btn-ghost btn-sm" :disabled="!canManage || busy" @click="openRemote(p)"><Icon name="globe" :size="13" /> 远端</button>
                 <button class="btn-ghost btn-sm danger" :disabled="!canManage"
             :title="canManage ? '' : '无 backup.manage 权限'" @click="delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
               </td>
@@ -588,33 +567,14 @@ const selName = ref('')
       </div>
       <EmptyState v-else title="暂无备份计划" />
 
-      <section class="card" v-if="editRemote">
-        <div class="sec-head">
-          <Icon name="globe" :size="16" />
-          远端副本：计划 #{{ editRemote.plan.id }}（{{ editRemote.plan.kind }}/{{ editRemote.plan.target }}）
-          <span class="spacer" />
-          <button class="btn-ghost btn-sm" :disabled="busy || !editRemote.cfg.kind" @click="testRemote">
-            <Icon name="bolt" :size="13" /> 测试连接
-          </button>
-          <button class="btn-primary" :disabled="!canManage || busy" @click="saveRemote">保存</button>
-          <button class="btn-ghost btn-sm" @click="editRemote = null">关闭</button>
-        </div>
-
-        <RemoteTargetForm v-model="editRemote.cfg" :disabled="!canManage"
-          :has-secret="editRemote.plan.remote_has_secret" />
-
-        <p class="tip">
-          「测试连接」会真的<b>上传一个探针对象再删掉</b>——用备份实际要用的操作验证，
-          比"能不能连上"更接近真相。「保存」只改进当前计划的远端配置（类型/目标不在此处改）。
-          凭据框为空表示<b>沿用已保存的凭据</b>；要清空请把用户名也清空改为匿名访问。
-        </p>
-      </section>
-
       <section class="card" v-if="editPlan">
         <div class="sec-head">
           <Icon name="edit" :size="16" />
           编辑计划 #{{ editPlan.plan.id }}（{{ editPlan.plan.kind }}/{{ editPlan.plan.target }}）
           <span class="spacer" />
+          <button class="btn-ghost btn-sm" :disabled="busy || !editPlan.remote.kind" @click="testRemote">
+            <Icon name="bolt" :size="13" /> 测试连接
+          </button>
           <button class="btn-primary" :disabled="!canManage || busy" @click="saveEditPlan">保存</button>
           <button class="btn-ghost btn-sm" @click="editPlan = null">关闭</button>
         </div>
@@ -637,7 +597,14 @@ const selName = ref('')
           </label>
         </div>
 
-        <p class="tip">修改保存后立即生效；改 cron/启用无需删除重建，历史产物关联保持不变。</p>
+        <RemoteTargetForm v-model="editPlan.remote" :disabled="!canManage"
+          :has-secret="editPlan.plan.remote_has_secret" />
+
+        <p class="tip">
+          计划字段与远端副本<b>一次保存</b>；改 cron/启用无需删除重建，历史产物关联保持不变。
+          「测试连接」会用当前编辑的配置真的<b>上传探针对象再删掉</b>；凭据框为空表示<b>沿用已保存的凭据</b>
+          （要清空请把用户名也清空改为匿名访问）。开启远端副本必须同时勾选「静态加密」。
+        </p>
       </section>
 
       <section class="card" v-if="curArtifacts">
@@ -811,7 +778,8 @@ const selName = ref('')
    只作用于新建区，编辑弹窗的 .row 后面不是 RiskBanner，不受影响。 */
 .create-row { margin-bottom: 14px; }
 /* 备份计划表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
-   操作列 5 个带文字按钮，按「各约 59px + 4×6 间距」实测约 320px，取 340 留余量；
+   操作列 4 个带文字按钮（「远端」已并入「编辑」面板），按「各约 59px + 3×6 间距」
+   实测约 254px，取 280 留余量；
    产物目录为唯一弹性列（可能很长），ellipsis 截断、完整值走 title。
    保留/加密在窄屏（<=720px）由 main.css 公共规则隐藏（.col-opt）。 */
 .w-bid { width: 5%; }
@@ -822,7 +790,7 @@ const selName = ref('')
 .w-benc { width: 8%; }
 .w-bremote { width: 12%; }
 .w-brun { width: 13%; }
-.w-bacts { width: 340px; }    /* 执行 / 产物 / 编辑 / 远端 / 删除 5 个带文字按钮 */
+.w-bacts { width: 280px; }    /* 执行 / 产物 / 编辑 / 删除 4 个带文字按钮 */
 /* 产物明细表（弹窗内） */
 .w-afile { width: auto; }     /* 文件名弹性列 */
 .w-asize { width: 90px; }
