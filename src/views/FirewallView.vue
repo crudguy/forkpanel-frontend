@@ -600,11 +600,13 @@ col.w-fwacts { width: 100px; }
   col.w-fwacts { width: 100px; }
 }
 
-/* flex 行里的 select 必须局部盖掉全局 width:100%，否则动作被挤没。
-   ⚠ 不能写 `flex: 0 0 128px`：.row > label 是 column flex，主轴=垂直，
-   该缩写的 flex-basis 会落在高度上，把 select 撑成 128px（实测 128 vs 应有 38），
-   整行被顶高、动作与端口输入框中心错开 45px。用 flex:none 只锁宽、不碰高度。 */
-select.fw-action { width: 128px; flex: none; }
+/* 动作下拉必须撑满所在列（width:100%），和端口/来源/备注的输入框左右对齐。
+   ⚠ 曾写死 width:128px：label 列宽 254px，下拉右边空出 126px，
+   到端口框的视觉间距 136px，而其它列间只有 10px（老板截图圈出的空白）。
+   ⚠ 不能写 `flex: 0 0 Npx`：.row > label 是 column flex，主轴=垂直，
+   该缩写的 flex-basis 会落在高度上，把 select 撑成 N px 高（实测 45px 错位）。
+   flex:none 只锁高度按内容、不碰横向宽度。 */
+select.fw-action { width: 100%; flex: none; }
 
 /* 入站生效状态：只读观察值，与下方「可编辑规则表」视觉上明确分开 */
 .exposure-card .sec-head { margin-bottom: 8px; }
