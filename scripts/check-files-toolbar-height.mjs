@@ -42,6 +42,14 @@ function helpBtnSquare(rawCss) {
   const r = rules(css).find((x) => /\.tools-actions\s*>\s*\.help-btn/.test(x.sel))
   return !!r && /width\s*:\s*38px\s*;/.test(r.body) && /height\s*:\s*38px\s*;/.test(r.body)
 }
+// 标签栏下边距必须为 0：写 10px 会被 head-row 的 align-items:center 顶高 5px
+// （34+10=44 恰等于内容区高），使 tab 与工具行错位（用户看到「搜靠下」）。
+// 全局 main.css 已归零，但本 scoped `.tabbar` 特异性相同、加载在后，会反向覆盖。
+function tabbarNoBottomMargin(rawCss) {
+  const css = stripComments(rawCss)
+  const r = rules(css).find((x) => /^\.tabbar$/.test(x.sel))
+  return !!r && /margin-bottom\s*:\s*0\s*;/.test(r.body)
+}
 
 let failed = false
 function check(ok, label) {
@@ -60,21 +68,26 @@ const PROBE_OK = `
 .fp-head-row > .tools-row > .tools-actions > .hid,
 .fp-head-row > .tools-row > .tools-actions > button { height: 38px; }
 .fp-head-row > .tools-row > .tools-actions > .help-btn { width: 38px; height: 38px; }
+.tabbar { display: flex; margin-bottom: 0; }
 `
 const PROBE_BAD = `
 .fp-head-row > .tools-row > .tools-actions > .fsearch { height: 36px; }
 .fp-head-row > .tools-row > .tools-actions > .help-btn { width: 34px; }
+.tabbar { display: flex; margin-bottom: 10px; }
 `
 check(hasUniformHeight(stripComments(PROBE_OK)), '[1] 等高契约好样本能被解析检出')
 check(!hasUniformHeight(stripComments(PROBE_BAD)), '[2] 缺 .hid/button 或高度 36px 的坏样本能被判红')
 check(helpBtnSquare(stripComments(PROBE_OK)), '[3] 帮助按钮 38×38 好样本能被解析检出')
 check(!helpBtnSquare(stripComments(PROBE_BAD)), '[4] 帮助按钮 34px 坏样本能被判红')
 check(!hasUniformHeight('/* .tools-actions > .fsearch, .tools-actions > .hid, .tools-actions > button { height:38px; } */'), '[5] 注释里的规则不参与判定')
+check(tabbarNoBottomMargin(PROBE_OK), '[5a] tabbar margin-bottom:0 好样本能被解析检出')
+check(!tabbarNoBottomMargin(PROBE_BAD), '[5b] tabbar margin-bottom:10px 坏样本能被判红')
 
 // ── 真实文件 ──
 const raw = readFileSync(FILES, 'utf8')
 check(hasUniformHeight(styleText(stripComments(raw))), '[6] FilesView 工具行 .fsearch/.hid/button 统一 38px')
 check(helpBtnSquare(styleText(stripComments(raw))), '[7] FilesView 帮助按钮 38×38（父 scoped 命中根元素）')
+check(tabbarNoBottomMargin(styleText(stripComments(raw))), '[8] FilesView tabbar 下边距归零（与工具行同一中线）')
 
 if (failed) process.exit(1)
 console.log('PASS：文件页工具行控件等高契约通过')

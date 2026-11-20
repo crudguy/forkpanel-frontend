@@ -968,8 +968,12 @@ function full(p: string) {
 /* 多页签标签栏（2026-10-16）：与容器页 TabBar 同源但形态不同——可关闭标签条
    vs 导航分段。两者共享 --seg-* token，激活态一律浅底 + 品牌色文字 + 加粗。
    标签是目录视图，不是页面级主操作，故「+ 新标签」走中性色，不抢走 tools-row
-   里唯一的 btn-primary（上传）。 */
-.tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+   里唯一的 btn-primary（上传）。
+   ⚠ margin-bottom 必须为 0：全局 main.css 的 `.fp-head-row .tabbar` 已归零，但本
+   scoped `.tabbar` 特异性相同且加载在后，写 10px 会反过来覆盖它，导致 tabbar
+   在 align-items:center 的 head-row 里被顶高 5px（34+10=44 恰等于内容区高），
+   与右侧工具行错位（tab 中线 91 vs 搜索框/面包屑 96，用户看到「搜靠下」）。 */
+.tabbar { display: flex; align-items: stretch; gap: 4px; margin-bottom: 0; flex-wrap: wrap; }
 .tab { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 6px 10px;
   border: 1px solid var(--c-border); border-radius: var(--seg-radius); background: var(--c-glass);
   color: var(--seg-fg); cursor: pointer; font-size: var(--fs-12-5); user-select: none; }
