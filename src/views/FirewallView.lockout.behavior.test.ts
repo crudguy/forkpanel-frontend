@@ -93,6 +93,7 @@ describe('防火墙禁用端口入口（真挂载）', () => {
     expect(card!.textContent).toContain('放行（accept）')
     expect(card!.textContent).toContain('未列出的端口默认可访问')
     expect(card!.textContent, '必须声明这些不是可删规则').toContain('只读观察值')
+    expect(card!.textContent, '必须说明封禁优先，否则用户会按列表顺序误判').toContain('优先生效')
     const chips = [...card!.querySelectorAll('.exposure-chip')].map(x => x.textContent?.trim() ?? '')
     expect(chips.some(t => t.startsWith('22') && t.includes('默认放行')), '22 应显示为默认放行').toBe(true)
     m.fake.assertClean(); m.cleanup()
