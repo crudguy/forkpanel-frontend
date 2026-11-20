@@ -66,8 +66,9 @@ describe('dirLabel', () => {
 })
 
 describe('buildCrumbs', () => {
-  it('根目录只有一段', () => {
-    expect(buildCrumbs('/')).toEqual([{ label: '根目录', to: '/' }])
+  it('根目录只有一段，且显示 / 而非「根目录」（避免与标签页标题重复）', () => {
+    expect(buildCrumbs('/')).toEqual([{ label: '/', to: '/' }])
+    expect(buildCrumbs('')).toEqual([{ label: '/', to: '/' }])
   })
   it('逐段拼回绝对路径（前端不解析 ..）', () => {
     expect(buildCrumbs('/a/b')).toEqual([

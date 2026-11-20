@@ -65,10 +65,15 @@ export function dirLabel(p: string): string {
  *
  * 后端返回的 path 已是规范路径（resolve 后的 SafePath 显示值），所以逐段累加
  * 就是合法路径，**前端不解析 `..`**——拼路径在前端毫无意义，后端沙箱才是唯一防线。
+ *
+ * ⚠ 根路径（无分段）首段显示 `/` 而非「根目录」：标签页标题 `dirLabel('/')`
+ * 已是「根目录」，两者在根目录时紧挨着会重复成「根目录 根目录」（真机截图）。
+ * 深路径下仍保留「根目录」作可点锚点——若连同分隔符一起换成 `/`，会叠成 `//var`，
+ * 反而更乱。所以只针对「当前就在根」这一个场景收口。
  */
 export function buildCrumbs(path: string): Crumb[] {
   const segs = normalizePath(path).split('/').filter(Boolean)
-  const out: Crumb[] = [{ label: '根目录', to: '/' }]
+  const out: Crumb[] = [{ label: segs.length ? '根目录' : '/', to: '/' }]
   let acc = ''
   for (const s of segs) {
     acc += '/' + s
