@@ -75,15 +75,40 @@ export function applyConfirm(
     return { title: `确认${verb}端口`, detail: `将${verb}端口：${list}${src}`, danger: false }
   }
   return {
-    title: '确认封禁 SSH 端口（高危）',
-    detail: `将封禁端口：${list}${src}。其中含当前 SSH 端口，封禁后将直接失联且无法从面板恢复。请确认已通过其它通道登录，或已保留回退方案。`,
+    title: '确认封禁 SSH 端口（须迁移）',
+    detail: `将封禁端口：${list}${src}。其中含当前 SSH 端口，直接封禁会导致失联。面板会先把 SSH 迁移到你在表单中填写的新端口并放行，再封禁旧端口；任一步失败自动回滚。迁移完成后请用新端口重新连接。`,
     danger: true,
   }
 }
 
-/** 提交时是否带 `allow_lockout_risk`（后端二次确认开关，仅命中时给）。 */
-export function needsLockoutAck(action: FirewallAction, hitsSsh: boolean): boolean {
+/**
+ * 封禁 SSH 端口时是否必须迁移到新端口。
+ * 只有 deny/reject 命中受保护端口才需要；放行不需要。
+ */
+export function needsMigration(action: FirewallAction, hitsSsh: boolean): boolean {
   return action !== 'allow' && hitsSsh
+}
+
+/**
+ * 校验用户填写的"新 SSH 端口"（与后端 new_port_is_safe 同口径）。
+ * 三条判据：合法范围 / 不等于当前 SSH 端口 / 不在本次封禁范围内。
+ * 返回 null 表示可用，否则是可直接展示给用户的错误原因。
+ */
+export function newPortError(
+  raw: string, parsed: PortParse, protectedPorts: number[],
+): string | null {
+  if (!/^\d+$/.test(raw.trim())) return '请填写新 SSH 端口（1-65535 的数字）'
+  const n = Number(raw.trim())
+  if (n < 1 || n > 65535) return '新 SSH 端口超出范围（1-65535）'
+  if (protectedPorts.includes(n)) return `新 SSH 端口 ${n} 与当前 SSH 端口相同，等于没有迁移`
+  if (parsed.ok) {
+    if (parsed.all) return '不能封禁全部端口：没有任何端口可用于 SSH 迁移，请先缩小封禁范围'
+    if (parsed.singles.includes(n)) return `新 SSH 端口 ${n} 也在本次封禁的端口中，迁过去仍会被封`
+    if (parsed.ranges.some(([a, b]) => n >= a && n <= b)) {
+      return `新 SSH 端口 ${n} 在本次封禁的端口范围内，迁过去仍会被封`
+    }
+  }
+  return null
 }
 
 /** toast 文案：区分放行 / 封禁，不能封禁成功也报「已放行」。 */

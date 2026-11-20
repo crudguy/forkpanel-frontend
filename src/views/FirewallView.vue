@@ -4,10 +4,11 @@
  *
  * 三个刻意的安全设计：
  * 1. 表单支持 Allow/Deny/Reject。封禁端口是"把自己锁在门外"的主因，
- *    命中当前 SSH 端口时走高危二次确认（带 allow_lockout_risk）。
+ *    命中当前 SSH 端口时不再允许"确认后硬封"，而是必须先填写一个新端口：
+ *    面板先把 SSH 迁过去并放行，再封禁旧端口，任一步失败全程回滚。
  *    受保护端口集由后端 GET /rules 现读下发，前端不猜端口——否则 SSH
  *    改到 2222 后会继续盯 22，保护错位。
- * 2. 提交前用确认弹窗展示"本次将放行哪些端口 / 来源"，让用户看清再点（prepareApply 实现）。
+ * 2. 提交前用确认弹窗展示"本次将封禁哪些端口 / 来源"，让用户看清再点（prepareApply 实现）。
  * 3. 后端在 apply 前会无条件做快照并在失败时回滚，UI 明确告知这一点。
  */
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
@@ -25,7 +26,7 @@ import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 import { matchFields } from '@/composables/listSearch'
-import { parsePorts, hitsProtectedPort, applyConfirm, needsLockoutAck, applyToast, type FirewallAction } from '@/composables/firewallRules'
+import { parsePorts, hitsProtectedPort, applyConfirm, needsMigration, newPortError, applyToast, type FirewallAction } from '@/composables/firewallRules'
 
 interface Rule {
   id: string; ports: string; protocol: string; action: string
@@ -82,6 +83,12 @@ const ports = ref('80,443')
 const action = ref<FirewallAction>('allow')
 /** 后端现读 sshd 配置下发的受保护端口；前端不自行推断 SSH 端口 */
 const protectedPorts = ref<number[]>([])
+/** 封禁 SSH 端口时必需的新端口：先迁移过去再封禁，避免失联 */
+const newSshPort = ref('')
+/** 实时判定：填中 SSH 端口就展开新端口输入行，不必先点「应用」才知道要迁移 */
+const migrationRequired = computed(() =>
+  needsMigration(action.value, hitsProtectedPort(parsePorts(ports.value, action.value), protectedPorts.value))
+)
 const source = ref('')
 const comment = ref('')
 
@@ -112,18 +119,27 @@ async function apply() {
   // 清空前留一份：提示文案要说清处理了哪些端口，下面几行就把 ports 清掉了
   const applied = ports.value
   const act = action.value
-  const highRisk = needsLockoutAck(act, hitsProtectedPort(parsePorts(applied, act), protectedPorts.value))
+  const parsed = parsePorts(applied, act)
+  const migrate = needsMigration(act, hitsProtectedPort(parsed, protectedPorts.value))
+  const newPort = newSshPort.value.trim()
   try {
-    const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[] }>(
+    // 兜底：有人绕过 prepareApply 直接触发提交时，仍要拦住缺失/不安全的新端口。
+    if (migrate) {
+      const reason = newPortError(newPort, parsed, protectedPorts.value)
+      if (reason) { error.value = reason; return }
+    }
+    const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[]; ssh_migrated_to?: number }>(
       API.firewall.rules(),
       { rules: [{ ports: applied, protocol: 'tcp', action: act,
                   source: source.value || undefined, comment: comment.value || undefined }],
-        // 后端只在命中 SSH 端口时要求这道确认；放行绝不传，避免误开高危开关
-        allow_lockout_risk: highRisk ? true : undefined })
+        // 封禁 SSH 端口时后端要求新端口做迁移；放行/普通封禁绝不传
+        new_ssh_port: migrate ? Number(newPort) : undefined })
     warn.value = r.warnings?.length ? r.warnings.join('；') : ''
-    ports.value = ''; source.value = ''; comment.value = ''
+    ports.value = ''; source.value = ''; comment.value = ''; newSshPort.value = ''
     // 后端幂等：同一规则重复提交计 unchanged、added 为 0。不区分的话用户会以为"又加了一条"。
-    toast(applyToast(act, applied, r.added))
+    toast(r.ssh_migrated_to
+      ? `已将 SSH 迁移到端口 ${r.ssh_migrated_to}，请用新端口重新连接`
+      : applyToast(act, applied, r.added))
     // await：重载完成前 busy 保持 true，否则这段窗口里用户能再点一次
     await load()
   } catch (e) { error.value = errorText(e) }
@@ -156,7 +172,12 @@ function prepareApply() {
   const p = parsePorts(ports.value, action.value)
   if (!p.ok) { allowErr.value = p.msg!; return }
   if (!validSource(source.value)) { allowErr.value = '来源格式无效（应为 IPv4 或 IPv4/CIDR，如 1.2.3.4 或 1.2.3.0/24）'; return }
-  const highRisk = needsLockoutAck(action.value, hitsProtectedPort(p, protectedPorts.value))
+  const highRisk = migrationRequired.value
+  if (highRisk) {
+    // 命中 SSH 时新端口必填且必须安全：拦在弹窗之前，别让用户确认完才发现无效
+    const reason = newPortError(newSshPort.value, p, protectedPorts.value)
+    if (reason) { allowErr.value = reason; return }
+  }
   const c = applyConfirm(action.value, ports.value, source.value, highRisk)
   allowTitle.value = c.title
   allowSummary.value = c.detail
@@ -355,11 +376,18 @@ onMounted(() => { load(); loadFail2ban() })
           <button class="btn-primary" :disabled="busy || !canManage || !ports"
             :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填写端口')" @click="prepareApply">应用</button>
         </div>
+        <!-- 命中 SSH 端口才展开：新端口是迁移目标。面板先迁移并放行它，再封禁旧端口。 -->
+        <div v-if="migrationRequired" class="row migrate-row">
+          <label>新 SSH 端口（迁移目标）
+            <input v-model="newSshPort" class="fw-newport" placeholder="如 2222" inputmode="numeric" />
+          </label>
+          <p class="migrate-tip">本次封禁含当前 SSH 端口。请填一个不在封禁范围内、且不同于当前端口的新端口；面板会先迁移并放行它，再封禁旧端口，失败自动回滚。</p>
+        </div>
         <p v-if="allowErr" class="err">{{ allowErr }}</p>
         <!-- 说明条是本卡片最后一个元素：传 last 让间距翻到上方，否则会紧贴端口输入行、
              同时把 14px 下边距叠在卡片 padding 上（看上去黏在编辑区底下）。 -->
         <RiskBanner last level="warn" title="封禁端口需二次确认"
-          text="封禁当前 SSH 端口会直接失联；命中时弹高危确认，后端也会独立拦截。变更前自动快照，失败时回滚。" />
+          text="封禁当前 SSH 端口会导致失联；命中时必须填写新 SSH 端口，面板先迁移并放行新端口、再封禁旧端口。变更前自动快照，任一步失败全程回滚。" />
       </section>
 
       <!-- 卡片按原始规则数渲染：搜不到时表体给独立空态，搜索框仍在，用户能就地清空 -->
@@ -545,6 +573,12 @@ col.w-fwacts { width: 100px; }
    该缩写的 flex-basis 会落在高度上，把 select 撑成 128px（实测 128 vs 应有 38），
    整行被顶高、动作与端口输入框中心错开 45px。用 flex:none 只锁宽、不碰高度。 */
 select.fw-action { width: 128px; flex: none; }
+
+/* 迁移新端口行：label 是 column flex，锁宽只能 width + flex:none（用 flex 缩写会把
+   basis 落到高度上，把输入框撑成 200px）。说明文字同排，窄屏自动折行。 */
+.migrate-row { margin-top: 12px; }
+.migrate-row > label { width: 200px; flex: none; }
+.migrate-tip { flex: 1; min-width: 220px; margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
 
 /* ── fail2ban 入侵防御 ── */
 .f2b-list { display: flex; flex-direction: column; gap: 10px; }

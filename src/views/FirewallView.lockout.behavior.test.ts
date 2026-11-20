@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// P0/P1：SSH 失联保护 + 禁用端口入口的真实挂载行为测试。
-// 判据全部来自 DOM 与 POST body —— 源码文本断言抓不到「确认框没弹 / 高危开关没带」。
+// SSH 失联保护的真实挂载行为测试。
+// 判据全部来自 DOM 与 POST body —— 源码文本断言抓不到「确认框没弹 / 迁移行没展开 /
+// 新端口没带」这类静默失败。
 import { describe, it, expect, beforeEach } from 'vitest'
 import FirewallView from './FirewallView.vue'
 import { mountView, capsAllOk, type Mounted } from '@/test/mount'
@@ -12,17 +13,22 @@ const PERMS = ['firewall.manage', 'system.view', 'system.manage']
 
 interface ApplyBody {
   rules: Array<{ ports: string; protocol: string; action: string }>
-  allow_lockout_risk?: boolean
+  new_ssh_port?: number
 }
 
-async function setup(protectedPorts: number[] = []): Promise<Mounted> {
+const OK_BODY = { added: 1, removed: 0, unchanged: 0, warnings: [] }
+
+async function setup(
+  protectedPorts: number[] = [],
+  postResponse: Record<string, unknown> = OK_BODY,
+): Promise<Mounted> {
   return mountView({
     component: withToastHost(FirewallView),
     caps: capsAllOk(),
     perms: PERMS,
     routes: {
       [API.firewall.rules()]: (c) => c.method === 'POST'
-        ? { added: 1, removed: 0, unchanged: 0, warnings: [] }
+        ? postResponse
         : { backend: 'ufw', active: true, rules: [], protected_ports: protectedPorts },
       [API.firewall.fail2ban()]: { available: false, active: false, jails: [] },
     },
@@ -38,6 +44,12 @@ function actionSelect(m: Mounted): HTMLSelectElement {
 function portsInput(m: Mounted): HTMLInputElement {
   const el = m.host.querySelector<HTMLInputElement>('input[placeholder^="80,443"]')
   if (!el) throw new Error('找不到端口输入框')
+  return el
+}
+
+function newPortInput(m: Mounted): HTMLInputElement {
+  const el = m.host.querySelector<HTMLInputElement>('input[placeholder="如 2222"]')
+  if (!el) throw new Error('找不到新 SSH 端口输入框（命中 SSH 时应展开）')
   return el
 }
 
@@ -60,6 +72,10 @@ function dlg(): HTMLElement {
   return el
 }
 
+function inlineError(m: Mounted): string {
+  return m.host.querySelector('.err')?.textContent ?? ''
+}
+
 function lastBody(m: Mounted): ApplyBody {
   return m.fake.lastBody(API.firewall.rules(), 'POST') as ApplyBody
 }
@@ -67,14 +83,16 @@ function lastBody(m: Mounted): ApplyBody {
 beforeEach(clearToasts)
 
 describe('防火墙禁用端口入口（真挂载）', () => {
-  it('动作下拉含 allow/deny/reject，封禁普通端口的 POST 带 action=deny 但不带高危开关', async () => {
+  it('动作下拉含 allow/deny/reject；普通封禁不展开迁移行，POST 不带 new_ssh_port', async () => {
     const m = await setup()
     expect([...actionSelect(m).options].map(o => o.value)).toEqual(['allow', 'deny', 'reject'])
 
     setAction(m, 'deny')
     setInput(portsInput(m), '8080')
-    await prepare(m)
+    await m.flush()
+    expect(m.host.querySelector('.migrate-row'), '未命中 SSH 不该展开新端口输入').toBeNull()
 
+    await prepare(m)
     expect(dlg().textContent, '普通封禁不该弹高危确认').toContain('确认封禁端口')
     expect(dlg().querySelector('.btn-danger')).toBeNull()
     buttonByText(document, '确定').click()
@@ -83,35 +101,50 @@ describe('防火墙禁用端口入口（真挂载）', () => {
     const body = lastBody(m)
     expect(body.rules[0].action).toBe('deny')
     expect(body.rules[0].ports).toBe('8080')
-    expect(body.allow_lockout_risk, '未命中 SSH 端口不能带高危开关').toBeUndefined()
+    expect(body.new_ssh_port, '未命中 SSH 不能带迁移端口').toBeUndefined()
     expect(toastTexts()).toContain('已封禁端口 8080')
     m.fake.assertClean(); m.cleanup()
   })
 
-  it('SSH 改到 2222 后封 2222：弹高危确认，POST 带 allow_lockout_risk=true', async () => {
+  it('SSH 改到 2222 后封 2222：未填新端口被拦；填了才弹须迁移确认，POST 带 new_ssh_port', async () => {
     // 保护集由后端现读下发为 [22, 2222]，不再是写死的 [22]
-    const m = await setup([22, 2222])
+    const m = await setup([22, 2222], { ...OK_BODY, ssh_migrated_to: 2223 })
     setAction(m, 'deny')
     setInput(portsInput(m), '2222')
+    await m.flush()
+
+    // 输入阶段就展开，不必先点「应用」才知道要迁移
+    expect(newPortInput(m)).toBeTruthy()
+
+    // 没填新端口：不弹框、行内给出原因、不发 POST
+    await prepare(m)
+    expect(document.querySelector('.mask')).toBeNull()
+    expect(inlineError(m)).toContain('请填写新 SSH 端口')
+
+    setInput(newPortInput(m), '2223')
     await prepare(m)
 
     const d = dlg()
-    expect(d.textContent).toContain('确认封禁 SSH 端口（高危）')
-    expect(d.textContent, '确认框必须把失联后果说透').toContain('失联')
-    expect(d.querySelector('.btn-danger'), '高危确认必须是 danger 样式').not.toBeNull()
+    expect(d.textContent).toContain('确认封禁 SSH 端口（须迁移）')
+    expect(d.textContent, '确认框必须说明失联后果').toContain('失联')
+    expect(d.textContent, '确认框必须说明失败回滚').toContain('回滚')
+    expect(d.querySelector('.btn-danger'), '迁移确认必须是 danger 样式').not.toBeNull()
     buttonByText(document, '确认执行').click()
     await m.flush()
 
-    expect(lastBody(m).allow_lockout_risk).toBe(true)
+    expect(lastBody(m).new_ssh_port).toBe(2223)
+    expect(toastTexts()).toContain('已将 SSH 迁移到端口 2223，请用新端口重新连接')
     m.fake.assertClean(); m.cleanup()
   })
 
-  it('放行 SSH 端口不弹高危、不带 allow_lockout_risk', async () => {
+  it('放行 SSH 端口不展开迁移行、不带 new_ssh_port', async () => {
     const m = await setup([22, 2222])
     // 默认动作就是 allow
     setInput(portsInput(m), '2222')
-    await prepare(m)
+    await m.flush()
+    expect(m.host.querySelector('.migrate-row')).toBeNull()
 
+    await prepare(m)
     expect(dlg().textContent).toContain('确认放行端口')
     expect(dlg().querySelector('.btn-danger')).toBeNull()
     buttonByText(document, '确定').click()
@@ -119,35 +152,64 @@ describe('防火墙禁用端口入口（真挂载）', () => {
 
     const body = lastBody(m)
     expect(body.rules[0].action).toBe('allow')
-    expect(body.allow_lockout_risk, '放行绝不能带上高危开关').toBeUndefined()
+    expect(body.new_ssh_port, '放行绝不能带上迁移端口').toBeUndefined()
     m.fake.assertClean(); m.cleanup()
   })
 
-  it('端口范围命中 SSH 时也走高危确认', async () => {
+  it('端口范围命中 SSH：新端口落在封禁范围内被拦，换范围外的端口才放行', async () => {
     const m = await setup([2222])
     setAction(m, 'reject')
     setInput(portsInput(m), '2200-2300')
-    await prepare(m)
+    await m.flush()
+    expect(newPortInput(m)).toBeTruthy()
 
-    expect(dlg().textContent).toContain('高危')
+    setInput(newPortInput(m), '2233')
+    await prepare(m)
+    expect(document.querySelector('.mask')).toBeNull()
+    expect(inlineError(m)).toContain('封禁的端口范围内')
+
+    setInput(newPortInput(m), '2323')
+    await prepare(m)
+    expect(dlg().textContent).toContain('须迁移')
+    buttonByText(document, '确认执行').click()
+    await m.flush()
+
+    expect(lastBody(m).new_ssh_port).toBe(2323)
     m.fake.assertClean(); m.cleanup()
   })
 
-  it('封 all 无条件弹高危确认，即使前端没拿到保护端口集', async () => {
+  it('新端口等于当前自定义 SSH 端口被拦（不能只盯 22）', async () => {
+    const m = await setup([22, 2222])
+    setAction(m, 'deny')
+    setInput(portsInput(m), '2222')
+    await m.flush() // 等 migrationRequired 计算并重渲染，否则新端口行还没出现
+    setInput(newPortInput(m), '2222')
+    await prepare(m)
+
+    expect(document.querySelector('.mask')).toBeNull()
+    expect(inlineError(m)).toContain('与当前 SSH 端口相同')
+    m.fake.assertClean(); m.cleanup()
+  })
+
+  it('封 all：展开迁移行，但任何新端口都无处可迁，行内提示缩小范围', async () => {
+    // all 无条件命中，即使前端没拿到保护端口集
     const m = await setup([])
     setAction(m, 'deny')
     setInput(portsInput(m), 'all')
-    await prepare(m)
+    await m.flush()
+    expect(newPortInput(m)).toBeTruthy()
 
-    expect(dlg().textContent).toContain('高危')
+    setInput(newPortInput(m), '2222')
+    await prepare(m)
+    expect(document.querySelector('.mask')).toBeNull()
+    expect(inlineError(m)).toContain('不能封禁全部端口')
     m.fake.assertClean(); m.cleanup()
   })
 
   it('后端 SSH 失联拦截（409/10005）显示中文原因，而不是「已有同名资源」', async () => {
-    // 老板实测反馈：旧后端没下发 protected_ports，前端没能提前弹高危确认，
-    // 提交后被后端拦截；界面却显示「已有同名资源，请换一个名称」——完全无关的
-    // 报错让用户无从判断。errorText 的 10005 分支必须透出后端中文 message。
-    const reason = '该规则会封禁当前 SSH 端口（22），可能导致无法远程连接。请在页面确认高风险提示后重试'
+    // 旧后端没下发 protected_ports 时前端无法提前提示，提交后仍靠后端兜底拦截；
+    // 界面必须显示后端中文 message，而不是与场景无关的重名文案。
+    const reason = '该规则会封禁当前 SSH 端口，必须同时提供一个新的 SSH 端口用于迁移，避免失联'
     const m = await mountView({
       component: withToastHost(FirewallView),
       caps: capsAllOk(),
@@ -166,7 +228,7 @@ describe('防火墙禁用端口入口（真挂载）', () => {
     await m.flush()
 
     const errBar = m.host.querySelector('.err-bar, .err')
-    expect(errBar?.textContent, '必须显示后端给的 SSH 失联原因').toContain('SSH 端口（22）')
+    expect(errBar?.textContent, '必须显示后端给的 SSH 失联原因').toContain('SSH 端口')
     expect(errBar?.textContent, '不能显示与场景无关的重名文案').not.toContain('已有同名资源')
     m.fake.assertClean(); m.cleanup()
   })

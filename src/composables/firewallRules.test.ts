@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parsePorts, hitsProtectedPort, applyConfirm, needsLockoutAck, applyToast,
+  parsePorts, hitsProtectedPort, applyConfirm,
+  needsMigration, newPortError, applyToast,
 } from './firewallRules'
 
 describe('parsePorts', () => {
@@ -41,10 +42,45 @@ describe('hitsProtectedPort', () => {
     expect(hitsProtectedPort(parsePorts('all', 'deny'), [])).toBe(true)
   })
 
-  it('放行不算命中，封禁命中才允许越过确认', () => {
-    expect(needsLockoutAck('allow', true)).toBe(false)
-    expect(needsLockoutAck('deny', true)).toBe(true)
-    expect(needsLockoutAck('reject', false)).toBe(false)
+})
+
+describe('needsMigration', () => {
+  it('只有 deny/reject 命中受保护端口才要求迁移；放行与否都不要', () => {
+    expect(needsMigration('allow', true)).toBe(false)
+    expect(needsMigration('deny', true)).toBe(true)
+    expect(needsMigration('reject', true)).toBe(true)
+    expect(needsMigration('deny', false)).toBe(false)
+  })
+})
+
+describe('newPortError', () => {
+  const blocked = parsePorts('2200-2300', 'deny')
+
+  it('合法新端口放行', () => {
+    // 2224 落在 blocked 的 2200-2300 内，合法样例必须取范围外
+    expect(newPortError('2323', blocked, [22])).toBeNull()
+  })
+
+  it('空 / 非数字 / 超范围都拦住', () => {
+    expect(newPortError('', blocked, [22])).toContain('请填写')
+    expect(newPortError('22a', blocked, [22])).toContain('请填写')
+    expect(newPortError('0', blocked, [22])).toContain('超出范围')
+    expect(newPortError('65536', blocked, [22])).toContain('超出范围')
+  })
+
+  it('新端口等于当前 SSH 端口＝没迁移，必须拦', () => {
+    // 自定义 SSH 端口同样受保护，不能只盯 22
+    expect(newPortError('2222', blocked, [22, 2222])).toContain('相同')
+  })
+
+  it('新端口落在本次封禁的单端口 / 范围 / all 内都要拦', () => {
+    expect(newPortError('8080', parsePorts('80,8080', 'deny'), [22])).toContain('封禁的端口中')
+    expect(newPortError('2222', blocked, [22])).toContain('封禁的端口范围内')
+    expect(newPortError('2222', parsePorts('all', 'deny'), [22])).toContain('不能封禁全部端口')
+  })
+
+  it('源端口解析失败时不误判封禁范围，只校验新端口本身', () => {
+    expect(newPortError('2222', parsePorts('', 'deny'), [22])).toBeNull()
   })
 })
 
