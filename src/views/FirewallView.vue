@@ -3,8 +3,10 @@
  * 防火墙。
  *
  * 三个刻意的安全设计：
- * 1. 表单只允许 Allow（放行端口）。封禁端口是"把自己锁在门外"的主因，
- *    需要单独的高危流程 + 输入端口确认词，MVP 不提供图形入口。
+ * 1. 表单支持 Allow/Deny/Reject。封禁端口是"把自己锁在门外"的主因，
+ *    命中当前 SSH 端口时走高危二次确认（带 allow_lockout_risk）。
+ *    受保护端口集由后端 GET /rules 现读下发，前端不猜端口——否则 SSH
+ *    改到 2222 后会继续盯 22，保护错位。
  * 2. 提交前用确认弹窗展示"本次将放行哪些端口 / 来源"，让用户看清再点（prepareApply 实现）。
  * 3. 后端在 apply 前会无条件做快照并在失败时回滚，UI 明确告知这一点。
  */
@@ -23,6 +25,7 @@ import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 import { matchFields } from '@/composables/listSearch'
+import { parsePorts, hitsProtectedPort, applyConfirm, needsLockoutAck, applyToast, type FirewallAction } from '@/composables/firewallRules'
 
 interface Rule {
   id: string; ports: string; protocol: string; action: string
@@ -76,6 +79,9 @@ function focusAllow() {
   nextTick(() => allowCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
 const ports = ref('80,443')
+const action = ref<FirewallAction>('allow')
+/** 后端现读 sshd 配置下发的受保护端口；前端不自行推断 SSH 端口 */
+const protectedPorts = ref<number[]>([])
 const source = ref('')
 const comment = ref('')
 
@@ -85,10 +91,12 @@ async function load() {
   // 不挡请求——不 gate 的话用户先看到红色报错再看到"不支持"，体验割裂。
   if (!auth.supported(CAP.FIREWALL_MANAGE)) return
   try {
-    const r = await api.get<{ backend: string; active: boolean; rules: Rule[] }>(API.firewall.rules())
+    const r = await api.get<{ backend: string; active: boolean; rules: Rule[]; protected_ports?: number[] }>(API.firewall.rules())
     backend.value = r.backend; active.value = r.active
     // 兜底：后端无规则时可能返 null（表格的 sorted/统计都假定是数组）
     rules.value = r.rules ?? []
+    // 旧后端/读失败时为空：后端 apply 仍会独立兜底拦截，前端只是提前提示
+    protectedPorts.value = r.protected_ports ?? []
     loaded.value = true
   } catch (e) { loaded.value = false; error.value = errorText(e) }
 }
@@ -101,17 +109,21 @@ const loaded = ref(false)
 
 async function apply() {
   busy.value = true; error.value = ''; confirmAllow.value = false
-  // 清空前留一份：提示文案要说清「放行了哪些端口」，下面几行就把 ports 清掉了
+  // 清空前留一份：提示文案要说清处理了哪些端口，下面几行就把 ports 清掉了
   const applied = ports.value
+  const act = action.value
+  const highRisk = needsLockoutAck(act, hitsProtectedPort(parsePorts(applied, act), protectedPorts.value))
   try {
     const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[] }>(
       API.firewall.rules(),
-      { rules: [{ ports: applied, protocol: 'tcp', action: 'allow',
-                  source: source.value || undefined, comment: comment.value || undefined }] })
+      { rules: [{ ports: applied, protocol: 'tcp', action: act,
+                  source: source.value || undefined, comment: comment.value || undefined }],
+        // 后端只在命中 SSH 端口时要求这道确认；放行绝不传，避免误开高危开关
+        allow_lockout_risk: highRisk ? true : undefined })
     warn.value = r.warnings?.length ? r.warnings.join('；') : ''
     ports.value = ''; source.value = ''; comment.value = ''
-    // 后端幂等：同一端口重复提交计 unchanged、added 为 0。不区分的话用户会以为"又加了一条"。
-    toast(r.added > 0 ? `已放行端口 ${applied}` : `端口 ${applied} 已在放行列表中`)
+    // 后端幂等：同一规则重复提交计 unchanged、added 为 0。不区分的话用户会以为"又加了一条"。
+    toast(applyToast(act, applied, r.added))
     // await：重载完成前 busy 保持 true，否则这段窗口里用户能再点一次
     await load()
   } catch (e) { error.value = errorText(e) }
@@ -121,23 +133,9 @@ async function apply() {
 // P1：放行端口校验 + 提交前确认（注释设计点 2 的落地）
 const confirmAllow = ref(false)
 const allowSummary = ref('')
+const allowTitle = ref('确认放行端口')
+const allowDanger = ref(false)
 const allowErr = ref('')
-function parsePorts(s: string): { ok: boolean; msg?: string } {
-  const toks = s.split(',').map(t => t.trim()).filter(Boolean)
-  if (!toks.length) return { ok: false, msg: '请填写要放行的端口' }
-  for (const t of toks) {
-    if (/^\d+$/.test(t)) {
-      const n = Number(t)
-      if (n < 1 || n > 65535) return { ok: false, msg: `端口 ${t} 超出范围（1-65535）` }
-    } else {
-      const m = t.match(/^(\d+)-(\d+)$/)
-      if (!m) return { ok: false, msg: `无法识别的端口「${t}」（支持单端口或范围，如 80 或 8000-8100）` }
-      const a = Number(m[1]), b = Number(m[2])
-      if (a < 1 || b > 65535 || a > b) return { ok: false, msg: `端口范围 ${t} 无效` }
-    }
-  }
-  return { ok: true }
-}
 function validSource(s: string): boolean {
   if (!s.trim()) return true
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(s.trim())
@@ -155,11 +153,14 @@ function validSource(s: string): boolean {
 function prepareApply() {
   allowErr.value = ''
   if (!canManage.value) return
-  const p = parsePorts(ports.value)
+  const p = parsePorts(ports.value, action.value)
   if (!p.ok) { allowErr.value = p.msg!; return }
   if (!validSource(source.value)) { allowErr.value = '来源格式无效（应为 IPv4 或 IPv4/CIDR，如 1.2.3.4 或 1.2.3.0/24）'; return }
-  const list = ports.value.split(',').map(t => t.trim()).filter(Boolean).join('、')
-  allowSummary.value = `将放行端口：${list}${source.value.trim() ? `（来源：${source.value.trim()}）` : '（来源：任意）'}`
+  const highRisk = needsLockoutAck(action.value, hitsProtectedPort(p, protectedPorts.value))
+  const c = applyConfirm(action.value, ports.value, source.value, highRisk)
+  allowTitle.value = c.title
+  allowSummary.value = c.detail
+  allowDanger.value = c.danger
   confirmAllow.value = true
 }
 
@@ -333,8 +334,15 @@ onMounted(() => { load(); loadFail2ban() })
       <p v-if="warn" class="warn" role="status">⚠ {{ warn }}</p>
 
       <section class="card" ref="allowCard">
-        <div class="sec-head"><Icon name="firewall" :size="16" /> 放行端口</div>
+        <div class="sec-head"><Icon name="firewall" :size="16" /> 端口规则</div>
         <div class="row">
+          <label>动作
+            <select v-model="action" class="fw-action" aria-label="规则动作">
+              <option value="allow">放行（allow）</option>
+              <option value="deny">拒绝（deny）</option>
+              <option value="reject">拒绝并回复（reject）</option>
+            </select>
+          </label>
           <label>端口
             <input v-model="ports" placeholder="80,443 或 8000-8100" />
           </label>
@@ -345,13 +353,13 @@ onMounted(() => { load(); loadFail2ban() })
             <input v-model="comment" placeholder="web" />
           </label>
           <button class="btn-primary" :disabled="busy || !canManage || !ports"
-            :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填要放行的端口')" @click="prepareApply">应用</button>
+            :title="!canManage ? '无 firewall.manage 权限' : (ports ? '' : '先填写端口')" @click="prepareApply">应用</button>
         </div>
         <p v-if="allowErr" class="err">{{ allowErr }}</p>
         <!-- 说明条是本卡片最后一个元素：传 last 让间距翻到上方，否则会紧贴端口输入行、
              同时把 14px 下边距叠在卡片 padding 上（看上去黏在编辑区底下）。 -->
-        <RiskBanner last level="warn" title="仅支持放行（allow）"
-          text="封禁端口可能导致 SSH 失联，需通过命令行操作。后端会在变更前自动快照，失败时回滚。" />
+        <RiskBanner last level="warn" title="封禁端口需二次确认"
+          text="封禁当前 SSH 端口会直接失联；命中时弹高危确认，后端也会独立拦截。变更前自动快照，失败时回滚。" />
       </section>
 
       <!-- 卡片按原始规则数渲染：搜不到时表体给独立空态，搜索框仍在，用户能就地清空 -->
@@ -489,7 +497,7 @@ onMounted(() => { load(); loadFail2ban() })
       :detail="delTarget ? `将删除 ${delTarget.direction === 'in' ? '入站' : '出站'} ${delTarget.ports}/${delTarget.protocol}（${delTarget.action}）${delTarget.comment ? ' · ' + delTarget.comment : ''}。后端会先快照，失败时自动回滚。` : ''"
       @confirm="doDelete" @cancel="delTarget = null" />
 
-    <ConfirmDialog :open="confirmAllow" title="确认放行端口"
+    <ConfirmDialog :open="confirmAllow" :danger="allowDanger" :title="allowTitle"
       :detail="allowSummary"
       @confirm="apply" @cancel="confirmAllow = false" />
 
@@ -512,6 +520,12 @@ col.w-fwsrc { width: auto; }
 col.w-fwcmt { width: 16%; }
 col.w-fwown { width: 11%; }
 col.w-fwacts { width: 100px; }
+
+/* flex 行里的 select 必须局部盖掉全局 width:100%，否则动作被挤没。
+   ⚠ 不能写 `flex: 0 0 128px`：.row > label 是 column flex，主轴=垂直，
+   该缩写的 flex-basis 会落在高度上，把 select 撑成 128px（实测 128 vs 应有 38），
+   整行被顶高、动作与端口输入框中心错开 45px。用 flex:none 只锁宽、不碰高度。 */
+select.fw-action { width: 128px; flex: none; }
 
 /* ── fail2ban 入侵防御 ── */
 .f2b-list { display: flex; flex-direction: column; gap: 10px; }
