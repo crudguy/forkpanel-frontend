@@ -72,6 +72,9 @@ export const UI_GUARDS = [
   // 2026-11-19 文件页工具行等高：align-items:center 只管中心，控件自身高度不齐
   // 仍会上下边参差；真机量得上传 38.4 / 帮助 34 / 显示隐藏 19.2，须钉死 38px 契约
   'check-files-toolbar-height.mjs',
+  // 2026-11-20 防火墙表格列宽：百分比会让来源吸走全部余量、窄屏把动作列压到
+  // 59.5px 截断；须按实测内容宽定固定列 px + 来源唯一弹性列
+  'check-firewall-cols.mjs',
   // 2026-11-11 表格规范：每个含 <table> 的文件必须登记（接分页/排序 或 例外+理由），
   // 且不得再出现私有 .pager 样式——新加表格漏接是本类问题唯一的退化方式
   'check-table-convention.mjs',

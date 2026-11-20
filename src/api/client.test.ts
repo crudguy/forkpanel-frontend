@@ -33,6 +33,15 @@ describe('errorText', () => {
     expect(errorText(new ApiError(80003, 0, 'timeout'))).toBe('操作超时')
   })
 
+  it('10005 冲突：中文安全拦截原因透出，英文内部串回落通用文案', () => {
+    // 防火墙 SSH 失联保护返回中文 message（code 10005）。一律压成「已有同名资源」
+    // 会让用户封禁 SSH 端口时看到完全无关的报错——与 10001 / default 同一纪律。
+    const cn = new ApiError(10005, 409, '该规则可能阻断当前 SSH 端口（22），请在确认风险后重试')
+    expect(errorText(cn)).toBe('该规则可能阻断当前 SSH 端口（22），请在确认风险后重试')
+    const en = new ApiError(10005, 409, 'conflict: site name exists')
+    expect(errorText(en)).toBe('已有同名资源，请换一个名称')
+  })
+
   it('10006 限流透出后端给的 retry_after_secs（没有则 60）', () => {
     const withSecs = new ApiError(10006, 429, 'rate limited', { retry_after_secs: 12 })
     expect(errorText(withSecs)).toBe('操作过于频繁，请 12 秒后再试')

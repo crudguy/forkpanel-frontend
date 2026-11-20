@@ -511,15 +511,34 @@ onMounted(() => { load(); loadFail2ban() })
 </template>
 
 <style scoped>
-/* 规则表列宽（站点表范式）：来源为唯一弹性列；操作列 100px 容下「删除」。 */
-col.w-fwport { width: 10%; }
-col.w-fwproto { width: 8%; }
-col.w-fwact { width: 8%; }
-col.w-fwdir { width: 7%; }
+/* 规则表列宽（站点表范式）：实测内容宽 + 唯一弹性列，禁百分比。
+   百分比会让弹性列在宽屏吸走全部余量（实测 1440 下来源 360px 全是空白、
+   1024 下动作被压到 59.5px 截断「拒绝并回复」）。按字体实测的内容需求
+   （含 26px 单元格 padding）定固定列：端口 41 / 协议 27 / 动作 27 /
+   方向 27 / 归属 54，各留排序箭头与徽章余量；来源承载 CIDR 作唯一弹性列。 */
+col.w-fwport { width: 96px; }
+col.w-fwproto { width: 72px; }
+col.w-fwact { width: 76px; }
+col.w-fwdir { width: 68px; }
 col.w-fwsrc { width: auto; }
-col.w-fwcmt { width: 16%; }
-col.w-fwown { width: 11%; }
+col.w-fwcmt { width: 120px; }
+col.w-fwown { width: 104px; }
 col.w-fwacts { width: 100px; }
+/* 宽屏档（>=1440）：8 列全定宽，避免来源列独吞余量（实测仅定宽时 1920 下来源
+   涨到 1004px、全是空白）。table-layout:fixed 下 Chrome 把容器余量按这些宽度
+   等比分给每一列（同 WafView 的成熟做法），各列一起放大而不失衡。
+   ⚠ 断点与列宽绑定：总和 1120px <= 1440 视口实测表宽 1150px，否则这一档横滚；
+   ⚠ 基础档必须排在 @media 之前：scoped 编译后特异性相同、谁在后谁赢。 */
+@media (min-width: 1440px) {
+  col.w-fwport { width: 120px; }
+  col.w-fwproto { width: 96px; }
+  col.w-fwact { width: 96px; }
+  col.w-fwdir { width: 88px; }
+  col.w-fwsrc { width: 320px; }
+  col.w-fwcmt { width: 180px; }
+  col.w-fwown { width: 120px; }
+  col.w-fwacts { width: 100px; }
+}
 
 /* flex 行里的 select 必须局部盖掉全局 width:100%，否则动作被挤没。
    ⚠ 不能写 `flex: 0 0 128px`：.row > label 是 column flex，主轴=垂直，

@@ -256,9 +256,13 @@ export function errorText(e: unknown): string {
     // 这种不知所云的字符串。补一条通用兜底，全项目一次生效；需要更具体说法的视图仍可
     // 用 isUnsupported 在自己的 catch 里覆盖。
     case 10009: return '当前环境未接入该能力（缺少依赖或后端未实装）'
-    // 10005 = 冲突（重名等）。后端 message 是内部英文串（如 "conflict: site name exists"），
-    // 直接透出等于把内部报错甩给用户——给一句中文，别让用户去猜英文。
-    case 10005: return '已有同名资源，请换一个名称'
+    // 10005 = 冲突。后端 message 有两种：① 重名等内部英文串（"conflict: site name exists"），
+    // 透出等于甩英文给用户⇒回落通用中文；② **面向用户的中文安全拦截原因**，如防火墙
+    // SSH 失联保护「该规则可能阻断当前 SSH 端口（22）……」。后者必须原样透出：一律压成
+    // 「已有同名资源」会让用户封禁 SSH 端口时看到完全无关的报错，无从判断自己错在哪。
+    // 与 10001 / default 分支同一纪律：含中文就透出，英文内部串才回落。
+    case 10005:
+      return /[\u4e00-\u9fff]/.test(e.message) ? e.message : '已有同名资源，请换一个名称'
     case 40002: return '配置校验未通过，未写入磁盘'
     case 50001: return '路径超出允许范围'
     case 80003: return '操作超时'

@@ -6,6 +6,7 @@ import FirewallView from './FirewallView.vue'
 import { mountView, capsAllOk, type Mounted } from '@/test/mount'
 import { API } from '@/api/endpoints'
 import { withToastHost, clearToasts, toastTexts, buttonByText, setInput } from '@/test/toastHarness'
+import { fakeError } from '@/test/apiFake'
 
 const PERMS = ['firewall.manage', 'system.view', 'system.manage']
 
@@ -139,6 +140,34 @@ describe('防火墙禁用端口入口（真挂载）', () => {
     await prepare(m)
 
     expect(dlg().textContent).toContain('高危')
+    m.fake.assertClean(); m.cleanup()
+  })
+
+  it('后端 SSH 失联拦截（409/10005）显示中文原因，而不是「已有同名资源」', async () => {
+    // 老板实测反馈：旧后端没下发 protected_ports，前端没能提前弹高危确认，
+    // 提交后被后端拦截；界面却显示「已有同名资源，请换一个名称」——完全无关的
+    // 报错让用户无从判断。errorText 的 10005 分支必须透出后端中文 message。
+    const reason = '该规则会封禁当前 SSH 端口（22），可能导致无法远程连接。请在页面确认高风险提示后重试'
+    const m = await mountView({
+      component: withToastHost(FirewallView),
+      caps: capsAllOk(),
+      perms: PERMS,
+      routes: {
+        [API.firewall.rules()]: (c) => c.method === 'POST'
+          ? fakeError(409, 10005, reason)
+          : { backend: 'ufw', active: true, rules: [], protected_ports: [] },
+        [API.firewall.fail2ban()]: { available: false, active: false, jails: [] },
+      },
+    })
+    setAction(m, 'deny')
+    setInput(portsInput(m), '22')
+    await prepare(m)
+    buttonByText(document, '确定').click()
+    await m.flush()
+
+    const errBar = m.host.querySelector('.err-bar, .err')
+    expect(errBar?.textContent, '必须显示后端给的 SSH 失联原因').toContain('SSH 端口（22）')
+    expect(errBar?.textContent, '不能显示与场景无关的重名文案').not.toContain('已有同名资源')
     m.fake.assertClean(); m.cleanup()
   })
 })
