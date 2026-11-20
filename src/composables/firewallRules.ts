@@ -116,3 +116,53 @@ export function applyToast(action: FirewallAction, ports: string, added: number)
   const verb = action === 'allow' ? '放行' : '封禁'
   return added > 0 ? `已${verb}端口 ${ports}` : `端口 ${ports} 已在${verb}列表中`
 }
+
+/** 本机监听端口的入站状态。只读观察值，不对应任何可删除的规则。 */
+export type PortExposure =
+  | 'explicit-allow' | 'explicit-deny' | 'by-source'
+  | 'default-allow' | 'default-deny' | 'unknown'
+
+export interface ExposureRule { ports: string; action: string; source?: string | null }
+
+/**
+ * 计算某端口当前的入站状态：先看面板显式规则，再看链默认策略。
+ *
+ * 判据优先级：显式封禁 > 带来源规则（只对特定来源成立，不能说成全局）> 显式放行
+ * > 默认策略。读不到默认策略时返回 unknown——绝不把"未知"渲染成"放行"。
+ */
+export function portExposure(
+  port: number, rules: ExposureRule[], defaultPolicy: string | null,
+): PortExposure {
+  let deny = false, allow = false, bySource = false
+  for (const r of rules) {
+    const act: FirewallAction | null =
+      r.action === 'allow' ? 'allow'
+      : r.action === 'deny' || r.action === 'reject' ? 'deny'
+      : null
+    if (!act) continue
+    const p = parsePorts(r.ports, act)
+    if (!p.ok) continue
+    const hit = p.all || p.singles.includes(port) || p.ranges.some(([a, b]) => port >= a && port <= b)
+    if (!hit) continue
+    if (r.source?.trim()) { bySource = true; continue }
+    if (act === 'deny') deny = true; else allow = true
+  }
+  if (deny) return 'explicit-deny'
+  if (bySource) return 'by-source'
+  if (allow) return 'explicit-allow'
+  if (defaultPolicy === 'accept') return 'default-allow'
+  if (defaultPolicy === 'drop' || defaultPolicy === 'reject') return 'default-deny'
+  return 'unknown'
+}
+
+/** 状态文案与色调：默认放行是风险项，用品牌橙（primary）而不是 ok，避免虚假安全感。 */
+export function portExposureLabel(e: PortExposure): { text: string; tone: string } {
+  switch (e) {
+    case 'explicit-allow': return { text: '显式放行', tone: 'ok' }
+    case 'explicit-deny': return { text: '显式封禁', tone: 'danger' }
+    case 'by-source': return { text: '按来源区分', tone: 'info' }
+    case 'default-allow': return { text: '默认放行', tone: 'primary' }
+    case 'default-deny': return { text: '默认拒绝', tone: 'ok' }
+    case 'unknown': return { text: '状态未知', tone: 'dim' }
+  }
+}

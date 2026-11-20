@@ -26,7 +26,7 @@ import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { toast } from '@/composables/useToast'
 import { matchFields } from '@/composables/listSearch'
-import { parsePorts, hitsProtectedPort, applyConfirm, needsMigration, newPortError, applyToast, type FirewallAction } from '@/composables/firewallRules'
+import { parsePorts, hitsProtectedPort, applyConfirm, needsMigration, newPortError, applyToast, portExposure, portExposureLabel, type FirewallAction } from '@/composables/firewallRules'
 
 interface Rule {
   id: string; ports: string; protocol: string; action: string
@@ -83,6 +83,9 @@ const ports = ref('80,443')
 const action = ref<FirewallAction>('allow')
 /** 后端现读 sshd 配置下发的受保护端口；前端不自行推断 SSH 端口 */
 const protectedPorts = ref<number[]>([])
+/** 只读观察值：面板链的默认策略 + 本机监听端口，解释「为什么列表里没有 22」 */
+const defaultPolicy = ref<string | null>(null)
+const listeningPorts = ref<number[]>([])
 /** 封禁 SSH 端口时必需的新端口：先迁移过去再封禁，避免失联 */
 const newSshPort = ref('')
 /** 实时判定：填中 SSH 端口就展开新端口输入行，不必先点「应用」才知道要迁移 */
@@ -98,15 +101,23 @@ async function load() {
   // 不挡请求——不 gate 的话用户先看到红色报错再看到"不支持"，体验割裂。
   if (!auth.supported(CAP.FIREWALL_MANAGE)) return
   try {
-    const r = await api.get<{ backend: string; active: boolean; rules: Rule[]; protected_ports?: number[] }>(API.firewall.rules())
+    const r = await api.get<{ backend: string; active: boolean; rules: Rule[]; protected_ports?: number[]; default_policy?: string | null; listening_ports?: number[] }>(API.firewall.rules())
     backend.value = r.backend; active.value = r.active
     // 兜底：后端无规则时可能返 null（表格的 sorted/统计都假定是数组）
     rules.value = r.rules ?? []
     // 旧后端/读失败时为空：后端 apply 仍会独立兜底拦截，前端只是提前提示
     protectedPorts.value = r.protected_ports ?? []
+    // 旧后端没有这两个字段时保持 null/[]，UI 如实显示「读不到」，不猜放行/封禁
+    defaultPolicy.value = r.default_policy ?? null
+    listeningPorts.value = r.listening_ports ?? []
     loaded.value = true
   } catch (e) { loaded.value = false; error.value = errorText(e) }
 }
+
+/** 本机监听端口 + 由显式规则与默认策略推断的状态（只读观察值，不是可删规则） */
+const listeningRows = computed(() => [...listeningPorts.value]
+  .sort((a, b) => a - b)
+  .map(port => ({ port, exposure: portExposure(port, rules.value, defaultPolicy.value) })))
 
 const canManage = computed(() => auth.enabled(CAP.FIREWALL_MANAGE, 'firewall.manage'))
 /** fail2ban 按钮的门控：后端只要求 firewall.manage 权限 + FAIL2BAN 能力（后者由区块 v-if 保证） */
@@ -390,6 +401,26 @@ onMounted(() => { load(); loadFail2ban() })
           text="封禁当前 SSH 端口会导致失联；命中时必须填写新 SSH 端口，面板先迁移并放行新端口、再封禁旧端口。变更前自动快照，任一步失败全程回滚。" />
       </section>
 
+      <!-- 入站生效状态：回答「为什么规则列表里没有 22」。这些是只读观察值，不是可删除的规则。 -->
+      <section class="card exposure-card">
+        <div class="sec-head"><Icon name="shield" :size="16" /> 入站生效状态</div>
+        <p class="exposure-policy" :class="defaultPolicy === 'accept' ? 'is-open' : ''">
+          <template v-if="defaultPolicy === 'accept'">⚠ 入站默认策略：<b>放行（accept）</b>——下方规则表未列出的端口默认可访问，包括当前 SSH 端口。</template>
+          <template v-else-if="defaultPolicy === 'drop' || defaultPolicy === 'reject'">入站默认策略：<b>拒绝（{{ defaultPolicy }}）</b>——只有下方显式放行的端口可访问。</template>
+          <template v-else>入站默认策略：<b>读不到</b>——无法判断未列端口状态，请以服务器实际配置为准。</template>
+        </p>
+        <template v-if="listeningRows.length">
+          <p class="exposure-hint">本机对外监听的 TCP 端口（不含仅本机可访问的 127.0.0.1/::1；只读观察值，不对应可删除的规则）：</p>
+          <div class="exposure-chips">
+            <span v-for="row in listeningRows" :key="row.port" class="exposure-chip">
+              <b class="mono">{{ row.port }}</b>
+              <span :class="portExposureLabel(row.exposure).tone === 'dim' ? 'badge' : `badge-${portExposureLabel(row.exposure).tone}`">{{ portExposureLabel(row.exposure).text }}</span>
+            </span>
+          </div>
+        </template>
+        <p v-else class="tip">读不到本机监听端口（ss 不可用或执行失败），无法列出当前暴露面。</p>
+      </section>
+
       <!-- 卡片按原始规则数渲染：搜不到时表体给独立空态，搜索框仍在，用户能就地清空 -->
       <div class="card flush toolbar-card" v-if="rules.length">
         <div class="card-toolbar">
@@ -573,6 +604,15 @@ col.w-fwacts { width: 100px; }
    该缩写的 flex-basis 会落在高度上，把 select 撑成 128px（实测 128 vs 应有 38），
    整行被顶高、动作与端口输入框中心错开 45px。用 flex:none 只锁宽、不碰高度。 */
 select.fw-action { width: 128px; flex: none; }
+
+/* 入站生效状态：只读观察值，与下方「可编辑规则表」视觉上明确分开 */
+.exposure-card .sec-head { margin-bottom: 8px; }
+.exposure-policy { margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--c-surface-2); font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
+.exposure-policy.is-open { background: var(--c-primary-soft); color: var(--c-primary); }
+.exposure-hint { margin: 0 0 8px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.exposure-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.exposure-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); font-size: var(--fs-12); }
+.exposure-chip .mono { font-weight: 600; }
 
 /* 迁移新端口行：label 是 column flex，锁宽只能 width + flex:none（用 flex 缩写会把
    basis 落到高度上，把输入框撑成 200px）。说明文字同排，窄屏自动折行。 */

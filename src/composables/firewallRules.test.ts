@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parsePorts, hitsProtectedPort, applyConfirm,
-  needsMigration, newPortError, applyToast,
+  needsMigration, newPortError, applyToast, portExposure, portExposureLabel,
 } from './firewallRules'
 
 describe('parsePorts', () => {
@@ -112,5 +112,36 @@ describe('applyConfirm', () => {
     expect(applyToast('allow', '80', 1)).toBe('已放行端口 80')
     expect(applyToast('deny', '80', 1)).toBe('已封禁端口 80')
     expect(applyToast('deny', '80', 0)).toBe('端口 80 已在封禁列表中')
+  })
+})
+
+describe('portExposure', () => {
+  it('22 没有显式规则 + accept → 默认放行（列表里看不到它，但它是通的）', () => {
+    expect(portExposure(22, [{ ports: '80,443', action: 'allow' }], 'accept')).toBe('default-allow')
+  })
+
+  it('显式规则优先：封禁压过放行，范围与 all 都能命中', () => {
+    const rules = [
+      { ports: '80,443', action: 'allow' },
+      { ports: '8000-8100', action: 'deny' },
+    ]
+    expect(portExposure(80, rules, 'accept')).toBe('explicit-allow')
+    expect(portExposure(8001, rules, 'accept')).toBe('explicit-deny')
+    expect(portExposure(22, [{ ports: 'all', action: 'reject' }], 'accept')).toBe('explicit-deny')
+  })
+
+  it('带来源的规则单独标记，不谎称全局放行/封禁', () => {
+    expect(portExposure(22, [{ ports: '22', action: 'allow', source: '1.2.3.0/24' }], 'drop'))
+      .toBe('by-source')
+  })
+
+  it('默认策略 drop 时未列端口是默认拒绝；读不到策略就是 unknown', () => {
+    expect(portExposure(9999, [], 'drop')).toBe('default-deny')
+    expect(portExposure(9999, [], null)).toBe('unknown')
+  })
+
+  it('默认放行是风险项，色调必须是 warn 而不是 ok', () => {
+    expect(portExposureLabel('default-allow')).toEqual({ text: '默认放行', tone: 'primary' })
+    expect(portExposureLabel('explicit-deny').tone).toBe('danger')
   })
 })

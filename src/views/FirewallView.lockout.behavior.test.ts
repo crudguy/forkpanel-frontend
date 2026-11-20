@@ -29,7 +29,8 @@ async function setup(
     routes: {
       [API.firewall.rules()]: (c) => c.method === 'POST'
         ? postResponse
-        : { backend: 'ufw', active: true, rules: [], protected_ports: protectedPorts },
+        : { backend: 'ufw', active: true, rules: [], protected_ports: protectedPorts,
+            default_policy: 'accept', listening_ports: [22, 80, 4443] },
       [API.firewall.fail2ban()]: { available: false, active: false, jails: [] },
     },
   })
@@ -83,6 +84,20 @@ function lastBody(m: Mounted): ApplyBody {
 beforeEach(clearToasts)
 
 describe('防火墙禁用端口入口（真挂载）', () => {
+  it('入站生效状态：22 作为监听端口以「默认放行」展示，并说清 accept 的含义', async () => {
+    // 老板问「22 默认开启吗、为什么列表没有」：规则表只列显式规则，
+    // 默认策略与监听端口是另一层只读观察值，必须单独可见。
+    const m = await setup([22])
+    const card = m.host.querySelector('.exposure-card')
+    expect(card, '必须展示入站生效状态区').not.toBeNull()
+    expect(card!.textContent).toContain('放行（accept）')
+    expect(card!.textContent).toContain('未列出的端口默认可访问')
+    expect(card!.textContent, '必须声明这些不是可删规则').toContain('只读观察值')
+    const chips = [...card!.querySelectorAll('.exposure-chip')].map(x => x.textContent?.trim() ?? '')
+    expect(chips.some(t => t.startsWith('22') && t.includes('默认放行')), '22 应显示为默认放行').toBe(true)
+    m.fake.assertClean(); m.cleanup()
+  })
+
   it('动作下拉含 allow/deny/reject；普通封禁不展开迁移行，POST 不带 new_ssh_port', async () => {
     const m = await setup()
     expect([...actionSelect(m).options].map(o => o.value)).toEqual(['allow', 'deny', 'reject'])
