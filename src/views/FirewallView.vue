@@ -368,20 +368,20 @@ onMounted(() => { load(); loadFail2ban() })
       <section class="card" ref="allowCard">
         <div class="sec-head"><Icon name="firewall" :size="16" /> 端口规则</div>
         <div class="row">
-          <label>动作
+          <label class="fw-form-act">动作
             <select v-model="action" class="fw-action" aria-label="规则动作">
               <option value="allow">放行（allow）</option>
               <option value="deny">拒绝（deny）</option>
               <option value="reject">拒绝并回复（reject）</option>
             </select>
           </label>
-          <label>端口
+          <label class="fw-form-port">端口
             <input v-model="ports" placeholder="80,443 或 8000-8100" />
           </label>
-          <label>来源（可选）
+          <label class="fw-form-src">来源（可选）
             <input v-model="source" placeholder="0.0.0.0/0 或留空" />
           </label>
-          <label>备注
+          <label class="fw-form-cmt">备注
             <input v-model="comment" placeholder="web" />
           </label>
           <button class="btn-primary" :disabled="busy || !canManage || !ports"
@@ -599,6 +599,18 @@ col.w-fwacts { width: 100px; }
   col.w-fwown { width: 120px; }
   col.w-fwacts { width: 100px; }
 }
+
+/* 表单行四列按内容需求分配，不再 flex:1 均分（1440 下四列各 254px）：
+   动作最长选项实测只需 147px，端口 placeholder 需 147px、实际输入常更长，
+   备注实际输入典型 143px。用相对权重让窄屏自动收敛——实测三档：
+     1440 → 181 / 305 / 226 / 305
+     1280 → 152 / 257 / 190 / 257
+     1024 → 140 / 160 / 140 / 160（动作/来源触到全局 min-width:140px 下限）
+   ⚠ 别把动作列写死 px：1024 下 168px 会比端口/备注的 146px 还宽，本末倒置。 */
+.row > label.fw-form-act  { flex: 0.8 1 0%; }
+.row > label.fw-form-port { flex: 1.35 1 0%; }
+.row > label.fw-form-src  { flex: 1 1 0%; }
+.row > label.fw-form-cmt  { flex: 1.35 1 0%; }
 
 /* 动作下拉必须撑满所在列（width:100%），和端口/来源/备注的输入框左右对齐。
    ⚠ 曾写死 width:128px：label 列宽 254px，下拉右边空出 126px，
