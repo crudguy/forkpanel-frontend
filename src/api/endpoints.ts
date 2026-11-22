@@ -331,6 +331,22 @@ export const API = {
     revokeSession: (id: string) => `/api/v1/security/sessions/${enc(id)}`,
     /** SSH 端口：GET 读现状，PUT 修改（需确认词「确认改端口」） */
     sshPort: () => '/api/v1/security/ssh-port',
+    /** SSH 登录 / 爆破记录（只读）；筛选参数可选，字面量子串。 */
+    sshLogins: (q: {
+      ip?: string; user?: string; result?: string; risk?: string; limit?: number
+    } = {}) => {
+      // 纯路径字面量必须出现在条目内第一个字符串位置：check-api-method.py
+      // 按「首个字符串字面量」解析端点，动态模板会让路径判成契约外而假红。
+      const base = '/api/v1/security/ssh-logins'
+      const p = new URLSearchParams()
+      if (q.ip?.trim()) p.set('ip', q.ip.trim())
+      if (q.user?.trim()) p.set('user', q.user.trim())
+      if (q.result) p.set('result', q.result)
+      if (q.risk) p.set('risk', q.risk)
+      if (q.limit) p.set('limit', String(q.limit))
+      const s = p.toString()
+      return s ? base + '?' + s : base
+    },
   },
 
   /**

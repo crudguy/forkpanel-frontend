@@ -38,6 +38,8 @@ function routesForEnroll() {
       effective: 22, explicit: false, source_file: '/etc/ssh/sshd_config',
       configured: [22], sshd_present: true,
     },
+    // 同理：SSH 登录记录分区也在挂载时独立拉一次，不登记会被 assertClean 拦下。
+    [API.security.sshLogins()]: { rows: [], total: 0, source: 'unavailable', truncated: false },
     [API.auth.mfaEnroll()]: ENROLL,
   }
 }

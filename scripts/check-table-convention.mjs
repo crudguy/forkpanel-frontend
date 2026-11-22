@@ -43,7 +43,7 @@ const REGISTRY = [
   R('views/FilesView.vue', 1, { note: '目录列表：本地排序（目录恒在前）+ 分页；选仍按可见集' }),
   R('views/FirewallView.vue', 1),
   R('views/ProcessesView.vue', 1),
-  R('views/SecurityView.vue', 1),
+  R('views/SecurityView.vue', 2, { note: '活跃会话表接客户端分页+排序；SSH 登录记录按服务端时间倒序 + limit 取，筛选走查询参数，不做客户端分页/表头排序' }),
   R('views/ServicesView.vue', 1),
   R('views/SettingsView.vue', 2, { note: '角色表接；能力矩阵是固定行只读总览，按规范不分页也不排序' }),
   R('views/SitesView.vue', 1),

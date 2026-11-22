@@ -52,6 +52,7 @@ function routes(
       ? (ctx: { method: string; body: unknown }) =>
           ctx.method === 'PUT' ? put(ctx) : port
       : port,
+    [API.security.sshLogins()]: { rows: [], total: 0, source: 'journald', truncated: false },
   }
 }
 

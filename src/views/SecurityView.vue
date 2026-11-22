@@ -30,6 +30,10 @@ import {
   SSH_PORT_CONFIRM_WORD, validatePortInput, portSummary, riskNotice,
   canSubmit, changeMessage, type SshPortState, type SshPortChange,
 } from '@/composables/sshPort'
+import {
+  baselineStatus, BASELINE_STATUS_LABEL, canFixBaseline, baselineOpNote, baselineAdvice,
+  sshResultLabel, sshRiskLabel, sshRiskBadge, sshLogTime, type SshLoginEvent,
+} from '@/composables/securityBaseline'
 
 interface BaselineItem {
   key: string; title: string; ok: boolean
@@ -140,6 +144,41 @@ async function submitPort() {
   finally { acting.value = false }
 }
 
+// ─────────────── SSH 登录 / 爆破记录 ───────────────
+interface SshLogResult {
+  rows: SshLoginEvent[]
+  total: number
+  source: 'journald' | 'unavailable'
+  truncated: boolean
+}
+const sshLogRows = ref<SshLoginEvent[]>([])
+const sshLogTotal = ref(0)
+const sshLogSource = ref<'journald' | 'unavailable'>('unavailable')
+const sshLogTruncated = ref(false)
+const sshLogErr = ref('')
+const sshLogLoading = ref(false)
+const sshLogQ = ref({ ip: '', user: '', result: '', risk: '' })
+
+async function loadSshLogins() {
+  sshLogLoading.value = true
+  sshLogErr.value = ''
+  try {
+    const r = await api.get<SshLogResult>(API.security.sshLogins(sshLogQ.value))
+    sshLogRows.value = Array.isArray(r?.rows) ? r.rows : []
+    sshLogTotal.value = r?.total ?? 0
+    sshLogSource.value = r?.source ?? 'unavailable'
+    sshLogTruncated.value = !!r?.truncated
+  }
+  // 日志分区独立失败：不牵连基线 / 会话 / 端口三块的展示
+  catch (e) { sshLogErr.value = errorText(e); sshLogRows.value = [] }
+  finally { sshLogLoading.value = false }
+}
+
+function resetSshLogFilter() {
+  sshLogQ.value = { ip: '', user: '', result: '', risk: '' }
+  loadSshLogins()
+}
+
 async function load() {
   await run(async () => {
     // ⚠ 不得 `.catch(() => null)`：基线接口一旦失败，run 无法感知、error 永不设置，
@@ -152,8 +191,10 @@ async function load() {
     sessions.value = s?.sessions ?? []
     loadFailed.value = false
   }, (e) => { loadFailed.value = true; error.value = errorText(e) })
-  // 端口现状独立加载：它读的是 sshd 配置文件，与基线扫描是两件事
+  // 端口现状与 SSH 日志各自独立加载：前者读 sshd 配置、后者读 journald，
+  // 任一失败都只标自己那一块，不牵连基线 / 会话。
   await loadSshPort()
+  await loadSshLogins()
 }
 onMounted(load)
 
@@ -191,22 +232,38 @@ async function revoke(s: SessionInfo) {
 }
 
 
-function blClass(c: BaselineItem) {
-  return !c.applicable ? 'na' : (c.ok ? 'ok' : 'danger')
+function blClass(c: BaselineItem) { return baselineStatus(c) }
+function blText(c: BaselineItem) { return baselineAdvice(c) }
+function blStatusText(c: BaselineItem) { return BASELINE_STATUS_LABEL[baselineStatus(c)] }
+function blBadge(c: BaselineItem) {
+  const s = baselineStatus(c)
+  return s === 'ok' ? 'badge-ok' : s === 'danger' ? 'badge-danger' : ''
 }
-function blText(c: BaselineItem) {
-  if (!c.applicable) return '不适用'
-  return c.ok ? c.current : `${c.current} → 期望 ${c.expected}`
-}
+
+// ─────────────── 状态筛选 ───────────────
+// 三种状态都必须能单独查看：汇总卡与清单共用同一套 baselineStatus 判据，
+// 不再出现「卡上有数字但点不进去、清单里也筛不出来」。
+type BlFilter = 'all' | 'ok' | 'danger' | 'na'
+const blFilter = ref<BlFilter>('all')
+const blCardFilters: BlFilter[] = ['ok', 'danger', 'na']
+const blTabs = computed(() => [
+  { key: 'all' as const, label: '全部', count: baseline.value.length },
+  { key: 'ok' as const, label: BASELINE_STATUS_LABEL.ok, count: passed.value },
+  { key: 'danger' as const, label: BASELINE_STATUS_LABEL.danger, count: risks.value },
+  { key: 'na' as const, label: BASELINE_STATUS_LABEL.na, count: naCount.value },
+])
+const visibleBaseline = computed(() => baseline.value.filter(
+  c => blFilter.value === 'all' || baselineStatus(c) === blFilter.value,
+))
+const blEmptyText = computed(() => blFilter.value === 'all'
+  ? '安全基线模块尚未接入'
+  : `没有「${BASELINE_STATUS_LABEL[blFilter.value]}」状态的检查项`)
 
 // ─────────────── 基线一键修复 ───────────────
-// 后端白名单：仅 sshd 三项可自动修（其余写入系统配置风险过高，不做）
-const FIXABLE = ['ssh.permit_root_login', 'ssh.password_auth', 'ssh.pubkey_auth']
+// 白名单与文案判定统一下沉到 composable，避免前端两处手写清单各自漂移。
 const acting = ref(false)
 
-function canFix(c: BaselineItem): boolean {
-  return c.applicable && !c.ok && FIXABLE.includes(c.key)
-}
+function canFix(c: BaselineItem): boolean { return canFixBaseline(c) }
 
 /** 待确认修复的基线项（审计 U5：window.confirm/prompt → ConfirmDialog 确认词模式） */
 const pendingFix = ref<BaselineItem | null>(null)
@@ -294,9 +351,13 @@ async function doDisable() {
     <p v-if="error" class="err">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
     <div v-if="loading" class="skeleton box" />
     <template v-else-if="!loadFailed">
-      <!-- ① 汇总卡：通过 / 风险 / 不适用 -->
+      <!-- ① 汇总卡：三张卡都可点击直达对应状态的清单（状态项不再「有数字却看不到」） -->
       <div class="grid cols-3 summary">
-        <MetricCard v-for="c in summaryCards" :key="c.label" v-bind="c" />
+        <div v-for="(c, i) in summaryCards" :key="c.label" class="stat-click"
+             role="button" tabindex="0" :title="`点击只看「${c.label}」`"
+             @click="blFilter = blCardFilters[i]" @keydown.enter="blFilter = blCardFilters[i]">
+          <MetricCard v-bind="c" />
+        </div>
       </div>
 
       <!-- ② 清单：安全基线逐项检查 -->
@@ -308,25 +369,42 @@ async function doDisable() {
           <span class="spacer" />
           <RefreshBtn :disabled="loading" sm @click="load" />
         </div>
+        <!-- 状态筛选：通过 / 风险 / 不适用各自可单独查看，计数与汇总卡同源 -->
+        <div class="bl-tabs" role="tablist" aria-label="按状态筛选安全基线">
+          <button v-for="t in blTabs" :key="t.key" type="button" class="bl-tab"
+                  :class="{ active: blFilter === t.key }" :aria-selected="blFilter === t.key"
+                  @click="blFilter = t.key">
+            {{ t.label }}<span class="tab-count">{{ t.count }}</span>
+          </button>
+        </div>
         <ul class="checks">
-          <li v-for="c in baseline" :key="c.key" :title="c.advice">
-            <span class="dot" :class="blClass(c)" />
-            <span class="c-name">{{ c.title }}</span>
-            <span class="c-detail muted">{{ blText(c) }}</span>
-            <button
-              v-if="canFix(c)"
-              class="btn-ghost btn-sm"
-              :disabled="acting"
-              title="先备份 → 写 → sshd -t 校验 → 不通过自动回滚"
-              @click="askFix(c)"
-            >修复</button>
+          <li v-for="c in visibleBaseline" :key="c.key" class="bl-item" :title="c.advice">
+            <div class="bl-info">
+              <div class="bl-title-row">
+                <span class="dot" :class="blClass(c)" />
+                <span class="c-name">{{ c.title }}</span>
+                <span class="badge" :class="blBadge(c)">{{ blStatusText(c) }}</span>
+              </div>
+              <p class="bl-desc muted">说明：{{ blText(c) }}</p>
+              <p v-if="c.applicable" class="bl-values mono">
+                当前 <b>{{ c.current || '—' }}</b><span class="arr">→</span>期望 <b>{{ c.expected || '—' }}</b>
+              </p>
+            </div>
+            <div class="bl-op">
+              <button v-if="canFix(c)" class="btn-ghost btn-sm" :disabled="acting"
+                      title="先备份 → 写 → sshd -t 校验 → 不通过自动回滚"
+                      @click="askFix(c)">修复</button>
+              <span v-else class="muted small">{{ baselineOpNote(c) }}</span>
+            </div>
           </li>
-          <li v-if="!baseline.length"><span class="dot warn" /> 安全基线模块尚未接入</li>
+          <li v-if="!visibleBaseline.length" class="bl-empty">
+            <span class="dot" :class="blFilter" /> {{ blEmptyText }}
+          </li>
         </ul>
       </section>
 
-      <!-- ③ SSH 端口（P1-7）：改端口是最容易把自己锁在门外的操作 -->
-      <section class="card">
+      <!-- ③ SSH 端口：当前端口 / 修改入口 / 风险提示 / 关键操作分区呈现 -->
+      <section class="card port-card">
         <div class="sec-head">
           <Icon name="terminal" :size="16" /><span>SSH 端口</span>
           <span class="spacer" />
@@ -335,13 +413,84 @@ async function doDisable() {
         <p v-if="sshPortErr" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ sshPortErr }}</span>
         </p>
-        <template v-else>
-          <p class="muted port-sum">{{ portSummary(sshPort) }}</p>
-          <div v-if="sshPort?.sshd_present" class="ops-row">
-            <button class="btn-ghost btn-sm" :disabled="acting" @click="askEditPort">修改端口</button>
-            <span class="muted small">修改需二次确认；后端会先检查端口占用，写入后跑 sshd -t，不通过自动回滚</span>
+        <template v-else-if="sshPort">
+          <div class="port-hero">
+            <div class="port-now">
+              <span class="port-cap">当前生效端口</span>
+              <strong class="port-num">{{ sshPort.effective }}</strong>
+              <span class="port-from muted small">{{ portSummary(sshPort) }}</span>
+            </div>
+            <div class="port-entry">
+              <button v-if="sshPort.sshd_present" class="btn-primary" :disabled="acting" @click="askEditPort">修改端口</button>
+              <span v-else class="muted small">未检测到 sshd，无需修改端口</span>
+              <span class="muted small">需确认词「{{ SSH_PORT_CONFIRM_WORD }}」；先检查占用 → 备份 → sshd -t，失败自动回滚</span>
+            </div>
           </div>
+          <p class="warn-tip port-risk">
+            <Icon name="alert" :size="15" class="ic" /><span>{{ riskNotice() }}</span>
+          </p>
         </template>
+        <p v-else class="muted">未读取到 SSH 配置</p>
+      </section>
+
+      <!-- ③-b SSH 登录 / 爆破记录：来源 IP、时间、用户、结果、风险类型 + 查询筛选 -->
+      <section class="card ssh-log-card">
+        <div class="sec-head">
+          <Icon name="terminal" :size="16" /><span>SSH 登录记录</span>
+          <span class="spacer" />
+          <span class="muted small">来源 {{ sshLogSource === 'journald' ? 'journald' : '不可用' }}</span>
+          <RefreshBtn :disabled="sshLogLoading" sm @click="loadSshLogins" />
+        </div>
+        <div class="log-filter">
+          <input v-model="sshLogQ.ip" class="filter log-inp" placeholder="来源 IP" @keyup.enter="loadSshLogins" />
+          <input v-model="sshLogQ.user" class="filter log-inp" placeholder="用户名" @keyup.enter="loadSshLogins" />
+          <select v-model="sshLogQ.result" class="filter log-sel" @change="loadSshLogins">
+            <option value="">全部结果</option><option value="success">成功</option><option value="failed">失败</option>
+          </select>
+          <select v-model="sshLogQ.risk" class="filter log-sel" @change="loadSshLogins">
+            <option value="">全部风险</option>
+            <option value="brute_force">疑似爆破</option>
+            <option value="root_login">root 登录成功</option>
+            <option value="root_attempt">尝试 root 登录</option>
+            <option value="invalid_user">无效用户</option>
+            <option value="failed_password">密码错误</option>
+            <option value="none">无</option>
+          </select>
+          <button class="btn-ghost btn-sm" :disabled="sshLogLoading" @click="loadSshLogins">查询</button>
+          <button class="btn-ghost btn-sm" :disabled="sshLogLoading" @click="resetSshLogFilter">重置</button>
+        </div>
+        <p v-if="sshLogErr" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ sshLogErr }}</span>
+        </p>
+        <div v-else-if="sshLogRows.length" class="t-scroll">
+          <table class="fixed" v-table-nav>
+            <colgroup>
+              <col class="w-ltime" /><col class="w-lip" /><col class="w-luser" />
+              <col class="w-lres" /><col class="w-lrisk" /><col class="w-ldetail" />
+            </colgroup>
+            <thead><tr>
+              <th>时间</th><th>来源 IP</th><th>用户</th><th>结果</th><th>风险类型</th><th>详情</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="(e, i) in sshLogRows" :key="`${e.ts_unix}-${e.ip}-${i}`">
+                <td class="muted nowrap">{{ sshLogTime(e.ts_unix, fmtDateTime) }}</td>
+                <td class="mono">{{ e.ip }}</td>
+                <td>{{ e.user }}</td>
+                <td>
+                  <span class="badge" :class="e.result === 'success' ? 'badge-ok' : 'badge-danger'">
+                    {{ sshResultLabel(e.result) }}
+                  </span>
+                </td>
+                <td><span class="badge" :class="sshRiskBadge(e.risk)">{{ sshRiskLabel(e.risk) }}</span></td>
+                <td class="muted" :title="e.detail">{{ e.detail.length > 80 ? `${e.detail.slice(0, 80)}…` : e.detail }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-else class="muted">暂无 SSH 登录记录{{ sshLogSource === 'unavailable' ? '（日志源不可用）' : '' }}</p>
+        <p class="muted small log-total">
+          共 {{ sshLogTotal }} 条{{ sshLogTruncated ? '（已达读取上限，仅展示最近 2000 条）' : '' }}
+        </p>
       </section>
 
       <!-- ④ 账号：账号安全分区（活跃会话 + 两步验证 MFA） -->
@@ -533,12 +682,35 @@ async function doDisable() {
 .part { margin-top: 16px; }
 .part-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
   font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
-.part-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-  font-size: var(--fs-15); font-weight: 600; color: var(--c-text); }
-.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
-.checks li { display: flex; align-items: center; gap: 10px; font-size: var(--fs-13-5); }
+/* 汇总卡可点：状态筛选直达清单。wrapper 而非给子组件根挂 class——
+   Vue3.5 scoped 不给子组件根补父级 data-v，直接写 class 样式恒不命中。 */
+.stat-click { cursor: pointer; min-width: 0; }
+.stat-click:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; border-radius: var(--radius); }
+.stat-click :deep(.card) { height: 100%; }
+.stat-click:hover :deep(.card) { border-color: var(--c-primary); }
+.bl-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 6px; }
+.bl-tab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+  border-radius: 999px; border: 1px solid var(--c-border); background: transparent;
+  color: var(--c-text-mute); font-size: var(--fs-12-5); cursor: pointer; }
+.bl-tab:hover { border-color: var(--c-primary); color: var(--c-text); }
+.bl-tab.active { background: var(--c-primary-soft); border-color: var(--c-primary);
+  color: var(--c-primary); font-weight: 600; }
+.tab-count { font-variant-numeric: tabular-nums; opacity: .8; }
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.checks li { font-size: var(--fs-13-5); }
+.checks li.bl-item { display: flex; align-items: flex-start; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--c-border); }
+.checks li.bl-item:last-child { border-bottom: none; }
+.bl-info { min-width: 0; flex: 1; }
+.bl-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bl-desc { margin: 5px 0 0; font-size: var(--fs-12-5); line-height: 1.5; }
+.bl-values { margin: 3px 0 0; font-size: var(--fs-12); color: var(--c-text-mute); }
+.bl-values b { color: var(--c-text); font-weight: 600; }
+.arr { margin: 0 5px; color: var(--c-text-dim); }
+.bl-op { flex: none; min-width: 100px; display: flex; justify-content: flex-end; align-items: flex-start; }
+.badge.na { background: color-mix(in srgb, var(--c-text-dim) 14%, transparent); color: var(--c-text-dim); }
+.bl-empty { display: flex; align-items: center; gap: 8px; padding: 14px 0; color: var(--c-text-mute); }
 .c-name { font-weight: 500; }
-.c-detail { margin-left: auto; font-size: var(--fs-12-5); text-align: right; }
 .summary { font-size: var(--fs-12-5); }
 /* 语义色一律只用 token，不给 var() 写第二参数兜底：这些 token 在 main.css 里
    全都已定义，兜底永远不生效，只是把一屏之外的旧色值抄进本文件——
@@ -586,7 +758,24 @@ col.w-srole { width: 100px; }
 col.w-sctime { width: 110px; }
 col.w-sidle { width: 80px; }
 col.w-sacts { width: 100px; }
-/* SSH 端口分区：现状摘要是长句，给它一个舒适的行高；不加宽度限制，
-   让它在宽屏下自然占满卡片（改端口说明本来就该一次读完）。 */
-.port-sum { margin: 0 0 10px; font-size: var(--fs-13); line-height: 1.65; word-break: break-word; }
+/* SSH 端口：大数字突出当前生效端口；修改入口与关键操作成列；风险提示独立一行。 */
+.port-hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.port-now { display: flex; flex-direction: column; gap: 3px; min-width: 190px; }
+.port-cap { font-size: var(--fs-12); color: var(--c-text-dim); }
+.port-num { font-size: var(--fs-26); line-height: 1; font-variant-numeric: tabular-nums; color: var(--c-text); }
+.port-from { line-height: 1.5; word-break: break-word; }
+.port-entry { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-left: auto; }
+.port-risk { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; }
+.port-risk .ic { flex: none; margin-top: 2px; }
+/* SSH 登录记录：筛选条复用全站 .filter，只覆盖宽度；表格详情列吃剩余宽度。 */
+.log-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.log-inp { width: 150px; }
+.log-sel { width: 140px; flex: none; }
+.log-total { margin: 8px 0 0; }
+col.w-ltime { width: 150px; }
+col.w-lip { width: 130px; }
+col.w-luser { width: 110px; }
+col.w-lres { width: 84px; }
+col.w-lrisk { width: 132px; }
+col.w-ldetail { width: auto; }
 </style>
