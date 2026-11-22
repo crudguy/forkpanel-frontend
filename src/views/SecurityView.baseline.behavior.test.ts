@@ -11,8 +11,10 @@
  */
 import { describe, it, expect, afterEach } from 'vitest'
 import SecurityView from '@/views/SecurityView.vue'
-import { mountView, type Mounted } from '@/test/mount'
+import { mountView, capsAllOk, type Mounted } from '@/test/mount'
 import { API } from '@/api/endpoints'
+import { fakeError, type FakeRoute } from '@/test/apiFake'
+import { CAP } from '@/api/types'
 
 const BASELINE = [
   { key: 'ssh.permit_root_login', title: '禁止 root 登录', ok: false,
@@ -44,15 +46,26 @@ const LOGS = {
 let m: Mounted | null = null
 afterEach(() => { m?.cleanup(); m = null })
 
-async function mountPage(logs = LOGS) {
+interface MountOver {
+  logs?: typeof LOGS
+  routes?: Record<string, FakeRoute>
+  caps?: ReturnType<typeof capsAllOk>
+  perms?: string[]
+}
+
+async function mountPage(over: MountOver = {}) {
+  const logs = over.logs ?? LOGS
   m = await mountView({
     component: SecurityView,
-    perms: ['security.manage', 'system.view', 'system.manage'],
+    perms: over.perms ?? ['security.manage', 'system.view', 'system.manage', 'firewall.manage'],
+    caps: over.caps ?? capsAllOk(),
     routes: {
       [API.security.baseline()]: BASELINE,
       [API.security.sessions()]: SESSIONS,
       [API.security.sshPort()]: PORT,
       [API.security.sshLogins()]: logs,
+      [API.firewall.fail2banBan()]: { jail: 'forkpanel', ip: '5.6.7.8', already_banned: false },
+      ...(over.routes ?? {}),
     },
   })
   await m.flush()
@@ -149,5 +162,62 @@ describe('SecurityView · SSH 端口与登录记录', () => {
       .at(-1)?.url ?? ''
     expect(url).toContain('ip=5.6.7.8')
     expect(h.fake.unexpected).toHaveLength(0)
+  })
+})
+
+describe('SecurityView · 从日志 IP 直接封禁', () => {
+  function banButton(h: Mounted, ip = '5.6.7.8'): HTMLButtonElement | undefined {
+    const sec = section(h.host, 'SSH 登录记录')
+    const row = [...sec.querySelectorAll('tbody tr')].find(tr => tr.textContent?.includes(ip))
+    return ([...(row?.querySelectorAll('button') ?? [])]
+      .find(b => b.textContent?.includes('封禁')) as HTMLButtonElement) || undefined
+  }
+
+  it('有权限与能力位时按钮可见，点击只提交该行 IP', async () => {
+    const h = await mountPage()
+    const btn = banButton(h)
+    expect(btn, '封禁按钮必须真实渲染到日志行').toBeTruthy()
+    expect(btn!.title).toContain('出口 IP')
+    expect(banButton(h, '10.0.0.9'), '另一行也应可封禁').toBeTruthy()
+    btn!.click()
+    await h.flush()
+    expect(h.fake.count(API.firewall.fail2banBan(), 'POST')).toBe(1)
+    expect(h.fake.lastBody(API.firewall.fail2banBan(), 'POST')).toEqual({ ip: '5.6.7.8' })
+    h.fake.assertClean()
+  })
+
+  it('能力位不支持时不渲染按钮，页面如实说明不可管理', async () => {
+    const h = await mountPage({ caps: capsAllOk({ [CAP.FAIL2BAN]: { supported: false } }) })
+    expect(banButton(h)).toBeFalsy()
+    expect(section(h.host, 'SSH 登录记录').textContent).toContain('不可管理')
+    h.fake.assertClean()
+  })
+
+  it('后端拒绝时错误条如实展示，不假装成功', async () => {
+    const h = await mountPage({
+      routes: {
+        [API.firewall.fail2banBan()]: fakeError(
+          400, 10001, '参数校验失败', { reason: 'IP 格式非法或不可封禁（回环/未指定地址）' }),
+      },
+    })
+    banButton(h)!.click()
+    await h.flush()
+    const err = section(h.host, 'SSH 登录记录').querySelector('.err-bar')?.textContent ?? ''
+    expect(err).toContain('封禁 5.6.7.8 失败')
+    expect(err).toContain('IP 格式非法')
+    h.fake.assertClean()
+  })
+
+  it('已封禁时如实提示，且不额外重复下发', async () => {
+    const h = await mountPage({
+      routes: {
+        [API.firewall.fail2banBan()]: { jail: 'forkpanel', ip: '5.6.7.8', already_banned: true },
+      },
+    })
+    banButton(h)!.click()
+    await h.flush()
+    expect(h.fake.count(API.firewall.fail2banBan(), 'POST')).toBe(1)
+    expect(section(h.host, 'SSH 登录记录').querySelector('.err-bar')).toBeFalsy()
+    h.fake.assertClean()
   })
 })

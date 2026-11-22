@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   baselineStatus, baselineOpNote, baselineAdvice, canFixBaseline,
-  sshResultLabel, sshRiskLabel, sshRiskBadge, sshLogTime,
+  sshResultLabel, sshRiskLabel, sshRiskBadge, sshLogTime, banIpIssue,
   type BaselineLike,
 } from './securityBaseline'
 
@@ -67,5 +67,20 @@ describe('SSH 登录记录展示映射', () => {
     expect(sshLogTime(0, fmt)).toBe('—')
     expect(sshLogTime(-1, fmt)).toBe('—')
     expect(sshLogTime(1700000000, fmt)).toBe('T1700000000')
+  })
+})
+
+describe('日志 IP 封禁的提交前校验', () => {
+  it('合法公网 / 内网 IP 与 IPv6 放行，空白可 trim', () => {
+    for (const ip of ['1.2.3.4', '10.0.0.9', ' 5.6.7.8 ', '2001:db8::1', 'fe80::1']) {
+      expect(banIpIssue(ip), `应可提交：${ip}`).toBeNull()
+    }
+  })
+
+  it('日志里的伪 IP、越界段、回环与未指定地址一律拦下', () => {
+    for (const ip of ['', 'unknown', '-', '999.999.999.999', '192.168.1',
+                      '127.0.0.1', '0.0.0.0', '::', '::1', '1.2.3.4; drop', 'foo1.2']) {
+      expect(banIpIssue(ip), `必须拦下：${ip}`).not.toBeNull()
+    }
   })
 })

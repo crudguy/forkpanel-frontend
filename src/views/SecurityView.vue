@@ -13,7 +13,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { fmtDateTime, fmtAgo, roleLabel } from '@/api/types'
+import { fmtDateTime, fmtAgo, roleLabel, CAP } from '@/api/types'
 import Icon from '@/components/Icon.vue'
 import QrCode from '@/components/QrCode.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
@@ -32,7 +32,8 @@ import {
 } from '@/composables/sshPort'
 import {
   baselineStatus, BASELINE_STATUS_LABEL, canFixBaseline, baselineOpNote, baselineAdvice,
-  sshResultLabel, sshRiskLabel, sshRiskBadge, sshLogTime, type SshLoginEvent,
+  sshResultLabel, sshRiskLabel, sshRiskBadge, sshLogTime, banIpIssue, BAN_IP_HINT,
+  type SshLoginEvent,
 } from '@/composables/securityBaseline'
 
 interface BaselineItem {
@@ -177,6 +178,38 @@ async function loadSshLogins() {
 function resetSshLogFilter() {
   sshLogQ.value = { ip: '', user: '', result: '', risk: '' }
   loadSshLogins()
+}
+
+// 从日志 IP 直接封禁：能力位 + 权限双门控；后端还会再复核并严格校验 IP。
+// 这里先拦是为了把失败原因留在用户还能看到的地方，而不是一次注定失败的往返。
+const canBanIp = computed(() => auth.can('firewall.manage') && auth.supported(CAP.FAIL2BAN))
+const banBusy = ref('')
+const banErr = ref('')
+
+async function banFromLog(ip: string) {
+  if (!canBanIp.value) return
+  const target = ip.trim()
+  const issue = banIpIssue(target)
+  if (issue) {
+    banErr.value = `无法封禁 ${target}：${issue}`
+    toast(banErr.value, 'warn')
+    return
+  }
+  banErr.value = ''
+  banBusy.value = target
+  try {
+    const r = await api.post<{ jail: string; ip: string; already_banned: boolean }>(
+      API.firewall.fail2banBan(), { ip: target })
+    toast(r?.already_banned
+      ? `${target} 已在封禁列表，未重复下发`
+      : `已封禁 ${target}（jail: ${r?.jail ?? '—'}）`,
+      r?.already_banned ? 'info' : 'ok')
+  } catch (e) {
+    banErr.value = `封禁 ${target} 失败：${errorText(e)}`
+    toast(banErr.value, 'err')
+  } finally {
+    banBusy.value = ''
+  }
 }
 
 async function load() {
@@ -462,14 +495,18 @@ async function doDisable() {
         <p v-if="sshLogErr" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ sshLogErr }}</span>
         </p>
+        <p v-if="banErr" class="err-bar form-msg" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ banErr }}</span>
+        </p>
         <div v-else-if="sshLogRows.length" class="t-scroll">
           <table class="fixed" v-table-nav>
             <colgroup>
               <col class="w-ltime" /><col class="w-lip" /><col class="w-luser" />
               <col class="w-lres" /><col class="w-lrisk" /><col class="w-ldetail" />
+              <col class="w-lact" />
             </colgroup>
             <thead><tr>
-              <th>时间</th><th>来源 IP</th><th>用户</th><th>结果</th><th>风险类型</th><th>详情</th>
+              <th>时间</th><th>来源 IP</th><th>用户</th><th>结果</th><th>风险类型</th><th>详情</th><th>操作</th>
             </tr></thead>
             <tbody>
               <tr v-for="(e, i) in sshLogRows" :key="`${e.ts_unix}-${e.ip}-${i}`">
@@ -483,6 +520,14 @@ async function doDisable() {
                 </td>
                 <td><span class="badge" :class="sshRiskBadge(e.risk)">{{ sshRiskLabel(e.risk) }}</span></td>
                 <td class="muted" :title="e.detail">{{ e.detail.length > 80 ? `${e.detail.slice(0, 80)}…` : e.detail }}</td>
+                <td class="col-actions">
+                  <button v-if="canBanIp" class="btn-ghost btn-sm" type="button"
+                    :title="BAN_IP_HINT" :disabled="banBusy === e.ip"
+                    @click="banFromLog(e.ip)">
+                    {{ banBusy === e.ip ? '封禁中…' : '封禁' }}
+                  </button>
+                  <span v-else class="muted tiny" :title="BAN_IP_HINT">不可管理</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -778,4 +823,5 @@ col.w-luser { width: 110px; }
 col.w-lres { width: 84px; }
 col.w-lrisk { width: 132px; }
 col.w-ldetail { width: auto; }
+col.w-lact { width: 92px; }
 </style>

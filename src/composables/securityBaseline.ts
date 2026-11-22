@@ -107,3 +107,39 @@ export function sshRiskBadge(v: string): string {
 export function sshLogTime(ts: number, fmt: (t: number) => string): string {
   return ts > 0 ? fmt(ts) : '—'
 }
+
+/** 封禁按钮的常驻风险提示：破坏性动作必须先说清后果。 */
+export const BAN_IP_HINT = '封禁后该 IP 将无法访问 jail 覆盖的服务；请先确认不是自己的出口 IP。已封禁的 IP 不会重复下发。'
+
+/**
+ * 提交前 IP 预校验：返回错误文案，null 表示可提交。
+ *
+ * 日志解析器只做粗提取（`999.999.999.999` 也能进列表），后端虽有严格校验，
+ * 但前端先拦能避免一次注定失败的往返，并在用户还能改的地方给出原因。
+ * 不引入正则回溯风险：IPv4 固定四段逐段比大小，IPv6 只查字符与段数。
+ */
+export function banIpIssue(raw: string): string | null {
+  const ip = raw.trim()
+  if (!ip) return 'IP 为空，无法封禁'
+  if (ip === 'unknown' || ip === '-') return '日志未提取到有效 IP'
+
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (v4) {
+    const parts = v4.slice(1).map(Number)
+    if (parts.some(n => n > 255)) return 'IP 格式非法'
+    if (parts[0] === 127 || parts.every(n => n === 0)) return '回环/未指定地址不可封禁'
+    return null
+  }
+
+  if (/^[0-9a-fA-F:]+$/.test(ip) && ip.includes(':')) {
+    if (ip === '::' || ip === '::1') return '回环/未指定地址不可封禁'
+    const halves = ip.split('::')
+    if (halves.length <= 2) {
+      const segs = halves.filter(Boolean).flatMap(h => h.split(':'))
+      const shapeOk = segs.every(s => s.length > 0 && s.length <= 4)
+      const totalOk = halves.length === 2 ? segs.length < 8 : segs.length === 8
+      if (shapeOk && totalOk) return null
+    }
+  }
+  return 'IP 格式非法'
+}
