@@ -321,7 +321,7 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 <template>
   <div>
     <div class="tools-row">
-      <span class="spacer" />
+      <!-- 筛选控件靠左：刻意不放 .spacer（flex:1），否则整行被推到右侧。 -->
       <select v-model="cur" :disabled="!canView" class="ctl">
         <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.label }}</option>
       </select>
