@@ -277,6 +277,11 @@ button {
   transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
 }
 button:hover:not(:disabled) { background: var(--c-hover); transform: translateY(-1px); }
+/* ⚠ 上面 `button:hover` 特异性 (0,2,1) 会盖掉 `.btn-primary`(0,1,0) 的渐变实心底，
+   白字 + 透明底＝按钮 hover 时"变空白"（实测所有实心主按钮都中招，非审计页独有）。
+   这里把实心底还回去；提亮/上浮反馈仍由各自的 :hover filter/transform 提供。 */
+button.btn-primary:hover:not(:disabled) { background: var(--gradient); }
+button.btn-danger:hover:not(:disabled) { background: var(--c-danger); }
 button:active:not(:disabled) { transform: translateY(0); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }

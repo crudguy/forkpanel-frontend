@@ -285,7 +285,7 @@ onMounted(load)
           <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('30d')">近 30 天</button>
           <button v-if="f.since || f.until" class="btn-ghost btn-sm" :disabled="loading" @click="clearTime">清除时间</button>
         </span>
-        <button class="btn-primary btn-sm" :disabled="loading" @click="applyFilters">筛选</button>
+        <button class="btn-primary btn-sm filter-submit" :disabled="loading" @click="applyFilters">筛选</button>
       </div>
 
       <p v-if="error" class="err">{{ error }}</p>
@@ -394,6 +394,8 @@ onMounted(load)
   background: var(--c-bg); color: var(--c-text-dim);
   font-size: var(--fs-13); white-space: nowrap; pointer-events: none; }
 .filters .quick { display: flex; align-items: center; gap: 6px; }
+/* 「筛选」主操作单独靠右，与前面的筛选控件分开；margin-left:auto 吃掉左侧余量。 */
+.filters .filter-submit { margin-left: auto; }
 
 /* 表格。⚠️ 行类名不得用 .row：main.css 的 .row 是表单行布局（display:flex），
    会把 tr 变成 flex 容器——整行内容叠挤、不按列对齐（实测 trDisp=flex）。 */
