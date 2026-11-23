@@ -829,6 +829,21 @@ export function taskStateBadge(s: string): string {
   return 'badge-warn'
 }
 
+/**
+ * 任务状态筛选下拉的选项（value 为落库值，label 走上面的 `taskStateLabel`）。
+ *
+ * 只列后端 `TaskState` 的 6 个真值，**不含** done/cancelled 这两个历史脏值——
+ * 它们只用于「渲染旧数据」，不该出现在筛选器里让用户去选本来就发不出来的状态。
+ */
+export const TASK_STATE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: 'queued', label: taskStateLabel('queued') },
+  { value: 'running', label: taskStateLabel('running') },
+  { value: 'ok', label: taskStateLabel('ok') },
+  { value: 'failed', label: taskStateLabel('failed') },
+  { value: 'canceled', label: taskStateLabel('canceled') },
+  { value: 'interrupted', label: taskStateLabel('interrupted') },
+]
+
 // ────────────── 通用枚举词表 ──────────────
 // 后端一律存/返英文枚举，直接渲染会让面板中英混杂。集中在此映射，
 // 各视图引用（勿在视图内各写一份——必漂移）。

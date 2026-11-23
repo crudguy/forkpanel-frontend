@@ -391,7 +391,17 @@ export const API = {
   },
 
   tasks: {
-    list: () => '/api/v1/tasks',
+    /** 任务列表。`limit` 0 = 不限（受后端 1000 上限兜底），对应前端「全部」档；
+     *  `state` 过滤由后端下推到 SQL（返回「最近 N 条满足筛选」）。 */
+    list: (q: { state?: string; limit?: number } = {}) => {
+      const base = '/api/v1/tasks'
+      const p = new URLSearchParams()
+      if (q.state) p.set('state', q.state)
+      // 0 是合法值（不限），不能用 `if (q.limit)` 判真——那会把 0 静默当成缺省。
+      if (q.limit !== undefined) p.set('limit', String(q.limit))
+      const s = p.toString()
+      return s ? base + '?' + s : base
+    },
     get: (id: number) => `/api/v1/tasks/${id}`,
     cancel: (id: number) => `/api/v1/tasks/${id}/cancel`,
     output: (id: number) => `/api/v1/tasks/${id}/output`,
