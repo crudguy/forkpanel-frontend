@@ -321,7 +321,9 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
 <template>
   <div>
     <div class="tools-row">
-      <!-- 筛选控件靠左：刻意不放 .spacer（flex:1），否则整行被推到右侧。 -->
+      <!-- 筛选控件靠左、操作按钮靠右，两组分开对齐：操作按钮包成单个 .tools-actions
+           flex 项用 margin-left:auto 推右，整组换行后仍靠右；若改用 .spacer，窄屏时
+           spacer 留在上一行、按钮组掉到下一行左侧（参 FilesView 的同类处理）。 -->
       <select v-model="cur" :disabled="!canView" class="ctl">
         <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.label }}</option>
       </select>
@@ -350,21 +352,23 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
       <label class="ctl chk" :class="{ on: wrapLines }" title="长行自动换行（默认横向滚动）">
         <input type="checkbox" v-model="wrapLines" /> 自动换行
       </label>
-      <button class="btn-primary" :class="{ active: follow }" :disabled="!canView"
-        :title="canView ? '' : '无 log.view 权限'" @click="toggleFollow">
-        <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
-      </button>
-      <RefreshBtn :disabled="!canView || follow"
-        :title="!canView ? '无 log.view 权限' : (follow ? '实时跟随中无需手动刷新' : '')" @click="load" />
-      <button class="btn-ghost" :class="{ active: showStats }" :disabled="!canView || follow || !cur" title="聚合统计：level 分布 + 时间直方图 + 高频模式（最多扫 2000 行，随当前筛选）" @click="toggleStats">
-        <Icon name="chart" :size="15" /> 统计
-      </button>
-      <button class="btn-ghost" :disabled="!canView || follow || !cur" title="按当前过滤条件下载（上限 10000 行 / 8MB）" @click="downloadLog">
-        <Icon name="download" :size="15" /> 下载
-      </button>
-      <button class="btn-ghost" :disabled="!canView || follow || !cur" :title="copyDone ? '已复制当前可见文本' : '复制当前过滤后的可见文本'" @click="copyView">
-        <Icon name="copy" :size="15" /> {{ copyDone ? '已复制' : '复制' }}
-      </button>
+      <div class="tools-actions">
+        <button class="btn-primary" :class="{ active: follow }" :disabled="!canView"
+          :title="canView ? '' : '无 log.view 权限'" @click="toggleFollow">
+          <Icon name="bolt" :size="15" /> {{ follow ? '停止跟随' : '实时跟随' }}
+        </button>
+        <RefreshBtn :disabled="!canView || follow"
+          :title="!canView ? '无 log.view 权限' : (follow ? '实时跟随中无需手动刷新' : '')" @click="load" />
+        <button class="btn-ghost" :class="{ active: showStats }" :disabled="!canView || follow || !cur" title="聚合统计：level 分布 + 时间直方图 + 高频模式（最多扫 2000 行，随当前筛选）" @click="toggleStats">
+          <Icon name="chart" :size="15" /> 统计
+        </button>
+        <button class="btn-ghost" :disabled="!canView || follow || !cur" title="按当前过滤条件下载（上限 10000 行 / 8MB）" @click="downloadLog">
+          <Icon name="download" :size="15" /> 下载
+        </button>
+        <button class="btn-ghost" :disabled="!canView || follow || !cur" :title="copyDone ? '已复制当前可见文本' : '复制当前过滤后的可见文本'" @click="copyView">
+          <Icon name="copy" :size="15" /> {{ copyDone ? '已复制' : '复制' }}
+        </button>
+      </div>
     </div>
 
     <EmptyState v-if="!auth.supported(CAP.LOGS_READ)"
@@ -448,6 +452,10 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
   cursor: pointer;
 }
 .fold-badge:hover { border-color: var(--c-primary); color: var(--c-primary); }
+/* 操作按钮整组靠右：单个 flex 项 + margin-left:auto 把它推到行尾。整组换行时
+   仍靠右；组内按钮不收缩，避免「实时跟随」等文字被压窄折行撑高整行。 */
+.tools-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.tools-actions > * { flex-shrink: 0; }
 .ctl { width: auto; min-width: 0; }
 .ctl.chk { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12); color: var(--c-text-dim); user-select: none; }
 .ctl.chk.on { color: var(--c-text); }
