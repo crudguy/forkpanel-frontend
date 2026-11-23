@@ -441,14 +441,21 @@ async function deleteTemplate() {
           :to="{ path: '/cron/tasks', query: { task: String(lastTaskId) } }">去任务中心查看输出</RouterLink>
       </p>
 
-      <section class="card" id="cron-create-card">
-        <div class="sec-head"><Icon name="clock" :size="16" /> 新建任务</div>
+      <section class="card cron-create" id="cron-create-card">
+        <div class="sec-head">
+          <Icon name="clock" :size="16" /> 新建任务
+          <span class="spacer" />
+          <label class="head-switch">
+            <span class="switch"><input type="checkbox" v-model="form.enabled" /><i /></span>
+            启用
+          </label>
+        </div>
         <!-- 模板入口：只做「填充」，不做「绑定」。选了模板就把字段灌进下面的表单，
              之后怎么改都是这次新建的事，模板本身不受影响。
              没有模板时这一条整体不渲染——手动创建路径完全不受影响。 -->
         <div v-if="templates.length" class="tpl-bar">
           <label class="tpl-pick">
-            <span>从模板填充</span>
+            <span>模板</span>
             <select v-model="tplPick" aria-label="从模板填充新建任务表单" @change="applyTemplate">
               <option value="">不使用模板（手动填写）</option>
               <option v-for="t in templates" :key="t.id" :value="String(t.id)">{{ t.name }}</option>
@@ -464,45 +471,36 @@ async function deleteTemplate() {
           还没有任务模板。<button type="button" class="link-btn" @click="openTplManager">创建一个</button>
           ，之后新建任务可一键填充常用字段。
         </p>
-        <div class="row">
+
+        <div class="cron-fields">
           <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
           <label>表达式<input v-model="form.expr" placeholder="0 3 * * *" /></label>
+          <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
+          <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
+          <label>Webhook URL<input v-model="form.webhook_url" placeholder="留空 = 不回调" /></label>
         </div>
         <!-- 名称格式提示：只在用户真的开始输入后才出现，空表单不先甩红字 -->
         <p v-if="nameWarn" id="cron-name-hint" class="field-err">{{ nameWarn }}</p>
-        <div class="field"><label>命令</label><input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></div>
-        <div class="row">
-          <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
-          <label>Webhook URL<input v-model="form.webhook_url" placeholder="留空 = 不回调" /></label>
-          <label class="switch-row">
-            <span>启用</span>
-            <span class="switch">
-              <input type="checkbox" v-model="form.enabled" /><i />
-            </span>
-          </label>
-        </div>
         <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+
+        <div class="cron-actions">
           <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
             {{ createBusy ? '创建中…' : '创建' }}</button>
           <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
             {{ previewBusy ? '计算中…' : '预览执行时刻' }}
           </button>
         </div>
-        <div class="field webhook-test">
-          <label>单独探测 Webhook 可达性
-            <input v-model="webhookUrl" placeholder="https://example.com/hook" :disabled="webhookBusy" />
-          </label>
+        <p v-if="previewExpr === form.expr" class="tip preview-tip">
+          下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
+        </p>
+        <div class="webhook-test">
+          <label>Webhook 测试地址<input v-model="webhookUrl" placeholder="https://example.com/hook" :disabled="webhookBusy" /></label>
           <button class="btn-ghost" :disabled="!canManage || !webhookUrl || webhookBusy" @click="testWebhook">
             <Icon name="bell" :size="14" /> {{ webhookBusy ? '测试中…' : '测试连通性' }}
           </button>
         </div>
-        <p v-if="previewExpr === form.expr" class="tip">
-          下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
-        </p>
-        <p class="tip">按当前平台的 cron 格式填写；格式有误会在下方原样提示。</p>
       </section>
 
       <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
@@ -535,7 +533,7 @@ async function deleteTemplate() {
             <SortTh label="命令" :active="isSorted('command')" :dir="sortDir" @sort="toggleSort('command')" />
             <SortTh class="col-opt" label="用户" :active="isSorted('user')" :dir="sortDir" @sort="toggleSort('user')" />
             <SortTh label="上次执行" :active="isSorted('last_run_at')" :dir="sortDir" @sort="toggleSort('last_run_at')" />
-            <SortTh label="下次预览" :active="isSorted('next')" :dir="sortDir" @sort="toggleSort('next')" />
+            <SortTh class="col-next" label="下次预览" :active="isSorted('next')" :dir="sortDir" @sort="toggleSort('next')" />
             <th />
           </tr></thead>
           <tbody>
@@ -547,12 +545,12 @@ async function deleteTemplate() {
               <!-- 「上次执行」必须带成败：此前只显示时间，用户看到「10-20 03:00」却不知道
                    那次成没成（`last_status` 在后端有回写、前端类型里也声明了，但从没渲染）。
                    取值来自后端 `run_outcome`：ok / exit N / killed：… -->
-              <td class="nowrap">
-                <span>{{ fmtDateTime(j.last_run_at) }}</span>
+              <td class="last-cell">
+                <span class="last-time">{{ fmtDateTime(j.last_run_at) }}</span>
                 <span v-if="j.last_run_at != null && j.last_status" class="badge last-status"
                   :class="lastStatusBadge(j.last_status)" :title="j.last_status">{{ j.last_status }}</span>
               </td>
-              <td class="dim">
+              <td class="dim col-next">
                 <span v-for="(t, i) in j.next.slice(0, 2)" :key="i">{{ fmtDateTime(t) }}<br /></span>
               </td>
               <td class="nowrap">
@@ -726,46 +724,64 @@ async function deleteTemplate() {
 <style scoped>
 /* 弹窗取公共 .mask / .modal.wide.stack / .modal-head / .modal-close / .modal-actions；
    本页不再保留 .m-head / .m-desc / .m-acts 私有结构式样（与全站弹窗漂移） */
+
+/* 编辑弹窗里的独立开关（不在 .row 内，保持横排） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
-/* `.row` 内的开关列：必须与同行「字段名 + 控件」两段式对齐。
-   .switch-row 自己的 inline-flex 会把字段名与开关**横向**排布，于是这一列少一行
-   字高（实测 53px vs 相邻 61px），标签基线比邻列高 9px、开关与输入框中心错位。
-   覆盖成 column 即可复刻全局 `.row > label` 的结构，且不影响编辑弹窗里那个
-   独立横排的 .switch-row（它不在 .row 里）。 */
-.row > .switch-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  font-size: var(--fs-12); }
-/* 字段名下的开关：与相邻 input 同高（38px）水平居中，中心 Y 与邻列对齐 */
-.row > .switch-row > .switch { height: 38px; display: inline-flex; align-items: center; }
-/* 实心主色底 + 白滑块、42×24：旧版 --c-primary-soft 浅色底开销/关都偏浅橙、对比弱。
-   与 ServiceDetailView（开机自启）、SitesView（自动续期）保持同一套开关外观。 */
-/* 任务表列宽（站点表范式）：命令为唯一弹性列；操作列 220px 容下
-   执行 / 编辑 / 删除 3 个按钮（「提交中…」文案更宽）。 */
-col.w-cjid { width: 10%; }
-col.w-cjexpr { width: 12%; }
+
+/* 新建任务卡片：字段收进两列网格、开关移到标题栏、测试区单独成行。
+   此前卡片实测 792px，把列表推到 y=934（首屏完全看不到任务）；目标压到 450px 内。 */
+.cron-create { margin-bottom: 12px; }
+.cron-create .sec-head { margin-bottom: 12px; }
+.head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
+  color: var(--c-text-dim); cursor: pointer; user-select: none; }
+.cron-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  font-size: var(--fs-12); color: var(--c-text-dim); }
+.cron-fields input { width: 100%; height: 38px; }
+.cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.preview-tip { margin-top: 8px; }
+/* Webhook 测试是独立工具（可测任意地址，不等于上面任务的回调地址）；
+   用一条分隔线 + 明确字段名把它和创建表单区分开，避免误当成两个重复输入框。 */
+.webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+.webhook-test label { flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px;
+  font-size: var(--fs-12); color: var(--c-text-dim); }
+.webhook-test input { width: 100%; height: 38px; }
+
+/* 任务表列宽：固定像素而非百分比——百分比在窄屏会把「命令」均摊到 37px。
+   命令为唯一弹性列；上次执行/下次预览各自容两行，操作列容三个按钮不折行。 */
+col.w-cjid { width: 118px; }
+col.w-cjexpr { width: 116px; }
 col.w-cjcmd { width: auto; }
-col.w-cjuser { width: 8%; }
-/* 上次执行列现在还要容下结果徽标（ok / exit 127 / killed：超时…），15% 会换行顶高行 */
-col.w-cjlast { width: 20%; }
-col.w-cjnext { width: 15%; }
-col.w-cjacts { width: 220px; }
-/* 上次执行结果徽标：与时间戳之间留缝，killed 长文案允许截断（完整值走 title） */
-.last-status { margin-left: 8px; max-width: 11em; overflow: hidden; text-overflow: ellipsis;
-  vertical-align: middle; }
+col.w-cjuser { width: 72px; }
+col.w-cjlast { width: 168px; }
+col.w-cjnext { width: 140px; }
+col.w-cjacts { width: 190px; }
+/* 上次执行：时间戳与结果徽标分两行，行高不再被徽标文案撑成两种 */
+.last-cell { white-space: normal; }
+.last-time { display: block; font-variant-numeric: tabular-nums; }
+.last-status { display: inline-block; margin-top: 3px; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+/* 窄屏依次收掉次要列，把宽度让给命令（比把每列都压到读不出强）。 */
+@media (max-width: 1280px) {
+  /* col 必须真正移除；只设 width:0 仍占一列，会让后面的 th/td 整体错位一列 */
+  col.w-cjuser, th.col-opt, td.col-opt { display: none; }
+}
+@media (max-width: 1100px) {
+  col.w-cjnext, th.col-next, td.col-next { display: none; }
+  .cron-fields { grid-template-columns: minmax(0, 1fr); }
+}
 /* 提交执行后的「去任务中心」链接：与提示文案同基线、主色可点 */
 .note-link { margin-left: 10px; color: var(--c-primary); font-weight: 600; text-decoration: none; }
 .note-link:hover { text-decoration: underline; }
-/* Webhook 测试行：输入与按钮底部对齐 */
-.webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.webhook-test label { flex: 1 1 280px; }
-.webhook-test input { width: 100%; }
 
 /* ───────── 任务模板 ───────── */
-/* 模板栏：在新建卡片顶部占一行，与下方 .row 视觉分隔开（它是「前置动作」，
-   不是表单字段）。控宽纪律同筛选条：先压掉全局 input/select 的 width:100%，再用 flex-basis。 */
-.tpl-bar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
-  padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--c-border); }
-.tpl-pick { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-13); color: var(--c-text-dim); }
-.tpl-pick select { width: auto; min-width: 220px; max-width: 100%; }
+/* 模板栏是「前置动作」不是表单字段：单行 inline 排布，压掉全局 select 的 100% 宽。 */
+.tpl-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px dashed var(--c-border); }
+.tpl-pick { display: flex; flex-direction: row; align-items: center; gap: 8px;
+  font-size: var(--fs-13); color: var(--c-text-dim); }
+.tpl-pick select { width: auto; min-width: 200px; max-width: 100%; height: 34px; }
 .tpl-note { font-size: var(--fs-13); color: var(--c-text-dim); flex: 1 1 200px; min-width: 0; }
 /* 「管理模板」单独靠右，换行也靠右 */
 .tpl-manage { margin-left: auto; white-space: nowrap; }

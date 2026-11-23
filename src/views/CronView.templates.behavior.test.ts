@@ -313,27 +313,24 @@ describe('任务模板 · 管理弹窗', () => {
 })
 
 
-describe('任务模板 · 开关列对齐（样式契约）', () => {
+describe('任务模板 · 开关布局（样式契约）', () => {
   /**
-   * 为什么这条必须是样式断言而不是行为断言：
+   * 开关已从字段网格移到新建卡片标题栏（.head-switch），与字段列解耦：
+   * 旧结构 `.row > .switch-row` 因 inline-flex 少一个字高、标签基线高 9px（真机实测），
+   * 且多占一整行、把卡片撑到 792px。现在标题栏里横排是预期样式，字段网格不再有开关列。
    *
-   * `.switch-row` 自带 `display:inline-flex`，字段名与开关会**横排**，于是这一列
-   * 比相邻的「字段名 + input」少一个字高（实测 53px vs 61px），标签基线高 9px。
-   * 这个错位在 vue-tsc / vite build / 所有行为单测下**全绿**，只有真机量 rect 才看得见。
-   *
-   * jsdom 不做布局，所以这里断言的是「正确实现所必需的那条规则存在且方向正确」，
-   * 且判据是**能区分实现**的：把 flex-direction 改回 row、或删掉这条规则，都会红。
+   * jsdom 不做布局，断言「正确实现所必需的规则存在且方向正确」：
+   * 把横排改成竖排、或把开关放回 .row，都会红。
    */
-  it('.row > .switch-row 必须显式声明 flex-direction: column', () => {
-    // ⚠ jsdom 下 import.meta.url 不是 file: 协议，`new URL('./x', import.meta.url)`
-    //   会抛 "The URL must be of scheme file"（本项目已有先例）。用 cwd 拼绝对路径。
+  it('新建卡片开关在标题栏横排，且字段网格里不再有 .row > .switch-row 死规则', () => {
+    // ⚠ jsdom 下 import.meta.url 不是 file: 协议，用 cwd 拼绝对路径（本项目已有先例）。
     const src = readFileSync(resolve(process.cwd(), 'src/views/CronView.vue'), 'utf8')
     const style = src.slice(src.indexOf('<style'))
-    // 锚定选择器本身（含 `.row >` 前缀），避免命中裸 `.switch-row` 那条 inline-flex
-    const idx = style.indexOf('.row > .switch-row {')
-    expect(idx, '缺少 `.row > .switch-row` 规则：开关列会退回 inline-flex 横向排布').toBeGreaterThan(-1)
+    const idx = style.indexOf('.head-switch {')
+    expect(idx, '缺少 .head-switch 规则：标题栏开关会退回默认布局').toBeGreaterThan(-1)
     const block = style.slice(idx, style.indexOf('}', idx))
-    expect(block, '该规则必须把方向改成 column，否则标签与开关仍横排').toMatch(/flex-direction:\s*column/)
-    expect(block, '该规则必须把 display 改成 flex（inline-flex 会保持横排基线）').toMatch(/display:\s*flex;/)
+    expect(block, '标题栏开关必须横排').toMatch(/display:\s*inline-flex/)
+    expect(block, '开关与文字需同基线').toMatch(/align-items:\s*center/)
+    expect(style, '字段网格不应再保留 .row > .switch-row 死规则').not.toContain('.row > .switch-row')
   })
 })
