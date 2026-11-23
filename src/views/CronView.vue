@@ -60,8 +60,41 @@ const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize,
 watch(q, () => { page.value = 1 })
 const { error, loading, run } = useAsync()
 const note = ref('')
-const form = ref({ name: '', expr: '', command: '', user: 'root' })
+/**
+ * 新建表单。字段集合对齐后端 `CreateReq`（cron.rs:143）与**编辑弹窗**——
+ * 此前只有 name/expr/user/command，于是新建出来的任务一律「默认启用、超时 30 分钟、
+ * 无 Webhook」，想改只能先建再点编辑；而编辑弹窗里超时/启用/Webhook 都是齐的。
+ * 创建态与编辑态的字段不对等，是这条流程最反直觉的地方。
+ */
+const form = ref({
+  name: '',
+  expr: '',
+  command: '',
+  user: 'root',
+  timeout_sec: 1800,
+  enabled: true,
+  webhook_url: '',
+})
 const del = ref<Job | null>(null)
+
+/**
+ * 名称格式判据——与后端 `panel_core::rules::is_valid_path_segment` 同口径
+ * （字母数字、下划线、连字符；会作为 crontab 里的标识）。
+ *
+ * 前端先拦一遍不是为了「替代后端」，而是因为只靠后端时用户要等一次 400 才知道
+ * 规则是什么。按项目约定，新增拒绝类约束必须「后端判定 + 前端提交前拦 + 文案提示」
+ * 三处同步，缺一处就会变成「只见 400 不知改哪」。
+ */
+const NAME_RE = /^[A-Za-z0-9_-]+$/
+function nameIssue(name: string): string | null {
+  const v = name.trim()
+  if (!v) return '请填写名称'
+  if (!NAME_RE.test(v)) return '名称只允许字母、数字、下划线与连字符（会作为 crontab 标识）'
+  return null
+}
+/** 表单内联错误：与页面级 error 分开，避免「填错一个字段」被当成整页失败。 */
+const formErr = ref('')
+const nameWarn = computed(() => (form.value.name ? nameIssue(form.value.name) : null))
 
 // 编辑态：PATCH /api/v1/cron/jobs/{id}
 const edit = ref<Job | null>(null)
@@ -82,11 +115,15 @@ async function load() {
 // 手动触发一次：后端把它排进任务队列并立刻返回 task_id，
 // 不在请求里等脚本跑完（脚本可能跑几分钟，HTTP 请求等不起）。
 const runBusy = ref<string | null>(null)
+/** 刚提交执行得到的任务 id：提示条里要给它一个**真链接**（连同状态徽标一起显示）。 */
+const lastTaskId = ref<number | null>(null)
 async function runNow(j: Job) {
-  runBusy.value = j.id; error.value = ''; note.value = ''
+  runBusy.value = j.id; error.value = ''; note.value = ''; lastTaskId.value = null
   try {
     const r = await api.post<{ task_id: number; created: boolean }>(API.cron.run(j.id), {})
-    note.value = `已提交执行「${j.id}」（任务 #${r.task_id}），去任务中心可看输出`
+    // note 只留纯文本部分；跳转链接放模板里（纯文本串里的"任务中心"用户点不了）
+    note.value = `已提交执行「${j.id}」（任务 #${r.task_id}）`
+    lastTaskId.value = r.task_id
     load()
   } catch (e) { error.value = errorText(e) }
   finally { runBusy.value = null }
@@ -98,16 +135,34 @@ const canManage = computed(() => auth.enabled(CAP.SCHEDULER_MANAGE, 'cron.manage
 // 创建按钮加 busy 态（审计 U8）：此前请求期间按钮可重复点击，产生重复任务
 const createBusy = ref(false)
 async function create() {
-  error.value = ''; note.value = ''
+  error.value = ''; note.value = ''; formErr.value = ''
+  // 前置校验：名称格式 + 超时范围（与编辑弹窗的约束同值，避免「新建能过、编辑被拒」）
+  const bad = nameIssue(form.value.name)
+  if (bad) { formErr.value = bad; return }
+  const to = Number(form.value.timeout_sec)
+  if (!Number.isFinite(to) || to < 1 || to > 604800) {
+    formErr.value = '超时需为 1-604800 之间的整数（秒）'
+    return
+  }
   createBusy.value = true
   try {
     await api.post(API.cron.jobs(), {
-      name: form.value.name, expr: form.value.expr,
+      name: form.value.name.trim(), expr: form.value.expr,
       command: form.value.command, user: form.value.user,
+      timeout_sec: to,
+      enabled: form.value.enabled,
+      // 空串 = 不设置（后端把空串当「未设置」）；不要传 null，YAML/JSON 语义会变
+      webhook_url: form.value.webhook_url.trim(),
     })
-    form.value = { name: '', expr: '', command: '', user: 'root' }
+    // 成功后 toast：同页的「执行」「Webhook 测试」都有反馈，创建这条主操作此前
+    // 只静默清空表单，用户无法确认到底成没成（只能靠列表里是否多了一行）。
+    toast(`已创建计划任务「${form.value.name.trim()}」`)
+    form.value = {
+      name: '', expr: '', command: '', user: 'root',
+      timeout_sec: 1800, enabled: true, webhook_url: '',
+    }
     load()
-  } catch (e) { error.value = errorText(e) }
+  } catch (e) { formErr.value = errorText(e) }
   finally { createBusy.value = false }
 }
 
@@ -116,6 +171,19 @@ async function doDelete() {
   try { await api.del(API.cron.job(del.value.id)); del.value = null; load() }
   // 失败也关框：否则确认框继续盖着、错误在遮罩后
   catch (e) { del.value = null; toast(`删除任务失败：${errorText(e)}`, 'err') }
+}
+
+/**
+ * 「上次执行结果」徽标配色。
+ *
+ * 后端 `run_outcome` 只产出三种形态：`ok` / `exit N` / `killed：…`，只有 `ok` 算成功，
+ * 其余（含 exit 0 以外的任何退出码、被信号杀掉）一律红色失败。
+ * ⚠ 不能直接借用 `taskStateBadge`：它的入参是 queued/running/… 六态，
+ * 传 `exit 1` 会落到默认的 badge-warn（黄色）——失败显示成「警告」，与任务中心的
+ * 红色失败徽标不一致。
+ */
+function lastStatusBadge(s: string): string {
+  return s === 'ok' ? 'badge-ok' : 'badge-danger'
 }
 
 function openEdit(j: Job) {
@@ -211,16 +279,36 @@ async function triggerWebhook(j: Job) {
 
     <template v-else>
       <p v-if="error" class="err" role="alert">{{ error }}<button class="btn-ghost btn-sm err-retry" type="button" @click="load">重试</button></p>
-      <p v-if="note" class="note" role="status">{{ note }}</p>
+      <!-- 提示条：提交执行后给的是**可点的**任务中心深链（带 ?task=id 直达那条输出）。
+           此前把「去任务中心可看输出」写成纯文本，用户只能自己找入口。 -->
+      <p v-if="note" class="note" role="status">
+        {{ note }}
+        <RouterLink v-if="lastTaskId != null" class="note-link"
+          :to="{ path: '/cron/tasks', query: { task: String(lastTaskId) } }">去任务中心查看输出</RouterLink>
+      </p>
 
       <section class="card" id="cron-create-card">
         <div class="sec-head"><Icon name="clock" :size="16" /> 新建任务</div>
         <div class="row">
-          <label>名称<input v-model="form.name" placeholder="backup-db" /></label>
+          <label>名称<input v-model="form.name" placeholder="backup-db"
+            aria-describedby="cron-name-hint" /></label>
           <label>表达式<input v-model="form.expr" placeholder="0 3 * * *" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
         </div>
+        <!-- 名称格式提示：只在用户真的开始输入后才出现，空表单不先甩红字 -->
+        <p v-if="nameWarn" id="cron-name-hint" class="field-err">{{ nameWarn }}</p>
         <div class="field"><label>命令</label><input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></div>
+        <div class="row">
+          <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
+          <label>Webhook URL<input v-model="form.webhook_url" placeholder="留空 = 不回调" /></label>
+          <label class="switch-row">
+            <span>启用</span>
+            <span class="switch">
+              <input type="checkbox" v-model="form.enabled" /><i />
+            </span>
+          </label>
+        </div>
+        <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
             {{ createBusy ? '创建中…' : '创建' }}</button>
@@ -229,7 +317,7 @@ async function triggerWebhook(j: Job) {
           </button>
         </div>
         <div class="field webhook-test">
-          <label>测试 Webhook URL
+          <label>单独探测 Webhook 可达性
             <input v-model="webhookUrl" placeholder="https://example.com/hook" :disabled="webhookBusy" />
           </label>
           <button class="btn-ghost" :disabled="!canManage || !webhookUrl || webhookBusy" @click="testWebhook">
@@ -281,7 +369,14 @@ async function triggerWebhook(j: Job) {
               <td class="mono">{{ j.expr }}</td>
               <td class="mono dim ellipsis" :title="j.command">{{ j.command }}</td>
               <td class="col-opt">{{ j.user }}</td>
-              <td class="nowrap">{{ fmtDateTime(j.last_run_at) }}</td>
+              <!-- 「上次执行」必须带成败：此前只显示时间，用户看到「10-20 03:00」却不知道
+                   那次成没成（`last_status` 在后端有回写、前端类型里也声明了，但从没渲染）。
+                   取值来自后端 `run_outcome`：ok / exit N / killed：… -->
+              <td class="nowrap">
+                <span>{{ fmtDateTime(j.last_run_at) }}</span>
+                <span v-if="j.last_run_at != null && j.last_status" class="badge last-status"
+                  :class="lastStatusBadge(j.last_status)" :title="j.last_status">{{ j.last_status }}</span>
+              </td>
               <td class="dim">
                 <span v-for="(t, i) in j.next.slice(0, 2)" :key="i">{{ fmtDateTime(t) }}<br /></span>
               </td>
@@ -394,9 +489,16 @@ col.w-cjid { width: 10%; }
 col.w-cjexpr { width: 12%; }
 col.w-cjcmd { width: auto; }
 col.w-cjuser { width: 8%; }
-col.w-cjlast { width: 15%; }
+/* 上次执行列现在还要容下结果徽标（ok / exit 127 / killed：超时…），15% 会换行顶高行 */
+col.w-cjlast { width: 20%; }
 col.w-cjnext { width: 15%; }
 col.w-cjacts { width: 220px; }
+/* 上次执行结果徽标：与时间戳之间留缝，killed 长文案允许截断（完整值走 title） */
+.last-status { margin-left: 8px; max-width: 11em; overflow: hidden; text-overflow: ellipsis;
+  vertical-align: middle; }
+/* 提交执行后的「去任务中心」链接：与提示文案同基线、主色可点 */
+.note-link { margin-left: 10px; color: var(--c-primary); font-weight: 600; text-decoration: none; }
+.note-link:hover { text-decoration: underline; }
 /* Webhook 测试行：输入与按钮底部对齐 */
 .webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .webhook-test label { flex: 1 1 280px; }
