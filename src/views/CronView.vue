@@ -128,7 +128,7 @@ async function runNow(j: Job) {
   } catch (e) { error.value = errorText(e) }
   finally { runBusy.value = null }
 }
-onMounted(load)
+onMounted(() => { void load(); void loadTemplates() })
 
 const canManage = computed(() => auth.enabled(CAP.SCHEDULER_MANAGE, 'cron.manage'))
 
@@ -269,6 +269,160 @@ async function triggerWebhook(j: Job) {
   } catch (e) { error.value = errorText(e) }
   finally { trigBusy.value = null }
 }
+
+// ───────────────────────── 任务模板 ─────────────────────────
+/**
+ * 模板 = 「新建任务的预置字段」，不是「任务本体」。
+ *
+ * 三条设计前提：
+ * 1. **只填充、不绑定**：选中模板后字段被灌进 form，之后随便改；模板与建出来的
+ *    任务之间没有任何关联，删模板不影响已建任务（后端无外键，见迁移 037）。
+ * 2. **不填充名称**：任务名在系统里唯一（落库即 crontab 标识），照模板名字填
+ *    第二次就会撞重名。所以命中模板后清空名称并聚焦，由用户给这一次起名。
+ * 3. **模板取不到/为空都要能手动建**：`templates` 为空时整条模板栏不渲染，
+ *    新建表单与「没有模板功能」时完全一致。
+ */
+interface Tpl {
+  id: number; name: string; description: string
+  expr: string; command: string; user: string
+  timeout_sec: number; webhook_url: string | null
+  created_at: number; updated_at: number
+}
+const templates = ref<Tpl[]>([])
+const tplPick = ref('')
+const tplNote = ref('')
+const nameInput = ref<HTMLInputElement | null>(null)
+
+async function loadTemplates() {
+  // 模板是「锦上添花」：拉取失败不该把整页打成错误态（新建任务本身还能用）。
+  // 静默降级为「没有模板」，只在控制台留痕。
+  try {
+    templates.value = await api.get<Tpl[]>(API.cron.templates())
+  } catch (e) {
+    templates.value = []
+    console.warn('[cron] 任务模板加载失败，已降级为手动创建：', errorText(e))
+  }
+}
+
+function applyTemplate() {
+  const t = templates.value.find(x => String(x.id) === tplPick.value)
+  if (!t) { tplNote.value = ''; return }
+  form.value = {
+    // 名称刻意留空：任务名唯一，沿用模板名必然撞重名
+    name: '',
+    expr: t.expr,
+    command: t.command,
+    user: t.user || 'root',
+    timeout_sec: t.timeout_sec || 1800,
+    enabled: true,
+    webhook_url: t.webhook_url ?? '',
+  }
+  formErr.value = ''
+  tplNote.value = `已按「${t.name}」填充${t.description ? `（${t.description}）` : ''}，请填写任务名称`
+  // 焦点落到名称框：填充后唯一缺的就是名字
+  requestAnimationFrame(() => nameInput.value?.focus())
+}
+
+// ── 模板管理弹窗：列出 / 新建 / 编辑 / 删除 ──
+const tplOpen = ref(false)
+const tplBox = ref<HTMLElement | null>(null)
+const tplErr = ref('')
+const tplBusy = ref(false)
+/** 正在编辑的模板 id；null = 新建态 */
+const tplEditing = ref<number | null>(null)
+const tplForm = ref({
+  name: '', description: '', expr: '', command: '',
+  user: 'root', timeout_sec: 1800, webhook_url: '',
+})
+const tplDel = ref<Tpl | null>(null)
+
+function resetTplForm() {
+  tplEditing.value = null
+  tplForm.value = {
+    name: '', description: '', expr: '', command: '',
+    user: 'root', timeout_sec: 1800, webhook_url: '',
+  }
+  tplErr.value = ''
+}
+
+function openTplManager() {
+  tplOpen.value = true
+  resetTplForm()
+  loadTemplates()
+}
+function closeTplManager() {
+  tplOpen.value = false
+  tplDel.value = null
+  resetTplForm()
+}
+const { close: closeTplModal } = useModal(() => tplOpen.value, tplBox, closeTplManager)
+
+function editTemplate(t: Tpl) {
+  tplEditing.value = t.id
+  tplForm.value = {
+    name: t.name, description: t.description, expr: t.expr, command: t.command,
+    user: t.user, timeout_sec: t.timeout_sec, webhook_url: t.webhook_url ?? '',
+  }
+  tplErr.value = ''
+}
+
+const tplNameIssue = computed(() => {
+  const v = tplForm.value.name.trim()
+  if (!v) return null
+  return v.length > 64 ? '模板名最多 64 个字符' : null
+})
+
+async function saveTemplate() {
+  tplErr.value = ''
+  // 前置校验与后端同口径：名称/表达式/命令必填，超时 1~604800
+  const name = tplForm.value.name.trim()
+  if (!name) { tplErr.value = '请填写模板名'; return }
+  if (name.length > 64) { tplErr.value = '模板名最多 64 个字符'; return }
+  if (tplForm.value.description.length > 200) { tplErr.value = '说明最多 200 个字符'; return }
+  if (!tplForm.value.expr.trim()) { tplErr.value = '请填写 cron 表达式'; return }
+  if (!tplForm.value.command.trim()) { tplErr.value = '请填写命令'; return }
+  const to = Number(tplForm.value.timeout_sec)
+  if (!Number.isFinite(to) || to < 1 || to > 604800) {
+    tplErr.value = '超时需为 1-604800 之间的整数（秒）'
+    return
+  }
+  tplBusy.value = true
+  const body = {
+    name, description: tplForm.value.description.trim(),
+    expr: tplForm.value.expr.trim(), command: tplForm.value.command,
+    user: tplForm.value.user.trim() || 'root',
+    timeout_sec: to,
+    webhook_url: tplForm.value.webhook_url.trim(),
+  }
+  try {
+    if (tplEditing.value == null) {
+      await api.post(API.cron.templates(), body)
+      toast(`已创建模板「${name}」`)
+    } else {
+      await api.put(API.cron.template(tplEditing.value), body)
+      toast(`已保存模板「${name}」`)
+    }
+    resetTplForm()
+    await loadTemplates()
+    // 选择框里的旧选项可能已被改名/删除，重置避免指向不存在的 id
+    if (tplPick.value && !templates.value.some(t => String(t.id) === tplPick.value)) tplPick.value = ''
+  } catch (e) { tplErr.value = errorText(e) }
+  finally { tplBusy.value = false }
+}
+
+async function deleteTemplate() {
+  if (!tplDel.value) return
+  const t = tplDel.value
+  tplDel.value = null
+  tplErr.value = ''
+  try {
+    await api.del(API.cron.template(t.id))
+    toast(`已删除模板「${t.name}」`)
+    if (tplEditing.value === t.id) resetTplForm()
+    if (tplPick.value === String(t.id)) { tplPick.value = ''; tplNote.value = '' }
+    await loadTemplates()
+  } catch (e) { tplErr.value = errorText(e) }
+}
 </script>
 
 <template>
@@ -289,8 +443,29 @@ async function triggerWebhook(j: Job) {
 
       <section class="card" id="cron-create-card">
         <div class="sec-head"><Icon name="clock" :size="16" /> 新建任务</div>
+        <!-- 模板入口：只做「填充」，不做「绑定」。选了模板就把字段灌进下面的表单，
+             之后怎么改都是这次新建的事，模板本身不受影响。
+             没有模板时这一条整体不渲染——手动创建路径完全不受影响。 -->
+        <div v-if="templates.length" class="tpl-bar">
+          <label class="tpl-pick">
+            <span>从模板填充</span>
+            <select v-model="tplPick" aria-label="从模板填充新建任务表单" @change="applyTemplate">
+              <option value="">不使用模板（手动填写）</option>
+              <option v-for="t in templates" :key="t.id" :value="String(t.id)">{{ t.name }}</option>
+            </select>
+          </label>
+          <span v-if="tplNote" class="tpl-note">{{ tplNote }}</span>
+          <button v-if="canManage" type="button" class="btn-ghost btn-sm tpl-manage" @click="openTplManager">
+            <Icon name="gear" :size="13" /> 管理模板
+          </button>
+        </div>
+        <!-- 一个模板都没有时，仍给管理入口（否则第一次就永远建不了模板） -->
+        <p v-else-if="canManage" class="tpl-empty">
+          还没有任务模板。<button type="button" class="link-btn" @click="openTplManager">创建一个</button>
+          ，之后新建任务可一键填充常用字段。
+        </p>
         <div class="row">
-          <label>名称<input v-model="form.name" placeholder="backup-db"
+          <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
           <label>表达式<input v-model="form.expr" placeholder="0 3 * * *" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
@@ -473,6 +648,77 @@ async function triggerWebhook(j: Job) {
         </div>
       </div>
       </Teleport>
+
+      <!-- 确认框叠在模板管理弹窗之上：必须 level2，否则同 z-index 下谁在上碰运气 -->
+      <ConfirmDialog :open="!!tplDel" danger level2 title="删除任务模板"
+        :detail="`将删除模板「${tplDel?.name}」。已用它创建过的任务不受影响（模板只是新建时的预置字段）。`"
+        @confirm="deleteTemplate" @cancel="tplDel = null" />
+
+      <!-- 模板管理弹窗。⚠ 必须留在 v-if="tplOpen" 块之外的**根层级**：
+           浮层若被塞进条件块内，编译器与单测都察觉不到，真机一个 .mask 都不出。
+           且 Teleport 到 body——祖先有 backdrop-filter 会造 fixed 包含块。 -->
+      <Teleport to="body">
+      <div v-if="tplOpen" class="mask" @click.self="closeTplModal">
+        <div ref="tplBox" class="modal wide stack" role="dialog" aria-modal="true" aria-label="任务模板管理">
+          <div class="modal-head">
+            <div class="modal-title">
+              <h3>任务模板</h3>
+              <p class="modal-lead">模板只是新建任务时的预置字段，改模板不会影响已创建的任务</p>
+            </div>
+            <button class="modal-close" type="button" aria-label="关闭" @click="closeTplModal">
+              <Icon name="close" :size="16" />
+            </button>
+          </div>
+
+          <p v-if="tplErr" class="err-bar" role="alert">{{ tplErr }}</p>
+
+          <!-- 已有模板列表 -->
+          <div v-if="templates.length" class="tpl-list">
+            <div v-for="t in templates" :key="t.id" class="tpl-item" :class="{ 'is-editing': tplEditing === t.id }">
+              <div class="tpl-item-main">
+                <div class="tpl-item-name">
+                  <span class="mono">{{ t.name }}</span>
+                  <span v-if="t.description" class="tpl-item-desc">{{ t.description }}</span>
+                </div>
+                <div class="tpl-item-sub mono">{{ t.expr }} · {{ t.user }} · {{ t.timeout_sec }}s</div>
+              </div>
+              <button type="button" class="btn-ghost btn-sm" @click="editTemplate(t)">编辑</button>
+              <button type="button" class="btn-ghost btn-sm danger-ghost" @click="tplDel = t">删除</button>
+            </div>
+          </div>
+          <p v-else class="tip">还没有模板。填下表建第一个即可。</p>
+
+          <div class="tpl-form">
+            <div class="sec-head">{{ tplEditing == null ? '新建模板' : '编辑模板' }}</div>
+            <div class="row">
+              <label>模板名<input v-model="tplForm.name" :disabled="tplBusy" placeholder="每日备份" aria-describedby="tpl-name-hint" /></label>
+              <label>表达式<input v-model="tplForm.expr" :disabled="tplBusy" placeholder="0 3 * * *" /></label>
+              <label>执行用户<input v-model="tplForm.user" :disabled="tplBusy" placeholder="root" /></label>
+            </div>
+            <p v-if="tplNameIssue" id="tpl-name-hint" class="field-err">{{ tplNameIssue }}</p>
+            <div class="field">
+              <label>说明<input v-model="tplForm.description" :disabled="tplBusy" placeholder="可选，例如：每天凌晨备份数据库" /></label>
+            </div>
+            <div class="field">
+              <label>命令<input v-model="tplForm.command" :disabled="tplBusy" placeholder="/usr/local/bin/backup.sh" /></label>
+            </div>
+            <div class="row">
+              <label>超时(秒)<input v-model.number="tplForm.timeout_sec" type="number" min="1" max="604800" :disabled="tplBusy" /></label>
+              <label>Webhook URL<input v-model="tplForm.webhook_url" :disabled="tplBusy" placeholder="留空 = 不回调" /></label>
+            </div>
+            <div class="modal-actions">
+              <button v-if="tplEditing != null" type="button" class="btn-ghost" :disabled="tplBusy" @click="resetTplForm">改为新建</button>
+              <span class="spacer" />
+              <button type="button" class="btn-primary"
+                :disabled="tplBusy || !tplForm.name.trim() || !tplForm.expr.trim() || !tplForm.command.trim()"
+                @click="saveTemplate">
+                {{ tplBusy ? '保存中…' : (tplEditing == null ? '创建模板' : '保存修改') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </Teleport>
     </template>
   </div>
 </template>
@@ -481,6 +727,15 @@ async function triggerWebhook(j: Job) {
 /* 弹窗取公共 .mask / .modal.wide.stack / .modal-head / .modal-close / .modal-actions；
    本页不再保留 .m-head / .m-desc / .m-acts 私有结构式样（与全站弹窗漂移） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
+/* `.row` 内的开关列：必须与同行「字段名 + 控件」两段式对齐。
+   .switch-row 自己的 inline-flex 会把字段名与开关**横向**排布，于是这一列少一行
+   字高（实测 53px vs 相邻 61px），标签基线比邻列高 9px、开关与输入框中心错位。
+   覆盖成 column 即可复刻全局 `.row > label` 的结构，且不影响编辑弹窗里那个
+   独立横排的 .switch-row（它不在 .row 里）。 */
+.row > .switch-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  font-size: var(--fs-12); }
+/* 字段名下的开关：与相邻 input 同高（38px）水平居中，中心 Y 与邻列对齐 */
+.row > .switch-row > .switch { height: 38px; display: inline-flex; align-items: center; }
 /* 实心主色底 + 白滑块、42×24：旧版 --c-primary-soft 浅色底开销/关都偏浅橙、对比弱。
    与 ServiceDetailView（开机自启）、SitesView（自动续期）保持同一套开关外观。 */
 /* 任务表列宽（站点表范式）：命令为唯一弹性列；操作列 220px 容下
@@ -503,4 +758,35 @@ col.w-cjacts { width: 220px; }
 .webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .webhook-test label { flex: 1 1 280px; }
 .webhook-test input { width: 100%; }
+
+/* ───────── 任务模板 ───────── */
+/* 模板栏：在新建卡片顶部占一行，与下方 .row 视觉分隔开（它是「前置动作」，
+   不是表单字段）。控宽纪律同筛选条：先压掉全局 input/select 的 width:100%，再用 flex-basis。 */
+.tpl-bar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--c-border); }
+.tpl-pick { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-13); color: var(--c-text-dim); }
+.tpl-pick select { width: auto; min-width: 220px; max-width: 100%; }
+.tpl-note { font-size: var(--fs-13); color: var(--c-text-dim); flex: 1 1 200px; min-width: 0; }
+/* 「管理模板」单独靠右，换行也靠右 */
+.tpl-manage { margin-left: auto; white-space: nowrap; }
+.tpl-empty { margin: 0 0 10px; font-size: var(--fs-13); color: var(--c-text-dim); }
+.tpl-empty .link-btn { padding: 0; border: 0; background: none; color: var(--c-primary);
+  font: inherit; font-weight: 600; cursor: pointer; }
+.tpl-empty .link-btn:hover { text-decoration: underline; }
+
+/* 模板列表：一行一个，名称与说明同排（说明可截断），副行放表达式/用户/超时 */
+.tpl-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.tpl-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--c-border); border-radius: var(--r-sm, 8px); }
+.tpl-item.is-editing { border-color: var(--c-primary); background: var(--c-primary-soft); }
+.tpl-item-main { flex: 1 1 auto; min-width: 0; }
+.tpl-item-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tpl-item-name .mono { font-weight: 600; }
+.tpl-item-desc { font-size: var(--fs-13); color: var(--c-text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-item-sub { font-size: var(--fs-13); color: var(--c-text-dim); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.danger-ghost:hover:not(:disabled) { color: var(--c-danger); border-color: var(--c-danger); }
+/* 表单与列表之间留出呼吸空间 */
+.tpl-form { margin-top: 12px; }
 </style>

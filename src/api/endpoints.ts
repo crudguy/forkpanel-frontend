@@ -371,6 +371,9 @@ export const API = {
     // Webhook：测试任意 URL 可达性 / 触发某任务已配置的 webhook（发一条 test 事件）
     webhookTest: () => '/api/v1/cron/webhook/test',
     webhookTrigger: (id: string) => `/api/v1/cron/jobs/${enc(id)}/webhook`,
+    // 任务模板：新建任务的脚手架（与 cron_jobs 无外键，删模板不影响已建任务）
+    templates: () => '/api/v1/cron/templates',
+    template: (id: number) => `/api/v1/cron/templates/${id}`,
   },
 
   logs: {

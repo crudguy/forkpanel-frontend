@@ -60,7 +60,9 @@ describe('两个视图的空态 CTA 真的可用', () => {
   it('CronView：暂无任务时 CTA 在 DOM 里，点击把焦点带回新建表单', async () => {
     m = await mountView({
       component: CronView,
-      routes: { [API.cron.jobs()]: [] },
+      // CronView 挂载时会顺带拉一次模板列表（新建卡片的「从模板填充」）：
+      // 不登记就是未登记请求，assertClean 会红。
+      routes: { [API.cron.jobs()]: [], [API.cron.templates()]: [] },
       perms: PERMS,
     })
     expect(m.host.textContent).toContain('暂无计划任务')

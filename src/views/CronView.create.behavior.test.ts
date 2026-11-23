@@ -67,7 +67,7 @@ describe('计划任务 · 新建表单字段完整性', () => {
       component: CronView,
       perms: PERMS,
       caps: capsAllOk(),
-      routes: { [API.cron.jobs()]: [] },
+      routes: { [API.cron.jobs()]: [], [API.cron.templates()]: [] },
     })
     await fillForm(m)
 
@@ -95,7 +95,7 @@ describe('计划任务 · 新建表单字段完整性', () => {
       component: CronView,
       perms: PERMS,
       caps: capsAllOk(),
-      routes: { [API.cron.jobs()]: [] },
+      routes: { [API.cron.jobs()]: [], [API.cron.templates()]: [] },
     })
     await fillForm(m)
     // 覆盖成非法名称
@@ -126,6 +126,7 @@ describe('计划任务 · 列表信息组织', () => {
           job({ id: 'a-ok', last_run_at: 1700000000, last_status: 'ok' }),
           job({ id: 'b-fail', last_run_at: 1700000001, last_status: 'exit 127' }),
         ],
+        [API.cron.templates()]: [],
       },
     })
     const badges = Array.from(m.host.querySelectorAll('.last-status')).map((e) => ({
@@ -145,7 +146,7 @@ describe('计划任务 · 列表信息组织', () => {
       component: CronView,
       perms: PERMS,
       caps: capsAllOk(),
-      routes: { [API.cron.jobs()]: [job({ last_run_at: null, last_status: null })] },
+      routes: { [API.cron.jobs()]: [job({ last_run_at: null, last_status: null })], [API.cron.templates()]: [] },
     })
     expect(m.host.querySelectorAll('.last-status').length).toBe(0)
     m.fake.assertClean(); m.cleanup()
@@ -161,6 +162,7 @@ describe('计划任务 · 执行后跳转任务中心是可点的链接', () => 
       routes: {
         [API.cron.jobs()]: [job()],
         [API.cron.run('backup-db')]: { task_id: 42, created: true },
+        [API.cron.templates()]: [],
       },
     })
     // ⚠ 必须精确比对「执行」：`includes('执行')` 会先命中「预览执行时刻」，
