@@ -734,7 +734,7 @@ async function deleteTemplate() {
 .cron-create .sec-head { margin-bottom: 12px; }
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
-.cron-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 10px 14px; }
+.cron-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 988px; gap: 10px 14px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
