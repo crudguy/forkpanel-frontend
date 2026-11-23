@@ -734,7 +734,7 @@ async function deleteTemplate() {
 .cron-create .sec-head { margin-bottom: 12px; }
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
-.cron-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.cron-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 10px 14px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
@@ -744,7 +744,7 @@ async function deleteTemplate() {
    用一条分隔线 + 明确字段名把它和创建表单区分开，避免误当成两个重复输入框。 */
 .webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
   margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border); }
-.webhook-test label { flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px;
+.webhook-test label { flex: 0 1 320px; display: flex; flex-direction: column; gap: 4px;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .webhook-test input { width: 100%; height: 38px; }
 
@@ -769,7 +769,7 @@ col.w-cjacts { width: 190px; }
 }
 @media (max-width: 1100px) {
   col.w-cjnext, th.col-next, td.col-next { display: none; }
-  .cron-fields { grid-template-columns: minmax(0, 1fr); }
+  .cron-fields { grid-template-columns: minmax(0, 480px); }
 }
 /* 提交执行后的「去任务中心」链接：与提示文案同基线、主色可点 */
 .note-link { margin-left: 10px; color: var(--c-primary); font-weight: 600; text-decoration: none; }
