@@ -53,6 +53,13 @@ function shouldBlockDateKey(e: KeyboardEvent): boolean {
 }
 function onDateKeydown(e: KeyboardEvent) { if (shouldBlockDateKey(e)) e.preventDefault() }
 
+/** 点框任意位置（含中文占位覆盖层、原生日历图标区）都弹出原生日期选择卡。
+ *  showPicker 是浏览器标准 API，须在用户手势里调用；图标区点击浏览器本就会弹，
+ *  再调一次是幂等的。不支持/无手势时抛错，吞掉即可——原生图标仍可照常弹。 */
+function openDatePicker(e: MouseEvent) {
+  try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch { /* 浏览器不支持时退回原生图标 */ }
+}
+
 /** 动作候选（datalist 建议）：从已加载的真实记录里累积去重——比手写词表诚实，
  *  也不会随后端新增动作而过时（评估 C5：自由文本无法枚举） */
 const knownActions = ref<string[]>([])
@@ -263,13 +270,13 @@ onMounted(load)
         </select>
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
         <label class="dt">起始<span class="dt-field">
-          <input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限；点右侧日历图标选择）"
-            @keydown="onDateKeydown" aria-label="起始时间，请点右侧日历图标选择" />
+          <input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限；点框选择）"
+            @keydown="onDateKeydown" @click="openDatePicker" aria-label="起始时间，点框任意位置选择" />
           <span v-if="!f.since" class="dt-ph">年/月/日</span>
         </span></label>
         <label class="dt">截止<span class="dt-field">
-          <input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限；点右侧日历图标选择）"
-            @keydown="onDateKeydown" aria-label="截止时间，请点右侧日历图标选择" />
+          <input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限；点框选择）"
+            @keydown="onDateKeydown" @click="openDatePicker" aria-label="截止时间，点框任意位置选择" />
           <span v-if="!f.until" class="dt-ph">年/月/日</span>
         </span></label>
         <span class="quick">

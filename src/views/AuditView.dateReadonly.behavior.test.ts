@@ -50,6 +50,18 @@ describe('审计页日期框只读化', () => {
     }
   })
 
+  it('点框任意位置都尝试弹出日期选择卡（showPicker 接线），而非只能点日历图标', async () => {
+    const m = await mountAudit()
+    const inputs = m.host.querySelectorAll<HTMLInputElement>('input[type=datetime-local]')
+    // jsdom 无原生 showPicker，挂 spy 断言 @click 真的调用了它
+    let calls = 0
+    for (const input of inputs) input.showPicker = () => { calls++ }
+    inputs[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(calls).toBe(1)
+    inputs[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(calls).toBe(2)
+  })
+
   it('空值显示中文占位，有值后占位消失（只能由日历图标/快捷区间填入）', async () => {
     const m = await mountAudit()
     const labels = [...m.host.querySelectorAll<HTMLElement>('label.dt')]
