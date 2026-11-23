@@ -43,11 +43,15 @@ const onError = (e: unknown) => { error.value = errorText(e) }
 // ── 筛选条件（空值不下传，等价于"不过滤"）──
 const f = ref({ actor: '', action: '', result: '', q: '', since: '', until: '' })
 
-/** 日期框键盘编辑态：仅当用户真正敲键才撤掉中文占位覆盖层，露出原生分段输入。
- *  只用 focus 判断不行——点一下框聚焦就露原生 yyyy/mm/日（用户反馈的问题）。
- *  datetime-local 的占位符由浏览器 locale 画，placeholder/color/lang 都改不动，
- *  只能靠覆盖层物理盖住；点击（含日历图标）穿透覆盖层仍可正常选日期。 */
-const dtTyping = ref({ since: false, until: false })
+/** 日期框只读化：拦掉所有会改值的键，但放行导航/无障碍键（Tab、Shift+Tab、Enter、Esc、
+ *  以及 Ctrl/Meta/Alt 组合），否则键盘用户会被困在框里。方向键在 datetime-local 里会改值，需拦。
+ *  抽成纯函数便于单测钉住放行集合；接线只有模板 @keydown 一处。 */
+function shouldBlockDateKey(e: KeyboardEvent): boolean {
+  if (e.key === 'Tab' || e.key === 'Enter' || e.key === 'Escape') return false
+  if (e.ctrlKey || e.metaKey || e.altKey) return false
+  return true
+}
+function onDateKeydown(e: KeyboardEvent) { if (shouldBlockDateKey(e)) e.preventDefault() }
 
 /** 动作候选（datalist 建议）：从已加载的真实记录里累积去重——比手写词表诚实，
  *  也不会随后端新增动作而过时（评估 C5：自由文本无法枚举） */
@@ -259,14 +263,14 @@ onMounted(load)
         </select>
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
         <label class="dt">起始<span class="dt-field">
-          <input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限）"
-            @keydown="dtTyping.since = true" @blur="dtTyping.since = false" />
-          <span v-if="!f.since && !dtTyping.since" class="dt-ph">年/月/日</span>
+          <input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限；点右侧日历图标选择）"
+            @keydown="onDateKeydown" aria-label="起始时间，请点右侧日历图标选择" />
+          <span v-if="!f.since" class="dt-ph">年/月/日</span>
         </span></label>
         <label class="dt">截止<span class="dt-field">
-          <input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限）"
-            @keydown="dtTyping.until = true" @blur="dtTyping.until = false" />
-          <span v-if="!f.until && !dtTyping.until" class="dt-ph">年/月/日</span>
+          <input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限；点右侧日历图标选择）"
+            @keydown="onDateKeydown" aria-label="截止时间，请点右侧日历图标选择" />
+          <span v-if="!f.until" class="dt-ph">年/月/日</span>
         </span></label>
         <span class="quick">
           <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('today')">今天</button>
@@ -375,8 +379,8 @@ onMounted(load)
 .filters .dt-field input[type=datetime-local] { width: 100%; }
 /* 占位覆盖层：datetime-local 原生占位符由浏览器 locale 画（本机 zh-CN 是「年/月/日 --:--」，
    部分环境画成 yyyy/mm/日），placeholder 属性 / color / lang 均改不动它。空值时用
-   pointer-events:none 的层物理盖住，统一显示中文「年/月/日」；点击穿过它仍可唤起原生日历。
-   仅 dtTyping（用户真敲键）时撤层露原生分段输入——单纯 focus 不撤，否则一点就露 yyyy/mm/日。 */
+   pointer-events:none 的层物理盖住，统一显示中文「年/月/日」；点击穿过它仍可点右侧日历图标选日期。
+   键盘编辑已由 onDateKeydown 拦掉（放行 Tab/Enter/Esc 保证可导航），故无需聚焦/敲键状态机——值非空才撤层。 */
 .filters .dt-field .dt-ph {
   position: absolute; left: 1px; top: 1px; bottom: 1px; right: 30px;
   display: flex; align-items: center; padding: 0 10px;
