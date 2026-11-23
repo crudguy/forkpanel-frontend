@@ -43,10 +43,11 @@ const onError = (e: unknown) => { error.value = errorText(e) }
 // ── 筛选条件（空值不下传，等价于"不过滤"）──
 const f = ref({ actor: '', action: '', result: '', q: '', since: '', until: '' })
 
-/** 日期框聚焦态：聚焦时露出原生分段输入，松开后空值才显示中文占位覆盖层。
- *  datetime-local 的占位符由浏览器 locale 画（部分版本 yyyy/mm/日），
- *  placeholder 属性/color/lang 都改不动，只能用覆盖层物理盖住。 */
-const dtFocus = ref({ since: false, until: false })
+/** 日期框键盘编辑态：仅当用户真正敲键才撤掉中文占位覆盖层，露出原生分段输入。
+ *  只用 focus 判断不行——点一下框聚焦就露原生 yyyy/mm/日（用户反馈的问题）。
+ *  datetime-local 的占位符由浏览器 locale 画，placeholder/color/lang 都改不动，
+ *  只能靠覆盖层物理盖住；点击（含日历图标）穿透覆盖层仍可正常选日期。 */
+const dtTyping = ref({ since: false, until: false })
 
 /** 动作候选（datalist 建议）：从已加载的真实记录里累积去重——比手写词表诚实，
  *  也不会随后端新增动作而过时（评估 C5：自由文本无法枚举） */
@@ -259,13 +260,13 @@ onMounted(load)
         <input v-model="f.q" placeholder="关键词（目标 / 详情）" @keyup.enter="applyFilters" />
         <label class="dt">起始<span class="dt-field">
           <input v-model="f.since" type="datetime-local" title="起始时间（留空 = 不限）"
-            @focus="dtFocus.since = true" @blur="dtFocus.since = false" />
-          <span v-if="!f.since && !dtFocus.since" class="dt-ph">年/月/日</span>
+            @keydown="dtTyping.since = true" @blur="dtTyping.since = false" />
+          <span v-if="!f.since && !dtTyping.since" class="dt-ph">年/月/日</span>
         </span></label>
         <label class="dt">截止<span class="dt-field">
           <input v-model="f.until" type="datetime-local" title="截止时间（留空 = 不限）"
-            @focus="dtFocus.until = true" @blur="dtFocus.until = false" />
-          <span v-if="!f.until && !dtFocus.until" class="dt-ph">年/月/日</span>
+            @keydown="dtTyping.until = true" @blur="dtTyping.until = false" />
+          <span v-if="!f.until && !dtTyping.until" class="dt-ph">年/月/日</span>
         </span></label>
         <span class="quick">
           <button class="btn-ghost btn-sm" :disabled="loading" @click="quickRange('today')">今天</button>
@@ -373,9 +374,9 @@ onMounted(load)
 .filters .dt-field { position: relative; display: inline-flex; flex: 0 1 170px; }
 .filters .dt-field input[type=datetime-local] { width: 100%; }
 /* 占位覆盖层：datetime-local 原生占位符由浏览器 locale 画（本机 zh-CN 是「年/月/日 --:--」，
-   部分环境画成 yyyy/mm/日），placeholder 属性 / color / lang 均改不动它。空值且未聚焦时
-   用 pointer-events:none 的层物理盖住，统一显示中文「年/月/日」；点击穿过它仍可唤起原生日历。
-   聚焦时撤掉覆盖层，露出原生分段输入，避免遮住用户正在敲的年/月/日。 */
+   部分环境画成 yyyy/mm/日），placeholder 属性 / color / lang 均改不动它。空值时用
+   pointer-events:none 的层物理盖住，统一显示中文「年/月/日」；点击穿过它仍可唤起原生日历。
+   仅 dtTyping（用户真敲键）时撤层露原生分段输入——单纯 focus 不撤，否则一点就露 yyyy/mm/日。 */
 .filters .dt-field .dt-ph {
   position: absolute; left: 1px; top: 1px; bottom: 1px; right: 30px;
   display: flex; align-items: center; padding: 0 10px;
