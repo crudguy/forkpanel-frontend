@@ -345,8 +345,14 @@ onMounted(load)
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
 .filters input, .filters select {
   background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
-  border-radius: var(--radius-sm); padding: 7px 10px; font-size: var(--fs-13); font-family: inherit; }
-.filters input { flex: 1 1 150px; min-width: 130px; }
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: var(--fs-13); font-family: inherit;
+  /* main.css 的 input,select{width:100%} 会把筛选框拉满整行；flex 条里须显式收回。
+     box-sizing 让 padding/border 计入 flex-basis，宽度即所见。 */
+  width: auto; box-sizing: border-box; }
+/* 不再让文本框 grow 吸收整行余量（实测 1920 下各被撑到 792px、下拉到 1594px）。
+   固定基准、窄屏可收缩后换行；datetime 仍由下方 .dt 规则单独定 170px。 */
+.filters input { flex: 0 1 180px; min-width: 140px; }
+.filters select { flex: 0 1 140px; min-width: 120px; }
 /* 时间列：显式「起始 / 截止」标签——datetime-local 空值无法用 placeholder 说明（评估 C5）。
    nowrap 必要：flex 收缩会把两个字断成两行（实测「起/始」竖排）。 */
 .filters .dt { display: flex; align-items: center; gap: 6px; flex: 0 1 auto;
