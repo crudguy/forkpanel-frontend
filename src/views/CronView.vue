@@ -246,14 +246,14 @@ async function saveEdit() {
 
 
 // ── Webhook 测试 / 触发（cron.webhook/test + cron/jobs/{id}/webhook）──
-const webhookUrl = ref('')
 const webhookBusy = ref(false)
 async function testWebhook() {
-  if (!webhookUrl.value) return
+  const url = form.value.webhook_url.trim()
+  if (!url) return
   webhookBusy.value = true; error.value = ''; note.value = ''
   try {
-    await api.post(API.cron.webhookTest(), { url: webhookUrl.value })
-    note.value = `Webhook「${webhookUrl.value}」探测成功`
+    await api.post(API.cron.webhookTest(), { url })
+    note.value = `Webhook「${url}」探测成功`
     toast('Webhook 探测成功')
   } catch (e) { error.value = errorText(e) }
   finally { webhookBusy.value = false }
@@ -478,7 +478,16 @@ async function deleteTemplate() {
           <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
           <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
-          <label>Webhook URL<input v-model="form.webhook_url" placeholder="留空 = 不回调" /></label>
+          <label>Webhook URL
+            <span class="webhook-url-field">
+              <input v-model="form.webhook_url" placeholder="留空 = 不回调" :disabled="webhookBusy" />
+              <button class="btn-ghost webhook-test-btn" type="button" title="测试连通性"
+                :disabled="!canManage || !form.webhook_url.trim() || webhookBusy"
+                @click.stop="testWebhook">
+                {{ webhookBusy ? '测试中…' : '测试' }}
+              </button>
+            </span>
+          </label>
           <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
           <div class="cron-actions">
             <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
@@ -495,12 +504,6 @@ async function deleteTemplate() {
         <p v-if="previewExpr === form.expr" class="tip preview-tip">
           下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
         </p>
-        <div class="webhook-test">
-          <label>Webhook 测试地址<input v-model="webhookUrl" placeholder="https://example.com/hook" :disabled="webhookBusy" /></label>
-          <button class="btn-ghost" :disabled="!canManage || !webhookUrl || webhookBusy" @click="testWebhook">
-            <Icon name="bell" :size="14" /> {{ webhookBusy ? '测试中…' : '测试连通性' }}
-          </button>
-        </div>
       </section>
 
       <!-- 动作收进卡片顶栏（同 ProcessesView 范式）：去掉只放一个「刷新」的页面级
@@ -722,7 +725,7 @@ async function deleteTemplate() {
 /* 编辑弹窗里的独立开关（不在 .row 内，保持横排） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 
-/* 新建任务卡片：字段收进两列网格、开关移到标题栏、测试区单独成行。
+/* 新建任务卡片：字段收进单排网格、开关移到标题栏、Webhook 测试按钮内嵌在 URL 字段。
    此前卡片实测 792px，把列表推到 y=934（首屏完全看不到任务）；目标压到 450px 内。 */
 .cron-create { margin-bottom: 12px; }
 .cron-create .sec-head { margin-bottom: 12px; }
@@ -739,13 +742,12 @@ async function deleteTemplate() {
 .cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   justify-self: end; margin-top: 0; }
 .preview-tip { margin-top: 8px; }
-/* Webhook 测试是独立工具（可测任意地址，不等于上面任务的回调地址）；
-   用一条分隔线 + 明确字段名把它和创建表单区分开，避免误当成两个重复输入框。 */
-.webhook-test { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
-  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border); }
-.webhook-test label { flex: 0 1 320px; display: flex; flex-direction: column; gap: 4px;
-  font-size: var(--fs-12); color: var(--c-text-dim); }
-.webhook-test input { width: 100%; height: 38px; }
+/* Webhook 测试按钮直接附着在上方 Webhook URL 输入框右侧，测的就是本任务要回调的地址；
+   不再单独占一行、也不再让用户填第二遍地址。输入框吃掉剩余宽度，按钮与输入框同高。 */
+.webhook-url-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.webhook-url-field input { flex: 1 1 auto; width: auto; min-width: 0; height: 38px; }
+.webhook-test-btn { flex: 0 0 auto; height: 38px; padding: 0 8px; white-space: nowrap;
+  font-size: var(--fs-12); }
 
 /* 任务表列宽：固定像素而非百分比——百分比在窄屏会把「命令」均摊到 37px。
    命令为唯一弹性列；上次执行/下次预览各自容两行，操作列容三个按钮不折行。 */

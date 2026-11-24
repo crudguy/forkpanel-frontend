@@ -181,3 +181,43 @@ describe('计划任务 · 执行后跳转任务中心是可点的链接', () => 
     m.fake.assertClean(); m.cleanup()
   })
 })
+
+describe('计划任务 · Webhook 测试入口', () => {
+  it('「测试」按钮直接探测表单里的 Webhook URL，不再另填测试地址', async () => {
+    const m = await mountView({
+      component: CronView,
+      perms: PERMS,
+      caps: capsAllOk(),
+      routes: {
+        [API.cron.jobs()]: [],
+        [API.cron.templates()]: [],
+        [API.cron.webhookTest()]: { ok: true },
+      },
+    })
+
+    // 独立测试区已移除，按钮内嵌在 URL 字段右侧
+    expect(m.host.querySelector('.webhook-test')).toBeNull()
+    const input = inputByLabel(m.host, 'Webhook URL')
+    expect(input, '找不到 Webhook URL 输入框').toBeTruthy()
+    const btn = Array.from(m.host.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === '测试',
+    ) as HTMLButtonElement
+    expect(btn, '找不到 Webhook URL 旁的「测试」按钮').toBeTruthy()
+    expect(btn.disabled, 'URL 为空时按钮应禁用').toBe(true)
+
+    input!.value = 'https://example.com/hook'
+    input!.dispatchEvent(new Event('input'))
+    await m.flush()
+    expect(btn.disabled, '填了 URL 后按钮应可用').toBe(false)
+
+    btn.click()
+    await m.flush()
+
+    const call = m.fake.calls.find(
+      (c) => c.method === 'POST' && c.url.includes('/api/v1/cron/webhook/test'),
+    )
+    expect(call, '没有发出 Webhook 探测请求').toBeTruthy()
+    expect((call!.body as { url: string }).url).toBe('https://example.com/hook')
+    m.fake.assertClean(); m.cleanup()
+  })
+})
