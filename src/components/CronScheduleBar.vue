@@ -59,7 +59,7 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
   <div class="cron-sched">
     <span class="cron-sched-title">执行频率</span>
     <div class="cron-sched-row">
-      <select :value="view.mode" :disabled="disabled" aria-label="快捷设置执行频率"
+      <select :value="view.mode" :class="{ 'mode-every': view.mode === 'every' }" :disabled="disabled" aria-label="快捷设置执行频率"
         @change="setMode(($event.target as HTMLSelectElement).value)">
         <option value="every">每 N 分钟</option>
         <option value="hourly">每小时</option>
@@ -112,8 +112,10 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cron-sched select, .cron-sched input { height: 38px; }
 .cron-sched select { width: 100px; min-width: 0; }
-/* 模式下拉要完整显示「每 N 分钟」+箭头，单独加宽；执行星期/日期等下拉仍用 100px。 */
-.cron-sched-row > select:first-child { width: 124px; }
+/* 只有「每 N 分钟」需要 124px 显示全文案；其余模式 88px 足够，
+   省下的宽度让 1366/1280 档末列的下拉+时间框仍在同一行。 */
+.cron-sched-row > select:first-child { width: 88px; }
+.cron-sched-row > select.mode-every { width: 124px; }
 .cron-sched input[type='number'] { width: 96px; }
 /* 自定义模式表达式框与下拉同排，宽度对齐「每月」档三控件总宽；文字用 font-size:0 保留给测试定位。 */
 .cron-sched .cron-expr-label { flex: 0 1 200px; min-width: 0; font-size: 0; }
