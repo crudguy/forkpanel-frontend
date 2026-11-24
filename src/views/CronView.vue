@@ -737,7 +737,7 @@ async function deleteTemplate() {
   gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
-.cron-fields input { width: 100%; height: 38px; }
+.cron-fields input { width: 100%; height: 42px; }
 /* 执行频率作为末列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
 .cron-fields > .cron-sched { margin-bottom: 0; }
 /* 创建/预览按钮固定落到字段下一行并左对齐。 */
@@ -747,8 +747,8 @@ async function deleteTemplate() {
 /* Webhook 测试按钮直接附着在上方 Webhook URL 输入框右侧，测的就是本任务要回调的地址；
    不再单独占一行、也不再让用户填第二遍地址。输入框吃掉剩余宽度，按钮与输入框同高。 */
 .webhook-url-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.webhook-url-field input { flex: 1 1 auto; width: auto; min-width: 0; height: 38px; }
-.webhook-test-btn { flex: 0 0 auto; height: 38px; padding: 0 8px; white-space: nowrap;
+.webhook-url-field input { flex: 1 1 auto; width: auto; min-width: 0; height: 42px; }
+.webhook-test-btn { flex: 0 0 auto; height: 42px; padding: 0 8px; white-space: nowrap;
   font-size: var(--fs-12); }
 
 /* 任务表列宽：固定像素而非百分比——百分比在窄屏会把「命令」均摊到 37px。

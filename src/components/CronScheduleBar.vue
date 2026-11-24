@@ -110,11 +110,12 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; margin-bottom: 10px; }
 .cron-sched-title { font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-sched-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.cron-sched select, .cron-sched input { height: 34px; }
+.cron-sched select, .cron-sched input { height: 38px; }
 .cron-sched select { width: 100px; min-width: 0; }
-.cron-sched input[type='number'] { width: 72px; }
-.cron-sched .cron-expr-label { flex: 1 1 100%; min-width: 0; font-size: 0; }
+.cron-sched input[type='number'] { width: 96px; }
+/* 自定义模式表达式框与下拉同排，窄一点避免独占整行；文字用 font-size:0 保留给测试定位。 */
+.cron-sched .cron-expr-label { flex: 0 1 160px; min-width: 0; font-size: 0; }
 .cron-sched .cron-expr-input { width: 100%; font-size: var(--fs-13); }
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
-.cron-sched input[type='time'] { width: 120px; color-scheme: dark; }
+.cron-sched input[type='time'] { width: 100px; color-scheme: dark; }
 </style>
