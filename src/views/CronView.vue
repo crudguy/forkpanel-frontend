@@ -472,9 +472,8 @@ async function deleteTemplate() {
           ，之后新建任务可一键填充常用字段。
         </p>
 
-        <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
-
         <div class="cron-fields">
+          <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
           <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
           <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
@@ -733,6 +732,8 @@ async function deleteTemplate() {
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
+/* 快捷设置并入网格：通栏占满一行；组件自带 margin 由网格 gap 取代。 */
+.cron-fields > .cron-sched { grid-column: 1 / -1; margin-bottom: 0; }
 .cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .preview-tip { margin-top: 8px; }
 /* Webhook 测试是独立工具（可测任意地址，不等于上面任务的回调地址）；
