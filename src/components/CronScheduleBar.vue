@@ -112,7 +112,9 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cron-sched select, .cron-sched input { height: 38px; }
 .cron-sched select { width: 100px; min-width: 0; }
-.cron-sched input[type='number'] { width: 120px; }
+/* 模式下拉要完整显示「每 N 分钟」+箭头，单独加宽；执行星期/日期等下拉仍用 100px。 */
+.cron-sched-row > select:first-child { width: 124px; }
+.cron-sched input[type='number'] { width: 96px; }
 /* 自定义模式表达式框与下拉同排，宽度对齐「每月」档三控件总宽；文字用 font-size:0 保留给测试定位。 */
 .cron-sched .cron-expr-label { flex: 0 1 200px; min-width: 0; font-size: 0; }
 .cron-sched .cron-expr-input { width: 100%; font-size: var(--fs-13); }
