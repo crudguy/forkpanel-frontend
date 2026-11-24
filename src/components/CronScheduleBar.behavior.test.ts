@@ -43,7 +43,7 @@ describe('CronScheduleBar · 快捷设置联动', () => {
     const m = await mountBar('10 3 * * *')
     expect(select(m, '快捷设置执行频率').value).toBe('daily')
     expect(input(m, '执行时间').value).toBe('03:10')
-    expect(m.host.textContent).toContain('每天 03:10 执行一次')
+    expect(m.host.querySelector('input[aria-label="间隔分钟数"]')).toBeNull()
     expect(m.emitted).toHaveLength(0)
     m.cleanup()
   })
@@ -57,7 +57,7 @@ describe('CronScheduleBar · 快捷设置联动', () => {
     setInput(input(m, '间隔分钟数'), '10')
     await m.flush()
     expect(last(m.emitted)).toBe('*/10 * * * *')
-    expect(m.host.textContent).toContain('每 10 分钟执行一次')
+    expect(input(m, '间隔分钟数').value).toBe('10')
     m.cleanup()
   })
 
@@ -72,7 +72,7 @@ describe('CronScheduleBar · 快捷设置联动', () => {
     setInput(input(m, '执行时间'), '04:20')
     await m.flush()
     expect(last(m.emitted)).toBe('20 4 * * 0')
-    expect(m.host.textContent).toContain('每周日 04:20 执行')
+    expect(select(m, '执行星期').value).toBe('0')
     m.cleanup()
   })
 
@@ -82,7 +82,7 @@ describe('CronScheduleBar · 快捷设置联动', () => {
     await m.flush()
     expect(select(m, '快捷设置执行频率').value).toBe('weekly')
     expect(input(m, '执行时间').value).toBe('04:20')
-    expect(m.host.textContent).toContain('每周一 04:20 执行')
+    expect(select(m, '执行星期').value).toBe('1')
     m.cleanup()
   })
 
@@ -104,7 +104,7 @@ describe('CronScheduleBar · 快捷设置联动', () => {
   it('手写复杂表达式归自定义且原样回显，不被快捷设置改写', async () => {
     const m = await mountBar('0 3 * * 1,5')
     expect(select(m, '快捷设置执行频率').value).toBe('custom')
-    expect(m.host.textContent).toContain('按自定义规则执行：0 3 * * 1,5')
+    expect(input(m, '表达式').value).toBe('0 3 * * 1,5')
     expect(m.host.querySelector('input[aria-label="执行时间"]')).toBeNull()
     m.cleanup()
   })

@@ -4,11 +4,11 @@
  *
  * 对外仍只是一个标准 cron 字符串（v-model），后端契约零改动；
  * 对内把每 N 分钟 / 每小时 / 每天 / 每周 / 每月收敛成看得懂的控件。
- * 手写的复杂表达式由 describeCron 原样回显，不改写、不吞掉。
+ * 手写的复杂表达式原样回显，不改写、不吞掉。
  */
 import { ref, watch } from 'vue'
 import {
-  parseCronSchedule, cronScheduleToCron, describeCron, type CronScheduleView, type CronMode,
+  parseCronSchedule, cronScheduleToCron, type CronScheduleView, type CronMode,
 } from '@/composables/cronSchedule'
 
 const props = defineProps<{
@@ -103,7 +103,6 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
         </select>
       </label>
     </div>
-    <span class="cron-sched-desc">{{ describeCron(modelValue) }}</span>
   </div>
 </template>
 
@@ -118,6 +117,4 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched .cron-expr-input { width: 100%; font-size: var(--fs-13); }
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
 .cron-sched input[type='time'] { width: 84px; color-scheme: dark; }
-.cron-sched-desc { font-size: var(--fs-12); color: var(--c-text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
