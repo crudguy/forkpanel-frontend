@@ -10,7 +10,6 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
 import { API } from '@/api/endpoints'
 import { useAsync } from '@/composables/useAsync'
-import { focusCreateCard } from '@/composables/emptyStateCta'
 import { useAuthStore } from '@/stores/auth'
 import { CAP, cronKindLabel, fmtDateTime } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
@@ -583,14 +582,7 @@ async function deleteTemplate() {
           @update:page="gotoPage" @update:size="changeSize" />
       </div>
       <EmptyState v-if="!loading && !jobs.length" title="暂无计划任务"
-        hint="用上方的「新建任务」卡片添加第一个定时任务，例如每天凌晨备份数据库。">
-        <template #cta>
-          <button class="btn-primary" type="button" :disabled="!canManage"
-            @click="focusCreateCard('cron-create-card')">
-            <Icon name="plus" :size="13" /> 去新建任务
-          </button>
-        </template>
-      </EmptyState>
+        hint="用上方的「新建任务」卡片添加第一个定时任务，例如每天凌晨备份数据库。" />
 
       <ConfirmDialog :open="!!del" danger title="删除计划任务"
         :detail="`将删除 ${del?.id}，该任务的后续执行会一并取消。`"

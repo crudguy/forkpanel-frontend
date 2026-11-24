@@ -56,8 +56,8 @@ describe('focusCreateCard 纯 DOM 行为', () => {
   })
 })
 
-describe('两个视图的空态 CTA 真的可用', () => {
-  it('CronView：暂无任务时 CTA 在 DOM 里，点击把焦点带回新建表单', async () => {
+describe('空态 CTA：CronView 去重，其余视图仍可用', () => {
+  it('CronView：空态不再给「去新建任务」按钮（与常驻新建卡片重复）', async () => {
     m = await mountView({
       component: CronView,
       // CronView 挂载时会顺带拉一次模板列表（新建卡片的「从模板填充」）：
@@ -66,14 +66,8 @@ describe('两个视图的空态 CTA 真的可用', () => {
       perms: PERMS,
     })
     expect(m.host.textContent).toContain('暂无计划任务')
-    expect(m.host.textContent).toContain('新建任务')
-    const btn = ctaButton(m, '去新建任务')
-    expect(btn.disabled, '有 cron.manage 权限时不该置灰').toBe(false)
-    btn.click()
-    await m.flush()
-    const first = m.host.querySelector<HTMLInputElement>('#cron-create-card input')
-    expect(first, '新建卡片必须带 id，CTA 才能定位').not.toBeNull()
-    expect(document.activeElement).toBe(first)
+    expect(m.host.querySelector('.empty .cta'), '空态不应再渲染 CTA 容器：新建卡片本来就常驻在上方').toBeNull()
+    expect(m.host.textContent, '「去新建任务」按钮不该再出现').not.toContain('去新建任务')
   })
 
   it('DatabasesView：暂无连接时 CTA 在 DOM 里，点击把焦点带回新增卡', async () => {
