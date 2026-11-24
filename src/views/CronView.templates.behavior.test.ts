@@ -315,22 +315,32 @@ describe('任务模板 · 管理弹窗', () => {
 
 describe('任务模板 · 开关布局（样式契约）', () => {
   /**
-   * 开关已从字段网格移到新建卡片标题栏（.head-switch），与字段列解耦：
-   * 旧结构 `.row > .switch-row` 因 inline-flex 少一个字高、标签基线高 9px（真机实测），
-   * 且多占一整行、把卡片撑到 792px。现在标题栏里横排是预期样式，字段网格不再有开关列。
+   * 开关在新建卡片字段网格里（.enable-field），与其他列同构：字段名在上、控件在下。
+   * 横排会少一行字段名，且开关中心比同行输入框高 11px（真机 CDP 实测）。
    *
    * jsdom 不做布局，断言「正确实现所必需的规则存在且方向正确」：
-   * 把横排改成竖排、或把开关放回 .row，都会红。
+   * 改回横排、给 .switch 本身加高、或把开关挪回标题栏，都会红。
    */
-  it('新建卡片开关在标题栏横排，且字段网格里不再有 .row > .switch-row 死规则', () => {
+  it('新建卡片开关在字段网格内两段式，标题栏不再有开关', () => {
     // ⚠ jsdom 下 import.meta.url 不是 file: 协议，用 cwd 拼绝对路径（本项目已有先例）。
     const src = readFileSync(resolve(process.cwd(), 'src/views/CronView.vue'), 'utf8')
     const style = src.slice(src.indexOf('<style'))
-    const idx = style.indexOf('.head-switch {')
-    expect(idx, '缺少 .head-switch 规则：标题栏开关会退回默认布局').toBeGreaterThan(-1)
+    const template = src.slice(0, src.indexOf('<style'))
+
+    // 模板：开关是网格里的一个 label，字段名与控件分两段
+    expect(template, '开关必须在字段网格里').toMatch(/<label class="enable-field">/)
+    expect(template, '需包一层 wrap 承载 42px 高，不能给 .switch 本身加高')
+      .toMatch(/<span class="switch-wrap"><span class="switch">/)
+
+    // 样式：wrap 与同行输入框等高且垂直居中；.switch 仍是 42x24 胶囊
+    const idx = style.indexOf('.cron-fields .enable-field .switch-wrap {')
+    expect(idx, '缺少 .switch-wrap 规则').toBeGreaterThan(-1)
     const block = style.slice(idx, style.indexOf('}', idx))
-    expect(block, '标题栏开关必须横排').toMatch(/display:\s*inline-flex/)
-    expect(block, '开关与文字需同基线').toMatch(/align-items:\s*center/)
+    expect(block, 'wrap 需与同行输入框等高 42px').toMatch(/height:\s*42px/)
+    expect(block, '开关需在 wrap 内垂直居中').toMatch(/align-items:\s*center/)
+    expect(style, '不应再有标题栏开关规则').not.toContain('.head-switch')
+    expect(style, '横排会少一行字段名，不得把 .enable-field 改回 row')
+      .not.toMatch(/\.cron-fields \.enable-field \{[^}]*flex-direction:\s*row/)
     expect(style, '字段网格不应再保留 .row > .switch-row 死规则').not.toContain('.row > .switch-row')
   })
 })

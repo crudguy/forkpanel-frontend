@@ -445,10 +445,6 @@ async function deleteTemplate() {
         <div class="sec-head">
           <Icon name="clock" :size="16" /> 新建任务
           <span class="spacer" />
-          <label class="head-switch">
-            <span class="switch"><input type="checkbox" v-model="form.enabled" /><i /></span>
-            启用
-          </label>
         </div>
         <!-- 模板入口：只做「填充」，不做「绑定」。选了模板就把字段灌进下面的表单，
              之后怎么改都是这次新建的事，模板本身不受影响。
@@ -487,6 +483,10 @@ async function deleteTemplate() {
                 {{ webhookBusy ? '测试中…' : '测试' }}
               </button>
             </span>
+          </label>
+          <label class="enable-field">
+            <span>启用</span>
+            <span class="switch-wrap"><span class="switch"><input type="checkbox" v-model="form.enabled" /><i /></span></span>
           </label>
           <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
           <div class="cron-actions">
@@ -725,19 +725,21 @@ async function deleteTemplate() {
 /* 编辑弹窗里的独立开关（不在 .row 内，保持横排） */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--c-text-dim); cursor: pointer; user-select: none; }
 
-/* 新建任务卡片：字段收进单排网格、开关移到标题栏、Webhook 测试按钮内嵌在 URL 字段。
+/* 新建任务卡片：字段收进单排网格、启用开关作为表单一列、Webhook 测试按钮内嵌在 URL 字段。
    此前卡片实测 792px，把列表推到 y=934（首屏完全看不到任务）；目标压到 450px 内。 */
 .cron-create { margin-bottom: 12px; }
 .cron-create .sec-head { margin-bottom: 12px; }
-.head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
-  color: var(--c-text-dim); cursor: pointer; user-select: none; }
-/* 六个字段铺满卡片整行：宽列用 fr 吸收余量，执行用户/超时固定窄宽不随屏幕膨胀。 */
+/* 七列铺满卡片整行：启用开关占固定窄列，执行频率末列权重最高（保证 1440 档下拉+时间单行）。 */
 .cron-fields { display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(220px, 2.1fr) 96px 96px minmax(180px, 1.35fr) minmax(226px, 1.55fr);
+  grid-template-columns: minmax(120px, 0.9fr) minmax(220px, 1.9fr) 96px 96px minmax(180px, 1.3fr) 76px minmax(226px, 2.05fr);
   gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
-.cron-fields input { width: 100%; height: 42px; }
+/* 开关是 checkbox，不能套用普通输入框的 100% 宽 / 42px 高。 */
+.cron-fields input:not([type='checkbox']) { width: 100%; height: 42px; }
+/* 启用开关与其他字段同构：字段名在上、控件在下（两段式），不横排。
+   横排会少一行字段名，且开关中心比同行输入框中心高约 11px。 */
+.cron-fields .enable-field .switch-wrap { height: 42px; display: inline-flex; align-items: center; }
 /* 执行频率作为末列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
 .cron-fields > .cron-sched { margin-bottom: 0; }
 /* 创建/预览按钮固定落到字段下一行并左对齐。 */
@@ -767,8 +769,8 @@ col.w-cjacts { width: 190px; }
   text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 /* 窄屏依次收掉次要列，把宽度让给命令（比把每列都压到读不出强）。 */
 @media (max-width: 1360px) {
-  /* 中等宽度：六列继续铺满整行，短字段再收紧一档 */
-  .cron-fields { grid-template-columns: minmax(110px, 0.9fr) minmax(180px, 2.1fr) 88px 88px minmax(160px, 1.35fr) minmax(160px, 1.25fr); }
+  /* 中等宽度：七列继续铺满整行，短字段再收紧一档 */
+  .cron-fields { grid-template-columns: minmax(110px, 0.9fr) minmax(180px, 1.9fr) 88px 88px minmax(160px, 1.3fr) 72px minmax(160px, 2.05fr); }
 }
 @media (max-width: 1280px) {
   /* col 必须真正移除；只设 width:0 仍占一列，会让后面的 th/td 整体错位一列 */
