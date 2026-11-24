@@ -149,6 +149,15 @@ const taskPoll = usePolling({
   },
 })
 
+/**
+ * 输出区文案：后端对「路径还在但文件已被清理」会降级成 200 + note，
+ * 这时要把「输出不可用」讲清楚，不能显示误导性的「(无输出)」或错误堆栈。
+ */
+function formatTaskOutput(r: { lines?: string[]; note?: string }): string {
+  if (r.note && r.note !== '无输出文件') return `⚠ ${r.note}`
+  return r.lines?.length ? r.lines.join('\n') : '(无输出)'
+}
+
 async function open(t: Task) {
   sel.value = { ...t }; outLoading.value = true; output.value = ''
   syncUrl(t.id)
@@ -157,8 +166,8 @@ async function open(t: Task) {
   catch { /* 列表行兜底 */ }
   // 输出：后端返回 {id, lines[]}（不是 output 字符串——旧代码在这里永远显示"无输出"）
   try {
-    const r = await api.get<{ id: number; lines: string[] }>(API.tasks.output(t.id))
-    output.value = r.lines?.length ? r.lines.join('\n') : '(无输出)'
+    const r = await api.get<{ id: number; lines: string[]; note?: string }>(API.tasks.output(t.id))
+    output.value = formatTaskOutput(r)
   } catch (e) { output.value = errorText(e) }
   finally { outLoading.value = false }
   taskPoll.restart()
