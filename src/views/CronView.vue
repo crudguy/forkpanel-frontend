@@ -733,7 +733,7 @@ async function deleteTemplate() {
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
 /* 六个字段铺满卡片整行：宽列用 fr 吸收余量，执行用户/超时固定窄宽不随屏幕膨胀。 */
 .cron-fields { display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(220px, 2.1fr) 96px 96px minmax(180px, 1.35fr) minmax(180px, 1.25fr);
+  grid-template-columns: minmax(120px, 0.9fr) minmax(220px, 2.1fr) 96px 96px minmax(180px, 1.35fr) minmax(226px, 1.55fr);
   gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }

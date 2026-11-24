@@ -116,5 +116,5 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched .cron-expr-label { flex: 1 1 100%; min-width: 0; font-size: 0; }
 .cron-sched .cron-expr-input { width: 100%; font-size: var(--fs-13); }
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
-.cron-sched input[type='time'] { width: 84px; color-scheme: dark; }
+.cron-sched input[type='time'] { width: 120px; color-scheme: dark; }
 </style>
