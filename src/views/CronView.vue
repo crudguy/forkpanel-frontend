@@ -728,7 +728,9 @@ async function deleteTemplate() {
 .cron-create .sec-head { margin-bottom: 12px; }
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
-.cron-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 988px; gap: 10px 14px; }
+.cron-fields { display: grid;
+  grid-template-columns: 170px minmax(180px, 1fr) 84px 92px 240px;
+  max-width: 988px; gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
@@ -762,6 +764,9 @@ col.w-cjacts { width: 190px; }
 @media (max-width: 1280px) {
   /* col 必须真正移除；只设 width:0 仍占一列，会让后面的 th/td 整体错位一列 */
   col.w-cjuser, th.col-opt, td.col-opt { display: none; }
+}
+@media (max-width: 1240px) {
+  .cron-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 1100px) {
   col.w-cjnext, th.col-next, td.col-next { display: none; }
