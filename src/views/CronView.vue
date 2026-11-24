@@ -731,16 +731,18 @@ async function deleteTemplate() {
 .cron-create .sec-head { margin-bottom: 12px; }
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
+/* 六个字段铺满卡片整行：宽列用 fr 吸收余量，执行用户/超时固定窄宽不随屏幕膨胀。 */
 .cron-fields { display: grid;
-  grid-template-columns: minmax(100px, 0.7fr) minmax(180px, 1.7fr) minmax(64px, 0.45fr) minmax(64px, 0.5fr) minmax(170px, 1.2fr) minmax(160px, 1.1fr);
-  max-width: 1124px; gap: 10px 12px; }
+  grid-template-columns: minmax(120px, 0.9fr) minmax(220px, 2.1fr) 96px 96px minmax(180px, 1.35fr) minmax(180px, 1.25fr);
+  gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
 /* 执行频率作为末列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
 .cron-fields > .cron-sched { margin-bottom: 0; }
+/* 创建/预览按钮固定落到字段下一行并左对齐。 */
 .cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  grid-column: 1 / -1; justify-self: end; margin-top: 0; }
+  grid-column: 1 / -1; justify-self: start; margin-top: 0; }
 .preview-tip { margin-top: 8px; }
 /* Webhook 测试按钮直接附着在上方 Webhook URL 输入框右侧，测的就是本任务要回调的地址；
    不再单独占一行、也不再让用户填第二遍地址。输入框吃掉剩余宽度，按钮与输入框同高。 */
@@ -765,9 +767,8 @@ col.w-cjacts { width: 190px; }
   text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 /* 窄屏依次收掉次要列，把宽度让给命令（比把每列都压到读不出强）。 */
 @media (max-width: 1360px) {
-  /* 中等宽度：六列按比例继续铺满整行，按钮已在基础档落到下一行 */
-  .cron-fields { grid-template-columns: minmax(90px, 0.7fr) minmax(150px, 1.7fr) minmax(60px, 0.45fr) minmax(60px, 0.5fr) minmax(150px, 1.2fr) minmax(140px, 1.1fr);
-    max-width: 988px; }
+  /* 中等宽度：六列继续铺满整行，短字段再收紧一档 */
+  .cron-fields { grid-template-columns: minmax(110px, 0.9fr) minmax(180px, 2.1fr) 88px 88px minmax(160px, 1.35fr) minmax(160px, 1.25fr); }
 }
 @media (max-width: 1280px) {
   /* col 必须真正移除；只设 width:0 仍占一列，会让后面的 th/td 整体错位一列 */
