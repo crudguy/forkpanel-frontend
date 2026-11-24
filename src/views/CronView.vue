@@ -729,13 +729,13 @@ async function deleteTemplate() {
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
 .cron-fields { display: grid;
-  grid-template-columns: 170px minmax(180px, 1fr) 84px 92px 240px;
+  grid-template-columns: 200px 130px minmax(180px, 1fr) 72px 80px 200px;
   max-width: 988px; gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
-/* 快捷设置并入网格：通栏占满一行；组件自带 margin 由网格 gap 取代。 */
-.cron-fields > .cron-sched { grid-column: 1 / -1; margin-bottom: 0; }
+/* 快捷设置作为首列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
+.cron-fields > .cron-sched { margin-bottom: 0; }
 .cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .preview-tip { margin-top: 8px; }
 /* Webhook 测试是独立工具（可测任意地址，不等于上面任务的回调地址）；

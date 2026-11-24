@@ -57,7 +57,8 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 
 <template>
   <div class="cron-sched">
-    <label>快捷设置
+    <span class="cron-sched-title">执行频率</span>
+    <div class="cron-sched-row">
       <select :value="view.mode" :disabled="disabled" aria-label="快捷设置执行频率"
         @change="setMode(($event.target as HTMLSelectElement).value)">
         <option value="every">每 N 分钟</option>
@@ -67,56 +68,56 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
         <option value="monthly">每月</option>
         <option value="custom">自定义</option>
       </select>
-    </label>
 
-    <label v-show="view.mode === 'custom'">表达式
-      <input class="cron-expr-input" :value="view.custom || modelValue" :disabled="disabled"
-        aria-label="表达式" placeholder="0 3 * * *" @input="setCustom" />
-    </label>
+      <label v-show="view.mode === 'custom'" class="cron-expr-label">表达式
+        <input class="cron-expr-input" :value="view.custom || modelValue" :disabled="disabled"
+          aria-label="表达式" placeholder="0 3 * * *" @input="setCustom" />
+      </label>
 
-    <label v-if="view.mode === 'every'">间隔(分钟)
-      <input type="number" min="1" max="59" :value="view.every" :disabled="disabled" aria-label="间隔分钟数"
-        @input="setEvery" />
-    </label>
+      <label v-if="view.mode === 'every'">
+        <input type="number" min="1" max="59" placeholder="分钟" :value="view.every" :disabled="disabled" aria-label="间隔分钟数"
+          @input="setEvery" />
+      </label>
 
-    <label v-if="timed()">时间
-      <input type="time" :value="view.time" :disabled="disabled" aria-label="执行时间" @input="setTime" />
-    </label>
+      <label v-if="timed()">
+        <input type="time" :value="view.time" :disabled="disabled" aria-label="执行时间" @input="setTime" />
+      </label>
 
-    <label v-if="view.mode === 'weekly'">星期
-      <select :value="view.weekday" :disabled="disabled" aria-label="执行星期"
-        @change="setWeekday(($event.target as HTMLSelectElement).value)">
-        <option value="1">周一</option>
-        <option value="2">周二</option>
-        <option value="3">周三</option>
-        <option value="4">周四</option>
-        <option value="5">周五</option>
-        <option value="6">周六</option>
-        <option value="0">周日</option>
-      </select>
-    </label>
+      <label v-if="view.mode === 'weekly'">
+        <select :value="view.weekday" :disabled="disabled" aria-label="执行星期"
+          @change="setWeekday(($event.target as HTMLSelectElement).value)">
+          <option value="1">周一</option>
+          <option value="2">周二</option>
+          <option value="3">周三</option>
+          <option value="4">周四</option>
+          <option value="5">周五</option>
+          <option value="6">周六</option>
+          <option value="0">周日</option>
+        </select>
+      </label>
 
-    <label v-if="view.mode === 'monthly'">日期
-      <select :value="view.monthday" :disabled="disabled" aria-label="执行日期"
-        @change="setMonthday(($event.target as HTMLSelectElement).value)">
-        <option v-for="d in 31" :key="d" :value="String(d)">{{ d }} 日</option>
-      </select>
-    </label>
-
+      <label v-if="view.mode === 'monthly'">
+        <select :value="view.monthday" :disabled="disabled" aria-label="执行日期"
+          @change="setMonthday(($event.target as HTMLSelectElement).value)">
+          <option v-for="d in 31" :key="d" :value="String(d)">{{ d }} 日</option>
+        </select>
+      </label>
+    </div>
     <span class="cron-sched-desc">{{ describeCron(modelValue) }}</span>
   </div>
 </template>
 
 <style scoped>
-.cron-sched { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.cron-sched label { display: flex; flex-direction: row; align-items: center; gap: 6px;
-  font-size: var(--fs-12); color: var(--c-text-dim); }
+.cron-sched { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; margin-bottom: 10px; }
+.cron-sched-title { font-size: var(--fs-12); color: var(--c-text-dim); }
+.cron-sched-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cron-sched select, .cron-sched input { height: 34px; }
-.cron-sched select { width: auto; min-width: 118px; }
-.cron-sched input[type='number'] { width: 88px; }
-.cron-sched .cron-expr-input { width: 240px; }
+.cron-sched select { width: 100px; min-width: 0; }
+.cron-sched input[type='number'] { width: 72px; }
+.cron-sched .cron-expr-label { flex: 1 1 100%; min-width: 0; font-size: 0; }
+.cron-sched .cron-expr-input { width: 100%; font-size: var(--fs-13); }
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
-.cron-sched input[type='time'] { width: 120px; color-scheme: dark; }
-.cron-sched-desc { align-self: center; font-size: var(--fs-12); color: var(--c-text-dim);
+.cron-sched input[type='time'] { width: 84px; color-scheme: dark; }
+.cron-sched-desc { font-size: var(--fs-12); color: var(--c-text-dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
