@@ -2,9 +2,9 @@
 /**
  * 计划任务（用户 cron，不是面板内部任务）。
  *
- * 刻意说清一件事：表达式是**平台本地语义**。Linux 是 cron 五段，
- * Windows/macOS 完全不同。所以 UI 只负责收集字符串，校验交给后端，
- * 并把后端返回的校验错误原样展示 —— 前端绝不自作聪明地"帮你解析"。
+ * 表达式是**平台本地语义**：Linux 是 cron 五段。UI 的快捷设置只把常用周期
+ * 编成规范字符串，且只识别自己生成的那几种格式；用户手写的复杂表达式
+ * 原样保留，不做通用解析。校验仍由后端负责，错误原样展示。
  */
 import { ref, onMounted, computed, watch } from 'vue'
 import { api, errorText } from '@/api/client'
@@ -17,6 +17,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import CronScheduleBar from '@/components/CronScheduleBar.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import { useModal } from '@/composables/useModal'
@@ -472,6 +473,8 @@ async function deleteTemplate() {
           ，之后新建任务可一键填充常用字段。
         </p>
 
+        <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
+
         <div class="cron-fields">
           <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
@@ -610,6 +613,8 @@ async function deleteTemplate() {
 
           <p v-if="editError" class="err-bar" role="alert">{{ editError }}</p>
 
+          <CronScheduleBar v-model="editForm.expr" :disabled="editBusy" />
+
           <div class="row">
             <label>表达式<input v-model="editForm.expr" placeholder="0 3 * * *" :disabled="editBusy" /></label>
             <label>执行用户<input v-model="editForm.user" placeholder="root" :disabled="editBusy" /></label>
@@ -688,6 +693,7 @@ async function deleteTemplate() {
 
           <div class="tpl-form">
             <div class="sec-head">{{ tplEditing == null ? '新建模板' : '编辑模板' }}</div>
+            <CronScheduleBar v-model="tplForm.expr" :disabled="tplBusy" />
             <div class="row">
               <label>模板名<input v-model="tplForm.name" :disabled="tplBusy" placeholder="每日备份" aria-describedby="tpl-name-hint" /></label>
               <label>表达式<input v-model="tplForm.expr" :disabled="tplBusy" placeholder="0 3 * * *" /></label>
