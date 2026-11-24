@@ -473,25 +473,25 @@ async function deleteTemplate() {
         </p>
 
         <div class="cron-fields">
-          <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
           <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
           <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
           <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
           <label>Webhook URL<input v-model="form.webhook_url" placeholder="留空 = 不回调" /></label>
+          <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
+          <div class="cron-actions">
+            <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
+              {{ createBusy ? '创建中…' : '创建' }}</button>
+            <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
+              {{ previewBusy ? '计算中…' : '预览执行时刻' }}
+            </button>
+          </div>
         </div>
         <!-- 名称格式提示：只在用户真的开始输入后才出现，空表单不先甩红字 -->
         <p v-if="nameWarn" id="cron-name-hint" class="field-err">{{ nameWarn }}</p>
         <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
 
-        <div class="cron-actions">
-          <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
-            {{ createBusy ? '创建中…' : '创建' }}</button>
-          <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
-            {{ previewBusy ? '计算中…' : '预览执行时刻' }}
-          </button>
-        </div>
         <p v-if="previewExpr === form.expr" class="tip preview-tip">
           下次执行（本地时间）：<span class="mono">{{ previewNext.length ? previewNext.map(fmtDateTime).join('　') : '一年内无命中（检查日期字段）' }}</span>
         </p>
@@ -729,14 +729,15 @@ async function deleteTemplate() {
 .head-switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13);
   color: var(--c-text-dim); cursor: pointer; user-select: none; }
 .cron-fields { display: grid;
-  grid-template-columns: 200px 130px minmax(180px, 1fr) 72px 80px 200px;
-  max-width: 988px; gap: 10px 12px; }
+  grid-template-columns: 120px minmax(140px, 1fr) 68px 76px 190px 190px auto;
+  max-width: 1124px; gap: 10px 12px; }
 .cron-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0;
   font-size: var(--fs-12); color: var(--c-text-dim); }
 .cron-fields input { width: 100%; height: 38px; }
-/* 快捷设置作为首列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
+/* 执行频率作为末列与其余字段同排；组件自带 margin 由网格 gap 取代。 */
 .cron-fields > .cron-sched { margin-bottom: 0; }
-.cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.cron-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  justify-self: end; margin-top: 0; }
 .preview-tip { margin-top: 8px; }
 /* Webhook 测试是独立工具（可测任意地址，不等于上面任务的回调地址）；
    用一条分隔线 + 明确字段名把它和创建表单区分开，避免误当成两个重复输入框。 */
@@ -761,6 +762,12 @@ col.w-cjacts { width: 190px; }
 .last-status { display: inline-block; margin-top: 3px; max-width: 100%; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 /* 窄屏依次收掉次要列，把宽度让给命令（比把每列都压到读不出强）。 */
+@media (max-width: 1360px) {
+  /* 中等宽度放不下第七列按钮：按钮换行到下方一行，仍保持靠右 */
+  .cron-fields { grid-template-columns: 200px minmax(160px, 1fr) 72px 80px 200px 200px;
+    max-width: 988px; }
+  .cron-fields > .cron-actions { grid-column: 1 / -1; }
+}
 @media (max-width: 1280px) {
   /* col 必须真正移除；只设 width:0 仍占一列，会让后面的 th/td 整体错位一列 */
   col.w-cjuser, th.col-opt, td.col-opt { display: none; }
