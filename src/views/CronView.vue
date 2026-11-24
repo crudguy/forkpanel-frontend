@@ -477,7 +477,6 @@ async function deleteTemplate() {
         <div class="cron-fields">
           <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
             aria-describedby="cron-name-hint" /></label>
-          <label>表达式<input v-model="form.expr" placeholder="0 3 * * *" /></label>
           <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
           <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
@@ -608,7 +607,6 @@ async function deleteTemplate() {
           <CronScheduleBar v-model="editForm.expr" :disabled="editBusy" />
 
           <div class="row">
-            <label>表达式<input v-model="editForm.expr" placeholder="0 3 * * *" :disabled="editBusy" /></label>
             <label>执行用户<input v-model="editForm.user" placeholder="root" :disabled="editBusy" /></label>
             <label>超时(秒)<input v-model.number="editForm.timeout_sec" type="number" min="1" max="604800" :disabled="editBusy" /></label>
           </div>
@@ -688,7 +686,6 @@ async function deleteTemplate() {
             <CronScheduleBar v-model="tplForm.expr" :disabled="tplBusy" />
             <div class="row">
               <label>模板名<input v-model="tplForm.name" :disabled="tplBusy" placeholder="每日备份" aria-describedby="tpl-name-hint" /></label>
-              <label>表达式<input v-model="tplForm.expr" :disabled="tplBusy" placeholder="0 3 * * *" /></label>
               <label>执行用户<input v-model="tplForm.user" :disabled="tplBusy" placeholder="root" /></label>
             </div>
             <p v-if="tplNameIssue" id="tpl-name-hint" class="field-err">{{ tplNameIssue }}</p>

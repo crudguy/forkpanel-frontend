@@ -42,6 +42,15 @@ function setEvery(e: Event) { view.value = { ...view.value, every: Number((e.tar
 function setTime(e: Event) { view.value = { ...view.value, time: (e.target as HTMLInputElement).value }; push() }
 function setWeekday(v: string) { view.value = { ...view.value, weekday: v }; push() }
 function setMonthday(v: string) { view.value = { ...view.value, monthday: v }; push() }
+/**
+ * 直接发出用户敲入的原值：走 cronScheduleToCron 会把中间态 trim 掉，
+ * 输入到一半的空格会被吞。watch 的比较口径与该值一致，不会引发回声重置。
+ */
+function setCustom(e: Event) {
+  const v = (e.target as HTMLInputElement).value
+  view.value = { ...view.value, mode: 'custom', custom: v }
+  emit('update:modelValue', v)
+}
 
 const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' || view.value.mode === 'monthly'
 </script>
@@ -58,6 +67,11 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
         <option value="monthly">每月</option>
         <option value="custom">自定义</option>
       </select>
+    </label>
+
+    <label v-show="view.mode === 'custom'">表达式
+      <input class="cron-expr-input" :value="view.custom || modelValue" :disabled="disabled"
+        aria-label="表达式" placeholder="0 3 * * *" @input="setCustom" />
     </label>
 
     <label v-if="view.mode === 'every'">间隔(分钟)
@@ -100,6 +114,7 @@ const timed = () => view.value.mode === 'daily' || view.value.mode === 'weekly' 
 .cron-sched select, .cron-sched input { height: 34px; }
 .cron-sched select { width: auto; min-width: 118px; }
 .cron-sched input[type='number'] { width: 88px; }
+.cron-sched .cron-expr-input { width: 240px; }
 /* 原生时间控件在深色主题下需显式声明配色，否则弹出的时间面板是白底黑字。 */
 .cron-sched input[type='time'] { width: 120px; color-scheme: dark; }
 .cron-sched-desc { align-self: center; font-size: var(--fs-12); color: var(--c-text-dim);

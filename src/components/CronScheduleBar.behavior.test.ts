@@ -86,6 +86,21 @@ describe('CronScheduleBar · 快捷设置联动', () => {
     m.cleanup()
   })
 
+  it('表达式输入框只在自定义模式可见，手填后自动切到自定义', async () => {
+    const m = await mountBar('0 3 * * *')
+    const expr = input(m, '表达式')
+    expect(expr, '输入框须始终在 DOM 中，由 v-show 控制可见性').toBeTruthy()
+    // v-show 写在 label 上；jsdom 的 getComputedStyle 不会把祖先 display:none 继承给 input
+    expect((expr.closest('label') as HTMLElement).style.display).toBe('none')
+
+    setInput(expr, '5 6 * * *')
+    await m.flush()
+    expect(select(m, '快捷设置执行频率').value).toBe('custom')
+    expect((input(m, '表达式').closest('label') as HTMLElement).style.display).not.toBe('none')
+    expect(last(m.emitted)).toBe('5 6 * * *')
+    m.cleanup()
+  })
+
   it('手写复杂表达式归自定义且原样回显，不被快捷设置改写', async () => {
     const m = await mountBar('0 3 * * 1,5')
     expect(select(m, '快捷设置执行频率').value).toBe('custom')
