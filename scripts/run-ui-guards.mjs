@@ -88,6 +88,10 @@ export const UI_GUARDS = [
   'check-syntax-highlight.mjs',
   // 2026-11-13 B1 收尾：scoped 圆角野值（单值裸 px）回潮防护，含例外登记与扫描活性自检
   'check-radius-wildcard.mjs',
+  // 2026-11-25 用户表「操作」列 sticky 右钉：编辑弹窗 Teleport 全屏遮罩会盖住
+  // 列表中段让「编辑/删除」看不见（用户观感"用户会隐藏"）；须 sticky right:0 +
+  // z-index ≥3（否则被 z-index:2 的吸顶表头压住），col 列宽不得带 position
+  'check-users-acts-sticky.mjs',
   // 2026-11-16 曲线平滑：9 条数据曲线必须全部走统一平滑实现，禁止退回 polyline 直连
   'check-smooth-charts.mjs',
   // 2026-11-16 新建应用弹窗：分区声明 / 模板 section / 事件接线 / 错误映射必须一致

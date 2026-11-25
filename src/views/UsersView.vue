@@ -56,8 +56,8 @@ const userSortCols: SortColumn<UserOut>[] = [
   { key: 'last_login_at', dir: 'desc', compare: (a, b) => (a.last_login_at ?? 0) - (b.last_login_at ?? 0) },
 ]
 /**
- * 列表本地检索：用户名 / 角色（含中文显示名）/ 权限范围都是表里可见的字段。
- * 权限范围常是路径，搜「/srv」能快速找出被限制在该目录的用户。
+ * 列表本地检索：用户名 / 角色（含中文显示名）/ 目录白名单都是表里可见的字段。
+ * 目录白名单常是路径，搜「/srv」能快速找出被限制在该目录的用户。
  */
 const q = ref('')
 const filteredUsers = computed(() => users.value.filter(u => matchFields(q.value, [
@@ -261,11 +261,11 @@ onMounted(() => { if (canManage.value) load() })
           <thead><tr>
             <SortTh label="用户名" :active="isSorted('username')" :dir="sortDir" @sort="toggleSort('username')" />
             <SortTh label="角色" :active="isSorted('role')" :dir="sortDir" @sort="toggleSort('role')" />
-            <SortTh label="权限范围" :active="isSorted('allowed_roots')" :dir="sortDir" @sort="toggleSort('allowed_roots')" />
+            <SortTh label="目录白名单" :active="isSorted('allowed_roots')" :dir="sortDir" @sort="toggleSort('allowed_roots')" />
             <SortTh label="状态" :active="isSorted('disabled')" :dir="sortDir" @sort="toggleSort('disabled')" />
             <SortTh label="MFA" :active="isSorted('mfa_enabled')" :dir="sortDir" @sort="toggleSort('mfa_enabled')" />
             <SortTh label="最后登录" :active="isSorted('last_login_at')" :dir="sortDir" @sort="toggleSort('last_login_at')" />
-            <th />
+            <th class="uacts" />
           </tr></thead>
           <tbody>
             <tr v-for="u in pageRows" :key="u.id">
@@ -275,11 +275,11 @@ onMounted(() => { if (canManage.value) load() })
                 <span v-if="u.role === 'owner'" class="badge"
                       title="首启向导创建的初始管理员账号，受保护：不可删除、不可禁用">引导账号</span>
               </td>
-              <td class="muted ellipsis" :title="(u.allowed_roots || []).join(', ') || '全部'">{{ (u.allowed_roots || []).join(', ') || '全部' }}</td>
+              <td class="muted ellipsis" :title="(u.allowed_roots || []).join(', ') || '不限制目录'">{{ (u.allowed_roots || []).join(', ') || '不限制目录' }}</td>
               <td><span class="badge" :class="u.disabled ? 'badge-danger' : 'badge-ok'">{{ u.disabled ? '已禁用' : '正常' }}</span></td>
               <td><span class="badge" :class="u.mfa_enabled ? 'badge-ok' : 'badge-warn'">{{ u.mfa_enabled ? '已启用' : '未启用' }}</span></td>
               <td class="muted">{{ u.last_login_at ? fmtDateTime(u.last_login_at) : '从未登录' }}</td>
-              <td class="nowrap">
+              <td class="nowrap uacts">
                 <button v-if="u.role !== 'owner'" class="btn-ghost btn-sm" :disabled="!canManage"
           :title="canManage ? '' : '无 user.manage 权限'" @click="openEdit(u)">
                   <Icon name="edit" :size="14" /> 编辑
@@ -290,7 +290,7 @@ onMounted(() => { if (canManage.value) load() })
                 </button>
               </td>
             </tr>
-            <!-- colspan 必须等于表头列数（用户名/角色/权限范围/状态/MFA/最后登录/操作 = 7）。
+            <!-- colspan 必须等于表头列数（用户名/角色/目录白名单/状态/MFA/最后登录/操作 = 7）。
                  此前写 5，空列表时 EmptyState 只占前 5 列，最后一列留空。 -->
             <tr v-if="!pageRows.length"><td colspan="7">
               <EmptyState :title="q.trim() ? `没有匹配「${q.trim()}」的用户` : '无用户'"
@@ -357,7 +357,7 @@ onMounted(() => { if (canManage.value) load() })
           </p>
         </div>
         <div class="field">
-          <label>权限范围（目录白名单，逗号分隔，留空=全部）</label>
+          <label>目录白名单（逗号分隔，留空=不限制目录）</label>
           <textarea v-model="form.rootsText" rows="2" placeholder="/srv/www,/var/backups" />
         </div>
         <div v-if="editing" class="field row">
@@ -419,7 +419,7 @@ onMounted(() => { if (canManage.value) load() })
 .switch-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .switch-label { cursor: pointer; }
 /* 用户表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
-   权限范围为唯一弹性列（目录白名单可能很长），ellipsis 截断、完整值走 title。 */
+   目录白名单为唯一弹性列（可能很长），ellipsis 截断、完整值走 title。 */
 .w-uname { width: 12%; }
 .w-urole { width: 9%; }
 .w-uroots { width: auto; }    /* 弹性列 */
@@ -427,5 +427,10 @@ onMounted(() => { if (canManage.value) load() })
 .w-umfa { width: 8%; }
 .w-ulogin { width: 14%; }
 .w-uacts { width: 150px; }    /* 编辑 + 删除两个带文字按钮 */
+/* 「操作」列 sticky 右：弹窗（Teleport 到 body、z-index:50）会盖住列表中段，
+   把这一列钉在右侧，无论弹窗开多大都能看到「编辑/删除」，避免"用户会隐藏"。
+   z-index 必须 > thead 的 2，否则被吸顶表头压住；背景用 --c-surface 与行底色一致。
+   ⚠ `col.w-uacts` 只定宽度，不能加 position（col 不支持）。 */
+tbody td.uacts, thead th.uacts { position: sticky; right: 0; z-index: 3; background: var(--c-surface); }
 
 </style>
