@@ -11,8 +11,11 @@ export const router = createRouter({
   history: createWebHistory(),
   // 支持 #锚点 深链（如 /settings#caps：topbar 系统信息胶囊直达能力矩阵）；
   // 顺带修正"切换路由后仍停在旧滚动位置"的默认行为。
-  scrollBehavior(to, _from, savedPosition) {
+  scrollBehavior(to, from, savedPosition) {
     if (to.hash) return { el: to.hash, top: 24, behavior: 'smooth' }
+    // 同一路径只变 query（任务详情 ?task=id、筛选等）不是换页：
+    // router.replace 也会被当成导航，旧实现在这里把用户从列表下方滚回顶部。
+    if (to.path === from.path) return savedPosition ?? false
     return savedPosition ?? { top: 0 }
   },
   routes: [
