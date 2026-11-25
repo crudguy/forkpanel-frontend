@@ -82,7 +82,28 @@ function makeTab(path: string, id?: string): FileTab {
 }
 
 const auth = useAuthStore()
-const tabs = ref<FileTab[]>([makeTab('/')])
+
+/**
+ * 文件页默认落点。
+ *
+ * 问题（用户实测反馈）：「用户 1 只授权了 /home，但是现在打开文件，默认是 / 导致没有权限」
+ * —— `makeTab('/')` 写死根目录，而白名单是 `/home` 时 `/` 会被 `resolve_impl` 拒为
+ * 50001「路径超出允许范围」。用户一进来就撞红，得自己摸到面包屑里点 `/home`。
+ *
+ * 解决：默认落**白名单第一个目录**。语义对齐后端 `resolve_impl` 的多根循环——
+ * 它也是按 `allowed_roots` 顺序逐个试，第一个能命中的就是用户实际能进的根。
+ * 空白名单 = 不限制目录（owner 默认态）⇒ 落 `/`。
+ *
+ * ⚠ 只取第一个：UI 一次只能展示一个目录，多个根时让用户从面包屑/「上级」走进其他根
+ *   比一进来就给选择器更省事。第一个根是「用户最可能想看的那个」（管理员配白名单时
+ *   通常把最常用的放前面）。
+ */
+function defaultRoot(): string {
+  const roots = auth.me?.allowed_roots ?? []
+  return roots.length > 0 ? roots[0] : '/'
+}
+
+const tabs = ref<FileTab[]>([makeTab(defaultRoot())])
 const activeId = ref(tabs.value[0].id)
 const activeTab = computed<FileTab>(() => tabs.value.find((t) => t.id === activeId.value) ?? tabs.value[0])
 
