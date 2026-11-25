@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizePath, baseName, parentPath, joinPath, dirLabel,
-  buildCrumbs, collapseCrumbs, isOctalMode, type Crumb,
+  buildCrumbs, buildAllowedCrumbs, collapseCrumbs, enclosingRoot, isOctalMode, isWithinRoots, type Crumb,
 } from './filePath'
 
 describe('normalizePath', () => {
@@ -79,6 +79,65 @@ describe('buildCrumbs', () => {
   })
   it('尾斜杠不影响分段', () => {
     expect(buildCrumbs('/a/b/')).toEqual(buildCrumbs('/a/b'))
+  })
+})
+
+describe('白名单路径判断', () => {
+  it('空白名单 = 不限制目录（owner 默认态）', () => {
+    expect(isWithinRoots('/etc/shadow', [])).toBe(true)
+    expect(enclosingRoot('/etc', [])).toBe('/')
+  })
+
+  it('按组件边界比较：/home 放行自身与子目录，不放行同前缀兄弟', () => {
+    expect(isWithinRoots('/home', ['/home'])).toBe(true)
+    expect(isWithinRoots('/home/a/b', ['/home'])).toBe(true)
+    // ★负向对照：裸 startsWith 会把 /homework 误判为授权，这里必须挡住
+    expect('/homework'.startsWith('/home')).toBe(true)
+    expect(isWithinRoots('/homework', ['/home'])).toBe(false)
+    expect(isWithinRoots('/home2/a', ['/home'])).toBe(false)
+  })
+
+  it('尾斜杠归一化；授权 / 等于整个文件系统', () => {
+    expect(isWithinRoots('/home/a', ['/home/'])).toBe(true)
+    expect(isWithinRoots('/home', ['/home/'])).toBe(true)
+    expect(isWithinRoots('/var/log', ['/'])).toBe(true)
+    expect(enclosingRoot('/var/log', ['/'])).toBe('/')
+  })
+
+  it('enclosingRoot 取最长匹配根；越界返回 null', () => {
+    expect(enclosingRoot('/home/a/b', ['/home', '/home/a'])).toBe('/home/a')
+    expect(enclosingRoot('/var/log', ['/home', '/home/a'])).toBeNull()
+    expect(enclosingRoot('/homework', ['/home'])).toBeNull()
+  })
+})
+
+describe('buildAllowedCrumbs（白名单内导航）', () => {
+  it('★白名单无 / 时不得生成 to:/ 的根面包屑', () => {
+    const r = buildAllowedCrumbs('/home/a/b', ['/home'])
+    expect(r).toEqual([
+      { label: 'home', to: '/home' },
+      { label: 'a', to: '/home/a' },
+      { label: 'b', to: '/home/a/b' },
+    ])
+    expect(r.some((c) => c.to === '/')).toBe(false)
+    // 负向对照：旧版 buildCrumbs 必然给出可点的根目录
+    expect(buildCrumbs('/home/a/b')[0].to).toBe('/')
+  })
+
+  it('停在授权根时只有一段（没有可点的上级，符合「不要让用户点到根目录」）', () => {
+    expect(buildAllowedCrumbs('/home', ['/home'])).toEqual([{ label: 'home', to: '/home' }])
+  })
+
+  it('越界路径保留可点的「回到授权目录」锚点，不让用户困在错误页', () => {
+    const r = buildAllowedCrumbs('/etc', ['/home'])
+    expect(r[0]).toEqual({ label: 'home', to: '/home' })
+    expect(r[1]).toEqual({ label: 'etc', to: '/etc' })
+  })
+
+  it('多根时从最长根开始；授权 / 时与旧版逐项一致', () => {
+    expect(buildAllowedCrumbs('/home/a/b', ['/home', '/home/a'])[0].to).toBe('/home/a')
+    expect(buildAllowedCrumbs('/a/b', ['/'])).toEqual(buildCrumbs('/a/b'))
+    expect(buildAllowedCrumbs('/', ['/'])).toEqual(buildCrumbs('/'))
   })
 })
 

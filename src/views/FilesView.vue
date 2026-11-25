@@ -35,7 +35,7 @@ import { useModal } from '@/composables/useModal'
 import { filterEntries, filterHint, matchesQuery } from '@/composables/fileFilter'
 import { hasFiles, droppedFiles, createDragDepth, dropHint } from '@/composables/fileDrop'
 import {
-  buildCrumbs, collapseCrumbs, dirLabel, isOctalMode, joinPath, parentPath,
+  buildAllowedCrumbs, collapseCrumbs, dirLabel, enclosingRoot, isOctalMode, isWithinRoots, joinPath, parentPath,
 } from '@/composables/filePath'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrashPanel from '@/components/TrashPanel.vue'
@@ -94,9 +94,9 @@ const auth = useAuthStore()
  * 它也是按 `allowed_roots` 顺序逐个试，第一个能命中的就是用户实际能进的根。
  * 空白名单 = 不限制目录（owner 默认态）⇒ 落 `/`。
  *
- * ⚠ 只取第一个：UI 一次只能展示一个目录，多个根时让用户从面包屑/「上级」走进其他根
- *   比一进来就给选择器更省事。第一个根是「用户最可能想看的那个」（管理员配白名单时
- *   通常把最常用的放前面）。
+ * ⚠ 只取第一个作为**初始**落点：第一个根是「用户最可能想看的那个」（管理员配白名单时
+ *   通常把最常用的放前面）。多根之间由工具行的「授权目录」选择器直接切换——不能靠
+ *   面包屑走回 `/` 再往下点，因为 `/` 本身很可能不在白名单里。
  */
 function defaultRoot(): string {
   const roots = auth.me?.allowed_roots ?? []
@@ -117,6 +117,27 @@ const selected = computed({ get: () => activeTab.value.selected, set: (v) => { a
 const sortBy = computed({ get: () => activeTab.value.sortBy, set: (v) => { activeTab.value.sortBy = v } })
 const sortDir = computed({ get: () => activeTab.value.sortDir, set: (v) => { activeTab.value.sortDir = v } })
 const showHidden = computed({ get: () => activeTab.value.showHidden, set: (v) => { activeTab.value.showHidden = v } })
+
+/**
+ * 目录白名单（空数组 = 不限制，与后端 resolve_impl 的分支一致）。
+ *
+ * 所有「会改变当前目录」的入口共用 isAllowedPath 这一道门：
+ * 面包屑 / 上级 / 进入子目录 / 新建页签 / 多根切换器。少接一个，那个入口就能
+ * 把用户送到 50001 的页面上，而且面包屑还停在旧目录——用户不知道自己是怎么进去的。
+ */
+const allowedRoots = computed(() => auth.me?.allowed_roots ?? [])
+function isAllowedPath(p: string): boolean {
+  return isWithinRoots(p, allowedRoots.value)
+}
+
+/** 当前所在的授权根；越界时回落到默认根（与「回到授权目录」面包屑同一落点）。 */
+const currentRoot = computed(() => enclosingRoot(path.value, allowedRoots.value) ?? defaultRoot())
+
+/** 多根切换：直接落到另一个授权根，不经过可能未授权的 `/`。 */
+function switchRoot(e: Event) {
+  const p = (e.target as HTMLSelectElement).value
+  if (isAllowedPath(p)) load(p)
+}
 
 /** 当前标签的过滤串（本地筛选，不走后端——见 composables/fileFilter.ts 的语义说明）。
  *  按标签存放：切标签时两边各自记住自己的查询词，不会串（见 FileTab.filter 注释）。 */
@@ -210,9 +231,10 @@ async function load(toPath?: string) {
 onMounted(load)
 
 // ── 标签栏（多页签）──
-/** 新建标签：以当前激活标签所在目录为起点开一个分支（沿用用户选定的交互模型）。 */
+/** 新建标签：以当前目录为起点；若它已越界（错误态），回落到默认授权根。 */
 function openTab() {
-  const t = makeTab(activeTab.value.path)
+  const base = isAllowedPath(activeTab.value.path) ? activeTab.value.path : defaultRoot()
+  const t = makeTab(base)
   tabs.value.push(t)
   activeId.value = t.id
   // 必须走无参 load()（内部取 activeTab.value，即响应式代理）——若传原始对象 t，
@@ -241,7 +263,7 @@ function closeTab(id: string) {
 // ── 面包屑（A7）：路径分段可点，直达任意上级 ──
 // 后端返回的 path 是规范路径（resolve 后的 SafePath 显示值），分段即可逆：
 // 每段 cumulative 拼回去就是合法路径，无需在前端解析 `..`。
-const crumbs = computed(() => buildCrumbs(path.value))
+const crumbs = computed(() => buildAllowedCrumbs(path.value, allowedRoots.value))
 /** 折叠规则与「…」的落脚点见 composables/filePath.ts（根目录 + 5 级足够定位，
  *  更深的路径整行会挤爆表头）。 */
 const crumbsVisible = computed(() => collapseCrumbs(crumbs.value, 6))
@@ -256,14 +278,21 @@ const crumbsVisible = computed(() => collapseCrumbs(crumbs.value, 6))
 // 现在由 load(toPath?) 独占「改路径」这一动作：它在**赋值之前**拿旧路径与目标
 // 比较，因此 pathChanged 的语义是真的「目录换了没」。所有入口都走同一条路，
 // 不存在第二个地方偷偷改 path 让判据失真。
-function goto(p: string) { load(p) }
+function goto(p: string) {
+  if (!isAllowedPath(p)) return
+  load(p)
+}
 
 function up() {
-  load(parentPath(path.value))
+  const p = parentPath(path.value)
+  if (!isAllowedPath(p)) return
+  load(p)
 }
 function enter(e: Entry) {
   if (e.kind !== 'dir') return open(e)
-  load(joinPath(path.value, e.name))
+  const p = joinPath(path.value, e.name)
+  if (!isAllowedPath(p)) return
+  load(p)
 }
 
 async function open(e: Entry) {
@@ -658,6 +687,11 @@ function full(p: string) {
     <div class="tools-row">
       <!-- A7 面包屑：路径分段可点直达；原先是整行 <code> 全路径 + 只有「上级」，
            深目录要连点多级。当前目录（末段）为纯文本，其余为按钮。 -->
+      <!-- 多授权目录时直接切根：不经过 `/`，避免未授权根把用户挡在 50001。 -->
+      <select v-if="allowedRoots.length > 1" class="root-pick" :value="currentRoot"
+        aria-label="切换授权目录" title="切换授权目录" @change="switchRoot">
+        <option v-for="r in allowedRoots" :key="r" :value="r">{{ r }}</option>
+      </select>
       <nav class="crumbs" aria-label="路径">
         <template v-for="(c, i) in crumbsVisible" :key="c.to">
           <span v-if="i > 0" class="sep" aria-hidden="true">/</span>
@@ -691,7 +725,7 @@ function full(p: string) {
              ⚠ 文字被 CSS 隐藏后，可访问名称只剩 aria-label —— 每个降级按钮都必须带
                （刷新按钮由 RefreshBtn 的 collapsible 分支自带），否则读屏用户面对
                一排无名图标。判据只能在真机读 accessibility name，jsdom 不求值媒体查询。 -->
-        <button class="btn-ghost" :disabled="path === '/'" title="上一级目录" aria-label="上一级目录" @click="up">
+        <button class="btn-ghost" :disabled="!isAllowedPath(parentPath(path))" title="上一级目录" aria-label="上一级目录" @click="up">
           <Icon name="chevron-left" :size="14" /><span class="tool-label">上级</span>
         </button>
         <RefreshBtn :disabled="loading" collapsible @click="() => load()" />
@@ -891,7 +925,7 @@ function full(p: string) {
 
       <h4>导航与排序</h4>
       <ul>
-        <li>面包屑每一段都可点击直达，层级过深时中间会折叠成「…」。</li>
+        <li>面包屑可点击直达授权目录内的各级路径，层级过深时中间会折叠成「…」；授权范围外的上级目录不会出现。有多个授权目录时可用工具行的目录选择器直接切换。</li>
         <li>点表头按名称、大小、修改时间排序；<strong>目录始终排在文件前面</strong>，当前排序列显示为主色。</li>
       </ul>
 
@@ -1015,6 +1049,11 @@ function full(p: string) {
 .tab.add:hover { color: var(--c-primary); }
 /* A7 面包屑：替换原整行 cwd 全路径。分段按钮 + 分隔符，当前级加粗纯文本。
    走 page-head 既有字号（--fs-12-5 与旧 .cwd 一致），不新增视觉变量。 */
+/* 多授权目录切换器。必须局部盖掉全局 `select{width:100%}`，否则它会吃满
+   工具行余量把面包屑挤到下一行（与筛选条同一类坑）；也不给它 grow。 */
+.fp-head-row > .tools-row > .root-pick {
+  width: auto; flex: 0 0 auto; max-width: 180px; height: 38px;
+}
 .crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; font-size: var(--fs-12-5); }
 .crumbs .sep { color: var(--c-text-mute); user-select: none; }
 .crumbs .crumb { background: none; border: none; padding: 2px 4px; border-radius: var(--radius-chip); cursor: pointer;

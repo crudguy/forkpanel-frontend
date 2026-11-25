@@ -54,9 +54,13 @@ describe('FilesView 默认落点', () => {
     const initCalls = calls.filter((c) => c.includes('defaultRoot'))
     expect(initCalls, '初始 tab 必须走 defaultRoot()').toHaveLength(1)
 
-    // ③ 新建标签那处必须沿用 activeTab.value.path（不走 defaultRoot）
-    const newTabCalls = calls.filter((c) => c.includes('activeTab.value.path'))
-    expect(newTabCalls, '新建标签必须沿用当前标签路径').toHaveLength(1)
+    // ③ 新建标签必须先校验当前路径，非法才回落 defaultRoot
+    //    （上一版直接沿用 activeTab.value.path，越界目录会传染给新页签）
+    const baseLine = SRC.split('\n').find((l) => l.includes('const base = isAllowedPath('))
+    expect(baseLine, '新建标签必须先判 isAllowedPath(activeTab.value.path)').toBeTruthy()
+    expect(baseLine, '合法时沿用当前目录')
+      .toMatch(/isAllowedPath\(activeTab\.value\.path\) \? activeTab\.value\.path/)
+    expect(baseLine, '非法时回落默认授权根').toMatch(/: defaultRoot\(\)/)
 
     // ④ 负向：代码里不能有 makeTab('/') 这种写死根目录的
     //    ⚠ 只扫代码行——doc comment 里解释「此前写死 /」的 `makeTab('/')` 是合法引用。
@@ -73,10 +77,8 @@ describe('FilesView 默认落点', () => {
       /function defaultRoot\(\): string \{[\s\S]*?\n\}/,
       "function defaultRoot(): string { return '/' }"
     )
-    const body1 = bad1.slice(
-      bad1.indexOf('function defaultRoot(): string {'),
-      bad1.indexOf('\n}', bad1.indexOf('function defaultRoot(): string {'))
-    )
+    // 坏样本是单行函数，不能按 `\n}` 抽体（会吞进下一个函数，造成假绿）。
+    const body1 = bad1.split('\n').find((l) => l.startsWith('function defaultRoot('))
     expect(body1).not.toMatch(/allowed_roots/)
     expect(body1).not.toMatch(/roots\[0\]/)
 
@@ -88,5 +90,13 @@ describe('FilesView 默认落点', () => {
     expect(bad2).toMatch(/makeTab\('\/'\)/)
     const initCalls2 = (bad2.match(/makeTab\([^)]*\)/g) ?? []).filter((c) => c.includes('defaultRoot'))
     expect(initCalls2).toHaveLength(0)
+
+    // 坏样本 3：新建标签退回「无条件沿用当前路径」，③ 必须转红
+    const bad3 = SRC.replace(
+      /const base = isAllowedPath\(activeTab\.value\.path\) \? activeTab\.value\.path : defaultRoot\(\)/,
+      'const base = activeTab.value.path'
+    )
+    const baseLine3 = bad3.split('\n').find((l) => l.includes('const base = isAllowedPath('))
+    expect(baseLine3, '坏样本必须让 ③ 找不到校验行').toBeUndefined()
   })
 })

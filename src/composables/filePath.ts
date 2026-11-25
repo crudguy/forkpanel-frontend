@@ -83,6 +83,69 @@ export function buildCrumbs(path: string): Crumb[] {
 }
 
 /**
+ * 路径是否落在目录白名单内。
+ *
+ * roots 为空 = 不限制目录（owner 默认态，与后端 resolve_impl 的分支一致）⇒ 全部放行。
+ * 比较按**组件边界**：`/home` 放行 `/home` 与 `/home/a`，但绝不放行 `/homework`
+ * ——用裸 `startsWith(root)` 会把同前缀的兄弟目录误判为授权。
+ */
+export function isWithinRoots(p: string, roots: readonly string[]): boolean {
+  if (roots.length === 0) return true
+  const n = normalizePath(p)
+  return roots.some((r) => {
+    const root = normalizePath(r)
+    return n === root || n.startsWith(root === '/' ? '/' : root + '/')
+  })
+}
+
+/** 包含 p 的**最长**允许根；不在任何根内返回 `null`（roots 为空视为 `/`）。 */
+export function enclosingRoot(p: string, roots: readonly string[]): string | null {
+  if (roots.length === 0) return '/'
+  const n = normalizePath(p)
+  let best: string | null = null
+  for (const r of roots) {
+    const root = normalizePath(r)
+    const inside = n === root || n.startsWith(root === '/' ? '/' : root + '/')
+    if (inside && (best === null || root.length > best.length)) best = root
+  }
+  return best
+}
+
+/**
+ * 白名单感知的面包屑：从「包含当前路径的允许根」开始，不生成更上层。
+ *
+ * 不能直接复用 buildCrumbs：它首项恒为 `to:'/'`，白名单只有 `/home` 时会出现
+ * 一个可点的「根目录」——点进去 50001，而面包屑还停在旧路径上，用户切不回来
+ * （用户的原话：「不要让用户点到根目录，否则没法切回去」）。
+ *
+ * 越界路径仍保留一个可点的「回到授权目录」锚点：`load()` 失败时 tab.path 会
+ * 落到目标路径，此时若所有 crumb 都不可点，用户就真的被困在错误页里了。
+ */
+export function buildAllowedCrumbs(path: string, roots: readonly string[]): Crumb[] {
+  if (roots.length === 0) return buildCrumbs(path)
+  const n = normalizePath(path)
+  const root = enclosingRoot(n, roots)
+  if (root === null) {
+    const safe = normalizePath(roots[0])
+    return [
+      { label: dirLabel(safe), to: safe },
+      { label: baseName(n), to: n },
+    ]
+  }
+  // 根作首段时，深路径仍显示「根目录」而不是 `/`——后者会和分隔符叠成 `//a`。
+  // 只有「当前就在根」时才用 `/`，与 buildCrumbs 的标签页去重规则一致。
+  const rootLabel = root === '/' ? (n === '/' ? '/' : '根目录') : dirLabel(root)
+  const out: Crumb[] = [{ label: rootLabel, to: root }]
+  const rel = root === '/' ? n.slice(1) : n.slice(root.length + 1)
+  let acc = root
+  for (const s of rel.split('/').filter(Boolean)) {
+    acc = acc === '/' ? '/' + s : acc + '/' + s
+    out.push({ label: s, to: acc })
+  }
+  return out
+}
+
+/**
  * 面包屑折叠：超过 `maxShown` 段时中段折成一个可点的「…」。
  *
  * 折叠段落在第 2 段（根目录之后第一级），而不是"折叠位置的前一段"——它是给
