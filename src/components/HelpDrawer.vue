@@ -6,16 +6,45 @@
  *
  * 与 RiskBanner 分工：本组件承载**完整的背景/约束说明**（长文），RiskBanner 承载
  * **常驻的高危提示**（短文）。前者按需展开，后者始终可见。
+ *
+ * ⚠ Esc 关闭必须挂 document 的捕获阶段，不能只写 `@keydown.esc.window`：
+ * `KeyboardEvent` 派发给的是**当前焦点元素**，抽屉打开时焦点往往还停在触发器或已落空到
+ * `<body>`，事件从 body 冒泡到 document 后就结束，`window` 上的监听点（`@keydown.esc.window`
+ * 挂的是 window）收不到——表现为「焦点在抽屉里 Esc 能关、焦点在外面 Esc 没反应」。
+ * document 捕获阶段在事件下达给任何焦点元素之前就执行，焦点在哪都能收到。
+ * （同款处置见 TerminalView 的 onQuickDocKeydown。）
  */
+import { onUnmounted, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 
-defineProps<{ open: boolean; title?: string }>()
+const props = defineProps<{ open: boolean; title?: string }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
+
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (!props.open) return
+  // 内层弹窗（ConfirmDialog 等）自己也要用 Esc：它们打开时先让给它们关，
+  // 否则一次 Esc 会把抽屉和里面的确认框一起收掉。
+  // 判据是「抽屉之外还有别的 modal dialog」，不是 target 落在哪里——
+  // target 常常是 body，靠它判断不出来。
+  const inner = document.querySelectorAll('[role="dialog"][aria-modal="true"]')
+  const own = document.querySelector('.hd')
+  for (const el of inner) if (el !== own) return
+  emit('close')
+}
+
+// 只在打开期间挂监听，关闭即摘：抽屉收着还占一个全局 keydown 是无谓开销，
+// 且多个页面复用时不会互相抢。
+watch(() => props.open, (open) => {
+  if (open) document.addEventListener('keydown', onDocKeydown, true)
+  else document.removeEventListener('keydown', onDocKeydown, true)
+}, { immediate: true })
+onUnmounted(() => document.removeEventListener('keydown', onDocKeydown, true))
 </script>
 
 <template>
   <Teleport to="body">
-  <div v-if="open" class="mask" @click.self="emit('close')" @keydown.esc.window="emit('close')">
+  <div v-if="open" class="mask" @click.self="emit('close')">
     <aside class="hd" role="dialog" aria-modal="true" aria-label="说明">
       <div class="hd-head">
         <Icon name="help" :size="18" />

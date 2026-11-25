@@ -35,7 +35,8 @@ import '@xterm/xterm/css/xterm.css'
 import { useAuthStore } from '@/stores/auth'
 import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
-import RiskBanner from '@/components/RiskBanner.vue'
+import HelpBtn from '@/components/HelpBtn.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TerminalCommandDialog from '@/components/TerminalCommandDialog.vue'
@@ -49,6 +50,12 @@ import {
 
 const auth = useAuthStore()
 const enabled = computed(() => auth.enabled(CAP.TERMINAL_MANAGE, 'system.manage'))
+
+/**
+ * 帮助抽屉开关。宿主级权限这类的**完整说明**放这里（与全站 HelpBtn/HelpDrawer 同款），
+ * 页面流里不再铺一条彩色警示条——终端本身要占满一屏，那条 banner 常驻会挤掉两行终端。
+ */
+const helpOpen = ref(false)
 
 /** 标签展示态（保持在响应式数组里；重量级实例一律走 sessions Map）。 */
 interface TermTab {
@@ -70,7 +77,7 @@ interface TermSession {
 const sessions = new Map<string, TermSession>()
 /** 每个标签各自的终端容器 DOM（同样非响应式）。 */
 const panes = new Map<string, HTMLElement>()
-/** 容器尺寸变化（错误条出现/消失、提示条换行、标签栏折行、切换标签显隐）时把 xterm
+/** 容器尺寸变化（错误条出现/消失、标签栏折行、切换标签显隐）时把 xterm
     重新 fit 到新尺寸；否则画布仍是旧高度，会比终端黑框高出一截。pane 高度由外层
     flex 分配、不受 xterm 内容影响，故不会形成「fit → 尺寸变化 → 再 fit」的循环。 */
 let paneObs: ResizeObserver | null = null
@@ -471,6 +478,9 @@ onUnmounted(() => {
       <span class="stat" :class="{ on: connected }">
         <span class="dot" /> {{ status }}
       </span>
+      <!-- 权限/会话说明入口：与全站各页一致摆在这一行的最右侧（spacer 之后第一组）。
+           宿主级权限这类「背景说明」收进抽屉，页面流里不再常驻一条警示条。 -->
+      <HelpBtn title="终端说明" aria-label="终端说明" :expanded="helpOpen" @click="helpOpen = true" />
       <!-- 快捷命令入口：disclosure（trigger + aria-controls + expanded），不声明
            aria-haspopup=menu——面板里有输入框和分段操作，套 menu 键盘模型会让读屏
            把普通按钮当菜单项跳过。面板 Teleport 到 body，见下方浮层。 -->
@@ -501,9 +511,6 @@ onUnmounted(() => {
 
     <template v-else>
       <p v-if="errorMsg" class="err" role="alert">{{ errorMsg }}</p>
-      <!-- 高危提示前置：进入终端输入区之前就要看见，且不与终端贴边 -->
-      <RiskBanner level="danger" title="宿主级权限"
-        text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面或关闭标签即断开会话。" />
 
       <!-- 快捷命令浮层：Teleport 到 body，避免顶栏 backdrop-filter 把 fixed 浮层
            困进包含块（与主布局用户菜单、列选择器同款处置）。平时不渲染、不请求。 -->
@@ -585,6 +592,25 @@ onUnmounted(() => {
         :detail="`确定删除命令「${pendingDelete?.cmd ?? ''}」吗？`" danger
         @confirm="confirmDelete" @cancel="pendingDelete = null" />
     </template>
+
+    <!-- 终端说明：宿主级权限这类「高危背景约束」的完整交代，入口是工具栏的「?」。 -->
+    <HelpDrawer :open="helpOpen" title="终端说明" @close="helpOpen = false">
+      <p>这里打开的是运行面板那台服务器上的真实 shell，不是模拟器。</p>
+      <h4>权限级别</h4>
+      <p>终端拥有<b>宿主级权限</b>：所有命令都以面板进程的运行身份执行。<b>若面板本身以 root 运行，这里的每条命令就是 root 命令</b>，可以读写任意文件、停掉任何服务、重装或重格式化磁盘，面板自身与其他管理功能也一并包含在内。命令产生的后果<u>不受面板的权限校验、敏感文件黑名单和审计规则约束</u>，没有任何二次确认。</p>
+      <p>因此这项能力只应对<b>确实需要 shell 的人</b>开放；不需要时请在账号权限里收回终端的「管理」权限。</p>
+      <h4>会话生命周期</h4>
+      <ul>
+        <li>关闭页面或关闭标签即断开对应会话，shell 进程随之结束（后台任务会收到挂断信号）。</li>
+        <li>无任何输入满 <b>15 分钟</b>会自动断开，避免会话被遗忘后常驻。</li>
+        <li>同时最多 <b>{{ auth.terminalMax }}</b> 个会话（服务端全局上限，超出只能先关掉别的标签）。</li>
+        <li>网络中断不代表命令停止：断线时已发出的命令仍在服务器上继续跑完。</li>
+      </ul>
+      <h4>快捷命令</h4>
+      <p>工具栏「快捷命令」里保存的命令存在<b>当前登录账号</b>下，换设备、换浏览器都还在，别的账号看不到。它只是把文本填进终端，<b>不会绕过上面的权限约束</b>。</p>
+      <h4>操作建议</h4>
+      <p>破坏性操作前先确认当前所在目录与用户（<code>pwd</code>、<code>whoami</code>）；需要长期运行的服务请交给 systemd 之类的守护进程，不要挂在这个终端里。</p>
+    </HelpDrawer>
   </div>
 </template>
 
@@ -615,7 +641,7 @@ onUnmounted(() => {
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-mute); }
 .stat.on .dot { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
 
-/* 页面定高成 flex column：工具行 / 提示条固定，终端 flex:1 吃满剩余视口。
+/* 页面定高成 flex column：工具行固定，终端 flex:1 吃满剩余视口。
    高度取 100vh - var(--page-chrome-h)（顶栏 + .content 上下内边距的单一来源，窄屏
    自动变小），与 FilesView 的全高布局同源；此前写死 258px 把提示条高度算进常量，
    提示条换行变高就会把整页顶出一屏滚动。 */
@@ -625,8 +651,6 @@ onUnmounted(() => {
 }
 .term-view > .fp-head-row { flex: none; }
 .term-view > .err { flex: none; }
-/* RiskBanner 是子组件根（scoped 不给它补父级 data-v），需 :deep 才能钉住不伸缩。 */
-.term-view > :deep(.risk) { flex: none; }
 /* 终端容器：所有标签共用一套尺寸；非激活的隐藏（保活）而非销毁。 */
 .term-pane {
   flex: 1 1 0; min-height: 360px;
