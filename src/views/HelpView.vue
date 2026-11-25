@@ -14,11 +14,12 @@ import PageLayout from '@/components/PageLayout.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { FAQS, MODULE_DOCS, pickQuickTasks } from '@/composables/helpContent'
+import { whyDisabledForPath } from '@/composables/navPolicy'
 
 const auth = useAuthStore()
 
 // 常用操作按「能力位 AND 权限点」过滤：只留下点得进去的入口。
-const quick = computed(() => pickQuickTasks(auth.whyDisabled))
+const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisabledForPath(auth, to)))
 </script>
 
 <template>

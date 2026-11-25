@@ -31,7 +31,8 @@ import { whyDisabledForPath } from '@/composables/navPolicy'
 import { navCollapsed, toggleNav, navDrawerOpen } from '@/composables/nav'
 import Icon from '@/components/Icon.vue'
 
-interface Item { to: string; label: string; icon: string; cap: string; perm: string; group: string }
+/** perm 可能是数组（任一即可），见 NavDef；本组件只透传给 whyDisabledForPath，不解读。 */
+interface Item { to: string; label: string; icon: string; cap: string; perm: string | string[]; group: string }
 /**
  * 渲染用菜单项 = 定义 + 预计算的禁用原因。
  *

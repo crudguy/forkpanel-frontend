@@ -100,12 +100,21 @@ export const QUICK_TASKS: QuickTask[] = [
  */
 export function pickQuickTasks(
   whyDisabled: (cap: string, perm: string) => string | null,
+  whyDisabledForPath?: (to: string) => string | null,
 ): Array<QuickTask & { icon: string }> {
   return QUICK_TASKS.flatMap((t) => {
     const nav = NAV_ITEMS.find((n) => n.to === t.to)
     // 找不到对应导航项属于内容错误，测试会拦；运行期直接跳过，不渲染死链接。
     if (!nav) return []
-    if (whyDisabled(nav.cap, nav.perm)) return []
+    // 权限点允许写成数组（有任一即可，见 NavDef）。数组形没法塞进「单权限」签名里，
+    // 交给侧栏同一判据 whyDisabledForPath（HelpView 传 auth→navPolicy 那个）。
+    // 没传（纯函数测试里）时退化为逐项判：任一通过即可。
+    if (Array.isArray(nav.perm)) {
+      const blocked = whyDisabledForPath
+        ? whyDisabledForPath(nav.to)
+        : (nav.perm.every((p) => whyDisabled(nav.cap, p) !== null) ? '权限不足' : null)
+      if (blocked) return []
+    } else if (whyDisabled(nav.cap, nav.perm)) return []
     return [{ ...t, icon: nav.icon }]
   })
 }

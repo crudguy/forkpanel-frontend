@@ -122,3 +122,47 @@ describe('F-09 非导航路径不再一律放行', () => {
     )).toBe('权限不足')
   })
 })
+
+/**
+ * 菜单门控必须取**该页接口的最小权限**（列表/详情那条 require），
+ * 而不是"能写"的权限：写错会把一个已授权的页面整页藏死，且直接进 URL 也会被
+ * 路由守卫弹回概览——用户看到的是"这个角色没有这个功能"，而后端明明放行。
+ *
+ * 三条断言都对着「只读/单 Tab」的真实角色形态，而不是"给全部权限"：
+ * 全权限下无论门控写 view 还是 manage 都是绿的，测不出回归。
+ */
+describe('导航项 perm 与接口最小权限对齐', () => {
+  it('只有 service.view → 软件与服务 / 应用 可达（接口列表本就是 service.view）', () => {
+    const auth = store(capsAllOk(), ['system.view', 'service.view'])
+    expect(whyDisabledForPath(auth, '/services')).toBeNull()
+    expect(whyDisabledForPath(auth, '/apps')).toBeNull()
+  })
+
+  it('只有 service.view、没有 service.manage 的账号依旧进得去（负向对照：写成 manage 会红）', () => {
+    const auth = store(capsAllOk(), ['service.view'])
+    expect(auth.can('service.manage')).toBe(false)
+    expect(whyDisabledForPath(auth, '/services')).toBeNull()
+  })
+
+  it('日志入口对"只有 log.view"与"只有 audit.view"两种角色都可达（两个 Tab 权限不同）', () => {
+    expect(whyDisabledForPath(store(capsAllOk(), ['log.view']), '/logs')).toBeNull()
+    expect(whyDisabledForPath(store(capsAllOk(), ['audit.view']), '/logs')).toBeNull()
+  })
+
+  it('两者都没有 → 日志入口不可达（"任一即可"不能退化成恒可见）', () => {
+    expect(whyDisabledForPath(store(capsAllOk(), ['system.view']), '/logs')).toBe('权限不足')
+  })
+
+  it('安全页对 firewall.view 与 security.manage 各自可达，「任一即可」不是恒真', () => {
+    expect(whyDisabledForPath(store(capsAllOk(), ['firewall.view']), '/firewall')).toBeNull()
+    expect(whyDisabledForPath(store(capsAllOk(), ['security.manage']), '/firewall')).toBeNull()
+    expect(whyDisabledForPath(store(capsAllOk(), ['site.view']), '/firewall')).toBe('权限不足')
+  })
+
+  it('能力位不支持时，"任一即可"页仍先报环境原因（不被权限判断吞掉）', () => {
+    const caps = capsAllOk()
+    caps[CAP.FIREWALL_MANAGE] = { supported: false, backend: null, reason: 'nft_missing' }
+    const why = whyDisabledForPath(store(caps, ['firewall.view']), '/firewall')
+    expect(why).toContain('当前环境不支持')
+  })
+})

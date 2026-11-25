@@ -14,6 +14,10 @@ import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { matchFields } from '@/composables/listSearch'
+import {
+  loadRoleCatalog, assignableRoles, missingFromGranted, roleOptionLabel,
+  type RoleCatalog, type RoleRow,
+} from '@/composables/roleCatalog'
 
 /** 对应后端 `UserOut`（routes/users.rs）。此前用 `any[]`，字段拼写错误无从发现。 */
 interface UserOut {
@@ -67,9 +71,38 @@ const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize,
 /** 改搜索词回第一页 */
 watch(q, () => { page.value = 1 })
 
-/** 可分配的内置角色（owner 不可经 API 分配，故不在列）。 */
-const ROLES = ['admin', 'operator', 'viewer']
+// ⚠ 这里**不再写死**角色数组。原先固定 ['admin','operator','viewer']，导致在
+//   「设置 → 角色权限」建出的自定义角色永远无法指派给账号（后端
+//   ensure_role_assignable 本来就认自定义角色，是前端没去读）。
+//   现在选项来自 GET /roles，与设置页同一份目录。
+const roleCatalog = ref<RoleCatalog | null>(null)
+const roleCatalogErr = ref('')
+const roleOptions = computed(() => assignableRoles(roleCatalog.value))
 const canManage = computed(() => auth.enabled(CAP.USER_MANAGE, 'user.manage'))
+
+/** 当前表单选中角色的权限集合（用于在选项下方回显"这个角色到底能给到什么"）。 */
+const selectedRole = computed<RoleRow | null>(() =>
+  roleOptions.value.find(r => r.name === form.value.role) ?? null)
+/** 选中角色里当前登录者自己没有的权限：非空 ⇒ 后端必 400，前端先拦。 */
+const selectedMissing = computed(() =>
+  missingFromGranted(selectedRole.value?.permissions ?? [], auth.me?.permissions ?? []))
+const roleAssignable = computed(() => !!selectedRole.value && selectedMissing.value.length === 0)
+
+async function loadRoleCatalogForForm() {
+  roleCatalogErr.value = ''
+  try {
+    roleCatalog.value = await loadRoleCatalog()
+  } catch (e) {
+    roleCatalogErr.value = errorText(e)
+    return
+  }
+  // 默认选中：优先 operator（内置、权限最小可用集），没有则取第一个可分配角色。
+  // 编辑态不动 form.role——它来自被编辑用户当前的角色。
+  if (!editing.value && !roleOptions.value.some(r => r.name === form.value.role)) {
+    form.value.role = roleOptions.value.some(r => r.name === 'operator')
+      ? 'operator' : (roleOptions.value[0]?.name ?? '')
+  }
+}
 
 // 弹窗：新建 / 编辑共用
 const editing = ref<UserOut | null>(null)
@@ -108,6 +141,8 @@ function openCreate() {
   form.value = { username: '', password: '', role: 'operator', rootsText: '', disabled: false }
   formErr.value = ''; fieldErrors.value = {}
   showModal.value = true
+  // 每次打开都重拉：设置页可能刚建/改了角色，用缓存会让人选了旧清单。
+  loadRoleCatalogForForm()
 }
 function openEdit(u: UserOut) {
   editing.value = u
@@ -117,6 +152,7 @@ function openEdit(u: UserOut) {
   }
   formErr.value = ''; fieldErrors.value = {}
   showModal.value = true
+  loadRoleCatalogForForm()
 }
 
 // P1：新建用户必须校验用户名非空 + 口令强度（与占位文案「≥10 位含两类」一致）；
@@ -132,6 +168,8 @@ function pwStrong(p: string): boolean {
 }
 const formValid = computed(() => {
   if (!form.value.username.trim() || form.value.username.trim().length > 64) return false
+  // 角色必须是可选（目录里存在）且不超出自己权限的：否则后端必 400。
+  if (!roleAssignable.value) return false
   if (!editing.value) {
     if (!pwStrong(form.value.password)) return false
   } else if (form.value.password && !pwStrong(form.value.password)) {
@@ -146,6 +184,15 @@ async function save() {
   if (!form.value.username.trim()) { fieldErrors.value.username = '用户名不能为空'; saving.value = false; return }
   if (!editing.value && !pwStrong(form.value.password)) { fieldErrors.value.password = '密码至少 10 位且含两类字符'; saving.value = false; return }
   if (editing.value && form.value.password && !pwStrong(form.value.password)) { fieldErrors.value.password = '密码至少 10 位且含两类字符'; saving.value = false; return }
+  // 角色必须已从后端目录加载出来，且不超出自身权限。放这里而不是只靠按钮禁用：
+  // 页面上的禁用只是提示，判定与拒绝仍在后端 ensure_no_escalation。
+  if (!form.value.role) { formErr.value = '请选择角色'; saving.value = false; return }
+  if (!roleAssignable.value) {
+    formErr.value = selectedMissing.value.length
+      ? `不能分配权限超出自己的账号（该角色需要 ${selectedMissing.value.join('、')}）`
+      : '所选角色不可用，请刷新后重试'
+    saving.value = false; return
+  }
   const roots = form.value.rootsText.split(',').map(s => s.trim()).filter(Boolean)
   try {
     if (editing.value) {
@@ -286,9 +333,28 @@ onMounted(() => { if (canManage.value) load() })
         </div>
         <div class="field">
           <label>角色</label>
-          <select v-model="form.role">
-            <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
+          <select v-model="form.role" :disabled="!roleOptions.length">
+            <option v-if="!roleOptions.length" value="">（角色清单加载中…）</option>
+            <option v-for="r in roleOptions" :key="r.name" :value="r.name"
+              :disabled="missingFromGranted(r.permissions, auth.me?.permissions ?? []).length > 0">
+              {{ roleOptionLabel(r) }} · {{ r.permissions.length }} 项权限{{ missingFromGranted(r.permissions, auth.me?.permissions ?? []).length ? '（超出你的权限）' : '' }}
+            </option>
           </select>
+          <p v-if="roleCatalogErr" class="field-err" role="alert">角色清单加载失败：{{ roleCatalogErr }}</p>
+        </div>
+        <!-- 选中角色的权限明细：不给这层回显，用户是"看不见权限在授权"的。
+             权限项直接来自后端 known_permissions 口径（角色定义里就是这些名字），
+             其中标了「你也没有」的项后端必拒，这里先讲清楚。 -->
+        <div v-if="selectedRole" class="field role-perms">
+          <label>该角色的权限（{{ selectedRole.permissions.length }} 项）</label>
+          <div class="perm-tags">
+            <code v-for="p in selectedRole.permissions" :key="p"
+              :class="{ missing: selectedMissing.includes(p) }"
+              :title="selectedMissing.includes(p) ? '你自身没有该权限，无法分配此角色' : p">{{ p }}</code>
+          </div>
+          <p v-if="selectedMissing.length" class="field-err" role="alert">
+            该角色包含你自身没有的权限（{{ selectedMissing.join('、') }}），无法分配
+          </p>
         </div>
         <div class="field">
           <label>权限范围（目录白名单，逗号分隔，留空=全部）</label>
@@ -338,6 +404,15 @@ onMounted(() => { if (canManage.value) load() })
   width: 100%; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text);
   border-radius: var(--radius-sm); padding: 9px 11px; font-size: var(--fs-13-5); font-family: inherit; }
 .field textarea { resize: vertical; }
+.role-perms { margin-top: -4px; }
+.perm-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.perm-tags code {
+  font-family: var(--mono); font-size: var(--fs-12);
+  padding: 2px 6px; border-radius: var(--radius-chip);
+  background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text-dim);
+}
+.perm-tags code.missing { border-color: var(--c-danger); color: var(--c-danger); }
+.field-err { color: var(--c-danger); font-size: var(--fs-12-5); margin: 5px 0 0; }
 .field.row { display: flex; align-items: center; }
 /* 本页开关现已统一走 main.css 全局 .switch（42×24，input+i 结构）。
    外层 .switch-row 仅作行容器，文字单独 @click 切换，避免嵌套 <label> 关联歧义。 */

@@ -28,7 +28,17 @@ export interface NavDef {
   label: string
   icon: string
   cap: string
-  perm: string
+  /**
+   * RBAC 权限点。**字符串 = 必须有**；**数组 = 有任一即可**。
+   *
+   * 为什么要给"任一"这一种形态：有些页面的多个 Tab 各自对应不同权限点，
+   * 菜单层只该回答"这个入口对他有没有意义"。写成单个权限点时，只有另一个
+   * Tab 权限的账号会连入口都看不到（页面本身对他是可用的）。
+   * 元素仍是**纯权限名字面量**——`ci/check-permissions.sh` 按名字逐个校验，
+   * 不能在字符串里拼 `a|b` 这种隐式表达式（那样的名字后端根本不认，且门禁
+   * 会把它当成一个整体权限名去比对，直接漏检）。
+   */
+  perm: string | string[]
   group: string
 }
 
@@ -43,6 +53,11 @@ export const NAV_ITEMS: NavDef[] = [
   // —— 服务：跑业务（软件包 + systemd 单元 / 托管应用 / 站点）——
   // 「软件与服务」保留原名：其页内默认页签即「软件」，改名「服务」反而与页签错位；
   // 它（系统包 + systemd 单元）与「应用」（面板托管进程 + 自动反代）是两个不同概念，不合并。
+  // ⚠ `perm` 取**该页接口的最小权限**（列表/详情那条 require），不是"能写"的权限。
+  //   曾写成 service.manage：只有 service.view 的自定义角色（合法的只读运维角色）
+  //   两个入口一起不可见、直接进 URL 也会被守卫弹回概览——而接口本身对
+  //   service.view 是放行的，等于把一个已授权的页面藏死。写操作在页面内
+  //   由各自的 enabled(cap, 对应 manage 权限) 置灰，不靠菜单门控代劳。
   { to: '/services', label: '软件与服务', icon: 'server', cap: CAP.SERVICE_MANAGE, perm: 'service.view', group: '服务' },
   { to: '/apps', label: '应用', icon: 'bolt', cap: CAP.SERVICE_MANAGE, perm: 'service.view', group: '服务' },
   { to: '/sites', label: '网站', icon: 'globe', cap: ALWAYS_CAP, perm: 'site.view', group: '服务' },
@@ -54,13 +69,21 @@ export const NAV_ITEMS: NavDef[] = [
   { to: '/backups', label: '备份', icon: 'archive', cap: CAP.BACKUP_MANAGE, perm: 'backup.view', group: '数据' },
   { to: '/files', label: '文件', icon: 'folder', cap: CAP.FILE_READ, perm: 'file.read', group: '数据' },
   // —— 安全：守边界（防火墙 + 公网暴露同处，边界决策一处完成）——
-  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE, perm: 'firewall.manage', group: '安全' },
+  // 防火墙：页面同时承载「规则」与「安全基线」两个 Tab，两张 Tab 的门控不同
+  // （规则 firewall.view / 基线 security.manage）。顶层菜单只声明**任一即可**
+  // 的那一项，Tab 级细判仍由 navPolicy 的 EXTRA_GATES 逐路径给出。
+  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE,
+    perm: ['firewall.view', 'security.manage'], group: '安全' },
   // 公网访问原埋在「系统」组底部；它与防火墙同质（对外暴露 / 边界防御），2026-10-29 上移至此。
   // 路由同时从 /system/expose 提为顶层 /expose（不再挂在主机监控 Tab 下）；旧链接由路由重定向兜住。
   // 图标由 globe 改为 network：globe 已被「网站」占用，折叠态 76px 下两者会撞脸。
   { to: '/expose', label: '公网访问', icon: 'network', cap: CAP.EXPOSE_MANAGE, perm: 'system.view', group: '安全' },
   // —— 运维：排障（日志 / 任务 / 终端 合并，消除单条目分组噪音）——
-  { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ, perm: 'log.view', group: '运维' },
+  // 日志：页面是双 Tab（系统日志 log.view / 审计日志 audit.view），两 Tab 权限点不同，
+  // 故用"任一即可"。曾写成单个 audit.view：只有 log.view 的账号连系统日志入口都
+  // 看不到，而 LogsView 自己的门控（enabled(LOGS_READ,'log.view')）明确是放行的。
+  { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ,
+    perm: ['log.view', 'audit.view'], group: '运维' },
   { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '运维' },
   // —— 系统：低频管理区（AI 助手唯一入口；顶栏重复胶囊已移除，

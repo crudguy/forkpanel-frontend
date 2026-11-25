@@ -33,6 +33,8 @@ import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 import { llmTestBlockReason } from '@/utils/llmTestGate'
+import PermMatrix from '@/components/PermMatrix.vue'
+import { loadRoleCatalog, missingFromGranted, type RoleRow } from '@/composables/roleCatalog'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -159,7 +161,7 @@ async function testConn() {
 // 安全判断全在后端：防提权（权限必须是自身权限的子集）、内置角色名保留、
 // 被用户引用的角色不可删。前端只把后端给的 known_permissions 渲染成勾选项，
 // **绝不自己发明权限名**——前端多一个后端不认的名字，只会得到一次 400。
-interface RoleRow { name: string; permissions: string[]; builtin: boolean; created_at: number | null }
+// RoleRow 类型唯一源在 composables/roleCatalog.ts（用户弹窗与本页共用）。
 const roles = ref<RoleRow[]>([])
 const knownPerms = ref<string[]>([])
 const roleName = ref('')
@@ -167,6 +169,25 @@ const rolePerms = ref<string[]>([])
 const roleBusy = ref(false)
 const roleErr = ref('')
 const canRoles = computed(() => auth.can('user.manage'))
+
+/** 权限明细展开：点角色行 / 行内「权限」按钮切换。默认收起，避免 28 项铺满表格。 */
+const expandedRole = ref<string | null>(null)
+
+/**
+ * 正在编辑权限的自定义角色名（null = 未在编辑）。
+ * 前端原先只有「建」和「删」——权限一旦建错就只能删了重建，而删又会因
+ * 「仍被用户引用」被拒，实际等于**改不了**。后端 PATCH /roles/{name} 一直是通的。
+ */
+const editRole = ref<string | null>(null)
+const editPerms = ref<string[]>([])
+/** 编辑态的刷新基准：用于判断「没改就点保存」并给出准确反馈（而不是一律报成功）。 */
+const editBaseline = ref<string[]>([])
+const editErr = ref('')
+
+/** 该角色里当前登录者没有的权限（非空 ⇒ 后端 check_permissions 会 400）。 */
+function missingFor(perms: string[]): string[] {
+  return missingFromGranted(perms, auth.me?.permissions ?? [])
+}
 
 // 可见页签随权限收敛；当前签若因权限变化消失，退回第一个可见签（能力矩阵恒在）。
 const visibleTabs = computed(() => {
@@ -202,10 +223,11 @@ const { size, page, pageCount, pageRows, total, sortDir, toggleSort, changeSize,
 async function loadRoles() {
   if (!canRoles.value) return
   try {
-    const r = await api.get<{ roles: RoleRow[]; known_permissions: string[] }>(API.roles.list())
-    // 兜底：后端异常路径可能返 null，v-for 虽不渲染但后续 .filter/.length 会崩
-    roles.value = r.roles ?? []
-    knownPerms.value = r.known_permissions ?? []
+    // 与新建用户弹窗共用同一个加载器：两处各写一份解析，就会出现「这里能看到
+    // 自定义角色、那里看不到」的漂移（正是本次的根因形态）。
+    const cat = await loadRoleCatalog()
+    roles.value = cat.roles
+    knownPerms.value = cat.knownPermissions
   } catch (e) { roleErr.value = errorText(e) }
 }
 
@@ -220,6 +242,47 @@ async function createRole() {
     roleName.value = ''; rolePerms.value = []
     await loadRoles()
   } catch (e) { roleErr.value = errorText(e) }
+  finally { roleBusy.value = false }
+}
+
+/** 进入权限编辑：以当前落库权限为基准，取消时直接丢弃草稿。 */
+function startEditPermissions(r: RoleRow) {
+  editErr.value = ''
+  editRole.value = r.name
+  editPerms.value = [...r.permissions]
+  editBaseline.value = [...r.permissions].sort()
+}
+function cancelEditPermissions() {
+  editRole.value = null
+  editPerms.value = []
+  editBaseline.value = []
+  editErr.value = ''
+}
+
+/**
+ * 保存角色权限（PATCH /roles/{name}）。
+ *
+ * 为什么必须给「编辑」而不是只给「删除重建」：后端删角色时会拒绝「仍被用户引用」
+ * 的角色，所以权限写错的自定义角色**实际改不动**——只能先把人都挪走再删再建。
+ */
+async function saveEditPermissions() {
+  const name = editRole.value
+  if (!name) return
+  if (!editPerms.value.length) { editErr.value = '至少要保留一项权限'; return }
+  const missing = missingFor(editPerms.value)
+  if (missing.length) {
+    editErr.value = `不能授予自己不具备的权限：${missing.join('、')}`
+    return
+  }
+  const same = [...editPerms.value].sort().join(',') === editBaseline.value.join(',')
+  if (same) { cancelEditPermissions(); toast('权限未改动'); return }
+  roleBusy.value = true; editErr.value = ''
+  try {
+    await api.patch(API.roles.item(name), { permissions: editPerms.value })
+    cancelEditPermissions()
+    await loadRoles()
+    toast(`角色 ${name} 的权限已更新`)
+  } catch (e) { editErr.value = errorText(e) }
   finally { roleBusy.value = false }
 }
 
@@ -589,21 +652,58 @@ onMounted(async () => {
             <th />
           </tr></thead>
           <tbody>
-            <tr v-for="r in pageRows" :key="r.name">
-              <td class="mono ellipsis" :title="r.name">{{ r.name }}</td>
-              <td class="num">
-                {{ r.permissions.length }} 项
-                <span v-if="!r.permissions.length" class="danger">（无法解析）</span>
-              </td>
-              <td>{{ r.builtin ? '内置' : '自定义' }}</td>
-              <td class="nowrap">
-                <button v-if="!r.builtin" class="btn-ghost btn-sm" @click="delRole = r.name">删除</button>
-              </td>
-            </tr>
+            <template v-for="r in pageRows" :key="r.name">
+              <tr>
+                <td class="mono ellipsis" :title="r.name">{{ r.name }}</td>
+                <td class="num">
+                  <button class="perm-toggle" type="button"
+                    :aria-expanded="expandedRole === r.name"
+                    @click="expandedRole = expandedRole === r.name ? null : r.name">
+                    {{ r.permissions.length }} 项
+                    <span v-if="!r.permissions.length" class="danger">（无法解析）</span>
+                  </button>
+                </td>
+                <td>{{ r.builtin ? '内置' : '自定义' }}</td>
+                <td class="nowrap">
+                  <template v-if="!r.builtin">
+                    <button class="btn-ghost btn-sm" :disabled="roleBusy" @click="startEditPermissions(r)">编辑权限</button>
+                    <button class="btn-ghost btn-sm danger" @click="delRole = r.name">删除</button>
+                  </template>
+                </td>
+              </tr>
+              <!-- 权限明细：点「N 项」展开。没有这层，界面只告诉你"这个角色有几项权限"，
+                   却看不出是哪几项——而"权限准不准"正是最需要自证的地方。 -->
+              <tr v-if="expandedRole === r.name" class="perm-detail-row">
+                <td colspan="4">
+                  <div class="perm-tags">
+                    <code v-for="p in r.permissions" :key="p" :class="{ missing: missingFor(r.permissions).includes(p) }"
+                      :title="missingFor(r.permissions).includes(p) ? '该权限你自身没有，此角色无法分配给你能管的账号' : p">{{ p }}</code>
+                    <span v-if="!r.permissions.length" class="muted">权限数据无法解析（疑似库中 JSON 损坏），请删除该角色后重建</span>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
         <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
           @update:page="gotoPage" @update:size="changeSize" />
+      </div>
+
+      <!-- 编辑自定义角色权限（后端 PATCH /roles/{name}） -->
+      <div v-if="editRole" class="form edit-role">
+        <div class="sec-head">
+          <Icon name="edit" :size="15" /> 编辑角色 <code class="mono">{{ editRole }}</code> 的权限
+        </div>
+        <p v-if="editErr" class="err" role="alert">{{ editErr }}</p>
+        <PermMatrix v-model="editPerms" :all="knownPerms" :granted="auth.me?.permissions ?? []"
+          empty-hint="权限清单为空，请刷新页面重试" />
+        <div class="actions">
+          <button class="btn-ghost" :disabled="roleBusy" @click="cancelEditPermissions">取消</button>
+          <button class="btn-primary" :disabled="roleBusy || !editPerms.length" @click="saveEditPermissions">
+            {{ roleBusy ? '保存中…' : '保存权限' }}
+          </button>
+        </div>
+        <p class="sec-note">改完对已登录会话不生效，需要该账号重新登录（权限在登录时快照）。</p>
       </div>
 
       <div class="form" style="margin-top:12px">
@@ -613,12 +713,8 @@ onMounted(async () => {
         </div>
         <div class="field">
           <span class="lbl">权限（勾选；列表来自后端白名单，前端不自行发明名字）</span>
-          <div class="perm-grid">
-            <label v-for="p in knownPerms" :key="p" class="perm-chk">
-              <input v-model="rolePerms" type="checkbox" :value="p" />
-              <code>{{ p }}</code>
-            </label>
-          </div>
+          <PermMatrix v-model="rolePerms" :all="knownPerms" :granted="auth.me?.permissions ?? []"
+            empty-hint="权限清单为空，请刷新页面重试" />
         </div>
         <div class="actions">
           <button class="btn-primary" :disabled="roleBusy || !roleName.trim() || !rolePerms.length" @click="createRole">
@@ -705,6 +801,31 @@ onMounted(async () => {
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
 .perm-chk { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12-5); cursor: pointer; }
 .perm-chk code { color: var(--c-text-dim); }
+/* 权限明细展开行：整行内嵌，宽度交给 4 列 colspan，不再受 colgroup 限制。 */
+.perm-toggle {
+  border: none; background: transparent; cursor: pointer; font: inherit;
+  color: var(--c-text-dim); padding: 0; text-decoration: underline dotted;
+}
+.perm-toggle:hover { color: var(--c-primary); }
+.perm-detail-row > td {
+  background: var(--c-bg); padding: 8px 12px;
+  /* table.fixed 给所有 td 设了 overflow:hidden（配合 ellipsis 截断），
+     展开行里的标签是整块换行的，必须放开，否则标签被裁掉一半。 */
+  overflow: visible; white-space: normal;
+}
+.perm-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.perm-tags code {
+  font-family: var(--mono); font-size: var(--fs-12);
+  padding: 2px 7px; border-radius: var(--radius-chip);
+  background: var(--c-surface-2); border: 1px solid var(--c-border); color: var(--c-text-dim);
+}
+.perm-tags code.missing { border-color: var(--c-danger); color: var(--c-danger); }
+.edit-role {
+  margin-top: 12px; padding: 12px 14px;
+  border: 1px solid var(--c-primary-soft); border-radius: var(--radius-sm);
+}
+.edit-role .sec-head { margin-bottom: 8px; }
+.edit-role .actions { display: flex; gap: 8px; margin-top: 10px; }
 .perms { display: flex; flex-wrap: wrap; gap: 8px; }
 .perms code { background: var(--c-primary-soft); color: var(--c-primary); padding: 3px 10px; border-radius: 999px; font-size: var(--fs-12); }
 /* 能力矩阵表列宽：原因为唯一弹性列；角色表列宽：角色名为唯一弹性列。 */
@@ -715,6 +836,6 @@ col.w-caprs { width: auto; }
 col.w-rlname { width: 26%; }
 col.w-rlperm { width: 120px; }
 col.w-rlsrc { width: 100px; }
-col.w-rlacts { width: 90px; }
+col.w-rlacts { width: 190px; }   /* 自定义角色两个带文字按钮（编辑权限 + 删除） */
 
 </style>

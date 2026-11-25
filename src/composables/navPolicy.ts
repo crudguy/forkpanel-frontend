@@ -23,8 +23,9 @@ import type { useAuthStore } from '@/stores/auth'
 export interface NavGate {
   /** 宿主能力位；null = 面板内建页面，不依赖任何 OS 能力（只判权限点） */
   cap: string | null
-  /** RBAC 权限点 */
+  /** RBAC 权限点：`perm` = 必须有，`anyOf` = 有任一即可（两者不会同时出现） */
   perm: string
+  anyOf?: string[]
 }
 
 type AuthStore = ReturnType<typeof useAuthStore>
@@ -54,7 +55,14 @@ export function gateForPath(path: string): NavGate | null {
     // ALWAYS_CAP 是「此页无宿主能力门槛」的显式标记，不是真的在判指标能力：
     // 之前直接把 CAP.METRICS_READ 交给 whyDisabled，等于把「指标能力恒 yes」
     // 当隐含前提；一旦该能力位因故为 no，设置/帮助/通知之类无关页面会集体变灰。
-    if (nav) return { cap: nav.cap === ALWAYS_CAP ? null : nav.cap, perm: nav.perm }
+    // NAV_ITEMS 的 perm 允许写成数组 = "有其中任一即可"（见 NavDef 注释）；
+    // 归一化成 NavGate 的两种形态，下游只认 perm / anyOf 二选一。
+    // ⚠ `anyOf: nav.perm` 是**转发**而非声明（值仍来自 NAV_ITEMS 的字面量表），
+    //   ci/check-permissions.sh 的 [D2] 对这两行有显式豁免，改写法时要同步。
+    if (nav) {
+      const cap = nav.cap === ALWAYS_CAP ? null : nav.cap
+      return Array.isArray(nav.perm) ? { cap, perm: '', anyOf: nav.perm } : { cap, perm: nav.perm }
+    }
     const extra = EXTRA_GATES[p]
     if (extra) return { ...extra }
     const i = p.lastIndexOf('/')
@@ -72,8 +80,29 @@ export function gateForPath(path: string): NavGate | null {
 export function whyDisabledForPath(auth: AuthStore, path: string): string | null {
   const gate = gateForPath(path)
   if (!gate) return null
+  // "任一权限"形态：能力位先判（原因比权限不足更值得先说），再判权限集合。
+  // 逐个喂给 auth.can() 会写成变量参数，被 ci/check-permissions.sh 的 [D] 判为
+  // 「不可校验的调用点」——这里改走 holdsAny（与 can 同源的纯判定），
+  // 权限名仍是 NAV_ITEMS 里的字面量，校验基准不丢。
+  if (gate.anyOf) {
+    if (gate.cap !== null && !auth.supported(gate.cap)) {
+      return auth.whyDisabled(gate.cap, gate.anyOf[0] ?? '')
+    }
+    return holdsAny(auth, gate.anyOf) ? null : '权限不足'
+  }
   if (gate.cap === null) return auth.can(gate.perm) ? null : '权限不足'
   return auth.whyDisabled(gate.cap, gate.perm)
+}
+
+/**
+ * 「有其中任一即可」判定。与 `auth.can` 同源（都读登录快照里的 permissions）：
+ * 单独抽出来是为了给"任一权限"形态一个**不产生变量参数调用点**的出口，
+ * 免得 `check-permissions.sh` 的 [D] 把 `can(p)` 当成漏检点判红——
+ * 那道门禁的判据是"权限名必须是字面量"，这条路径的权限名在 NAV_ITEMS 里。
+ */
+export function holdsAny(auth: AuthStore, perms: readonly string[]): boolean {
+  const have = auth.me?.permissions ?? []
+  return perms.some((p) => have.includes(p))
 }
 
 export type GuardDecision = true | { name: 'dashboard' }

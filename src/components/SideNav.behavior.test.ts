@@ -31,6 +31,8 @@ import type { CapabilityMap } from '@/api/types'
 const ENABLED = NAV_ITEMS.find((i) => i.to === '/files')!
 /** 取另一个（用来验证"禁用的确实不跳"）。 */
 const BLOCKED = NAV_ITEMS.find((i) => i.to === '/expose')!
+/** BLOCKED 声明的**全部**权限点（perm 可能是数组）：缺任何一个都会置灰。 */
+const BLOCKED_PERMS = ([] as string[]).concat(BLOCKED.perm)
 
 let app: App | null = null
 let host: HTMLElement | null = null
@@ -46,11 +48,20 @@ function capsAllOk(overrides: Record<string, { supported: boolean; reason: strin
   return caps
 }
 
+/**
+ * NAV_ITEMS 里的全部权限点，**摊平数组形态**。
+ *
+ * perm 可以是 `string | string[]`（数组 = 任一即可）。直接把数组塞进 Set 会让
+ * `'log.view|audit.view'` 变成整个数组当元素——「全权限」用例的权限集合因此
+ * 缺项，表现为"能力与权限都齐备却有 N 项被置灰"。
+ */
+const ALL_NAV_PERMS = [...new Set(NAV_ITEMS.flatMap((i) => i.perm))]
+
 async function mountNav(opts: {
   unsupported?: Record<string, { supported: boolean; reason: string | null }>
   perms?: string[]
 } = {}) {
-  const perms = opts.perms ?? [...new Set(NAV_ITEMS.map((i) => i.perm))]
+  const perms = opts.perms ?? ALL_NAV_PERMS
   // ⚠ 必须与 `app.use(...)` 用的是**同一个** pinia 实例：两次 createPinia() 会让
   //   用例往 A 里塞 capabilities、组件从 B 里读（全是 undefined），于是"全部可用"
   //   的用例也会静默通过，"置灰"的用例则红得莫名其妙。
@@ -134,7 +145,7 @@ describe('SideNav：禁用项的原因说得出，且点了不跳转', () => {
   })
 
   it('权限点缺失 → 原因为「权限不足」，与「平台不支持」可区分', async () => {
-    const others = [...new Set(NAV_ITEMS.map((i) => i.perm))].filter((p) => p !== BLOCKED.perm)
+    const others = ALL_NAV_PERMS.filter((p) => !BLOCKED_PERMS.includes(p))
     await mountNav({ perms: others })
     const a = linkTo(BLOCKED.to)
     expect(a.classList.contains('disabled'), '权限不足却没有置灰').toBe(true)
