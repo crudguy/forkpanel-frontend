@@ -3,7 +3,7 @@
  * 新增 / 编辑终端快捷命令的弹窗。
  * 样式复用 main.css 的公共 .mask / .modal / .blk，行为复用 useModal（Esc / 焦点陷阱）。
  */
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { useModal } from '@/composables/useModal'
 import { validateQuickCommand, type QuickCommand, type QuickCommandInput } from '@/composables/useQuickCommands'
@@ -12,6 +12,8 @@ const props = defineProps<{
   open: boolean
   /** 传入即为编辑态，否则新增态 */
   initial?: QuickCommand | null
+  /** 已被占用的名称：预置 + 同用户自定义；编辑态由父级排除自身旧名 */
+  takenLabels?: string[]
 }>()
 const emit = defineEmits<{
   (e: 'close'): void
@@ -22,6 +24,8 @@ const label = ref('')
 const cmd = ref('')
 const desc = ref('')
 const error = ref('')
+/** 每次提交时按最新 props 构造，避免数组引用变化时旧 Set 残留。 */
+const takenSet = computed(() => new Set(props.takenLabels ?? []))
 
 const box = ref<HTMLElement | null>(null)
 const { close } = useModal(() => props.open, box, () => emit('close'))
@@ -36,7 +40,7 @@ watch(() => props.open, (v) => {
 
 function submit() {
   const value = { label: label.value, cmd: cmd.value, desc: desc.value }
-  const err = validateQuickCommand(value)
+  const err = validateQuickCommand(value, takenSet.value)
   if (err) { error.value = err; return }
   emit('save', {
     label: value.label.trim(),

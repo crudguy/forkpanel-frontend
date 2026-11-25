@@ -67,6 +67,14 @@ describe('快捷命令数据层（服务端）', () => {
     expect(validateQuickCommand({ label: ' 查状态 ', cmd: ' git status ' })).toBeNull()
   })
 
+  it('校验拒绝重名（trim 后比较；未传集合时仍只做格式校验）', () => {
+    const taken = new Set(['状态', '清屏'])
+    expect(validateQuickCommand({ label: '状态', cmd: 'ls' }, taken)).toContain('已存在')
+    expect(validateQuickCommand({ label: ' 状态 ', cmd: 'ls' }, taken)).toContain('已存在')
+    expect(validateQuickCommand({ label: '新名', cmd: 'ls' }, taken)).toBeNull()
+    expect(validateQuickCommand({ label: '状态', cmd: 'ls' })).toBeNull()
+  })
+
   it('服务端响应归一：数字 id 转字符串、脏记录丢弃', () => {
     expect(normalizeCustomCommands(null)).toEqual([])
     expect(normalizeCustomCommands('oops')).toEqual([])
@@ -75,6 +83,7 @@ describe('快捷命令数据层（服务端）', () => {
       { id: 'x', label: 'x', cmd: 'ls' },
       { id: 7, label: ' 一 ', cmd: ' ls -la ', desc: ' 说明 ' },
       { id: 7, label: '重复', cmd: 'pwd' },
+      { id: 11, label: ' 一 ', cmd: 'pwd' },
       { id: 'p_ls', label: '伪造预置', cmd: 'ls' },
       { id: 9, label: '换行', cmd: 'ls\nwhoami' },
       { id: 10, label: '缺命令', cmd: '' },

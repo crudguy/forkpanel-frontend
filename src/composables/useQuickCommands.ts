@@ -48,13 +48,21 @@ const MAX_LABEL = 40
 const MAX_CMD = 500
 const MAX_DESC = 80
 
-/** 表单校验：返回面向用户的错误文案，合法返回 null。与后端 check_input 同规则。 */
-export function validateQuickCommand(input: QuickCommandInput): string | null {
+/**
+ * 表单校验：返回面向用户的错误文案，合法返回 null。与后端 check_input 同规则。
+ * `takenLabels` 由视图传入（预置 + 同用户已有命令，编辑态已排除自身）；后端另有
+ * 按 user_id 的查重兜底，两处文案必须一致。
+ */
+export function validateQuickCommand(
+  input: QuickCommandInput,
+  takenLabels?: ReadonlySet<string>,
+): string | null {
   const label = (input.label ?? '').trim()
   const cmd = (input.cmd ?? '').trim()
   const desc = (input.desc ?? '').trim()
   if (!label) return '请填写名称'
   if (label.length > MAX_LABEL) return `名称最多 ${MAX_LABEL} 个字符`
+  if (takenLabels?.has(label)) return '名称已存在，请换一个'
   if (!cmd) return '请填写命令'
   if (/[\r\n\0]/.test(cmd)) return '命令必须是单行，不能包含换行'
   if (cmd.length > MAX_CMD) return `命令最多 ${MAX_CMD} 个字符`
@@ -70,6 +78,7 @@ export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
   if (!Array.isArray(raw)) return []
   const out: QuickCommand[] = []
   const seen = new Set<string>()
+  const usedLabels = new Set<string>()
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const o = item as Record<string, unknown>
@@ -85,10 +94,14 @@ export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
     }
     if (validateQuickCommand(candidate)) continue
     if (PRESET_COMMANDS.some((p) => p.id === id)) continue
+    const label = candidate.label.trim()
+    // 服务端已查重；这里再挡一层历史脏数据，否则浮层里两条同名仍会让用户误解。
+    if (usedLabels.has(label)) continue
+    usedLabels.add(label)
     seen.add(id)
     out.push({
       id,
-      label: candidate.label.trim(),
+      label,
       cmd: candidate.cmd.trim(),
       desc: (candidate.desc ?? '').trim(),
     })

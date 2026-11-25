@@ -291,6 +291,17 @@ const dialogOpen = ref(false)
 const editing = ref<QuickCommand | null>(null)
 const pendingDelete = ref<QuickCommand | null>(null)
 
+/** 已用名称：预置 + 当前用户自定义。编辑态按 **id** 排除自身（不是按名称——
+    按名称会把同名的预置项一起排除掉），否则「只改说明/命令」会被自己的旧名挡住；
+    改成同用户另一条已有的名字仍会被拦。 */
+const dialogTakenLabels = computed<string[]>(() => {
+  const ownId = editing.value?.id
+  return [
+    ...PRESET_COMMANDS.map((c) => c.label),
+    ...customCommands.value.filter((c) => c.id !== ownId).map((c) => c.label),
+  ]
+})
+
 function fillCommand(c: QuickCommand) {
   quickInput.value = c.cmd
   nextTick(() => quickInputEl.value?.focus())
@@ -562,8 +573,8 @@ onUnmounted(() => {
       <div v-for="t in tabs" :key="t.id" :ref="(el) => bindPane(t.id, el)"
         class="term-pane" :class="{ active: t.id === activeId }" />
 
-      <TerminalCommandDialog :open="dialogOpen" :initial="editing" @close="dialogOpen = false"
-        @save="saveQuick" />
+      <TerminalCommandDialog :open="dialogOpen" :initial="editing" :taken-labels="dialogTakenLabels"
+        @close="dialogOpen = false" @save="saveQuick" />
       <ConfirmDialog :open="!!pendingDelete" title="删除自定义命令"
         :detail="`确定删除「${pendingDelete?.label ?? ''}」吗？`" danger
         @confirm="confirmDelete" @cancel="pendingDelete = null" />
