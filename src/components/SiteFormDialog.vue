@@ -1007,7 +1007,7 @@ function confSpecChanged(): boolean {
           <label class="blk full adv-row" data-f="authPass" :class="{ 'has-err': fieldErrs.authPass }"
             title="留空 = 保留现有口令（仅设置时经 openssl 生成摘要写入 htpasswd，不落库、不回显）">
             口令{{ editing ? '（留空保留）' : '' }}
-            <input type="password" v-model="form.authPass" @input="clearFieldErr('authPass')" :disabled="isCaddy"
+            <input type="password" v-model="form.authPass" autocomplete="new-password" @input="clearFieldErr('authPass')" :disabled="isCaddy"
               :aria-invalid="!!fieldErrs.authPass" placeholder="********" />
             <span v-if="fieldErrs.authPass" :key="'authPass' + errSeq" class="field-err">{{ fieldErrs.authPass }}</span>
           </label>

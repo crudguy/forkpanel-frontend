@@ -323,12 +323,15 @@ onMounted(() => { if (canManage.value) load() })
         <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
         <div class="field">
           <label>用户名</label>
-          <input v-model="form.username" :disabled="!!editing" :placeholder="editing ? '' : '登录名，1-64 字符'" />
+          <!-- autocomplete 必须显式声明：Chrome 把无 autocomplete 的"用户名+密码"对当登录表单，
+               会把记住的 admin/密码填进弹窗，连带把搜索框也拖下水（截图实测）。
+               用户名用 off，密码用 new-password（标准的"非登录表单"信号）。 -->
+          <input v-model="form.username" autocomplete="off" :disabled="!!editing" :placeholder="editing ? '' : '登录名，1-64 字符'" />
           <span v-if="fieldErrors.username" class="field-err" role="alert">{{ fieldErrors.username }}</span>
         </div>
         <div class="field">
           <label>{{ editing ? '重置密码（留空不改）' : '密码' }}</label>
-          <input v-model="form.password" type="password" :placeholder="editing ? '留空则保持原密码' : '至少 10 位，含两类字符'" />
+          <input v-model="form.password" type="password" autocomplete="new-password" :placeholder="editing ? '留空则保持原密码' : '至少 10 位，含两类字符'" />
           <span v-if="fieldErrors.password" class="field-err" role="alert">{{ fieldErrors.password }}</span>
         </div>
         <div class="field">
