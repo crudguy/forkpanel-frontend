@@ -444,7 +444,7 @@ onMounted(() => { load(); loadFail2ban() })
             <template v-else>共 {{ rules.length }} 条规则</template>
           </span>
           <span class="spacer" />
-          <input v-model="q" class="filter" type="search" placeholder="搜索端口 / 来源 / 备注…"
+          <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索端口 / 来源 / 备注…"
             aria-label="搜索防火墙规则" />
           <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         </div>

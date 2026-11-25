@@ -224,7 +224,7 @@ async function saveRemark(c: Container, v: string) {
       <div class="card-toolbar">
         <span class="count">共 {{ containers.length }} 个容器<span v-if="filtered.length !== containers.length">（匹配 {{ filtered.length }}）</span></span>
         <span class="spacer" />
-        <input class="filter" v-model="q" type="search" placeholder="搜索名称 / 镜像 / 状态" aria-label="搜索容器" />
+        <input class="filter" v-model="q" type="search" autocomplete="off" placeholder="搜索名称 / 镜像 / 状态" aria-label="搜索容器" />
         <div class="seg" role="group" aria-label="状态筛选">
           <button type="button" :class="{ on: stateFilter === 'all' }" @click="stateFilter = 'all'">全部</button>
           <button type="button" :class="{ on: stateFilter === 'running' }" @click="stateFilter = 'running'">运行</button>

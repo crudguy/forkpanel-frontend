@@ -225,7 +225,7 @@ async function doKill() {
           </span>
           <span class="spacer" />
           <!-- 搜索：分页后 Ctrl+F 只能搜当前页，用这里补上；比肉眼扫 391 行快得多 -->
-          <input v-model="q" class="find" type="search" placeholder="筛选名称 / 用户 / PID"
+          <input v-model="q" class="find" type="search" autocomplete="off" placeholder="筛选名称 / 用户 / PID"
             aria-label="筛选进程" :disabled="loading" />
           <RefreshBtn :disabled="loading" sm @click="load()" />
         </div>

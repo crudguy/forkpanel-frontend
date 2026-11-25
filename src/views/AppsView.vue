@@ -474,7 +474,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
           <template v-else>共 {{ apps.length }} 个应用</template>
         </span>
         <span class="spacer" />
-        <input v-model="q" class="filter" type="search" placeholder="搜索名称 / 域名 / 运行时…"
+        <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索名称 / 域名 / 运行时…"
           aria-label="搜索应用" />
         <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         <HelpBtn title="应用说明" aria-label="应用说明" :expanded="helpOpen" @click="helpOpen = true" />

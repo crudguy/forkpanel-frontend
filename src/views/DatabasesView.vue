@@ -504,7 +504,7 @@ async function exportCsv() {
             <template v-else>共 {{ conns.length }} 个连接</template>
           </span>
           <span class="spacer" />
-          <input v-model="q" class="filter" type="search" placeholder="搜索名称 / 主机 / 库…"
+          <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索名称 / 主机 / 库…"
             aria-label="搜索数据库连接" />
           <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <RefreshBtn :disabled="busy" sm @click="load" />

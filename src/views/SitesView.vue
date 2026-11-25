@@ -333,7 +333,7 @@ async function batchDelete() {
         <!-- 工具条统一范式（S1）：count 在左 → spacer 居中 → 筛选/搜索与动作簇整体靠右，
              与容器 / 镜像 / 其余 15+ 个 card-toolbar 一致；搜索框属动作簇，不夹在计数中间。 -->
         <span class="spacer" />
-        <input v-model="q" class="filter" type="search" placeholder="搜索名称或域名…" aria-label="搜索站点" />
+        <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索名称或域名…" aria-label="搜索站点" />
         <!-- A3 列显隐：10 列塞不进内容区，默认收起 4 个次要列（完整取值走行展开）。
              偏好记在本机（useTableCols），不同账号/不同机器互不影响——它是"我这台设备
              怎么看"，不是面板级共享配置，故不占用后端 settings。

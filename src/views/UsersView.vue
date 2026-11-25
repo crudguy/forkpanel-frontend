@@ -244,7 +244,7 @@ onMounted(() => { if (canManage.value) load() })
             <template v-else>共 {{ users.length }} 个用户</template>
           </span>
           <span class="spacer" />
-          <input v-model="q" class="filter" type="search" placeholder="搜索用户名 / 角色…"
+          <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索用户名 / 角色…"
             aria-label="搜索用户" />
           <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <button class="btn-primary" :disabled="loading || notReady || !canManage"

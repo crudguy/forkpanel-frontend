@@ -265,7 +265,7 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
           <template v-else>共 {{ certs.length }} 张证书</template>
         </span>
         <span class="spacer" />
-        <input v-model="q" class="filter" type="search" placeholder="搜索域名 / 站点…"
+        <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索域名 / 站点…"
           aria-label="搜索证书" />
         <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         <HelpBtn title="证书说明" aria-label="证书说明" :expanded="helpOpen" @click="helpOpen = true" />

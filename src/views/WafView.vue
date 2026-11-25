@@ -514,7 +514,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
             <template v-else>共 {{ sites.length }} 个站点</template>
           </span>
           <span class="spacer" />
-          <input v-model="q" class="filter" type="search" placeholder="搜索站点 / 域名…"
+          <input v-model="q" class="filter" type="search" autocomplete="off" placeholder="搜索站点 / 域名…"
             aria-label="搜索 WAF 站点" />
           <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
           <HelpBtn title="WAF 说明" aria-label="WAF 说明" :expanded="helpOpen" @click="helpOpen = true" />

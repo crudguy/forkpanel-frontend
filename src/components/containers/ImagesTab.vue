@@ -201,7 +201,7 @@ function shortId(id: string) {
       <div class="card-toolbar">
         <span class="count">常用镜像 · {{ POPULAR_IMAGES.length }} 个</span>
         <span class="spacer" />
-        <input class="filter" v-model="popularQ" type="search"
+        <input class="filter" v-model="popularQ" type="search" autocomplete="off"
           placeholder="搜索名称 / 用途" aria-label="搜索常用镜像" />
       </div>
 

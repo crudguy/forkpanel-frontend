@@ -627,7 +627,7 @@ async function doConfirmed() {
       <TabBar :tabs="TABS" />
       <span class="spacer" />
       <!-- 搜索放页级工具条：两个 Tab 共用同一入口，位置沿用全站「spacer 右侧动作簇」范式 -->
-      <input v-model="q" class="filter" type="search"
+      <input v-model="q" class="filter" type="search" autocomplete="off"
         :placeholder="tab === 'services' ? '搜索服务名 / 说明 / 状态…' : '搜索软件名称 / 用途…'"
         :aria-label="tab === 'services' ? '搜索服务' : '搜索软件'" />
       <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
