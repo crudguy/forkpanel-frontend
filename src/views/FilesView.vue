@@ -440,6 +440,8 @@ function onDrop(e: DragEvent) {
     error.value = '当前账号没有文件写入权限，无法上传'
     return
   }
+  // 路径越界（如 50001）时也不该继续上传——会再次 50001 报错，观感是"给的入口点不动"。
+  if (error.value) return
   void uploadFiles(files)
 }
 
@@ -597,6 +599,10 @@ const helpOpen = ref(false)
 // 写操作需同时满足：RBAC 权限点 file.write **且** 能力位 file.write 存在。
 // 此前只判权限，能力位在文件页从未生效（侧边栏门禁用的是 FILE_READ）。
 const canWrite = computed(() => auth.can('file.write') && auth.supported(CAP.FILE_WRITE))
+// 当前目录能不能写：在 canWrite 基础上还要没有路径错误（如 50001「路径超出允许范围」）。
+// ⚠ 只判 canWrite 会让"路径越界但权限在"的空目录态给出「上传/新建文件夹」入口，
+//   点下去仍是 50001 报错——观感是"给的按钮点不动"。截图实测。
+const canWriteHere = computed(() => canWrite.value && !error.value)
 
 function full(p: string) {
   return joinPath(path.value, p)
@@ -668,13 +674,13 @@ function full(p: string) {
           <Icon name="chevron-left" :size="14" /><span class="tool-label">上级</span>
         </button>
         <RefreshBtn :disabled="loading" collapsible @click="() => load()" />
-        <button v-if="canWrite" class="btn-ghost" :disabled="loading" title="新建文件夹" aria-label="新建文件夹" @click="askMkdir">
+        <button v-if="canWriteHere" class="btn-ghost" :disabled="loading" title="新建文件夹" aria-label="新建文件夹" @click="askMkdir">
           <Icon name="plus" :size="15" /><span class="tool-label">新建文件夹</span>
         </button>
         <button class="btn-ghost" :disabled="!auth.supported(CAP.FILE_READ)" title="回收站：被移入的文件可在这里恢复" aria-label="回收站" @click="showTrash = true">
           <Icon name="trash" :size="15" /><span class="tool-label">回收站</span>
         </button>
-        <button v-if="canWrite" class="btn-primary" :disabled="uploading" @click="pickUpload"
+        <button v-if="canWriteHere" class="btn-primary" :disabled="uploading" @click="pickUpload"
           :title="`超过 ${MULTIPART_THRESHOLD / 1024 / 1024} MiB 的文件自动走分片上传（中断后可续传）`">
           <Icon name="plus" :size="15" /> {{ uploadLabel || (uploading ? '上传中…' : '上传') }}
         </button>
@@ -786,7 +792,7 @@ function full(p: string) {
         <button class="btn-ghost" type="button" @click="filterQuery = ''">清除筛选</button>
       </template>
     </EmptyState>
-    <EmptyState v-else-if="!loading && canWrite" title="空目录"
+    <EmptyState v-else-if="!loading && canWriteHere" title="空目录"
       hint="可以上传文件或新建文件夹开始使用。">
       <template #cta>
         <button class="btn-ghost" type="button" @click="pickUpload">上传文件</button>
