@@ -10,6 +10,7 @@ import Icon from '@/components/Icon.vue'
 import RefreshBtn from '@/components/RefreshBtn.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
+import TaskRunDetail from '@/components/TaskRunDetail.vue'
 import { useAsync } from '@/composables/useAsync'
 import { usePolling } from '@/composables/usePolling'
 import { PAGE_SIZE_ALL, useTableControls, type SortColumn } from '@/composables/useTableControls'
@@ -255,8 +256,15 @@ function isFailed(t: Task) { return t.state === 'failed' }
             <th />
           </tr></thead>
           <tbody>
+            <!-- 深链 / 切页后选中的任务不在当前页：详情退到表首，仍比原来的「页面最底部」近。 -->
+            <tr v-if="sel && !pageRows.some((t) => t.id === sel?.id)" class="detail-row">
+              <td colspan="6">
+                <TaskRunDetail :task="sel" :output="output" :out-loading="outLoading" @close="close" />
+              </td>
+            </tr>
+            <template v-for="t in pageRows" :key="t.id">
             <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 打开详情 -->
-            <tr v-for="t in pageRows" :key="t.id" :class="{ active: sel?.id === t.id }" @click="open(t)"
+            <tr :class="{ active: sel?.id === t.id }" @click="open(t)"
                 tabindex="0" role="button" :aria-label="`查看任务 #${t.id} 详情`"
                 @keydown.enter="open(t)" @keydown.space.prevent="open(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
@@ -280,6 +288,13 @@ function isFailed(t: Task) { return t.state === 'failed' }
                 <button v-if="isLive(t) && canCancel" class="btn-ghost btn-sm danger" title="取消任务" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
+            <!-- 详情就地展开在所点击的行下面：任务多时不必滑到页面最底部。 -->
+            <tr v-if="sel?.id === t.id" class="detail-row">
+              <td colspan="6">
+                <TaskRunDetail :task="sel" :output="output" :out-loading="outLoading" @close="close" />
+              </td>
+            </tr>
+            </template>
             <tr v-if="!total"><td colspan="6">
               <EmptyState v-if="stateFilter" :title="`没有「${stateText(stateFilter)}」状态的任务`"
                 hint="换个状态看看，或切回「全部状态」。">
@@ -296,36 +311,18 @@ function isFailed(t: Task) { return t.state === 'failed' }
           @update:page="gotoPage" @update:size="changeSize" />
       </div>
 
-      <div v-if="sel" class="card">
-        <div class="sec-head">
-          <Icon name="terminal" :size="16" /><span>任务 #{{ sel.id }} · {{ sel.key || sel.kind }}</span>
-          <span class="badge" :class="stateClass(sel.state)">{{ stateText(sel.state) }}</span>
-          <span class="spacer" /><button class="btn-sm" @click="close">关闭</button>
-        </div>
-        <p class="meta">
-          类型 <span class="mono">{{ sel.kind }}</span>
-          · 开始 {{ fmtDateTime(sel.started_at) }}
-          · 结束 {{ fmtDateTime(sel.finished_at) }}
-          · 耗时 <span class="mono">{{ sel.duration_secs != null ? sel.duration_secs + 's' : '—' }}</span>
-          <template v-if="sel.exit_code != null"> · 退出码 <span class="mono">{{ sel.exit_code }}</span></template>
-        </p>
-        <pre v-if="outLoading" class="skeleton" style="height:120px" />
-        <pre v-else class="out">{{ output }}</pre>
-      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.meta { margin: 0 0 10px; font-size: var(--fs-12-5); color: var(--c-text-dim); }
 .box { height: 320px; border-radius: var(--radius); }
 .mini { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .mini .progress { flex: 1; }
 .mini span { font-size: var(--fs-12); color: var(--c-text-dim); font-variant-numeric: tabular-nums; }
 tr.active { background: var(--c-active) !important; }
-.out { margin: 0; padding: 14px; background: var(--c-bg); border: 1px solid var(--c-border);
-       border-radius: var(--radius-sm); font-family: var(--mono); font-size: var(--fs-12-5);
-       white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
+/* 详情行不画自己的边框/内边距，交给内部 .detail-card，避免 td 与卡片双层盒子。 */
+tr.detail-row > td { padding: 0 0 8px; border-bottom: 0; }
 /* 任务表显式列宽（与站点/进程页统一范式：table-layout:fixed + colgroup）。
    任务标识（kind/key）为唯一弹性列，可能较长，ellipsis 截断、完整值走 title。 */
 .w-tid { width: 6%; }
