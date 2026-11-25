@@ -17,38 +17,34 @@ import { API } from '@/api/endpoints'
 
 export interface QuickCommand {
   id: string
-  /** 列表里显示的短名，如「仓库状态」 */
-  label: string
-  /** 真正送进 PTY 的命令文本（单行） */
+  /** 真正送进 PTY 的命令文本（单行）——浮层里展示的就是它，同用户下唯一 */
   cmd: string
-  /** 一行说明 */
+  /** 一行说明，解释这条命令干什么 */
   desc: string
   /** 预置项不可编辑/删除 */
   builtin?: boolean
 }
 
 export const PRESET_COMMANDS: readonly QuickCommand[] = [
-  { id: 'p_pwd', label: '当前目录', cmd: 'pwd', desc: '显示当前工作目录', builtin: true },
-  { id: 'p_ls', label: '列出文件', cmd: 'ls -la', desc: '列出全部文件（含隐藏项）', builtin: true },
-  { id: 'p_cdup', label: '上级目录', cmd: 'cd ..', desc: '返回上一级目录', builtin: true },
-  { id: 'p_gitstatus', label: '仓库状态', cmd: 'git status', desc: '查看 Git 工作区状态', builtin: true },
-  { id: 'p_gitlog', label: '最近提交', cmd: 'git log --oneline -10', desc: '最近 10 条提交记录', builtin: true },
-  { id: 'p_df', label: '磁盘占用', cmd: 'df -h', desc: '查看各分区磁盘占用', builtin: true },
-  { id: 'p_free', label: '内存占用', cmd: 'free -h', desc: '查看内存与交换分区', builtin: true },
-  { id: 'p_clear', label: '清屏', cmd: 'clear', desc: '清空终端当前屏幕', builtin: true },
+  { id: 'p_pwd', cmd: 'pwd', desc: '显示当前工作目录', builtin: true },
+  { id: 'p_ls', cmd: 'ls -la', desc: '列出全部文件（含隐藏项）', builtin: true },
+  { id: 'p_cdup', cmd: 'cd ..', desc: '返回上一级目录', builtin: true },
+  { id: 'p_gitstatus', cmd: 'git status', desc: '查看 Git 工作区状态', builtin: true },
+  { id: 'p_gitlog', cmd: 'git log --oneline -10', desc: '最近 10 条提交记录', builtin: true },
+  { id: 'p_df', cmd: 'df -h', desc: '查看各分区磁盘占用', builtin: true },
+  { id: 'p_free', cmd: 'free -h', desc: '查看内存与交换分区', builtin: true },
+  { id: 'p_clear', cmd: 'clear', desc: '清空终端当前屏幕', builtin: true },
 ]
 
 export interface QuickCommandInput {
-  label: string
   cmd: string
   desc?: string
 }
 
-const MAX_LABEL = 40
 const MAX_CMD = 500
 const MAX_DESC = 80
 
-export type QuickCommandField = 'label' | 'cmd' | 'desc'
+export type QuickCommandField = 'cmd' | 'desc'
 
 export interface QuickFieldError {
   field: QuickCommandField
@@ -61,22 +57,21 @@ export interface QuickFieldError {
  *
  * 之所以单独给字段：表单要把错误显示在**对应输入框下方**而不是底部统一错误条，
  * 展示层需要知道是哪一项出错；但校验规则本身不能有两份，否则前端两处会漂移。
- * `takenLabels` 由视图传入（预置 + 同用户已有命令，编辑态已排除自身）；后端另有
- * 按 user_id 的查重兜底，两处文案必须一致。
+ *
+ * 唯一性锚定**命令内容**而不是名称：浮层里展示的就是命令文本，同一条命令存两条
+ * 才是真正会让人点错的那种重复。`takenCmds` 由视图传入（预置 + 同用户已有命令，
+ * 编辑态已排除自身）；后端另有按 user_id 的查重与唯一索引兜底，文案必须一致。
  */
 export function quickFieldError(
   input: QuickCommandInput,
-  takenLabels?: ReadonlySet<string>,
+  takenCmds?: ReadonlySet<string>,
 ): QuickFieldError | null {
-  const label = (input.label ?? '').trim()
   const cmd = (input.cmd ?? '').trim()
   const desc = (input.desc ?? '').trim()
-  if (!label) return { field: 'label', message: '请填写名称' }
-  if (label.length > MAX_LABEL) return { field: 'label', message: `名称最多 ${MAX_LABEL} 个字符` }
-  if (takenLabels?.has(label)) return { field: 'label', message: '名称已存在，请换一个' }
   if (!cmd) return { field: 'cmd', message: '请填写命令' }
   if (/[\r\n\0]/.test(cmd)) return { field: 'cmd', message: '命令必须是单行，不能包含换行' }
   if (cmd.length > MAX_CMD) return { field: 'cmd', message: `命令最多 ${MAX_CMD} 个字符` }
+  if (takenCmds?.has(cmd)) return { field: 'cmd', message: '该命令已存在，请勿重复添加' }
   if (desc.length > MAX_DESC) return { field: 'desc', message: `说明最多 ${MAX_DESC} 个字符` }
   return null
 }
@@ -84,9 +79,9 @@ export function quickFieldError(
 /** 只关心文案的调用方（如数据层 guard、现有单测）继续用这个薄包装。 */
 export function validateQuickCommand(
   input: QuickCommandInput,
-  takenLabels?: ReadonlySet<string>,
+  takenCmds?: ReadonlySet<string>,
 ): string | null {
-  return quickFieldError(input, takenLabels)?.message ?? null
+  return quickFieldError(input, takenCmds)?.message ?? null
 }
 
 /**
@@ -97,7 +92,7 @@ export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
   if (!Array.isArray(raw)) return []
   const out: QuickCommand[] = []
   const seen = new Set<string>()
-  const usedLabels = new Set<string>()
+  const usedCmds = new Set<string>()
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const o = item as Record<string, unknown>
@@ -107,21 +102,20 @@ export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
     const id = String(o.id)
     if (!id || seen.has(id)) continue
     const candidate: QuickCommandInput = {
-      label: typeof o.label === 'string' ? o.label : '',
       cmd: typeof o.cmd === 'string' ? o.cmd : '',
       desc: typeof o.desc === 'string' ? o.desc : '',
     }
     if (validateQuickCommand(candidate)) continue
     if (PRESET_COMMANDS.some((p) => p.id === id)) continue
-    const label = candidate.label.trim()
-    // 服务端已查重；这里再挡一层历史脏数据，否则浮层里两条同名仍会让用户误解。
-    if (usedLabels.has(label)) continue
-    usedLabels.add(label)
+    const cmd = candidate.cmd.trim()
+    // 服务端已有唯一索引；这里再挡一层历史脏数据，否则浮层里两行一模一样的
+    // 命令并排摆着，用户点哪个都一样，还以为是 bug。
+    if (usedCmds.has(cmd)) continue
+    usedCmds.add(cmd)
     seen.add(id)
     out.push({
       id,
-      label,
-      cmd: candidate.cmd.trim(),
+      cmd,
       desc: (candidate.desc ?? '').trim(),
     })
   }

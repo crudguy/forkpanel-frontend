@@ -291,14 +291,14 @@ const dialogOpen = ref(false)
 const editing = ref<QuickCommand | null>(null)
 const pendingDelete = ref<QuickCommand | null>(null)
 
-/** 已用名称：预置 + 当前用户自定义。编辑态按 **id** 排除自身（不是按名称——
-    按名称会把同名的预置项一起排除掉），否则「只改说明/命令」会被自己的旧名挡住；
-    改成同用户另一条已有的名字仍会被拦。 */
-const dialogTakenLabels = computed<string[]>(() => {
+/** 已占用命令：预置 + 当前用户自定义。编辑态按 **id** 排除自身（不是按命令——
+    按命令会把内容相同的预置项一起排除掉），否则「只改说明」会被自己挡住；
+    改成同用户另一条已有的命令仍会被拦。 */
+const dialogTakenCmds = computed<string[]>(() => {
   const ownId = editing.value?.id
   return [
-    ...PRESET_COMMANDS.map((c) => c.label),
-    ...customCommands.value.filter((c) => c.id !== ownId).map((c) => c.label),
+    ...PRESET_COMMANDS.map((c) => c.cmd),
+    ...customCommands.value.filter((c) => c.id !== ownId).map((c) => c.cmd),
   ]
 })
 
@@ -536,8 +536,11 @@ onUnmounted(() => {
                 <span class="qb-label">常用</span>
                 <div class="qb-items">
                   <div v-for="c in PRESET_COMMANDS" :key="c.id" class="qb-item">
-                    <button class="qb-cmd" type="button" :title="c.desc" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
-                    <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
+                    <button class="qb-cmd" type="button" :title="c.desc" @click="fillCommand(c)">
+                      <code>{{ c.cmd }}</code>
+                      <span v-if="c.desc" class="qb-desc">{{ c.desc }}</span>
+                    </button>
+                    <button class="qb-act" type="button" :aria-label="`复制 ${c.cmd}`" title="复制"
                       @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
                   </div>
                 </div>
@@ -547,12 +550,15 @@ onUnmounted(() => {
                 <div class="qb-items">
                   <template v-if="customCommands.length">
                     <div v-for="c in customCommands" :key="c.id" class="qb-item">
-                      <button class="qb-cmd" type="button" :title="c.desc || c.cmd" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
-                      <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
+                      <button class="qb-cmd" type="button" :title="c.desc || c.cmd" @click="fillCommand(c)">
+                        <code>{{ c.cmd }}</code>
+                        <span v-if="c.desc" class="qb-desc">{{ c.desc }}</span>
+                      </button>
+                      <button class="qb-act" type="button" :aria-label="`复制 ${c.cmd}`" title="复制"
                         @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
-                      <button class="qb-act" type="button" :aria-label="`编辑 ${c.label}`" title="编辑"
+                      <button class="qb-act" type="button" :aria-label="`编辑 ${c.cmd}`" title="编辑"
                         @click="openEdit(c)"><Icon name="edit" :size="14" /></button>
-                      <button class="qb-act danger" type="button" :aria-label="`删除 ${c.label}`" title="删除"
+                      <button class="qb-act danger" type="button" :aria-label="`删除 ${c.cmd}`" title="删除"
                         @click="pendingDelete = c"><Icon name="trash" :size="14" /></button>
                     </div>
                   </template>
@@ -573,10 +579,10 @@ onUnmounted(() => {
       <div v-for="t in tabs" :key="t.id" :ref="(el) => bindPane(t.id, el)"
         class="term-pane" :class="{ active: t.id === activeId }" />
 
-      <TerminalCommandDialog :open="dialogOpen" :initial="editing" :taken-labels="dialogTakenLabels"
+      <TerminalCommandDialog :open="dialogOpen" :initial="editing" :taken-cmds="dialogTakenCmds"
         @close="dialogOpen = false" @save="saveQuick" />
       <ConfirmDialog :open="!!pendingDelete" title="删除自定义命令"
-        :detail="`确定删除「${pendingDelete?.label ?? ''}」吗？`" danger
+        :detail="`确定删除命令「${pendingDelete?.cmd ?? ''}」吗？`" danger
         @confirm="confirmDelete" @cancel="pendingDelete = null" />
     </template>
   </div>
@@ -665,8 +671,17 @@ onUnmounted(() => {
   background: var(--c-glass); padding: 3px 5px 3px 3px;
 }
 .qb-item:hover { border-color: var(--c-primary); }
-.qb-cmd { padding: 4px 5px; border: none; background: none; color: var(--c-text); font-size: var(--fs-12-5); }
+.qb-cmd {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 4px 5px; border: none; background: none; color: var(--c-text);
+  font-size: var(--fs-12-5); text-align: left; min-width: 0;
+}
 .qb-cmd code { background: none; padding: 0; }
+/* 说明常驻在命令下方：命令名本身看不出用途，靠悬停 title 才读到等于没有。 */
+.qb-desc {
+  font-size: var(--fs-12); line-height: 1.35; color: var(--c-text-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
 .qb-act {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: none; background: none;

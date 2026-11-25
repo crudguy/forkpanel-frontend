@@ -12,29 +12,27 @@ const props = defineProps<{
   open: boolean
   /** 传入即为编辑态，否则新增态 */
   initial?: QuickCommand | null
-  /** 已被占用的名称：预置 + 同用户自定义；编辑态由父级排除自身旧名 */
-  takenLabels?: string[]
+  /** 已被占用的命令文本：预置 + 同用户自定义；编辑态由父级排除自身旧命令 */
+  takenCmds?: string[]
 }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'save', value: QuickCommandInput): void
 }>()
 
-const label = ref('')
 const cmd = ref('')
 const desc = ref('')
 /** 字段级错误：只挂在出错的输入框下方，不再在弹窗底部堆一条统一错误条。
  *  判定与文案仍由 quickFieldError 唯一提供，这里只负责落到哪个字段。 */
 const fieldErrors = ref<Partial<Record<QuickCommandField, string>>>({})
 /** 每次提交时按最新 props 构造，避免数组引用变化时旧 Set 残留。 */
-const takenSet = computed(() => new Set(props.takenLabels ?? []))
+const takenSet = computed(() => new Set(props.takenCmds ?? []))
 
 const box = ref<HTMLElement | null>(null)
 const { close } = useModal(() => props.open, box, () => emit('close'))
 
 watch(() => props.open, (v) => {
   if (!v) return
-  label.value = props.initial?.label ?? ''
   cmd.value = props.initial?.cmd ?? ''
   desc.value = props.initial?.desc ?? ''
   fieldErrors.value = {}
@@ -42,11 +40,10 @@ watch(() => props.open, (v) => {
 
 function submit() {
   fieldErrors.value = {}
-  const value = { label: label.value, cmd: cmd.value, desc: desc.value }
+  const value = { cmd: cmd.value, desc: desc.value }
   const err = quickFieldError(value, takenSet.value)
   if (err) { fieldErrors.value = { [err.field]: err.message }; return }
   emit('save', {
-    label: value.label.trim(),
     cmd: value.cmd.trim(),
     desc: value.desc.trim(),
   })
@@ -67,19 +64,16 @@ function submit() {
       </div>
 
       <form @submit.prevent="submit">
-        <label class="blk" :class="{ 'has-err': !!fieldErrors.label }">名称
-          <input v-model="label" type="text" maxlength="40" placeholder="如：查看状态"
-            autocomplete="off" />
-          <span v-if="fieldErrors.label" class="field-err" role="alert">{{ fieldErrors.label }}</span>
-        </label>
         <label class="blk" :class="{ 'has-err': !!fieldErrors.cmd }">命令
           <input v-model="cmd" type="text" maxlength="500" class="mono" placeholder="如：git status"
-            autocomplete="off" spellcheck="false" />
+            autocomplete="off" spellcheck="false" :aria-invalid="!!fieldErrors.cmd"
+            @input="delete fieldErrors.cmd" />
           <span v-if="fieldErrors.cmd" class="field-err" role="alert">{{ fieldErrors.cmd }}</span>
         </label>
         <label class="blk" :class="{ 'has-err': !!fieldErrors.desc }">说明（可选）
-          <input v-model="desc" type="text" maxlength="80" placeholder="一句话说明用途"
-            autocomplete="off" />
+          <input v-model="desc" type="text" maxlength="80" placeholder="如：查看 Git 工作区状态"
+            autocomplete="off" :aria-invalid="!!fieldErrors.desc"
+            @input="delete fieldErrors.desc" />
           <span v-if="fieldErrors.desc" class="field-err" role="alert">{{ fieldErrors.desc }}</span>
         </label>
 
