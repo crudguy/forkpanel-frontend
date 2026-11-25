@@ -294,11 +294,13 @@ const editingTplId = ref<number | null>(null)
 const tplForm = ref<TplForm>({ name: '', profile: 'basic', rate: 0, burst: 0, conn: 0, ipAllow: '', ipDeny: '' })
 const tplSaving = ref(false)
 const tplError = ref('')
+/** 模板名校验错误：显示在名称输入框下方；tplError 只留给服务端错误。 */
+const tplNameErr = ref('')
 
 function openCreateTpl() {
   editingTplId.value = null
   tplForm.value = { name: '', profile: 'basic', rate: 0, burst: 0, conn: 0, ipAllow: '', ipDeny: '' }
-  tplError.value = ''
+  tplError.value = ''; tplNameErr.value = ''
   tplModalOpen.value = true
 }
 function openEditTpl(t: WafTemplate) {
@@ -307,13 +309,14 @@ function openEditTpl(t: WafTemplate) {
     name: t.name, profile: t.waf_profile, rate: t.rate_per_sec, burst: t.burst, conn: t.conn_max ?? 0,
     ipAllow: showIps(t.ip_allow ?? []), ipDeny: showIps(t.ip_deny ?? []),
   }
-  tplError.value = ''
+  tplError.value = ''; tplNameErr.value = ''
   tplModalOpen.value = true
 }
 
 /** 保存模板。PATCH 是**全量替换**语义，故每次都送全字段（缺省会被后端清成默认）。 */
 async function saveTpl() {
-  if (!tplForm.value.name.trim()) { tplError.value = '模板名不能为空'; return }
+  if (!tplForm.value.name.trim()) { tplNameErr.value = '模板名不能为空'; return }
+  tplNameErr.value = ''
   const body = {
     name: tplForm.value.name.trim(),
     profile: tplForm.value.profile,
@@ -803,11 +806,13 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
             <Icon name="close" :size="16" />
           </button>
         </div>
+        <!-- 仅服务端 / 归属不到输入框的错误走整段条；字段校验见名称输入框下方。 -->
         <p v-if="tplError" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ tplError }}</span>
         </p>
-        <label class="blk">名称
+        <label class="blk" :class="{ 'has-err': !!tplNameErr }">名称
           <input v-model="tplForm.name" placeholder="如：博客基础防护" :disabled="tplSaving" />
+          <span v-if="tplNameErr" class="field-err" role="alert">{{ tplNameErr }}</span>
         </label>
         <label class="blk">防护档位
           <select v-model="tplForm.profile" :disabled="tplSaving">

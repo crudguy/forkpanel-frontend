@@ -126,7 +126,7 @@ const canF2b = computed(() => auth.can('firewall.manage'))
 const loaded = ref(false)
 
 async function apply() {
-  busy.value = true; error.value = ''; confirmAllow.value = false
+  busy.value = true; error.value = ''; confirmAllow.value = false; fieldErrs.value = {}
   // 清空前留一份：提示文案要说清处理了哪些端口，下面几行就把 ports 清掉了
   const applied = ports.value
   const act = action.value
@@ -137,7 +137,7 @@ async function apply() {
     // 兜底：有人绕过 prepareApply 直接触发提交时，仍要拦住缺失/不安全的新端口。
     if (migrate) {
       const reason = newPortError(newPort, parsed, protectedPorts.value)
-      if (reason) { error.value = reason; return }
+      if (reason) { fieldErrs.value = { newPort: reason }; return }
     }
     const r = await api.post<{ added: number; removed: number; unchanged: number; warnings: string[]; ssh_migrated_to?: number }>(
       API.firewall.rules(),
@@ -163,6 +163,12 @@ const allowSummary = ref('')
 const allowTitle = ref('确认放行端口')
 const allowDanger = ref(false)
 const allowErr = ref('')
+/** 字段级校验错误：就近挂在出问题的那个输入框下方。
+ *  校验规则与文案原样不动，只改落点；allowErr 只留归属不到具体输入框的错误。 */
+const fieldErrs = ref<Partial<Record<'ports' | 'source' | 'newPort', string>>>({})
+function clearFieldErr(k: 'ports' | 'source' | 'newPort') {
+  if (fieldErrs.value[k]) delete fieldErrs.value[k]
+}
 function validSource(s: string): boolean {
   if (!s.trim()) return true
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(s.trim())
@@ -179,15 +185,16 @@ function validSource(s: string): boolean {
 }
 function prepareApply() {
   allowErr.value = ''
+  fieldErrs.value = {}
   if (!canManage.value) return
   const p = parsePorts(ports.value, action.value)
-  if (!p.ok) { allowErr.value = p.msg!; return }
-  if (!validSource(source.value)) { allowErr.value = '来源格式无效（应为 IPv4 或 IPv4/CIDR，如 1.2.3.4 或 1.2.3.0/24）'; return }
+  if (!p.ok) { fieldErrs.value = { ports: p.msg! }; return }
+  if (!validSource(source.value)) { fieldErrs.value = { source: '来源格式无效（应为 IPv4 或 IPv4/CIDR，如 1.2.3.4 或 1.2.3.0/24）' }; return }
   const highRisk = migrationRequired.value
   if (highRisk) {
     // 命中 SSH 时新端口必填且必须安全：拦在弹窗之前，别让用户确认完才发现无效
     const reason = newPortError(newSshPort.value, p, protectedPorts.value)
-    if (reason) { allowErr.value = reason; return }
+    if (reason) { fieldErrs.value = { newPort: reason }; return }
   }
   const c = applyConfirm(action.value, ports.value, source.value, highRisk)
   allowTitle.value = c.title
@@ -375,11 +382,15 @@ onMounted(() => { load(); loadFail2ban() })
               <option value="reject">拒绝并回复（reject）</option>
             </select>
           </label>
-          <label class="fw-form-port">端口
-            <input v-model="ports" placeholder="80,443 或 8000-8100" />
+          <label class="fw-form-port" :class="{ 'has-err': !!fieldErrs.ports }">端口
+            <input v-model="ports" placeholder="80,443 或 8000-8100" :aria-invalid="!!fieldErrs.ports"
+              @input="clearFieldErr('ports')" />
+            <span v-if="fieldErrs.ports" class="field-err" role="alert">{{ fieldErrs.ports }}</span>
           </label>
-          <label class="fw-form-src">来源（可选）
-            <input v-model="source" placeholder="0.0.0.0/0 或留空" />
+          <label class="fw-form-src" :class="{ 'has-err': !!fieldErrs.source }">来源（可选）
+            <input v-model="source" placeholder="0.0.0.0/0 或留空" :aria-invalid="!!fieldErrs.source"
+              @input="clearFieldErr('source')" />
+            <span v-if="fieldErrs.source" class="field-err" role="alert">{{ fieldErrs.source }}</span>
           </label>
           <label class="fw-form-cmt">备注
             <input v-model="comment" placeholder="web" />
@@ -389,11 +400,14 @@ onMounted(() => { load(); loadFail2ban() })
         </div>
         <!-- 命中 SSH 端口才展开：新端口是迁移目标。面板先迁移并放行它，再封禁旧端口。 -->
         <div v-if="migrationRequired" class="row migrate-row">
-          <label>新 SSH 端口（迁移目标）
-            <input v-model="newSshPort" class="fw-newport" placeholder="如 2222" inputmode="numeric" />
+          <label :class="{ 'has-err': !!fieldErrs.newPort }">新 SSH 端口（迁移目标）
+            <input v-model="newSshPort" class="fw-newport" placeholder="如 2222" inputmode="numeric"
+              :aria-invalid="!!fieldErrs.newPort" @input="clearFieldErr('newPort')" />
+            <span v-if="fieldErrs.newPort" class="field-err" role="alert">{{ fieldErrs.newPort }}</span>
           </label>
           <p class="migrate-tip">本次封禁含当前 SSH 端口。请填一个不在封禁范围内、且不同于当前端口的新端口；面板会先迁移并放行它，再封禁旧端口，失败自动回滚。</p>
         </div>
+        <!-- 仅归属不到某个输入框的错误（无权限等）走整段条；字段校验就近挂在上方各输入框下。 -->
         <p v-if="allowErr" class="err">{{ allowErr }}</p>
         <!-- 说明条是本卡片最后一个元素：传 last 让间距翻到上方，否则会紧贴端口输入行、
              同时把 14px 下边距叠在卡片 padding 上（看上去黏在编辑区底下）。 -->

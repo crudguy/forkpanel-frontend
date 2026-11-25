@@ -74,7 +74,9 @@ function dlg(): HTMLElement {
 }
 
 function inlineError(m: Mounted): string {
-  return m.host.querySelector('.err')?.textContent ?? ''
+  // 校验提示已改为就近挂在出问题的输入框下方（.field-err）；
+  // 兼容仍走整段条（.err）的归属不明错误。
+  return m.host.querySelector('.field-err')?.textContent ?? m.host.querySelector('.err')?.textContent ?? ''
 }
 
 function lastBody(m: Mounted): ApplyBody {

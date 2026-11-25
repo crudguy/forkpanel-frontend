@@ -90,10 +90,12 @@ const portConfirm = ref('')
 const keepOld = ref(true)
 /** 弹窗内的错误位：页面级 error 会被 .mask 挡住 */
 const portDialogErr = ref('')
+/** 确认词校验错误：显示在确认输入框下方，底部条只留给服务端错误。 */
+const confirmErr = ref('')
 const portBox = ref<HTMLElement | null>(null)
 const { close: closePort } = useModal(
   () => editingPort.value, portBox,
-  () => { editingPort.value = false; portDialogErr.value = '' },
+  () => { editingPort.value = false; portDialogErr.value = ''; confirmErr.value = '' },
 )
 
 const portInvalid = computed(() => {
@@ -116,18 +118,20 @@ async function loadSshPort() {
 function askEditPort() {
   portInput.value = String(sshPort.value?.effective ?? 22)
   portConfirm.value = ''
-  portDialogErr.value = ''
+  portDialogErr.value = ''; confirmErr.value = ''
   keepOld.value = true
   editingPort.value = true
 }
 
 async function submitPort() {
   const msg = validatePortInput(portInput.value, sshPort.value?.effective ?? null)
-  if (msg) { portDialogErr.value = msg; return }
+  // 端口错误由下方 portInvalid 就近显示，不再往弹窗底部堆同一句话。
+  if (msg) return
   if (portConfirm.value.trim() !== SSH_PORT_CONFIRM_WORD) {
-    portDialogErr.value = `请输入确认词「${SSH_PORT_CONFIRM_WORD}」`
+    confirmErr.value = `请输入确认词「${SSH_PORT_CONFIRM_WORD}」`
     return
   }
+  confirmErr.value = ''
   portDialogErr.value = ''
   acting.value = true
   try {
@@ -692,19 +696,21 @@ async function doDisable() {
           </button>
         </div>
         <p class="modal-lead">{{ riskNotice() }}</p>
+        <!-- 仅服务端 / 归属不到输入框的错误走整段条；字段校验见各输入框下方。 -->
         <p v-if="portDialogErr" class="err-bar form-msg" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ portDialogErr }}</span>
         </p>
-        <label class="blk">新端口（1-65535）
+        <label class="blk" :class="{ 'has-err': !!portInvalid }">新端口（1-65535）
           <input v-model="portInput" inputmode="numeric" autocomplete="off" />
+          <span v-if="portInvalid" class="field-err" role="alert">{{ portInvalid }}</span>
         </label>
-        <p v-if="portInvalid" class="field-err">{{ portInvalid }}</p>
         <label class="chk-row">
           <input v-model="keepOld" type="checkbox" />
           <span>过渡期同时保留旧端口 {{ sshPort?.effective }}（推荐：新端口连不上时可从这里回退）</span>
         </label>
-        <label class="blk">输入「{{ SSH_PORT_CONFIRM_WORD }}」以确认
+        <label class="blk" :class="{ 'has-err': !!confirmErr }">输入「{{ SSH_PORT_CONFIRM_WORD }}」以确认
           <input v-model="portConfirm" autocomplete="off" @keyup.enter="submitPort" />
+          <span v-if="confirmErr" class="field-err" role="alert">{{ confirmErr }}</span>
         </label>
         <div class="modal-foot">
           <div class="modal-actions">

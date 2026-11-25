@@ -86,6 +86,8 @@ const bUsername = ref('')
 const bPassword = ref('')
 const bPassword2 = ref('')
 const bError = ref('')
+/** 首启表单字段级错误：就近显示在对应输入框下；bError 只留给服务端错误。 */
+const bFieldErrors = ref<Partial<Record<'password' | 'confirm', string>>>({})
 const bBusy = ref(false)
 const reveal = ref(false)        // 口令明文/掩码切换（含生成后的可见性）
 const copied = ref(false)        // 「已复制」瞬时反馈
@@ -150,9 +152,9 @@ async function readTokenFromFile() {
 
 async function submitBootstrap() {
   if (bBusy.value) return
-  bError.value = ''
-  if (!policyOk.value) { bError.value = '密码需至少 10 位，且包含至少两类字符'; return }
-  if (bPassword.value !== bPassword2.value) { bError.value = '两次输入的密码不一致'; return }
+  bError.value = ''; bFieldErrors.value = {}
+  if (!policyOk.value) { bFieldErrors.value.password = '密码需至少 10 位，且包含至少两类字符'; return }
+  if (bPassword.value !== bPassword2.value) { bFieldErrors.value.confirm = '两次输入的密码不一致'; return }
   bBusy.value = true
   try {
     // skipAuthRedirect：令牌错误返回 401 时不触发全局"跳登录"事件
@@ -209,6 +211,7 @@ async function submitBootstrap() {
           <input v-model="bPassword" :type="reveal ? 'text' : 'password'" autocomplete="new-password" required :disabled="bBusy" />
           <button type="button" class="pw-toggle" :disabled="bBusy" @click="reveal = !reveal">{{ reveal ? '隐藏' : '显示' }}</button>
         </div>
+        <span v-if="bFieldErrors.password" class="field-err" role="alert">{{ bFieldErrors.password }}</span>
       </label>
       <div class="pw-actions">
         <button type="button" class="btn-ghost btn-sm" :disabled="bBusy" @click="genPassword">生成强口令</button>
@@ -219,8 +222,10 @@ async function submitBootstrap() {
       <label>
         <span>确认密码</span>
         <input v-model="bPassword2" :type="reveal ? 'text' : 'password'" autocomplete="new-password" required :disabled="bBusy" />
+        <span v-if="bFieldErrors.confirm" class="field-err" role="alert">{{ bFieldErrors.confirm }}</span>
       </label>
 
+      <!-- 服务端 / 归属不到输入框的错误走整段条；字段校验见各输入框下方。 -->
       <p v-if="bError" class="error" role="alert">{{ bError }}</p>
 
       <button type="submit" class="btn-primary" :disabled="bBusy">

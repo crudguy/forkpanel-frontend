@@ -43,6 +43,8 @@ const formLabel = ref('')
 const formSecret = ref('')
 const formZone = ref('')
 const formErr = ref('')
+/** 字段级校验错误：归属到具体输入框，不再堆在表单顶部。 */
+const fieldErr = ref('')
 const busyProv = ref('')
 
 const hasAny = computed(() => creds.value.length > 0)
@@ -61,7 +63,7 @@ async function load() {
 
 function startAdd() {
   editing.value = DNS_PROVIDERS[0]
-  formLabel.value = ''; formSecret.value = ''; formZone.value = ''; formErr.value = ''
+  formLabel.value = ''; formSecret.value = ''; formZone.value = ''; formErr.value = ''; fieldErr.value = ''
 }
 
 function startEdit(c: DnsCred) {
@@ -70,11 +72,11 @@ function startEdit(c: DnsCred) {
   // 不回填 token：接口只给掩码，回填掩码会让用户以为那是真 token
   formSecret.value = ''
   formZone.value = c.zone_hint
-  formErr.value = ''
+  formErr.value = ''; fieldErr.value = ''
 }
 
 function cancelEdit() {
-  editing.value = ''; formErr.value = ''
+  editing.value = ''; formErr.value = ''; fieldErr.value = ''
 }
 
 /** 当前编辑的是"新增"还是"更新"——决定 secret 是否必填 */
@@ -82,7 +84,9 @@ const isNew = computed(() => !creds.value.some((c) => c.provider === editing.val
 
 async function save() {
   const v = validateCredInput(editing.value, formSecret.value, isNew.value)
-  if (v) { formErr.value = v; return }
+  // 校验错误就近显示在 API Token 输入框下；formErr 只留给服务端 / 整段错误。
+  if (v) { fieldErr.value = v; return }
+  fieldErr.value = ''
   busyProv.value = editing.value; formErr.value = ''
   try {
     await api.put(API.dns.creds(), {
@@ -191,13 +195,15 @@ defineExpose({ reload: load })
       <!-- 表单：编辑中才显示。用 .blk 布局（字段名在上、控件满宽） -->
       <div v-if="editing" class="dc-form">
         <h4>{{ isNew ? '添加 DNS 凭据' : `编辑 ${providerLabel(editing)} 凭据` }}</h4>
+        <!-- 仅服务端 / 归属不到输入框的错误走整段条；字段校验见 API Token 下方。 -->
         <p v-if="formErr" class="err-bar" role="alert">
           <Icon name="alert" :size="15" class="ic" /><span>{{ formErr }}</span>
         </p>
-        <label class="blk">
+        <label class="blk" :class="{ 'has-err': !!fieldErr }">
           API Token
           <input v-model="formSecret" type="password" autocomplete="new-password"
             :placeholder="isNew ? '粘贴 Cloudflare API Token' : '留空 = 保持原有 Token 不变'" />
+          <span v-if="fieldErr" class="field-err" role="alert">{{ fieldErr }}</span>
         </label>
         <label class="blk">
           备注名（可选）

@@ -81,6 +81,8 @@ const { close: closeUserModal } = useModal(() => showModal.value, userBox, () =>
 const form = ref({ username: '', password: '', role: 'operator', rootsText: '', disabled: false })
 const saving = ref(false)
 const formErr = ref('')
+/** 字段级校验错误：就近显示在对应输入框下方；formErr 只留给服务端错误。 */
+const fieldErrors = ref<Partial<Record<'username' | 'password', string>>>({})
 
 // 删除确认
 const delTarget = ref<UserOut | null>(null)
@@ -104,7 +106,7 @@ async function load() {
 function openCreate() {
   editing.value = null
   form.value = { username: '', password: '', role: 'operator', rootsText: '', disabled: false }
-  formErr.value = ''
+  formErr.value = ''; fieldErrors.value = {}
   showModal.value = true
 }
 function openEdit(u: UserOut) {
@@ -113,7 +115,7 @@ function openEdit(u: UserOut) {
     username: u.username, password: '', role: u.role,
     rootsText: (u.allowed_roots || []).join(', '), disabled: u.disabled,
   }
-  formErr.value = ''
+  formErr.value = ''; fieldErrors.value = {}
   showModal.value = true
 }
 
@@ -139,11 +141,11 @@ const formValid = computed(() => {
 })
 
 async function save() {
-  saving.value = true; formErr.value = ''
-  // 双保险：即便按钮被绕过也拦截非法提交
-  if (!form.value.username.trim()) { formErr.value = '用户名不能为空'; saving.value = false; return }
-  if (!editing.value && !pwStrong(form.value.password)) { formErr.value = '密码至少 10 位且含两类字符'; saving.value = false; return }
-  if (editing.value && form.value.password && !pwStrong(form.value.password)) { formErr.value = '密码至少 10 位且含两类字符'; saving.value = false; return }
+  saving.value = true; formErr.value = ''; fieldErrors.value = {}
+  // 双保险：即便按钮被绕过也拦截非法提交。判定与文案不变，只把提示落到对应输入框。
+  if (!form.value.username.trim()) { fieldErrors.value.username = '用户名不能为空'; saving.value = false; return }
+  if (!editing.value && !pwStrong(form.value.password)) { fieldErrors.value.password = '密码至少 10 位且含两类字符'; saving.value = false; return }
+  if (editing.value && form.value.password && !pwStrong(form.value.password)) { fieldErrors.value.password = '密码至少 10 位且含两类字符'; saving.value = false; return }
   const roots = form.value.rootsText.split(',').map(s => s.trim()).filter(Boolean)
   try {
     if (editing.value) {
@@ -270,15 +272,17 @@ onMounted(() => { if (canManage.value) load() })
             <Icon name="close" :size="16" />
           </button>
         </div>
-        <!-- 整段错误统一 .err-bar（此前 .err 只是纯红字，与弹窗错误条两套长相） -->
+        <!-- 服务端 / 归属不到输入框的错误走整段条；字段校验见各输入框下方。 -->
         <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
         <div class="field">
           <label>用户名</label>
           <input v-model="form.username" :disabled="!!editing" :placeholder="editing ? '' : '登录名，1-64 字符'" />
+          <span v-if="fieldErrors.username" class="field-err" role="alert">{{ fieldErrors.username }}</span>
         </div>
         <div class="field">
           <label>{{ editing ? '重置密码（留空不改）' : '密码' }}</label>
           <input v-model="form.password" type="password" :placeholder="editing ? '留空则保持原密码' : '至少 10 位，含两类字符'" />
+          <span v-if="fieldErrors.password" class="field-err" role="alert">{{ fieldErrors.password }}</span>
         </div>
         <div class="field">
           <label>角色</label>

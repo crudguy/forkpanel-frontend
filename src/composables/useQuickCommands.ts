@@ -48,26 +48,45 @@ const MAX_LABEL = 40
 const MAX_CMD = 500
 const MAX_DESC = 80
 
+export type QuickCommandField = 'label' | 'cmd' | 'desc'
+
+export interface QuickFieldError {
+  field: QuickCommandField
+  message: string
+}
+
 /**
- * 表单校验：返回面向用户的错误文案，合法返回 null。与后端 check_input 同规则。
+ * 表单校验的**唯一判定源**：返回出错字段 + 面向用户的文案，合法返回 null。
+ * 与后端 check_input 同规则，判定顺序与文案与 validateQuickCommand 完全一致。
+ *
+ * 之所以单独给字段：表单要把错误显示在**对应输入框下方**而不是底部统一错误条，
+ * 展示层需要知道是哪一项出错；但校验规则本身不能有两份，否则前端两处会漂移。
  * `takenLabels` 由视图传入（预置 + 同用户已有命令，编辑态已排除自身）；后端另有
  * 按 user_id 的查重兜底，两处文案必须一致。
  */
+export function quickFieldError(
+  input: QuickCommandInput,
+  takenLabels?: ReadonlySet<string>,
+): QuickFieldError | null {
+  const label = (input.label ?? '').trim()
+  const cmd = (input.cmd ?? '').trim()
+  const desc = (input.desc ?? '').trim()
+  if (!label) return { field: 'label', message: '请填写名称' }
+  if (label.length > MAX_LABEL) return { field: 'label', message: `名称最多 ${MAX_LABEL} 个字符` }
+  if (takenLabels?.has(label)) return { field: 'label', message: '名称已存在，请换一个' }
+  if (!cmd) return { field: 'cmd', message: '请填写命令' }
+  if (/[\r\n\0]/.test(cmd)) return { field: 'cmd', message: '命令必须是单行，不能包含换行' }
+  if (cmd.length > MAX_CMD) return { field: 'cmd', message: `命令最多 ${MAX_CMD} 个字符` }
+  if (desc.length > MAX_DESC) return { field: 'desc', message: `说明最多 ${MAX_DESC} 个字符` }
+  return null
+}
+
+/** 只关心文案的调用方（如数据层 guard、现有单测）继续用这个薄包装。 */
 export function validateQuickCommand(
   input: QuickCommandInput,
   takenLabels?: ReadonlySet<string>,
 ): string | null {
-  const label = (input.label ?? '').trim()
-  const cmd = (input.cmd ?? '').trim()
-  const desc = (input.desc ?? '').trim()
-  if (!label) return '请填写名称'
-  if (label.length > MAX_LABEL) return `名称最多 ${MAX_LABEL} 个字符`
-  if (takenLabels?.has(label)) return '名称已存在，请换一个'
-  if (!cmd) return '请填写命令'
-  if (/[\r\n\0]/.test(cmd)) return '命令必须是单行，不能包含换行'
-  if (cmd.length > MAX_CMD) return `命令最多 ${MAX_CMD} 个字符`
-  if (desc.length > MAX_DESC) return `说明最多 ${MAX_DESC} 个字符`
-  return null
+  return quickFieldError(input, takenLabels)?.message ?? null
 }
 
 /**

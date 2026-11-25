@@ -5,6 +5,7 @@ import { API } from '@/api/endpoints'
 import {
   PRESET_COMMANDS,
   normalizeCustomCommands,
+  quickFieldError,
   useQuickCommands,
   validateQuickCommand,
 } from './useQuickCommands'
@@ -65,6 +66,28 @@ describe('快捷命令数据层（服务端）', () => {
     expect(validateQuickCommand({ label: 'x', cmd: 'a'.repeat(501) })).toContain('命令')
     expect(validateQuickCommand({ label: 'x', cmd: 'ls', desc: 'd'.repeat(81) })).toContain('说明')
     expect(validateQuickCommand({ label: ' 查状态 ', cmd: ' git status ' })).toBeNull()
+  })
+
+  it('字段级错误指向对应输入框，且与整段文案完全一致', () => {
+    const cases: Array<[Parameters<typeof quickFieldError>[0], 'label' | 'cmd' | 'desc']> = [
+      [{ label: '', cmd: 'ls' }, 'label'],
+      [{ label: 'x'.repeat(41), cmd: 'ls' }, 'label'],
+      [{ label: 'x', cmd: '' }, 'cmd'],
+      [{ label: 'x', cmd: 'ls\nrm -rf /' }, 'cmd'],
+      [{ label: 'x', cmd: 'a'.repeat(501) }, 'cmd'],
+      [{ label: 'x', cmd: 'ls', desc: 'd'.repeat(81) }, 'desc'],
+    ]
+    for (const [input, field] of cases) {
+      const err = quickFieldError(input)
+      expect(err).not.toBeNull()
+      expect(err!.field).toBe(field)
+      expect(err!.message).toBe(validateQuickCommand(input))
+    }
+    const taken = new Set(['仓库状态'])
+    const dup = quickFieldError({ label: ' 仓库状态 ', cmd: 'git status' }, taken)
+    expect(dup?.field).toBe('label')
+    expect(dup?.message).toBe(validateQuickCommand({ label: ' 仓库状态 ', cmd: 'git status' }, taken))
+    expect(quickFieldError({ label: 'ok', cmd: 'ls' })).toBeNull()
   })
 
   it('校验拒绝重名（trim 后比较；未传集合时仍只做格式校验）', () => {

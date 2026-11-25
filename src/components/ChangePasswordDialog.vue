@@ -32,14 +32,17 @@ const old = ref('')
 const nw = ref('')
 const confirm2 = ref('')
 const busy = ref(false)
+/** 服务端 / 归属不到具体输入框的整段错误仍走底部 err-bar。 */
 const error = ref('')
+/** 字段级校验错误挂在对应输入框下方；判定与文案保持原样，只改落点。 */
+const fieldErrors = ref<Partial<Record<'old' | 'nw' | 'confirm2', string>>>({})
 const done = ref(false)
 
 // 每次打开重置表单，避免残留上次输入
 watch(() => props.open, (v) => {
   if (v) {
     old.value = ''; nw.value = ''; confirm2.value = ''
-    error.value = ''; done.value = false; busy.value = false
+    error.value = ''; fieldErrors.value = {}; done.value = false; busy.value = false
   }
 })
 
@@ -56,17 +59,18 @@ const policyOk = computed(() => {
 async function submit() {
   if (busy.value || done.value) return
   error.value = ''
-  if (!old.value) { error.value = '请输入当前密码'; return }
-  if (!policyOk.value) { error.value = '新密码需至少 10 位，且包含至少两类字符'; return }
-  if (nw.value === old.value) { error.value = '新密码需与当前密码不同'; return }
-  if (nw.value !== confirm2.value) { error.value = '两次输入的新密码不一致'; return }
+  fieldErrors.value = {}
+  if (!old.value) { fieldErrors.value.old = '请输入当前密码'; return }
+  if (!policyOk.value) { fieldErrors.value.nw = '新密码需至少 10 位，且包含至少两类字符'; return }
+  if (nw.value === old.value) { fieldErrors.value.nw = '新密码需与当前密码不同'; return }
+  if (nw.value !== confirm2.value) { fieldErrors.value.confirm2 = '两次输入的新密码不一致'; return }
   busy.value = true
   try {
     await api.post(API.auth.password(), { old: old.value, new: nw.value })
     done.value = true
   } catch (e) {
     const detail = (e as ApiError).detail as { field?: string } | undefined
-    if ((e as ApiError).status === 400 && detail?.field === 'old') error.value = '当前密码不正确'
+    if ((e as ApiError).status === 400 && detail?.field === 'old') fieldErrors.value.old = '当前密码不正确'
     else error.value = errorText(e)
   } finally {
     busy.value = false
@@ -88,19 +92,21 @@ async function submit() {
       </div>
 
       <template v-if="!done">
-        <label class="blk">当前密码
+        <label class="blk" :class="{ 'has-err': !!fieldErrors.old }">当前密码
           <input v-model="old" type="password" autocomplete="current-password" :disabled="busy" />
+          <span v-if="fieldErrors.old" class="field-err" role="alert">{{ fieldErrors.old }}</span>
         </label>
-        <label class="blk">新密码
+        <label class="blk" :class="{ 'has-err': !!fieldErrors.nw }">新密码
           <input v-model="nw" type="password" autocomplete="new-password" :disabled="busy"
             placeholder="至少 10 位，含两类字符" />
+          <span v-if="fieldErrors.nw" class="field-err" role="alert">{{ fieldErrors.nw }}</span>
         </label>
-        <label class="blk">确认新密码
+        <label class="blk" :class="{ 'has-err': !!fieldErrors.confirm2 }">确认新密码
           <input v-model="confirm2" type="password" autocomplete="new-password" :disabled="busy"
             @keyup.enter="submit" />
+          <span v-if="fieldErrors.confirm2" class="field-err" role="alert">{{ fieldErrors.confirm2 }}</span>
         </label>
-        <!-- 字段级 / 整段错误改用公共 .err-bar（此前 .err 只是纯红字，没有底色与图标，
-             与站点弹窗的错误条长得完全不同） -->
+        <!-- 归属不到具体输入框的服务端错误仍走底部整段条；字段校验见各输入框下方。 -->
         <p v-if="error" class="err-bar" role="alert">{{ error }}</p>
         <div class="modal-foot">
           <div class="modal-actions">

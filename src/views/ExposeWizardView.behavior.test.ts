@@ -321,7 +321,7 @@ describe('证书成对（只给一个会静默回退成自签）', () => {
     button(m, '开启公网访问').click()
     await m.flush()
 
-    expect(m.host.querySelector('.err')?.textContent).toContain('证书链与私钥必须成对填写')
+    expect(m.host.querySelector('.field-err')?.textContent).toContain('证书链与私钥必须成对填写')
     expect(m.fake.count(API.system.expose.apply(), 'POST')).toBe(0)
     expect(dialog('确认开启公网访问')).toBeNull()
   })

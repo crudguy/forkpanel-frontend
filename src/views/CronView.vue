@@ -92,15 +92,23 @@ function nameIssue(name: string): string | null {
   if (!NAME_RE.test(v)) return '名称只允许字母、数字、下划线与连字符（会作为 crontab 标识）'
   return null
 }
-/** 表单内联错误：与页面级 error 分开，避免「填错一个字段」被当成整页失败。 */
+/** 表单内联错误：与页面级 error 分开，避免「填错一个字段」被当成整页失败。
+    这里只留**归属不到具体输入框**的错误（无权限等）；必填/格式类校验一律走
+    下面各字段的 field-* 文案，就近显示在对应输入框下方。 */
 const formErr = ref('')
 const nameWarn = computed(() => (form.value.name ? nameIssue(form.value.name) : null))
+
+/** 新建任务的字段级校验错误：提交时按字段写入，用户改该字段即清空。 */
+const createErrs = ref<Partial<Record<'name' | 'expr' | 'command' | 'timeout', string>>>({})
 
 // 编辑态：PATCH /api/v1/cron/jobs/{id}
 const edit = ref<Job | null>(null)
 const editForm = ref({ expr: '', command: '', user: '', enabled: true, timeout_sec: 60 })
 const editBusy = ref(false)
+/** 编辑弹窗里归属不到具体输入框的错误（无权限 / 服务端拒绝）。 */
 const editError = ref('')
+/** 编辑弹窗的字段级校验错误：就近显示在超时输入框下方。 */
+const editErrs = ref<Partial<Record<'timeout', string>>>({})
 
 async function load() {
   error.value = ''
@@ -135,13 +143,16 @@ const canManage = computed(() => auth.enabled(CAP.SCHEDULER_MANAGE, 'cron.manage
 // 创建按钮加 busy 态（审计 U8）：此前请求期间按钮可重复点击，产生重复任务
 const createBusy = ref(false)
 async function create() {
-  error.value = ''; note.value = ''; formErr.value = ''
-  // 前置校验：名称格式 + 超时范围（与编辑弹窗的约束同值，避免「新建能过、编辑被拒」）
+  error.value = ''; note.value = ''; formErr.value = ''; createErrs.value = {}
+  // 前置校验：名称格式 + 表达式/命令必填 + 超时范围（与编辑弹窗的约束同值，
+  // 避免「新建能过、编辑被拒」）。校验规则原样保留，只是把文案挂到对应输入框下方。
   const bad = nameIssue(form.value.name)
-  if (bad) { formErr.value = bad; return }
+  if (bad) { createErrs.value = { name: bad }; return }
+  if (!form.value.expr.trim()) { createErrs.value = { expr: '请填写执行频率' }; return }
+  if (!form.value.command.trim()) { createErrs.value = { command: '请填写命令' }; return }
   const to = Number(form.value.timeout_sec)
   if (!Number.isFinite(to) || to < 1 || to > 604800) {
-    formErr.value = '超时需为 1-604800 之间的整数（秒）'
+    createErrs.value = { timeout: '超时需为 1-604800 之间的整数（秒）' }
     return
   }
   createBusy.value = true
@@ -193,8 +204,9 @@ function openEdit(j: Job) {
     enabled: j.enabled, timeout_sec: j.timeout_sec || 60,
   }
   editError.value = ''
+  editErrs.value = {}
 }
-function closeEdit() { edit.value = null; editBusy.value = false }
+function closeEdit() { edit.value = null; editBusy.value = false; editErrs.value = {} }
 
 // Esc 关闭 + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还（此前本弹窗只有点遮罩和 ✕）。
 // X / 点遮罩 / 取消按钮统一走 closeEditModal。
@@ -227,10 +239,10 @@ async function saveEdit() {
   // P2：超时清空后 v-model.number 得 '' → Number('')=0，会下发非法超时；显式拦截
   const to = Number(editForm.value.timeout_sec)
   if (!Number.isFinite(to) || to < 1 || to > 604800) {
-    editError.value = '超时需为 1-604800 之间的整数（秒）'
+    editErrs.value = { timeout: '超时需为 1-604800 之间的整数（秒）' }
     return
   }
-  editBusy.value = true; editError.value = ''
+  editBusy.value = true; editError.value = ''; editErrs.value = {}
   try {
     await api.patch(API.cron.job(edit.value.id), {
       expr: editForm.value.expr,
@@ -327,6 +339,8 @@ function applyTemplate() {
 const tplOpen = ref(false)
 const tplBox = ref<HTMLElement | null>(null)
 const tplErr = ref('')
+/** 模板表单的字段级校验错误：就近显示在对应输入框下方；tplErr 只留给服务端错误。 */
+const tplErrs = ref<Partial<Record<'name' | 'description' | 'expr' | 'command' | 'timeout', string>>>({})
 const tplBusy = ref(false)
 /** 正在编辑的模板 id；null = 新建态 */
 const tplEditing = ref<number | null>(null)
@@ -343,6 +357,7 @@ function resetTplForm() {
     user: 'root', timeout_sec: 1800, webhook_url: '',
   }
   tplErr.value = ''
+  tplErrs.value = {}
 }
 
 function openTplManager() {
@@ -364,6 +379,7 @@ function editTemplate(t: Tpl) {
     user: t.user, timeout_sec: t.timeout_sec, webhook_url: t.webhook_url ?? '',
   }
   tplErr.value = ''
+  tplErrs.value = {}
 }
 
 const tplNameIssue = computed(() => {
@@ -373,17 +389,20 @@ const tplNameIssue = computed(() => {
 })
 
 async function saveTemplate() {
-  tplErr.value = ''
+  tplErr.value = ''; tplErrs.value = {}
   // 前置校验与后端同口径：名称/表达式/命令必填，超时 1~604800
+  // 规则原样保留，文案就近挂到各自输入框下方。
   const name = tplForm.value.name.trim()
-  if (!name) { tplErr.value = '请填写模板名'; return }
-  if (name.length > 64) { tplErr.value = '模板名最多 64 个字符'; return }
-  if (tplForm.value.description.length > 200) { tplErr.value = '说明最多 200 个字符'; return }
-  if (!tplForm.value.expr.trim()) { tplErr.value = '请填写 cron 表达式'; return }
-  if (!tplForm.value.command.trim()) { tplErr.value = '请填写命令'; return }
+  if (!name) { tplErrs.value = { name: '请填写模板名' }; return }
+  if (name.length > 64) { tplErrs.value = { name: '模板名最多 64 个字符' }; return }
+  if (tplForm.value.description.length > 200) {
+    tplErrs.value = { description: '说明最多 200 个字符' }; return
+  }
+  if (!tplForm.value.expr.trim()) { tplErrs.value = { expr: '请填写 cron 表达式' }; return }
+  if (!tplForm.value.command.trim()) { tplErrs.value = { command: '请填写命令' }; return }
   const to = Number(tplForm.value.timeout_sec)
   if (!Number.isFinite(to) || to < 1 || to > 604800) {
-    tplErr.value = '超时需为 1-604800 之间的整数（秒）'
+    tplErrs.value = { timeout: '超时需为 1-604800 之间的整数（秒）' }
     return
   }
   tplBusy.value = true
@@ -469,11 +488,21 @@ async function deleteTemplate() {
         </p>
 
         <div class="cron-fields">
-          <label>名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
-            aria-describedby="cron-name-hint" /></label>
-          <label>命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh" /></label>
+          <label :class="{ 'has-err': !!createErrs.name || !!nameWarn }">名称<input ref="nameInput" v-model="form.name" placeholder="backup-db"
+            :aria-invalid="!!createErrs.name || !!nameWarn" aria-describedby="cron-name-hint"
+            @input="delete createErrs.name" />
+            <span v-if="nameWarn" id="cron-name-hint" class="field-err">{{ nameWarn }}</span>
+            <span v-else-if="createErrs.name" class="field-err" role="alert">{{ createErrs.name }}</span>
+          </label>
+          <label :class="{ 'has-err': !!createErrs.command }">命令<input v-model="form.command" placeholder="/usr/local/bin/backup.sh"
+            :aria-invalid="!!createErrs.command" @input="delete createErrs.command" />
+            <span v-if="createErrs.command" class="field-err" role="alert">{{ createErrs.command }}</span>
+          </label>
           <label>执行用户<input v-model="form.user" placeholder="root" /></label>
-          <label>超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800" /></label>
+          <label :class="{ 'has-err': !!createErrs.timeout }">超时(秒)<input v-model.number="form.timeout_sec" type="number" min="1" max="604800"
+            :aria-invalid="!!createErrs.timeout" @input="delete createErrs.timeout" />
+            <span v-if="createErrs.timeout" class="field-err" role="alert">{{ createErrs.timeout }}</span>
+          </label>
           <label>Webhook URL
             <span class="webhook-url-field">
               <input v-model="form.webhook_url" placeholder="留空 = 不回调" :disabled="webhookBusy" />
@@ -489,16 +518,20 @@ async function deleteTemplate() {
             <span class="switch-wrap"><span class="switch"><input type="checkbox" v-model="form.enabled" /><i /></span></span>
           </label>
           <CronScheduleBar v-model="form.expr" :disabled="createBusy" />
+          <!-- 表达式输入由子组件承载，错误挂在它正下方 -->
+          <span v-if="createErrs.expr" class="field-err" role="alert" style="margin-top: -6px">{{ createErrs.expr }}</span>
           <div class="cron-actions">
-            <button class="btn-primary" :disabled="!canManage || createBusy || !form.name || !form.expr || !form.command" @click="create">
+            <!-- 必填项为空不禁用按钮：否则点击走不到 create()，下方各字段的
+                 field-err 永远无法出现（校验形同虚设）。必填判定交给 create()。 -->
+            <button class="btn-primary" :disabled="!canManage || createBusy" @click="create">
               {{ createBusy ? '创建中…' : '创建' }}</button>
             <button class="btn-ghost" :disabled="!form.expr || previewBusy" @click="doPreview(form.expr)">
               {{ previewBusy ? '计算中…' : '预览执行时刻' }}
             </button>
           </div>
         </div>
-        <!-- 名称格式提示：只在用户真的开始输入后才出现，空表单不先甩红字 -->
-        <p v-if="nameWarn" id="cron-name-hint" class="field-err">{{ nameWarn }}</p>
+        <!-- 名称格式提示已就近挂在名称输入框下方（与上面的 field-err 同处），
+             不再在整张表单底部重复一遍。formErr 只留归属不到字段的错误。 -->
         <p v-if="formErr" class="err-bar" role="alert">{{ formErr }}</p>
 
         <p v-if="previewExpr === form.expr" class="tip preview-tip">
@@ -604,13 +637,17 @@ async function deleteTemplate() {
             </button>
           </div>
 
-          <p v-if="editError" class="err-bar" role="alert">{{ editError }}</p>
+          <!-- 仅归属不到输入框的错误走整段条；字段校验见各输入框下方。 -->
+          <p v-if="editError" class="err-bar form-msg" role="alert">{{ editError }}</p>
 
           <CronScheduleBar v-model="editForm.expr" :disabled="editBusy" />
 
           <div class="row">
             <label>执行用户<input v-model="editForm.user" placeholder="root" :disabled="editBusy" /></label>
-            <label>超时(秒)<input v-model.number="editForm.timeout_sec" type="number" min="1" max="604800" :disabled="editBusy" /></label>
+            <label :class="{ 'has-err': !!editErrs.timeout }">超时(秒)<input v-model.number="editForm.timeout_sec" type="number" min="1" max="604800" :disabled="editBusy"
+              :aria-invalid="!!editErrs.timeout" @input="delete editErrs.timeout" />
+              <span v-if="editErrs.timeout" class="field-err" role="alert">{{ editErrs.timeout }}</span>
+            </label>
           </div>
           <div class="field"><label>命令</label><input v-model="editForm.command" placeholder="/usr/local/bin/backup.sh" :disabled="editBusy" /></div>
           <label class="switch-row">
@@ -665,6 +702,8 @@ async function deleteTemplate() {
             </button>
           </div>
 
+          <!-- 仅归属不到某个输入框的错误（服务端拒绝、网络异常）走整段条；
+               字段校验一律就近显示在各自输入框下方。 -->
           <p v-if="tplErr" class="err-bar" role="alert">{{ tplErr }}</p>
 
           <!-- 已有模板列表 -->
@@ -686,26 +725,44 @@ async function deleteTemplate() {
           <div class="tpl-form">
             <div class="sec-head">{{ tplEditing == null ? '新建模板' : '编辑模板' }}</div>
             <CronScheduleBar v-model="tplForm.expr" :disabled="tplBusy" />
+            <!-- 表达式输入由子组件承载，错误挂在它正下方 -->
+            <span v-if="tplErrs.expr" class="field-err" role="alert" style="margin-top: -6px">{{ tplErrs.expr }}</span>
             <div class="row">
-              <label>模板名<input v-model="tplForm.name" :disabled="tplBusy" placeholder="每日备份" aria-describedby="tpl-name-hint" /></label>
+              <label :class="{ 'has-err': !!tplErrs.name || !!tplNameIssue }">模板名<input v-model="tplForm.name" :disabled="tplBusy" placeholder="每日备份"
+                :aria-invalid="!!tplErrs.name || !!tplNameIssue" aria-describedby="tpl-name-hint"
+                @input="delete tplErrs.name" />
+                <span v-if="tplNameIssue" id="tpl-name-hint" class="field-err">{{ tplNameIssue }}</span>
+                <span v-else-if="tplErrs.name" class="field-err" role="alert">{{ tplErrs.name }}</span>
+              </label>
               <label>执行用户<input v-model="tplForm.user" :disabled="tplBusy" placeholder="root" /></label>
             </div>
-            <p v-if="tplNameIssue" id="tpl-name-hint" class="field-err">{{ tplNameIssue }}</p>
             <div class="field">
-              <label>说明<input v-model="tplForm.description" :disabled="tplBusy" placeholder="可选，例如：每天凌晨备份数据库" /></label>
+              <label :class="{ 'has-err': !!tplErrs.description }">说明<input v-model="tplForm.description" :disabled="tplBusy"
+                placeholder="可选，例如：每天凌晨备份数据库" :aria-invalid="!!tplErrs.description"
+                @input="delete tplErrs.description" />
+                <span v-if="tplErrs.description" class="field-err" role="alert">{{ tplErrs.description }}</span>
+              </label>
             </div>
             <div class="field">
-              <label>命令<input v-model="tplForm.command" :disabled="tplBusy" placeholder="/usr/local/bin/backup.sh" /></label>
+              <label :class="{ 'has-err': !!tplErrs.command }">命令<input v-model="tplForm.command" :disabled="tplBusy"
+                placeholder="/usr/local/bin/backup.sh" :aria-invalid="!!tplErrs.command"
+                @input="delete tplErrs.command" />
+                <span v-if="tplErrs.command" class="field-err" role="alert">{{ tplErrs.command }}</span>
+              </label>
             </div>
             <div class="row">
-              <label>超时(秒)<input v-model.number="tplForm.timeout_sec" type="number" min="1" max="604800" :disabled="tplBusy" /></label>
+              <label :class="{ 'has-err': !!tplErrs.timeout }">超时(秒)<input v-model.number="tplForm.timeout_sec" type="number" min="1" max="604800" :disabled="tplBusy"
+                :aria-invalid="!!tplErrs.timeout" @input="delete tplErrs.timeout" />
+                <span v-if="tplErrs.timeout" class="field-err" role="alert">{{ tplErrs.timeout }}</span>
+              </label>
               <label>Webhook URL<input v-model="tplForm.webhook_url" :disabled="tplBusy" placeholder="留空 = 不回调" /></label>
             </div>
             <div class="modal-actions">
               <button v-if="tplEditing != null" type="button" class="btn-ghost" :disabled="tplBusy" @click="resetTplForm">改为新建</button>
               <span class="spacer" />
-              <button type="button" class="btn-primary"
-                :disabled="tplBusy || !tplForm.name.trim() || !tplForm.expr.trim() || !tplForm.command.trim()"
+              <!-- 必填项为空不禁用：禁用会让 saveTemplate 里的必填校验永远触发不到，
+                   各字段的 field-err 也就永远看不见。必填判定交给 saveTemplate()。 -->
+              <button type="button" class="btn-primary" :disabled="tplBusy"
                 @click="saveTemplate">
                 {{ tplBusy ? '保存中…' : (tplEditing == null ? '创建模板' : '保存修改') }}
               </button>

@@ -46,6 +46,8 @@ const auth = useAuthStore()
 
 const status = ref<ExposeStatus | null>(null)
 const error = ref('')
+/** 表单字段级校验错误：就近显示在对应输入框下；error 只留给服务端整段错误。 */
+const fieldErrors = ref<Partial<Record<'domain' | 'allow' | 'cert', string>>>({})
 const busy = ref(false)
 
 // ── 表单状态 ──
@@ -109,10 +111,11 @@ const applySummary = computed(() => {
 
 function prepareApply() {
   if (!canManage.value) return
-  if (!domain.value.trim()) { error.value = '请填写对外域名'; return }
-  if (!parsedAllow().length) { error.value = '至少要给一个来源网段——留空等于把 root 面板开放给全网'; return }
+  fieldErrors.value = {}
+  if (!domain.value.trim()) { fieldErrors.value.domain = '请填写对外域名'; return }
+  if (!parsedAllow().length) { fieldErrors.value.allow = '至少要给一个来源网段——留空等于把 root 面板开放给全网'; return }
   if (tlsMode.value === 'custom' && (!fullchain.value.trim() || !key.value.trim())) {
-    error.value = '证书链与私钥必须成对填写（或改用自签）'; return
+    fieldErrors.value.cert = '证书链与私钥必须成对填写（或改用自签）'; return
   }
   error.value = ''
   confirmApply.value = true
@@ -238,16 +241,18 @@ onMounted(load)
         </p>
 
         <div class="form">
-          <label class="field">
+          <label class="field" :class="{ 'has-err': !!fieldErrors.domain }">
             <span class="lbl">对外域名 <em>必填</em></span>
             <input v-model="domain" placeholder="panel.example.com" autocomplete="off" />
+            <span v-if="fieldErrors.domain" class="field-err" role="alert">{{ fieldErrors.domain }}</span>
             <span class="hint">至少两级，且顶级域不能是数字（防止把 IP 填进来）。需已解析到本机。</span>
           </label>
 
-          <label class="field">
+          <label class="field" :class="{ 'has-err': !!fieldErrors.allow }">
             <span class="lbl">允许访问的来源网段 <em>必填</em></span>
             <textarea v-model="allowText" rows="3"
               placeholder="203.0.113.10&#10;198.51.100.0/24" />
+            <span v-if="fieldErrors.allow" class="field-err" role="alert">{{ fieldErrors.allow }}</span>
             <span class="hint">
               一行一个，填 IP 或网段。<b>名单之外的请求一律拒绝</b>，请把范围写小；填 <code>0.0.0.0/0</code>（放行所有）会被拒绝。
             </span>
@@ -266,13 +271,14 @@ onMounted(load)
           </div>
 
           <template v-if="tlsMode === 'custom'">
-            <label class="field">
+            <label class="field" :class="{ 'has-err': !!fieldErrors.cert }">
               <span class="lbl">证书链路径 <em>与私钥成对</em></span>
               <input v-model="fullchain" placeholder="/etc/ssl/certs/panel.fullchain.pem" class="mono" />
             </label>
-            <label class="field">
+            <label class="field" :class="{ 'has-err': !!fieldErrors.cert }">
               <span class="lbl">私钥路径</span>
               <input v-model="key" placeholder="/etc/ssl/private/panel.key" class="mono" />
+              <span v-if="fieldErrors.cert" class="field-err" role="alert">{{ fieldErrors.cert }}</span>
               <span class="hint">两个都给才算数；只给一个后端会拒绝（避免静默回退成自签）。</span>
             </label>
           </template>
