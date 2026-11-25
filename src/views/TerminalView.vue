@@ -98,7 +98,6 @@ const activeTab = computed<TermTab>(
 )
 
 // 工具栏作用于「当前激活标签」：这里一并代理过去（对齐 FilesView 的同款写法）。
-const status = computed({ get: () => activeTab.value.status, set: (v) => { activeTab.value.status = v } })
 const connected = computed({ get: () => activeTab.value.connected, set: (v) => { activeTab.value.connected = v } })
 const errorMsg = computed({ get: () => activeTab.value.errorMsg, set: (v) => { activeTab.value.errorMsg = v } })
 
@@ -210,12 +209,20 @@ function connect(id: string = activeId.value) {
     }
   }
   ws.onclose = () => {
-    // 重连/复用名额定场景：若关掉的不是当前这个 socket，直接忽略（否则会把新连接抹掉）。
-    if (s.ws !== sock) return
+    // 重连/复用名额的场景：若关掉的不是当前这个 socket，直接忽略（否则会把新连接抹掉）。
+    // 主动「断开」按钮会先把 s.ws 置 null 再 close，这里据此区分是"用户主动断开"
+    // 还是"连接意外掉线"，两种情形都要写提示行——否则终端停在旧提示符上，
+    // 看着像还能敲命令，实际已经没有任何东西在接收输入。
+    const voluntary = s.ws === null
+    if (!voluntary && s.ws !== sock) return
     tab.connected = false
     tab.status = '已断开'
     s.ws = null
-    if (s.term) s.term.writeln('\r\n\x1b[33m[连接已关闭]\x1b[0m')
+    if (s.term) {
+      s.term.writeln(voluntary
+        ? '\r\n\x1b[33m[已断开，点「重连」恢复会话]\x1b[0m'
+        : '\r\n\x1b[33m[连接已关闭]\x1b[0m')
+    }
   }
   ws.onerror = () => {
     // WS 握手失败（如并发名额用尽、只读模式、同源校验不通过）都走 onerror，
@@ -228,7 +235,14 @@ function connect(id: string = activeId.value) {
 function disconnect(id: string = activeId.value) {
   const s = sessions.get(id)
   const tab = tabById(id)
-  if (s?.ws) { s.ws.close(); s.ws = null }
+  if (!s?.ws) { if (tab) tab.connected = false; return }
+  const sock = s.ws
+  // s.ws 必须**先**置 null：reconnect 会紧接着调 connect，而 connect 开头
+  // `if (s.ws) return` 靠它判断"是否已有连接"，不清就会静默不重连。
+  // 置 null 同时充当「这次是用户主动断开」的信号，onclose 据此选提示文案
+  // （见 onclose 里的 voluntary 判定），避免终端停在旧提示符上像还能用。
+  s.ws = null
+  sock.close()
   if (tab) { tab.connected = false; if (tab.status === '连接中…') tab.status = '未连接' }
 }
 
@@ -475,9 +489,6 @@ onUnmounted(() => {
 
     <div class="tools-row">
       <span class="spacer" />
-      <span class="stat" :class="{ on: connected }">
-        <span class="dot" /> {{ status }}
-      </span>
       <!-- 权限/会话说明入口：与全站各页一致摆在这一行的最右侧（spacer 之后第一组）。
            宿主级权限这类「背景说明」收进抽屉，页面流里不再常驻一条警示条。 -->
       <HelpBtn title="终端说明" aria-label="终端说明" :expanded="helpOpen" @click="helpOpen = true" />
@@ -490,17 +501,28 @@ onUnmounted(() => {
         @click="toggleQuick" @keydown.escape="onQuickEsc">
         <Icon name="bolt" :size="14" /> 快捷命令
       </button>
-      <button class="btn-primary" :disabled="!enabled || connected" @click="connect()">
-        <Icon name="bolt" :size="15" /> 连接
-      </button>
-      <button class="btn-ghost" :disabled="!connected" @click="disconnect()">
+      <!-- 会话开关：断开与重连是同一件事的两个方向，合并成一个按钮，按当前状态二选一。
+           不并排放两个按钮——它们互斥，同时摆出来只会让用户判断"现在该点哪个"。
+           连接本身是自动的（onMounted / openTab 都会建连），所以不需要「连接」按钮；
+           会话状态改由标签上的状态点 + 终端内 [终端就绪]/[连接已关闭] 行表达。 -->
+      <button v-if="connected" class="btn-ghost" type="button"
+        title="断开会话：shell 与它启动的进程一并结束，立刻归还并发名额"
+        @click="disconnect()">
         <Icon name="stop" :size="15" /> 断开
       </button>
-      <button class="btn-ghost" :disabled="!connected" @click="reconnect()">
+      <!-- 重连用 btn-ghost 而非 btn-primary：两个状态共用一个位置，权重必须一致，
+           否则按下「断开」的瞬间按钮从幽灵色跳成橙色实心，视觉上像多出了一个主操作。
+           需要醒目时靠 refresh 图标 + 文案本身，不靠颜色抢。 -->
+      <button v-else class="btn-ghost" type="button" :disabled="!enabled"
+        title="重新建立终端会话"
+        @click="reconnect()">
         <Icon name="refresh" :size="15" /> 重连
       </button>
-      <button class="btn-ghost" :disabled="!enabled" @click="clearScreen()">
-        <Icon name="trash" :size="15" /> 清屏
+      <!-- 清屏只清本机 xterm 缓冲，不写 PTY、不影响正在运行的命令。
+           因此它不能被 clear 命令替代：命令跑着的时候输入进不了 shell。 -->
+      <button class="btn-ghost" :disabled="!enabled" title="清空本机屏幕显示（不等于 clear 命令，不影响正在运行的命令）"
+        @click="clearScreen()">
+        <Icon name="eraser" :size="15" /> 清屏
       </button>
     </div>
     </div>
@@ -601,11 +623,17 @@ onUnmounted(() => {
       <p>因此这项能力只应对<b>确实需要 shell 的人</b>开放；不需要时请在账号权限里收回终端的「管理」权限。</p>
       <h4>会话生命周期</h4>
       <ul>
+        <li>打开页面或新建标签会<b>自动连上</b>，不需要手动点「连接」。</li>
         <li>关闭页面或关闭标签即断开对应会话，shell 进程随之结束（后台任务会收到挂断信号）。</li>
         <li>无任何输入满 <b>15 分钟</b>会自动断开，避免会话被遗忘后常驻。</li>
         <li>同时最多 <b>{{ auth.terminalMax }}</b> 个会话（服务端全局上限，超出只能先关掉别的标签）。</li>
         <li>网络中断不代表命令停止：断线时已发出的命令仍在服务器上继续跑完。</li>
       </ul>
+      <h4>断开与重连</h4>
+      <p>工具栏那个按钮按当前状态二选一：连着时是<b>断开</b>，已断时是<b>重连</b>。断开会把整个会话连同它启动的进程一起结束，并<b>立刻把并发名额归还</b>；断线后唯一能恢复会话的也是这个按钮（系统不会自动重连）。</p>
+      <p><b>它和 <code>Ctrl+C</code> 不是一回事</b>：<code>Ctrl+C</code> 只给前台进程发 SIGINT，回到提示符但<b>会话仍然连著、仍占一个名额</b>，后台任务完全不受影响；在提示符下按更是只会显示 <code>^C</code>。想真正释放会话、或者误连后想主动收掉，只能用「断开」。</p>
+      <h4>清屏</h4>
+      <p>「清屏」清的是<b>本机屏幕缓冲</b>，不往会话里发任何字符，所以命令正在跑（<code>tail -f</code>、<code>htop</code>、日志刷屏）时也能直接用它把屏幕清干净。它<b>不等于 <code>clear</code> 命令</b>：<code>clear</code> 要按回车才会执行，而命令占着终端时输入进不了 shell。</p>
       <h4>快捷命令</h4>
       <p>工具栏「快捷命令」里保存的命令存在<b>当前登录账号</b>下，换设备、换浏览器都还在，别的账号看不到。它只是把文本填进终端，<b>不会绕过上面的权限约束</b>。</p>
       <h4>操作建议</h4>
@@ -635,11 +663,6 @@ onUnmounted(() => {
 .tab.add { color: var(--c-text-dim); }
 .tab.add:hover:not(:disabled) { color: var(--c-primary); }
 .tab.add:disabled { opacity: .45; cursor: not-allowed; }
-
-.stat { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-12-5); color: var(--c-text-mute); }
-.stat.on { color: var(--c-ok); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-mute); }
-.stat.on .dot { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
 
 /* 页面定高成 flex column：工具行固定，终端 flex:1 吃满剩余视口。
    高度取 100vh - var(--page-chrome-h)（顶栏 + .content 上下内边距的单一来源，窄屏

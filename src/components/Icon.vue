@@ -41,6 +41,9 @@ const ICONS: Record<string, string> = {
   restart: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
+  // 擦除（清屏专用）：不用 trash——垃圾桶在中文语境里读作「删除」，
+  // 而清屏只清本机显示、不删任何东西，图标本身就得把这个区别说清楚。
+  eraser: '<path d="M8.5 20H20M15.6 4.4l4 4a1.8 1.8 0 0 1 0 2.6l-7.4 7.4a1.8 1.8 0 0 1-2.6 0l-4-4a1.8 1.8 0 0 1 0-2.6l7.4-7.4a1.8 1.8 0 0 1 2.6 0z"/><path d="M9 10l5 5"/>',
   key: '<circle cx="8" cy="8" r="4"/><path d="M11 11l8 8M16 16l2-2M19 19l2-2"/>',
   cpu: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
   bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
