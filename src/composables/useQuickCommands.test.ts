@@ -1,27 +1,50 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installApiFake } from '@/test/apiFake'
+import { API } from '@/api/endpoints'
 import {
-  LS_KEY,
   PRESET_COMMANDS,
   normalizeCustomCommands,
   useQuickCommands,
   validateQuickCommand,
 } from './useQuickCommands'
 
-function makeStore() {
-  const data = new Map<string, string>()
-  return {
-    data,
-    getItem: (k: string) => data.get(k) ?? null,
-    setItem: (k: string, v: string) => { data.set(k, v) },
-    removeItem: (k: string) => { data.delete(k) },
-    clear: () => data.clear(),
-  }
+type Row = { id: number; label: string; cmd: string; desc: string }
+type Ctx = { url: string; method: string; body?: unknown }
+let rows: Row[]
+let fake: ReturnType<typeof installApiFake>
+
+function install() {
+  return installApiFake({
+    [API.quickCommands.list()]: (raw) => {
+      const ctx = raw as Ctx
+      if (ctx.method === 'GET') return rows
+      const body = (ctx.body ?? {}) as { label?: string; cmd?: string; desc?: string }
+      if (ctx.method === 'POST') {
+        rows.push({
+          id: rows.length + 1,
+          label: body.label ?? '', cmd: body.cmd ?? '', desc: body.desc ?? '',
+        })
+        return { ok: true }
+      }
+      const id = Number(ctx.url.split('/').pop())
+      if (ctx.method === 'PATCH') {
+        const i = rows.findIndex((r) => r.id === id)
+        if (i >= 0) rows[i] = { ...rows[i], ...body }
+        return { ok: true }
+      }
+      if (ctx.method === 'DELETE') {
+        rows = rows.filter((r) => r.id !== id)
+        return { ok: true }
+      }
+      return rows
+    },
+  })
 }
 
-describe('快捷命令数据层', () => {
-  beforeEach(() => {
-    vi.stubGlobal('localStorage', makeStore())
-  })
+describe('快捷命令数据层（服务端）', () => {
+  beforeEach(() => { rows = []; fake = install() })
+  afterEach(() => { fake.assertClean(); fake.restore() })
 
   it('预置命令字段完整且全部单行', () => {
     expect(PRESET_COMMANDS.length).toBeGreaterThanOrEqual(5)
@@ -44,53 +67,46 @@ describe('快捷命令数据层', () => {
     expect(validateQuickCommand({ label: ' 查状态 ', cmd: ' git status ' })).toBeNull()
   })
 
-  it('归一化丢弃脏记录并去重、trim', () => {
+  it('服务端响应归一：数字 id 转字符串、脏记录丢弃', () => {
     expect(normalizeCustomCommands(null)).toEqual([])
     expect(normalizeCustomCommands('oops')).toEqual([])
-    const raw = [
+    expect(normalizeCustomCommands([
       null,
-      42,
-      { id: '', label: 'x', cmd: 'ls' },
-      { id: 'a', label: ' 一 ', cmd: ' ls -la ', desc: ' 说明 ' },
-      { id: 'a', label: '重复', cmd: 'pwd' },
+      { id: 'x', label: 'x', cmd: 'ls' },
+      { id: 7, label: ' 一 ', cmd: ' ls -la ', desc: ' 说明 ' },
+      { id: 7, label: '重复', cmd: 'pwd' },
       { id: 'p_ls', label: '伪造预置', cmd: 'ls' },
-      { id: 'b', label: '换行', cmd: 'ls\nwhoami' },
-      { id: 'c', label: '缺命令', cmd: '' },
-    ]
-    expect(normalizeCustomCommands(raw)).toEqual([
-      { id: 'a', label: '一', cmd: 'ls -la', desc: '说明' },
-    ])
+      { id: 9, label: '换行', cmd: 'ls\nwhoami' },
+      { id: 10, label: '缺命令', cmd: '' },
+    ])).toEqual([{ id: '7', label: '一', cmd: 'ls -la', desc: '说明' }])
   })
 
-  it('自定义命令 CRUD 立即落盘，且刷新后能读回', () => {
+  it('load / add / update / remove 全部走服务端 API', async () => {
+    rows = [{ id: 1, label: '初始', cmd: 'pwd', desc: '' }]
     const api = useQuickCommands()
-    expect(api.all.value.length).toBe(PRESET_COMMANDS.length)
 
-    const created = api.add({ label: '部署', cmd: 'systemctl restart panel', desc: '重启面板' })
-    expect(created).not.toBeNull()
-    expect(api.custom.value).toHaveLength(1)
-    expect(api.all.value.at(-1)?.label).toBe('部署')
-    expect(JSON.parse(localStorage.getItem(LS_KEY) ?? '[]')).toHaveLength(1)
+    await api.load()
+    expect(api.custom.value).toEqual([{ id: '1', label: '初始', cmd: 'pwd', desc: '' }])
 
-    expect(api.update(created!.id, { label: '重启', cmd: 'systemctl restart panel' })).toBe(true)
-    expect(api.custom.value[0].label).toBe('重启')
+    await api.add({ label: '新增', cmd: 'git status', desc: '状态' })
+    expect(rows).toHaveLength(2)
+    expect(api.custom.value.map((c) => c.label)).toEqual(['初始', '新增'])
+    expect(fake.count(API.quickCommands.list(), 'POST')).toBe(1)
 
-    // 第二次实例模拟刷新：从落盘数据读回
-    const reloaded = useQuickCommands()
-    expect(reloaded.custom.value[0].label).toBe('重启')
-    expect(reloaded.custom.value[0].desc).toBe('')
+    await api.update('1', { label: '改名', cmd: 'pwd' })
+    expect(rows[0].label).toBe('改名')
+    expect(fake.count(API.quickCommands.item(1), 'PATCH')).toBe(1)
 
-    expect(reloaded.remove(created!.id)).toBe(true)
-    expect(reloaded.custom.value).toHaveLength(0)
-    expect(JSON.parse(localStorage.getItem(LS_KEY) ?? '[]')).toHaveLength(0)
+    await api.remove('1')
+    expect(rows.map((r) => r.id)).toEqual([2])
+    expect(fake.count(API.quickCommands.item(1), 'DELETE')).toBe(1)
   })
 
-  it('非法输入不入库，预置项不可被改删', () => {
+  it('非法输入在提交前拦下，不发请求', async () => {
     const api = useQuickCommands()
-    expect(api.add({ label: '', cmd: 'ls' })).toBeNull()
-    expect(api.add({ label: 'x', cmd: 'a\nb' })).toBeNull()
-    expect(api.custom.value).toHaveLength(0)
-    expect(api.update(PRESET_COMMANDS[0].id, { label: 'x', cmd: 'y' })).toBe(false)
-    expect(api.remove(PRESET_COMMANDS[0].id)).toBe(false)
+    await expect(api.add({ label: '', cmd: 'ls' })).rejects.toThrow('请填写名称')
+    await expect(api.update('1', { label: 'x', cmd: 'a\nb' })).rejects.toThrow('单行')
+    expect(fake.count(API.quickCommands.list(), 'POST')).toBe(0)
+    expect(fake.count(API.quickCommands.item(1), 'PATCH')).toBe(0)
   })
 })

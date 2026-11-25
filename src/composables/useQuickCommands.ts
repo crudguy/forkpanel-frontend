@@ -1,17 +1,19 @@
 /**
- * 终端快捷命令的数据层。
+ * 终端快捷命令的数据层（服务端存储，按登录用户隔离，跨设备）。
  *
- * 职责边界：这里只管「命令清单」——预置项、自定义项、校验与浏览器本地持久化；
- * 命令如何送进终端（WebSocket 二进制帧）由 TerminalView 负责，本模块不碰 WS。
+ * 职责边界：这里只管「命令清单」——预置项、自定义项的读写与校验；命令如何送进
+ * 终端（WebSocket 二进制帧）由 TerminalView 负责，本模块不碰 WS。
  *
- * 为什么存 localStorage 而不是后端：自定义命令是**浏览器本地的操作偏好**，和主题、
- * 列宽、折叠态同类；不涉及宿主权限、不跨设备共享，也不该进审计/备份链路。
- *  localStorage 的键只在本模块定义，避免散落到视图里。
+ * 自定义命令存在服务端 `user_quick_commands`，按 `user_id` 隔离；预置命令仍是
+ * 前端常量，不入库。读只在打开浮层时触发一次，写后 reload 列表取 id（服务端的
+ * create 不返回 id）。
  *
- * ⚠ localStorage 是用户可改的：脏数据（非数组 / 缺字段 / 超长 / 内嵌换行）必须在
- *  读取时归一，不能让一条坏记录把整个面板打不开，更不能把换行带进 shell 输入。
+ * ⚠ 服务端响应同样视为不可信：字段缺失 / 超长 / 内嵌换行的记录必须归一掉，
+ * 不能让一条坏数据把整个浮层打不开，更不能把换行带进 shell 输入。
  */
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
+import { api, ValidationError } from '@/api/client'
+import { API } from '@/api/endpoints'
 
 export interface QuickCommand {
   id: string
@@ -19,19 +21,12 @@ export interface QuickCommand {
   label: string
   /** 真正送进 PTY 的命令文本（单行） */
   cmd: string
-  /** 一行说明，仅用于列表 hover/副标题 */
+  /** 一行说明 */
   desc: string
   /** 预置项不可编辑/删除 */
   builtin?: boolean
 }
 
-export const LS_KEY = 'forkpanel.terminal.quick-commands'
-const MAX_CUSTOM = 50
-const MAX_LABEL = 40
-const MAX_CMD = 500
-const MAX_DESC = 80
-
-/** 预置命令：低频高危动作不预置（不帮用户一键执行 rm / reboot 之类）。 */
 export const PRESET_COMMANDS: readonly QuickCommand[] = [
   { id: 'p_pwd', label: '当前目录', cmd: 'pwd', desc: '显示当前工作目录', builtin: true },
   { id: 'p_ls', label: '列出文件', cmd: 'ls -la', desc: '列出全部文件（含隐藏项）', builtin: true },
@@ -49,10 +44,11 @@ export interface QuickCommandInput {
   desc?: string
 }
 
-/**
- * 表单校验：返回面向用户的错误文案，合法返回 null。
- * 拒绝换行——粘贴进 PTY 的多行文本会被 shell 逐行执行，一键填充不该变成一键执行。
- */
+const MAX_LABEL = 40
+const MAX_CMD = 500
+const MAX_DESC = 80
+
+/** 表单校验：返回面向用户的错误文案，合法返回 null。与后端 check_input 同规则。 */
 export function validateQuickCommand(input: QuickCommandInput): string | null {
   const label = (input.label ?? '').trim()
   const cmd = (input.cmd ?? '').trim()
@@ -67,7 +63,7 @@ export function validateQuickCommand(input: QuickCommandInput): string | null {
 }
 
 /**
- * 把 localStorage 里的任意值归一成合法清单。
+ * 把服务端返回的任意值归一成合法清单。
  * 纯函数，便于单测把「坏数据不进 UI」钉死，而不依赖浏览器环境。
  */
 export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
@@ -77,99 +73,74 @@ export function normalizeCustomCommands(raw: unknown): QuickCommand[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const o = item as Record<string, unknown>
-    if (typeof o.id !== 'string' || !o.id) continue
-    if (seen.has(o.id)) continue
+    // 服务端 id 是自增整数；字符串 id（含伪造的预置 id）一律当脏数据丢弃，
+    // 否则删除时会拿它拼出永远 404 的 URL。
+    if (typeof o.id !== 'number' || !Number.isInteger(o.id) || o.id <= 0) continue
+    const id = String(o.id)
+    if (!id || seen.has(id)) continue
     const candidate: QuickCommandInput = {
       label: typeof o.label === 'string' ? o.label : '',
       cmd: typeof o.cmd === 'string' ? o.cmd : '',
       desc: typeof o.desc === 'string' ? o.desc : '',
     }
     if (validateQuickCommand(candidate)) continue
-    // 预置 id 被伪造进自定义清单时，直接丢弃——否则分组里会出现两个同名 id。
-    if (PRESET_COMMANDS.some((p) => p.id === o.id)) continue
-    seen.add(o.id)
+    if (PRESET_COMMANDS.some((p) => p.id === id)) continue
+    seen.add(id)
     out.push({
-      id: o.id,
+      id,
       label: candidate.label.trim(),
       cmd: candidate.cmd.trim(),
       desc: (candidate.desc ?? '').trim(),
     })
-    if (out.length >= MAX_CUSTOM) break
   }
   return out
 }
 
-function readFromStorage(): QuickCommand[] {
-  try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (!raw) return []
-    return normalizeCustomCommands(JSON.parse(raw))
-  } catch {
-    return []
-  }
+function guard(input: QuickCommandInput) {
+  const err = validateQuickCommand(input)
+  if (err) throw new ValidationError(err)
 }
 
 export interface QuickCommandsApi {
   custom: Ref<QuickCommand[]>
-  all: ComputedRef<QuickCommand[]>
-  add: (input: QuickCommandInput) => QuickCommand | null
-  update: (id: string, input: QuickCommandInput) => boolean
-  remove: (id: string) => boolean
+  loading: Ref<boolean>
+  load: () => Promise<void>
+  add: (input: QuickCommandInput) => Promise<void>
+  update: (id: string, input: QuickCommandInput) => Promise<void>
+  remove: (id: string) => Promise<void>
 }
 
-/** 视图侧唯一入口：响应式清单 + 变更后立即落盘。 */
+/** 视图侧唯一入口：所有变更走 API，成功后重新拉列表拿最新 id。 */
 export function useQuickCommands(): QuickCommandsApi {
-  const custom = ref<QuickCommand[]>(readFromStorage())
+  const custom = ref<QuickCommand[]>([])
+  const loading = ref(false)
 
-  function persist() {
+  async function load() {
+    loading.value = true
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(custom.value))
-    } catch {
-      // 隐私模式 / 配额满：本次会话内仍然可用，只是刷新后丢失
+      const data = await api.get<unknown>(API.quickCommands.list())
+      custom.value = normalizeCustomCommands(data)
+    } finally {
+      loading.value = false
     }
   }
 
-  function makeId(): string {
-    return `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  async function add(input: QuickCommandInput) {
+    guard(input)
+    await api.post(API.quickCommands.list(), input)
+    await load()
   }
 
-  function add(input: QuickCommandInput): QuickCommand | null {
-    if (validateQuickCommand(input)) return null
-    if (custom.value.length >= MAX_CUSTOM) return null
-    const cmd: QuickCommand = {
-      id: makeId(),
-      label: input.label.trim(),
-      cmd: input.cmd.trim(),
-      desc: (input.desc ?? '').trim(),
-    }
-    custom.value.push(cmd)
-    persist()
-    return cmd
+  async function update(id: string, input: QuickCommandInput) {
+    guard(input)
+    await api.patch(API.quickCommands.item(id), input)
+    await load()
   }
 
-  function update(id: string, input: QuickCommandInput): boolean {
-    if (validateQuickCommand(input)) return false
-    const i = custom.value.findIndex((c) => c.id === id)
-    if (i < 0) return false
-    custom.value[i] = {
-      id,
-      label: input.label.trim(),
-      cmd: input.cmd.trim(),
-      desc: (input.desc ?? '').trim(),
-    }
-    persist()
-    return true
+  async function remove(id: string) {
+    await api.del(API.quickCommands.item(id))
+    await load()
   }
 
-  function remove(id: string): boolean {
-    const i = custom.value.findIndex((c) => c.id === id)
-    if (i < 0) return false
-    custom.value.splice(i, 1)
-    persist()
-    return true
-  }
-
-  const all = computed(() => [...PRESET_COMMANDS, ...custom.value])
-
-  return { custom, all, add, update, remove }
+  return { custom, loading, load, add, update, remove }
 }

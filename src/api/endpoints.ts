@@ -311,6 +311,13 @@ export const API = {
     note: (id: number | string) => `/api/v1/server/notes/${enc(id)}`,
   },
 
+  quickCommands: {
+    /** 用户级终端快捷命令（039）。GET 列表 / POST 新建，按登录用户隔离 */
+    list: () => '/api/v1/user/quick-commands',
+    /** 单条命令：PATCH 更新 / DELETE 删除 */
+    item: (id: number | string) => `/api/v1/user/quick-commands/${enc(id)}`,
+  },
+
   firewall: {
     status: () => '/api/v1/firewall/status',
     setEnabled: () => '/api/v1/firewall/enabled',

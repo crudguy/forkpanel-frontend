@@ -26,7 +26,7 @@
  * 实例按 id 存在普通 Map（非响应式），标签数组只放展示态。
  */
 import {
-  ref, computed, onMounted, onUnmounted, nextTick, watch,
+  ref, computed, onMounted, onUnmounted, nextTick,
   type ComponentPublicInstance,
 } from 'vue'
 import { Terminal } from '@xterm/xterm'
@@ -39,7 +39,7 @@ import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TerminalCommandDialog from '@/components/TerminalCommandDialog.vue'
-import { toast } from '@/composables/useToast'
+import { toast, toastError } from '@/composables/useToast'
 import {
   PRESET_COMMANDS,
   useQuickCommands,
@@ -235,15 +235,56 @@ function clearScreen(id: string = activeId.value) {
 }
 
 // ── 快捷命令 ──
-const { custom: customCommands, add: addQuick, update: updateQuick, remove: removeQuick } = useQuickCommands()
-const QK_OPEN = 'forkpanel.terminal.quick-open'
-const quickOpen = ref(true)
-try { quickOpen.value = localStorage.getItem(QK_OPEN) !== '0' } catch { /* 隐私模式：默认展开即可 */ }
-watch(quickOpen, (v) => {
-  try { localStorage.setItem(QK_OPEN, v ? '1' : '0') } catch { /* 配额满：本次会话仍生效 */ }
-})
+// 自定义命令存服务端（按登录用户隔离、跨设备），预置命令是前端常量；数据层只管
+// 清单，把命令写进当前会话 PTY 的逻辑留在 sendQuick（本文件）。
+const {
+  custom: customCommands,
+  loading: quickLoading,
+  load: loadQuick,
+  add: addQuick,
+  update: updateQuick,
+  remove: removeQuick,
+} = useQuickCommands()
 
-/** 面板内的命令输入框：可编辑后再送进终端，它不是终端的一部分。 */
+/** 入口在右上角工具栏；只在打开浮层时拉一次服务端清单，平时页面零请求。 */
+const quickBtn = ref<HTMLElement | null>(null)
+const quickOpen = ref(false)
+const quickPos = ref({ top: '0px', right: '0px' })
+
+// 浮层 Teleport 到 body（顶栏 backdrop-filter 会成为 fixed 包含块），脱离工具栏
+// 锚点后改用 fixed，坐标按触发按钮实测下发；与主布局用户菜单同款做法。
+function placeQuick() {
+  const r = quickBtn.value?.getBoundingClientRect()
+  if (!r) return
+  quickPos.value = {
+    top: `${Math.round(r.bottom + 6)}px`,
+    right: `${Math.round(document.documentElement.clientWidth - r.right)}px`,
+  }
+}
+async function toggleQuick() {
+  if (quickOpen.value) { closeQuick(); return }
+  placeQuick()               // 先量后开：否则首帧先落在 (0,0) 再跳到位
+  quickOpen.value = true
+  try { await loadQuick() } catch (e) { toastError(e) }
+}
+function closeQuick() { quickOpen.value = false }
+function onQuickEsc() {
+  // 表单/删除确认还开着时 Esc 归内层：它们各自接了 useModal 的焦点栈，
+  // 这里再关一次会连浮层带弹窗一起收掉。
+  if (dialogOpen.value || pendingDelete.value) return
+  closeQuick()
+  quickBtn.value?.focus()
+}
+function onQuickResize() { if (quickOpen.value) placeQuick() }
+/** Esc 关闭浮层：挂在 document 捕获阶段。删完命令后列表刷新、原删除按钮被卸载，
+    焦点会落空，此时浮层自身的 @keydown.escape 根本收不到冒泡上来的按键。 */
+function onQuickDocKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !quickOpen.value) return
+  if (dialogOpen.value || pendingDelete.value) return   // 内层弹窗优先，一层层关
+  onQuickEsc()
+}
+
+/** 浮层内的命令输入框：可编辑后再送进终端，它不是终端的一部分。 */
 const quickInput = ref('')
 const quickInputEl = ref<HTMLInputElement | null>(null)
 const dialogOpen = ref(false)
@@ -288,17 +329,27 @@ function sendQuick(execute: boolean) {
 function openAdd() { editing.value = null; dialogOpen.value = true }
 function openEdit(c: QuickCommand) { editing.value = c; dialogOpen.value = true }
 
-function saveQuick(v: QuickCommandInput) {
-  const ok = editing.value ? updateQuick(editing.value.id, v) : !!addQuick(v)
-  if (!ok) { toast('保存失败，请检查输入', 'err'); return }
+async function saveQuick(v: QuickCommandInput) {
   const wasEdit = !!editing.value
+  try {
+    if (editing.value) await updateQuick(editing.value.id, v)
+    else await addQuick(v)
+  } catch (e) {
+    toastError(e)          // 后端校验/超限/网络错误统一走错误闸门，不吞根因
+    return
+  }
   dialogOpen.value = false
   toast(wasEdit ? '命令已更新' : '命令已添加')
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (!pendingDelete.value) return
-  removeQuick(pendingDelete.value.id)
+  try {
+    await removeQuick(pendingDelete.value.id)
+  } catch (e) {
+    toastError(e)
+    return
+  }
   pendingDelete.value = null
   toast('命令已删除')
 }
@@ -352,10 +403,12 @@ function disposeSession(id: string) {
 function onResizeWin() {
   const s = sessions.get(activeId.value)
   if (s?.term) s.fit?.fit()
+  onQuickResize()   // 浮层锚在右上角按钮上，窗口缩放后重算坐标
 }
 
 onMounted(async () => {
   window.addEventListener('resize', onResizeWin)
+  document.addEventListener('keydown', onQuickDocKeydown, true)
   if (!enabled.value) return
   await nextTick()
   ensureTerm(tabs.value[0].id)
@@ -372,6 +425,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResizeWin)
+  document.removeEventListener('keydown', onQuickDocKeydown, true)
   paneObs?.disconnect()
   paneObs = null
   // 所有标签都要收：漏一个就是一条 WS 泄漏 + 一个 PTY 常驻。
@@ -406,6 +460,15 @@ onUnmounted(() => {
       <span class="stat" :class="{ on: connected }">
         <span class="dot" /> {{ status }}
       </span>
+      <!-- 快捷命令入口：disclosure（trigger + aria-controls + expanded），不声明
+           aria-haspopup=menu——面板里有输入框和分段操作，套 menu 键盘模型会让读屏
+           把普通按钮当菜单项跳过。面板 Teleport 到 body，见下方浮层。 -->
+      <button ref="quickBtn" class="btn-ghost btn-sm" type="button"
+        :aria-expanded="quickOpen" aria-controls="quick-cmd-popup"
+        :disabled="!enabled" title="快捷命令（保存在当前账号，跨设备同步）"
+        @click="toggleQuick" @keydown.escape="onQuickEsc">
+        <Icon name="bolt" :size="14" /> 快捷命令
+      </button>
       <button class="btn-primary" :disabled="!enabled || connected" @click="connect()">
         <Icon name="bolt" :size="15" /> 连接
       </button>
@@ -431,22 +494,23 @@ onUnmounted(() => {
       <RiskBanner level="danger" title="宿主级权限"
         text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面或关闭标签即断开会话。" />
 
-      <!-- 快捷命令：点命令填入输入框，可编辑后再插入/执行；复制按钮独立于填充。 -->
-      <section class="quick-bar" aria-label="快捷命令">
-        <div class="qb-head">
-          <button class="qb-toggle" type="button" :aria-expanded="quickOpen" @click="quickOpen = !quickOpen">
-            <Icon name="chevron" :size="14" class="chev" :class="{ open: quickOpen }" />
-            快捷命令
-          </button>
-          <span class="spacer" />
-          <button class="btn-ghost btn-sm" type="button" @click="openAdd">
-            <Icon name="plus" :size="14" /> 新增
-          </button>
-        </div>
-        <template v-if="quickOpen">
-          <div class="qb-input-row">
+      <!-- 快捷命令浮层：Teleport 到 body，避免顶栏 backdrop-filter 把 fixed 浮层
+           困进包含块（与主布局用户菜单、列选择器同款处置）。平时不渲染、不请求。 -->
+      <Teleport to="body">
+        <div v-if="quickOpen" class="qc-backdrop" aria-hidden="true" @click="closeQuick" />
+        <div v-if="quickOpen" id="quick-cmd-popup" class="qc-popup"
+          role="group" aria-label="快捷命令" :style="quickPos" @keydown.escape="onQuickEsc">
+          <div class="qc-head">
+            <strong>快捷命令</strong>
+            <span class="qc-tip">保存在当前账号 · 跨设备同步</span>
+            <button class="qc-x" type="button" aria-label="关闭" @click="closeQuick">
+              <Icon name="close" :size="15" />
+            </button>
+          </div>
+          <div class="qc-input-row">
             <input ref="quickInputEl" v-model="quickInput" class="qb-input" type="text"
-              placeholder="输入命令" spellcheck="false" @keydown.enter.prevent="sendQuick(true)" />
+              placeholder="输入命令，可编辑后插入/执行" spellcheck="false"
+              @keydown.enter.prevent="sendQuick(true)" />
             <button class="btn-ghost btn-sm" type="button" :disabled="!connected" @click="sendQuick(false)">
               <Icon name="terminal" :size="14" /> 插入
             </button>
@@ -454,37 +518,45 @@ onUnmounted(() => {
               <Icon name="play" :size="14" /> 执行
             </button>
           </div>
-          <div class="qb-groups">
-            <div class="qb-group">
-              <span class="qb-label">常用</span>
-              <div class="qb-items">
-                <div v-for="c in PRESET_COMMANDS" :key="c.id" class="qb-item">
-                  <button class="qb-cmd" type="button" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
-                  <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
-                    @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
-                </div>
-              </div>
-            </div>
-            <div class="qb-group">
-              <span class="qb-label">我的命令<em v-if="customCommands.length">（{{ customCommands.length }}）</em></span>
-              <div class="qb-items">
-                <template v-if="customCommands.length">
-                  <div v-for="c in customCommands" :key="c.id" class="qb-item">
-                    <button class="qb-cmd" type="button" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
+          <div class="qc-scroll">
+            <div v-if="quickLoading" class="qb-empty">加载中…</div>
+            <template v-else>
+              <div class="qc-group">
+                <span class="qb-label">常用</span>
+                <div class="qb-items">
+                  <div v-for="c in PRESET_COMMANDS" :key="c.id" class="qb-item">
+                    <button class="qb-cmd" type="button" :title="c.desc" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
                     <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
                       @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
-                    <button class="qb-act" type="button" :aria-label="`编辑 ${c.label}`" title="编辑"
-                      @click="openEdit(c)"><Icon name="edit" :size="14" /></button>
-                    <button class="qb-act danger" type="button" :aria-label="`删除 ${c.label}`" title="删除"
-                      @click="pendingDelete = c"><Icon name="trash" :size="14" /></button>
                   </div>
-                </template>
-                <span v-else class="qb-empty">暂无自定义命令</span>
+                </div>
               </div>
-            </div>
+              <div class="qc-group">
+                <span class="qb-label">我的命令<em v-if="customCommands.length">（{{ customCommands.length }}）</em></span>
+                <div class="qb-items">
+                  <template v-if="customCommands.length">
+                    <div v-for="c in customCommands" :key="c.id" class="qb-item">
+                      <button class="qb-cmd" type="button" :title="c.desc || c.cmd" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
+                      <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
+                        @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
+                      <button class="qb-act" type="button" :aria-label="`编辑 ${c.label}`" title="编辑"
+                        @click="openEdit(c)"><Icon name="edit" :size="14" /></button>
+                      <button class="qb-act danger" type="button" :aria-label="`删除 ${c.label}`" title="删除"
+                        @click="pendingDelete = c"><Icon name="trash" :size="14" /></button>
+                    </div>
+                  </template>
+                  <span v-else class="qb-empty">暂无自定义命令</span>
+                </div>
+              </div>
+            </template>
           </div>
-        </template>
-      </section>
+          <div class="qc-foot">
+            <button class="btn-ghost btn-sm" type="button" @click="openAdd">
+              <Icon name="plus" :size="14" /> 新增自定义命令
+            </button>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- 每个标签一个常驻容器：隐藏而非销毁，切回来才能保住滚动缓冲与回显 -->
       <div v-for="t in tabs" :key="t.id" :ref="(el) => bindPane(t.id, el)"
@@ -546,30 +618,33 @@ onUnmounted(() => {
 }
 .term-pane:not(.active) { display: none; }
 
-/* 快捷命令面板：常驻在终端上方，随终端 flex 列定高；折叠只隐藏内容不卸载，
-   输入框里的草稿不会被收起动作清掉。 */
-.term-view > .quick-bar { flex: none; }
-.quick-bar {
-  background: var(--c-glass); border: 1px solid var(--c-border);
-  border-radius: var(--radius-md); padding: 9px 12px;
+/* 快捷命令浮层：Teleport 到 body、fixed 定位由脚本按触发钮实测下发。
+   层级沿用主布局用户菜单的 40（遮罩）/41（浮层），不另造数值。 */
+.qc-backdrop { position: fixed; inset: 0; z-index: 40; }
+.qc-popup {
+  position: fixed; z-index: 41; width: min(420px, calc(100vw - 24px));
+  background: var(--c-surface-2); border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  padding: 10px; overflow: hidden;
 }
-.qb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.qb-toggle {
-  display: inline-flex; align-items: center; gap: 7px; padding: 0;
-  border: none; background: none; color: var(--c-text);
-  font-size: var(--fs-14); font-weight: 600; cursor: pointer;
+.qc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.qc-head strong { font-size: var(--fs-14); }
+.qc-tip { font-size: var(--fs-12); color: var(--c-text-mute); }
+.qc-x {
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border: none; background: none;
+  color: var(--c-text-dim); border-radius: var(--radius-chip); cursor: pointer;
 }
-.qb-toggle:hover:not(:disabled) { background: none; color: var(--c-primary); transform: none; }
-.qb-toggle .chev { transition: transform .14s ease; }
-.qb-toggle .chev.open { transform: rotate(90deg); }
-.qb-input-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.qc-x:hover:not(:disabled) { background: var(--c-hover); color: var(--c-primary); transform: none; }
+.qc-input-row { display: flex; align-items: center; gap: 8px; }
 /* flex 条里先 width:auto 压掉全局 input{width:100%}，再交给 flex 分配余量。 */
 .qb-input {
   flex: 1 1 auto; min-width: 0; width: auto; height: 38px;
   font-family: var(--mono); font-size: var(--fs-13);
 }
-.qb-groups { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
-.qb-group { display: flex; align-items: flex-start; gap: 10px; }
+.qc-scroll { margin-top: 10px; max-height: min(420px, 60vh); overflow-y: auto; }
+.qc-group { display: flex; align-items: flex-start; gap: 10px; margin-top: 7px; }
+.qc-group:first-child { margin-top: 0; }
 .qb-label { flex: 0 0 62px; padding-top: 8px; font-size: var(--fs-12-5); color: var(--c-text-mute); }
 .qb-label em { font-style: normal; }
 .qb-items { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -589,4 +664,5 @@ onUnmounted(() => {
 .qb-act:hover:not(:disabled) { background: var(--c-hover); color: var(--c-primary); transform: none; }
 .qb-act.danger:hover:not(:disabled) { color: var(--c-danger); }
 .qb-empty { padding: 6px 0; font-size: var(--fs-12-5); color: var(--c-text-mute); }
+.qc-foot { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--c-border); }
 </style>
