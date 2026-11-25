@@ -34,7 +34,7 @@ describe('任务详情就地展开', () => {
   it('点第 2 行：详情行紧跟该行，不在表格末尾', async () => {
     const m = await mountThree()
     await m.flush()
-    const rows = [...m.host.querySelectorAll('tbody tr')]
+    const rows = [...m.host.querySelectorAll<HTMLElement>('tbody tr')]
     expect(rows.length, '夹具应有 3 行数据').toBe(3)
 
     buttonByText(rows[1] as HTMLElement, /输出/).click()
@@ -51,7 +51,7 @@ describe('任务详情就地展开', () => {
   it('点详情内的关闭：详情行消失', async () => {
     const m = await mountThree()
     await m.flush()
-    const rows = [...m.host.querySelectorAll('tbody tr')]
+    const rows = [...m.host.querySelectorAll<HTMLElement>('tbody tr')]
 
     buttonByText(rows[1] as HTMLElement, /输出/).click()
     await m.flush()
@@ -61,6 +61,40 @@ describe('任务详情就地展开', () => {
     buttonByText(detail, '关闭').click()
     await m.flush()
     expect(m.host.querySelectorAll('tr.detail-row').length, '关闭后详情仍在').toBe(0)
+    m.fake.assertClean(); m.cleanup()
+  })
+
+  it('再次点击已展开的任务：行与输出按钮都能收起详情', async () => {
+    const m = await mountThree()
+    await m.flush()
+    const rows = [...m.host.querySelectorAll<HTMLElement>('tbody tr')]
+
+    rows[1].click()
+    await m.flush()
+    expect(m.host.querySelectorAll('tr.detail-row').length, '点行没有展开').toBe(1)
+    rows[1].click()
+    await m.flush()
+    expect(m.host.querySelectorAll('tr.detail-row').length, '再点同一行没有收起').toBe(0)
+
+    buttonByText(rows[1] as HTMLElement, /输出/).click()
+    await m.flush()
+    expect(m.host.querySelectorAll('tr.detail-row').length, '点输出按钮没有展开').toBe(1)
+    buttonByText(rows[1] as HTMLElement, /输出/).click()
+    await m.flush()
+    expect(m.host.querySelectorAll('tr.detail-row').length, '再点输出按钮没有收起').toBe(0)
+    m.fake.assertClean(); m.cleanup()
+  })
+
+  it('请求还没回来就再次点击：不会被在飞的响应重新打开', async () => {
+    const m = await mountThree()
+    await m.flush()
+    const rows = [...m.host.querySelectorAll<HTMLElement>('tbody tr')]
+
+    rows[1].click()   // open 挂起在 await 上
+    rows[1].click()   // 立刻收起（此时 sel 已被置为该任务）
+    await m.flush()   // 让在飞响应全部回来
+
+    expect(m.host.querySelectorAll('tr.detail-row').length, '关闭后又被在飞响应打开').toBe(0)
     m.fake.assertClean(); m.cleanup()
   })
 })

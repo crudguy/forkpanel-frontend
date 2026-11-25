@@ -109,8 +109,20 @@ function restoreFromUrl() {
   if (sel.value?.id === id) return
   void open({ id, key: '', kind: '', state: '', progress: 0, started_at: null, finished_at: null, exit_code: null })
 }
+/**
+ * ⚠ syncUrl 与 watch 共用 route.query.task：关闭时 `replace(null)` 尚未生效，
+ *   打开时的 `replace(id)` 会先触发 watch，被误判成深链 ⇒ 刚关掉的详情又冒出来。
+ *   记录每个「本页自己写进去的值」，watch 见到同值就消费掉，外部改动才当深链。
+ */
+const programmaticUrlTasks: Array<string | undefined> = []
 // 首屏 + 之后任何来源的 task 参数变化（含浏览器前进/后退）都恢复对应详情
-watch(() => route.query.task, () => restoreFromUrl(), { immediate: true })
+watch(() => route.query.task, () => {
+  const raw = route.query.task
+  const v = typeof raw === 'string' ? raw : undefined
+  const i = programmaticUrlTasks.indexOf(v)
+  if (i >= 0) { programmaticUrlTasks.splice(i, 1); return }
+  restoreFromUrl()
+}, { immediate: true })
 
 // 筛选 / 每页条数变化 ⇒ 必须重新向服务端要数（limit 变了，本地缓存的行数就不够）：
 // 这两者在客户端切片里只意味「换一页」，但本页的行数是**按 limit 取回来的**，
@@ -159,19 +171,40 @@ function formatTaskOutput(r: { lines?: string[]; note?: string }): string {
   return r.lines?.length ? r.lines.join('\n') : '(无输出)'
 }
 
+/**
+ * 用户点击任务行/输出按钮：已展开同一任务则收起，否则打开。
+ *
+ *  只有用户手势走这里；深链恢复与取消后刷新详情仍直接调 open()，
+ *  否则取消任务会把刚打开的详情关掉（那两处不是「再次点击」）。
+ */
+function toggle(t: Task) {
+  if (sel.value?.id === t.id) { close(); return }
+  void open(t)
+}
+
 async function open(t: Task) {
   sel.value = { ...t }; outLoading.value = true; output.value = ''
   syncUrl(t.id)
+  // ⚠ 每个 await 回来都要校验归属：用户可能在请求期间再次点击同一行把详情关掉，
+  //   或改点另一个任务。旧响应若无条件写回 sel，就会「关了又冒出来」/串到别的任务。
+  const stillCurrent = () => sel.value?.id === t.id
   // 详情（拿派生字段 duration_secs 等）；失败则退回列表行数据
-  try { sel.value = await api.get<Task>(API.tasks.get(t.id)) }
+  try {
+    const d = await api.get<Task>(API.tasks.get(t.id))
+    if (!stillCurrent()) return
+    sel.value = d
+  }
   catch { /* 列表行兜底 */ }
   // 输出：后端返回 {id, lines[]}（不是 output 字符串——旧代码在这里永远显示"无输出"）
   try {
     const r = await api.get<{ id: number; lines: string[]; note?: string }>(API.tasks.output(t.id))
-    output.value = formatTaskOutput(r)
-  } catch (e) { output.value = errorText(e) }
-  finally { outLoading.value = false }
-  taskPoll.restart()
+    if (stillCurrent()) output.value = formatTaskOutput(r)
+  } catch (e) {
+    if (stillCurrent()) output.value = errorText(e)
+  } finally {
+    if (stillCurrent()) outLoading.value = false
+  }
+  if (stillCurrent()) taskPoll.restart()
 }
 
 /** 关闭详情（同时清掉 URL 里的 task 参数，避免"关掉了但刷新又冒出来"）。 */
@@ -194,6 +227,7 @@ function syncUrl(id: number | null) {
   // 与当前完全一致时不 replace：避免 watch/再入造成多余的 history 操作
   const now = JSON.stringify(route.query)
   if (JSON.stringify(q) === now) return
+  programmaticUrlTasks.push(id == null ? undefined : String(id))
   void router.replace({ query: q })
 }
 
@@ -263,10 +297,11 @@ function isFailed(t: Task) { return t.state === 'failed' }
               </td>
             </tr>
             <template v-for="t in pageRows" :key="t.id">
-            <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 打开详情 -->
-            <tr :class="{ active: sel?.id === t.id }" @click="open(t)"
-                tabindex="0" role="button" :aria-label="`查看任务 #${t.id} 详情`"
-                @keydown.enter="open(t)" @keydown.space.prevent="open(t)" style="cursor:pointer">
+            <!-- 键盘可达（审计 P10）：行可 Tab 聚焦，Enter/Space 展开/收起详情 -->
+            <tr :class="{ active: sel?.id === t.id }" @click="toggle(t)"
+                tabindex="0" role="button"
+                :aria-label="sel?.id === t.id ? `关闭任务 #${t.id} 详情` : `查看任务 #${t.id} 详情`"
+                @keydown.enter="toggle(t)" @keydown.space.prevent="toggle(t)" style="cursor:pointer">
               <td class="mono">{{ t.id }}</td>
               <td class="mono dim ellipsis" :title="t.key || t.kind">{{ t.key || t.kind }}</td>
               <td>
@@ -284,7 +319,7 @@ function isFailed(t: Task) { return t.state === 'failed' }
               </td>
               <td class="muted nowrap">{{ fmtDateTime(t.started_at) }}</td>
               <td class="nowrap">
-                <button class="btn-sm" @click.stop="open(t)"><Icon name="terminal" :size="14" /> 输出</button>
+                <button class="btn-sm" @click.stop="toggle(t)"><Icon name="terminal" :size="14" /> 输出</button>
                 <button v-if="isLive(t) && canCancel" class="btn-ghost btn-sm danger" title="取消任务" @click.stop="cancel(t)">取消</button>
               </td>
             </tr>
