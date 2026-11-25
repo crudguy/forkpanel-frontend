@@ -31,9 +31,9 @@ export interface BadgePlatform {
   kernel: string | null
 }
 
-/** 点击目标统一为能力矩阵深链（/settings#caps）：它是唯一入口（概览在侧栏首项，
- *  指标条→概览属冗余快捷方式）；tooltip 尾部 CTA 与之一致。 */
-export const BADGE_CTA = '点击查看运行环境与能力矩阵'
+/** 点击目标统一为「主机监控」/system 的实时趋势：徽标三条迷你指标条就是它的摘要，
+ *  tooltip 尾部 CTA 与之一致；能力矩阵改由「设置 → 能力矩阵」页签进入。 */
+export const BADGE_CTA = '点击查看主机监控'
 
 export function sysBadgeTip(health: BadgeHealth | null, platform: BadgePlatform | null): string {
   if (!health && !platform) return '系统状态'

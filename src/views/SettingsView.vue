@@ -9,7 +9,7 @@
  * - 角色与权限（RBAC）：创建/删除自定义角色；「我的权限」徽章并入本卡作参照
  *   （创建角色的规则 = 权限必须是自身权限的子集，徽章就是那个"自身权限"）
  * - 面板维护：重启 / 检查更新 / 执行升级 / 核准公网 IP（owner 门控）+ localhost_only 可达性引导
- * - 能力矩阵（#caps）：功能模块开关状态总览（只读），topbar 系统徽标深链唯一落点
+ * - 能力矩阵（#caps）：功能模块开关状态总览（只读），「设置 → 能力矩阵」页签入口
  *
  * 已移除的只读展示（勿复活，守卫 SettingsView.refocus.test.ts 钉住）：
  * 运行环境卡（平台/发行版/内核/档位/用户——topbar 徽标 tooltip 已有）、
@@ -80,7 +80,7 @@ type SettingsTab = 'llm' | 'maint' | 'roles' | 'caps'
 const activeTab = ref<SettingsTab>(route.hash === '#caps' ? 'caps' : 'llm')
 function setTab(v: string) { activeTab.value = v as SettingsTab }
 
-// 深链定位（topbar 系统徽标胶囊直达 /settings#caps）：
+// 深链定位（手动访问 /settings#caps）：
 // 本页有 v-if="report" 的异步分区，路由 scrollBehavior 触发时它们尚未渲染，
 // 内容补上后锚点会被顶偏，故在数据就绪后再定位一次。
 // 能力矩阵现在位于独立页签：必须先切签再滚，否则锚点处于 display:none 滚不动。
@@ -600,7 +600,7 @@ onMounted(async () => {
     </template>
 
     <!-- 能力矩阵：功能模块的开关状态总览（菜单为什么置灰、功能为什么 501），
-         挂在锚点 #caps 上，topbar 系统徽标一键直达。 -->
+         挂在锚点 #caps 上，可由 /settings#caps 手动深链直达。 -->
     <section id="caps" v-show="activeTab === 'caps'" class="card">
       <div class="sec-head"><Icon name="shield" :size="16" /> 能力矩阵（{{ supportedCount }} / {{ caps.length }} 可用）</div>
       <table class="fixed" v-table-nav>

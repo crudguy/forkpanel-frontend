@@ -235,10 +235,10 @@ async function logout() {
              重复承载同一主机信息（healthTip 里也拼了 distro·arch），视觉互相冲突。
              合并后 = distro·arch 常驻文本 + CPU/内存/磁盘迷你条（metrics 可用时），
              无 metrics 时退化为纯文本胶囊。tooltip 文案见 composables/sysBadge.ts。
-             点击目标取能力矩阵而非概览：#caps 深链是排障唯一入口（菜单为何置灰、
-             端点为何 501），概览在侧栏首项、指标条→概览属冗余快捷方式；
+             点击目标为「主机监控」/system 的实时趋势：徽标三条迷你指标条就是它的摘要；
+             能力矩阵改由「设置 → 能力矩阵」页签进入，不再是徽标落点；
              早年「胶囊挨着主题切换」的偏好由本次合并让位（用户裁决合并优先）。 -->
-        <RouterLink v-if="auth.platform || (healthOk && health)" to="/settings#caps" class="health" :title="healthTip">
+        <RouterLink v-if="auth.platform || (healthOk && health)" to="/system" class="health" :title="healthTip">
           <span v-if="auth.platform" class="ht">{{ distroLabel(auth.platform.distro) || auth.platform.os }} · {{ auth.platform.arch }}</span>
           <span v-if="healthOk && health" class="hbars">
             <span class="hb" :class="htone(health.cpu)"><i :style="{ width: hpct(health.cpu) }" /></span>
@@ -502,7 +502,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    48px —— 这就是本档仍然保留的依据。
    （2026-11-05 的老记录里固定项 657px 还含「搜索 34」「主题 34」两个重复入口，
    1024 下 `.title` 曾被压到 0；两者已删，共省 96px。）
-   徽标是纯信息展示（点它才进能力矩阵），窄屏让位给标题；能力矩阵侧栏仍有入口。 */
+   徽标是纯信息展示（点它进主机监控），窄屏让位给标题；主机监控侧栏仍有入口。 */
 @media (max-width: 1200px) {
   .health { display: none; }
 }

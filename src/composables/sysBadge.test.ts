@@ -35,6 +35,9 @@ describe('sysBadgeTip', () => {
   it('两者皆无：兜底文案（外层 v-if 正常不会渲染到此）', () => {
     expect(sysBadgeTip(null, null)).toBe('系统状态')
   })
+  it('CTA 指向主机监控，与徽标点击目标一致', () => {
+    expect(BADGE_CTA).toBe('点击查看主机监控')
+  })
 })
 
 // 合并守卫：防止旧 sysinfo 胶囊复活（两处信息重复的回归）。断言指向 MainLayout.vue
@@ -45,14 +48,15 @@ describe('MainLayout 合并守卫', () => {
     expect(src.includes('class="sysinfo"')).toBe(false)
     expect(src.includes('.sysinfo {')).toBe(false)
   })
-  it('能力矩阵深链入口恰好一处（合并后唯一），且同时含文本段与指标条段', () => {
-    expect(src.match(/to="\/settings#caps"/g)?.length).toBe(1)
+  it('徽标点击直达主机监控（不再跳能力矩阵），且同时含文本段与指标条段', () => {
+    expect(src.match(/to="\/system" class="health"/g)?.length).toBe(1)
+    expect(src.includes('to="/settings#caps"')).toBe(false)
     expect(src.includes('class="ht"')).toBe(true)
     expect(src.includes('class="hbars"')).toBe(true)
   })
   it('tooltip 文案走 composable 唯一事实源，不再内联拼接', () => {
     expect(src.includes('sysBadgeTip(health.value, auth.platform)')).toBe(true)
-    expect(src.includes('点击查看概览')).toBe(false)
+    expect(src.includes('点击查看运行环境与能力矩阵')).toBe(false)
   })
   it('胶囊常驻文本也走可读发行版，不直接回显后端原始 id', () => {
     expect(src.includes('distroLabel(auth.platform.distro)')).toBe(true)
