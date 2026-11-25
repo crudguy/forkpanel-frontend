@@ -26,7 +26,7 @@
  * 实例按 id 存在普通 Map（非响应式），标签数组只放展示态。
  */
 import {
-  ref, computed, onMounted, onUnmounted, nextTick,
+  ref, computed, onMounted, onUnmounted, nextTick, watch,
   type ComponentPublicInstance,
 } from 'vue'
 import { Terminal } from '@xterm/xterm'
@@ -37,6 +37,15 @@ import { CAP } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import RiskBanner from '@/components/RiskBanner.vue'
 import Icon from '@/components/Icon.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import TerminalCommandDialog from '@/components/TerminalCommandDialog.vue'
+import { toast } from '@/composables/useToast'
+import {
+  PRESET_COMMANDS,
+  useQuickCommands,
+  type QuickCommand,
+  type QuickCommandInput,
+} from '@/composables/useQuickCommands'
 
 const auth = useAuthStore()
 const enabled = computed(() => auth.enabled(CAP.TERMINAL_MANAGE, 'system.manage'))
@@ -225,6 +234,75 @@ function clearScreen(id: string = activeId.value) {
   sessions.get(id)?.term?.clear()
 }
 
+// ── 快捷命令 ──
+const { custom: customCommands, add: addQuick, update: updateQuick, remove: removeQuick } = useQuickCommands()
+const QK_OPEN = 'forkpanel.terminal.quick-open'
+const quickOpen = ref(true)
+try { quickOpen.value = localStorage.getItem(QK_OPEN) !== '0' } catch { /* 隐私模式：默认展开即可 */ }
+watch(quickOpen, (v) => {
+  try { localStorage.setItem(QK_OPEN, v ? '1' : '0') } catch { /* 配额满：本次会话仍生效 */ }
+})
+
+/** 面板内的命令输入框：可编辑后再送进终端，它不是终端的一部分。 */
+const quickInput = ref('')
+const quickInputEl = ref<HTMLInputElement | null>(null)
+const dialogOpen = ref(false)
+const editing = ref<QuickCommand | null>(null)
+const pendingDelete = ref<QuickCommand | null>(null)
+
+function fillCommand(c: QuickCommand) {
+  quickInput.value = c.cmd
+  nextTick(() => quickInputEl.value?.focus())
+}
+
+async function copyCommand(c: QuickCommand) {
+  try {
+    await navigator.clipboard.writeText(c.cmd)
+  } catch {
+    // 非安全上下文 / 无剪贴板权限：退回 execCommand；两者都失败也只影响复制这一下
+    const ta = document.createElement('textarea')
+    ta.value = c.cmd
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } catch { /* 剪贴板完全不可用，忽略 */ }
+    document.body.removeChild(ta)
+  }
+  toast('已复制到剪贴板')
+}
+
+/** 把输入框内容写进当前激活会话的 PTY；execute 为真时补回车让 shell 执行。 */
+function sendQuick(execute: boolean) {
+  const text = quickInput.value.trim()
+  if (!text) { toast('请先选择或输入命令', 'warn'); return }
+  const s = sessions.get(activeId.value)
+  if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) {
+    toast('请先连接终端', 'warn')
+    return
+  }
+  s.ws.send(new TextEncoder().encode(execute ? `${text}\n` : text))
+  s.term?.focus()
+}
+
+function openAdd() { editing.value = null; dialogOpen.value = true }
+function openEdit(c: QuickCommand) { editing.value = c; dialogOpen.value = true }
+
+function saveQuick(v: QuickCommandInput) {
+  const ok = editing.value ? updateQuick(editing.value.id, v) : !!addQuick(v)
+  if (!ok) { toast('保存失败，请检查输入', 'err'); return }
+  const wasEdit = !!editing.value
+  dialogOpen.value = false
+  toast(wasEdit ? '命令已更新' : '命令已添加')
+}
+
+function confirmDelete() {
+  if (!pendingDelete.value) return
+  removeQuick(pendingDelete.value.id)
+  pendingDelete.value = null
+  toast('命令已删除')
+}
+
 // ── 标签栏 ──
 async function openTab() {
   if (tabs.value.length >= auth.terminalMax) return
@@ -352,9 +430,71 @@ onUnmounted(() => {
       <!-- 高危提示前置：进入终端输入区之前就要看见，且不与终端贴边 -->
       <RiskBanner level="danger" title="宿主级权限"
         text="终端拥有宿主级权限，所有命令以面板运行身份执行；关闭页面或关闭标签即断开会话。" />
+
+      <!-- 快捷命令：点命令填入输入框，可编辑后再插入/执行；复制按钮独立于填充。 -->
+      <section class="quick-bar" aria-label="快捷命令">
+        <div class="qb-head">
+          <button class="qb-toggle" type="button" :aria-expanded="quickOpen" @click="quickOpen = !quickOpen">
+            <Icon name="chevron" :size="14" class="chev" :class="{ open: quickOpen }" />
+            快捷命令
+          </button>
+          <span class="spacer" />
+          <button class="btn-ghost btn-sm" type="button" @click="openAdd">
+            <Icon name="plus" :size="14" /> 新增
+          </button>
+        </div>
+        <template v-if="quickOpen">
+          <div class="qb-input-row">
+            <input ref="quickInputEl" v-model="quickInput" class="qb-input" type="text"
+              placeholder="输入命令" spellcheck="false" @keydown.enter.prevent="sendQuick(true)" />
+            <button class="btn-ghost btn-sm" type="button" :disabled="!connected" @click="sendQuick(false)">
+              <Icon name="terminal" :size="14" /> 插入
+            </button>
+            <button class="btn-primary btn-sm" type="button" :disabled="!connected" @click="sendQuick(true)">
+              <Icon name="play" :size="14" /> 执行
+            </button>
+          </div>
+          <div class="qb-groups">
+            <div class="qb-group">
+              <span class="qb-label">常用</span>
+              <div class="qb-items">
+                <div v-for="c in PRESET_COMMANDS" :key="c.id" class="qb-item">
+                  <button class="qb-cmd" type="button" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
+                  <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
+                    @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
+                </div>
+              </div>
+            </div>
+            <div class="qb-group">
+              <span class="qb-label">我的命令<em v-if="customCommands.length">（{{ customCommands.length }}）</em></span>
+              <div class="qb-items">
+                <template v-if="customCommands.length">
+                  <div v-for="c in customCommands" :key="c.id" class="qb-item">
+                    <button class="qb-cmd" type="button" @click="fillCommand(c)"><code>{{ c.cmd }}</code></button>
+                    <button class="qb-act" type="button" :aria-label="`复制 ${c.label}`" title="复制"
+                      @click="copyCommand(c)"><Icon name="copy" :size="14" /></button>
+                    <button class="qb-act" type="button" :aria-label="`编辑 ${c.label}`" title="编辑"
+                      @click="openEdit(c)"><Icon name="edit" :size="14" /></button>
+                    <button class="qb-act danger" type="button" :aria-label="`删除 ${c.label}`" title="删除"
+                      @click="pendingDelete = c"><Icon name="trash" :size="14" /></button>
+                  </div>
+                </template>
+                <span v-else class="qb-empty">暂无自定义命令</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+
       <!-- 每个标签一个常驻容器：隐藏而非销毁，切回来才能保住滚动缓冲与回显 -->
       <div v-for="t in tabs" :key="t.id" :ref="(el) => bindPane(t.id, el)"
         class="term-pane" :class="{ active: t.id === activeId }" />
+
+      <TerminalCommandDialog :open="dialogOpen" :initial="editing" @close="dialogOpen = false"
+        @save="saveQuick" />
+      <ConfirmDialog :open="!!pendingDelete" title="删除自定义命令"
+        :detail="`确定删除「${pendingDelete?.label ?? ''}」吗？`" danger
+        @confirm="confirmDelete" @cancel="pendingDelete = null" />
     </template>
   </div>
 </template>
@@ -405,4 +545,48 @@ onUnmounted(() => {
   padding: 10px;
 }
 .term-pane:not(.active) { display: none; }
+
+/* 快捷命令面板：常驻在终端上方，随终端 flex 列定高；折叠只隐藏内容不卸载，
+   输入框里的草稿不会被收起动作清掉。 */
+.term-view > .quick-bar { flex: none; }
+.quick-bar {
+  background: var(--c-glass); border: 1px solid var(--c-border);
+  border-radius: var(--radius-md); padding: 9px 12px;
+}
+.qb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.qb-toggle {
+  display: inline-flex; align-items: center; gap: 7px; padding: 0;
+  border: none; background: none; color: var(--c-text);
+  font-size: var(--fs-14); font-weight: 600; cursor: pointer;
+}
+.qb-toggle:hover:not(:disabled) { background: none; color: var(--c-primary); transform: none; }
+.qb-toggle .chev { transition: transform .14s ease; }
+.qb-toggle .chev.open { transform: rotate(90deg); }
+.qb-input-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+/* flex 条里先 width:auto 压掉全局 input{width:100%}，再交给 flex 分配余量。 */
+.qb-input {
+  flex: 1 1 auto; min-width: 0; width: auto; height: 38px;
+  font-family: var(--mono); font-size: var(--fs-13);
+}
+.qb-groups { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
+.qb-group { display: flex; align-items: flex-start; gap: 10px; }
+.qb-label { flex: 0 0 62px; padding-top: 8px; font-size: var(--fs-12-5); color: var(--c-text-mute); }
+.qb-label em { font-style: normal; }
+.qb-items { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.qb-item {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-xs);
+  background: var(--c-glass); padding: 3px 5px 3px 3px;
+}
+.qb-item:hover { border-color: var(--c-primary); }
+.qb-cmd { padding: 4px 5px; border: none; background: none; color: var(--c-text); font-size: var(--fs-12-5); }
+.qb-cmd code { background: none; padding: 0; }
+.qb-act {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: none; background: none;
+  color: var(--c-text-dim); border-radius: var(--radius-chip); cursor: pointer;
+}
+.qb-act:hover:not(:disabled) { background: var(--c-hover); color: var(--c-primary); transform: none; }
+.qb-act.danger:hover:not(:disabled) { color: var(--c-danger); }
+.qb-empty { padding: 6px 0; font-size: var(--fs-12-5); color: var(--c-text-mute); }
 </style>
