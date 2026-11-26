@@ -50,6 +50,13 @@ import { fmtApplied, siteState, tlsState } from '@/composables/siteState'
 // CSS 只渲染 7 列 ⇒ 凭空多出 4 个空列、操作列被压到 58px）。这里只消费。
 const { narrow, hiddenCols, toggleCol, resetCols, shown, elasticId, tableMinW, colCount } = useSiteColumns()
 
+/** 配置状态徽章的完整说明：放到 script 里避免模板属性内嵌多行模板字符串（Vue 解析器会截断）。 */
+function confStateTitle(s: Site): string {
+  return s.conf_stale
+    ? '配置状态：未同步——表单已改但磁盘配置未更新，面板显示与实际生效不一致；编辑站点可「按表单重新生成」同步'
+    : '配置状态：手动维护——保存时不会覆盖磁盘配置文件，编辑弹窗内可「按表单重新生成」'
+}
+
 // 行展开：完整取值（等宽、不截断）
 const expanded = ref<number[]>([])
 const isExpanded = (id: number) => expanded.value.includes(id)
@@ -439,14 +446,11 @@ async function batchDelete() {
             <!-- .st-cell：单格最多 3 个徽章（状态 + 未同步 + 外部改动），6% 列宽放不下会
                  参差不齐地换行；改 flex 换行并给列加下限，行高才稳定。 -->
             <td v-if="shown('state')" class="st-cell">
-              <span class="badge" :class="siteState(s).cls" :title="siteState(s).title">{{ siteState(s).label }}</span>
+              <span class="badge" :class="siteState(s).cls" :title="`服务状态：${siteState(s).title}`"><i class="st-dim">服务</i>{{ siteState(s).label }}</span>
               <!-- 手动维护 / 未同步两态共用一个徽标：未同步（表单改了但配置没跟上）用红色——
                    「面板所见 ≠ 实际生效」必须一眼可见（as11 分叉事故的直接修复项）。 -->
               <span v-if="s.manual_conf" class="badge" :class="s.conf_stale ? 'badge-danger' : ''"
-                :title="s.conf_stale
-                  ? '未同步：表单已改但磁盘配置未更新，面板显示与实际生效不一致；编辑站点可「按表单重新生成」同步'
-                  : '手动维护：保存时不会覆盖磁盘配置文件，编辑弹窗内可「按表单重新生成」'">
-                {{ s.conf_stale ? '未同步' : '手动' }}</span>
+                :title="confStateTitle(s)"><i class="st-dim">配置</i>{{ s.conf_stale ? '未同步' : '手动' }}</span>
               <span v-if="s.conf_external" class="badge"
                 title="外部改动：磁盘配置在面板之外被修改过。面板不会覆盖它，可在编辑弹窗内「按表单重新生成」或改写为自定义配置">外部改动</span>
             </td>
@@ -458,8 +462,9 @@ async function batchDelete() {
             <td v-if="shown('tls')"><span class="badge" :class="tlsState(s).cls" :title="tlsState(s).title">{{ tlsState(s).label }}</span></td>
             <!-- 操作列补常驻文字（审计 U2）：纯图标靠 hover title 才能辨认，触屏无 hover、
                  新手也分不清哪个是删除。列宽 w-sacts 19% 本就是按「4 个带文字按钮」实测的。
-                 文字装在 .btn-label 里：窄屏（<=720px）由 main.css 收起只留图标，
-                 否则 4 个按钮在窄列里会竖着堆成 4 行（实测行高 247px）。 -->
+                 文字装在 .btn-label 里：≤1799px 由本文件收起只留图标（见下方
+                 td.col-actions 规则），否则 4 个按钮在 168px 窄列里会横向溢出、后两个
+                 按钮被 overflow:hidden 裁掉；≤720px 再由 main.css 统一收起。 -->
             <td class="col-actions">
               <button class="btn-ghost btn-sm" :disabled="!canManage || busy" title="编辑" @click="openEdit(s)"><Icon name="edit" :size="13" /><span class="btn-label">编辑</span></button>
               <button class="btn-ghost btn-sm" :disabled="!canReload || busy" :title="canReload ? '按磁盘上现有配置重载 Web 服务器（不重新渲染，改配置请用「编辑」）' : '需 Web 服务器'" @click="reloadSite(s)"><Icon name="refresh" :size="13" /><span class="btn-label">{{ rowBusyId === s.id ? '重载中…' : '重载' }}</span></button>
@@ -657,9 +662,13 @@ col.w-sacts { width: 320px; }  /* 4 个带文字按钮并排：各 67px + 3×6 �
    按钮可辨识性由 title / aria-label 保留（<=720 本就只显图标）。 */
 @media (max-width: 1799px) {
   col.w-sacts { width: 168px; }
-  .actions .btn-label { display: none; }
-  .actions .btn-sm { padding: 4px 7px; }
+  /* ⚠ 原选择器写成 `.actions ...`，而模板类名是 `td.col-actions`，规则从未命中：
+     1440px 实测 4×61px 按钮溢出单元格 107px，「证书」「删除」完全不可见。 */
+  td.col-actions .btn-label { display: none; }
+  td.col-actions .btn-sm { padding: 4px 7px; }
 }
+/* 状态列两个徽章各自标明所属维度，避免「运行中 / 未同步」被读成同一维度的矛盾状态 */
+.st-dim { font-style: normal; margin-right: 3px; opacity: .75; font-size: var(--fs-12); }
 /* 站点表首屏占位高度：10 列表格，300px ≈ 表头 + 8 行骨架的观感
    （骨架本体走公共 .skeleton.shimmer，见 main.css） */
 .box { height: 300px; }

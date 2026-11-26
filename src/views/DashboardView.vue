@@ -165,7 +165,7 @@ const ovCards = computed<MetricItem[]>(() => {
     { id: 'disk', label: '磁盘', value: (usedG / du).toFixed(1), unit: dUnit,
       sub: `总量 ${(totalG / du).toFixed(1)} ${dUnit}`,
       icon: 'disk', tone: 'ok', progress: diskPct.value },
-    { id: 'load', label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', icon: 'bolt', tone: loadTone.value },
+    { id: 'load', label: '负载', value: (ov.value?.load1 ?? 0).toFixed(2), unit: '1m', sub: '1 分钟均值', icon: 'bolt', tone: loadTone.value },
     { id: 'net', label: '网络', value: `↓ ${fmtNet(ov.value?.net_in_bps)}`,
       sub: `↑ ${fmtNet(ov.value?.net_out_bps)}`, icon: 'network', tone: 'cyan' },
   ]
@@ -785,9 +785,9 @@ onUnmounted(() => { es?.close() })
 .note-row .note-body { flex: 1; min-width: 0; }
 .note-time { flex: none; padding-top: 4px; font-size: var(--fs-12); color: var(--c-text-dim); white-space: nowrap; }
 .note-del { flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; margin-top: 1px; border: none; border-radius: var(--radius-chip);
-  background: none; color: var(--c-text-dim); cursor: pointer; opacity: .45; transition: opacity .12s ease; }
-.note-del:hover { opacity: 1; color: var(--c-danger); background: var(--c-danger-soft); }
+  width: 32px; height: 32px; margin-top: 1px; border: 1px solid transparent; border-radius: var(--radius-chip);
+  background: none; color: var(--c-text-dim); cursor: pointer; transition: color .12s ease, background .12s ease; }
+.note-del:hover { color: var(--c-danger); background: var(--c-danger-soft); border-color: var(--c-danger-soft); }
 
 .hot-tip { display: flex; align-items: center; gap: 9px; padding: 9px 14px;
            border: 1px solid var(--c-danger); border-radius: var(--radius-sm);

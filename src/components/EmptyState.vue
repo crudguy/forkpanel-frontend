@@ -36,6 +36,6 @@ const needsRestart = computed(() => props.reason === 'binary_missing')
 .title { margin: 0 0 6px; font-size: var(--fs-14); }
 .hint { margin: 0; font-size: var(--fs-13); color: var(--c-text-dim); }
 .reason { margin: 6px 0 0; font-size: var(--fs-12); color: var(--c-warn); font-family: var(--mono); }
-.tip { margin: 4px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); }
+.tip { margin: 4px 0 0; font-size: var(--fs-13); color: var(--c-text-dim); }
 .cta { margin-top: 14px; display: flex; justify-content: center; }
 </style>

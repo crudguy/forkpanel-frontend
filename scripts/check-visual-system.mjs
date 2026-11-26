@@ -150,7 +150,7 @@ if (hoverBody && /border-color\s*:\s*var\(--c-border-strong\)/.test(hoverBody)) 
 if (!ruleBody(css, '.btn-primary')?.includes('background: var(--gradient)')) {
   errors.push('主操作失去实心渐变底：重点会被稀释')
 }
-if (!ruleBody(css, '.btn-danger')?.includes('background: var(--c-danger)')) {
+if (!ruleBody(css, '.btn-danger')?.includes('background: var(--c-danger-fill)')) {
   errors.push('危险主操作失去实心红底')
 }
 if (!ruleBody(css, 'a.btn-danger')?.includes('border-color: var(--c-danger)')) {

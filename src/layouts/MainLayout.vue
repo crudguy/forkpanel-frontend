@@ -226,7 +226,7 @@ async function logout() {
         </button>
         <div class="title-block">
           <h1 class="title">{{ title }}</h1>
-          <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+          <span v-if="subtitle" class="subtitle" :title="subtitle">{{ subtitle }}</span>
         </div>
 
         <span class="spacer" />
@@ -393,12 +393,19 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    `.title` 的宽度就是 0，页面标题整块消失。顶栏里只有它是「可让」的文本，
    该让路的是信息性胶囊（见下方 <=1200 收起 .health），不是标题。 */
 .title-block { display: flex; flex-direction: column; justify-content: center; flex: 1 1 auto; min-width: 0; gap: 1px; }
-.subtitle { font-size: var(--fs-12); line-height: 1.3; color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
+/* 副标题允许两行：1280px 下需要 637px 而只有 407px，单行省略号会把
+   「谁能写」这类关键信息整段藏掉（此前模板还没有 title 兜底）。line-height 1.2
+   保证两行 + 标题仍落在 58px 顶栏内；极窄屏由下方 ≤480 规则直接收起。 */
+.subtitle { font-size: var(--fs-12); line-height: 1.2; color: var(--c-text-dim);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; text-overflow: ellipsis; max-width: 48vw; }
 
 .bell { position: relative; color: var(--c-text-dim); }
 .bell:hover { color: var(--c-text); }
 .badge-dot { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
-             padding: 0 4px; border-radius: 999px; background: var(--c-danger); color: var(--c-on-accent);
+             /* 实底+白字：必须用 --c-danger-fill（暗色 #dc2626 对白 4.83:1）。
+                --c-danger 是**文字色**档（暗色 #f87171），拿来做底时白字只有 2.77:1。 */
+             padding: 0 4px; border-radius: 999px; background: var(--c-danger-fill); color: var(--c-on-accent);
              font-size: var(--fs-12); line-height: 17px; text-align: center; font-weight: 500;
              box-shadow: 0 0 0 2px var(--c-surface); }
 .spacer { flex: 1; }
@@ -512,5 +519,13 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
    44 = 864 > 758 会横向滚动），该入口已删，现在只剩汉堡。 */
 @media (max-width: 900px) {
   .hamburger { display: inline-flex; align-items: center; justify-content: center; }
+}
+
+/* <=480：顶栏固定项必须给标题让位。实测 420px 下不收起用户名/版本文字时
+   .title-block 被压到 0，用户不知道自己在哪一页；同时右边缘溢出 1px。 */
+@media (max-width: 480px) {
+  .topbar { gap: 8px; padding: 0 12px; }
+  .uname { display: none; }
+  .subtitle { display: none; }
 }
 </style>

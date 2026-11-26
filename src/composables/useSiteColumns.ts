@@ -33,7 +33,7 @@ export const SITE_COLS: {
   { id: 'kind', label: '类型', w: 64 },
   { id: 'feat', label: '特性', w: 84 },
   { id: 'waf', label: 'WAF', w: 116 },
-  { id: 'state', label: '状态', w: 120 },
+  { id: 'state', label: '状态', w: 156 },
   // 日期右对齐，便于纵向比对（B9 列类型/对齐规范：数字/日期/字节列 right，文本与徽标 left）
   { id: 'applied', label: '上次下发', w: 108, align: 'right' },
   { id: 'tls', label: 'TLS', w: 84 },

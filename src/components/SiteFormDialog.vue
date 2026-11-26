@@ -1316,7 +1316,7 @@ function confSpecChanged(): boolean {
 .cc { margin-top: 10px; border-top: 1px dashed var(--c-border); padding-top: 12px; }
 .cc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .cc-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
-.cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: var(--fs-12); line-height: 1.55; }
+.cc-text { width: 100%; min-height: 96px; resize: vertical; font-size: var(--fs-14); line-height: 1.55; }
 .cc-note { margin: 6px 0 0; }
 /* 高级配置（020）：与 WAF / SSL 同范式（虚线分隔 = 站点配置的一部分）。
    内部是纵向堆叠的几个字段：选项多、且 HSTS 勾开后还会长出附加项，
@@ -1338,7 +1338,7 @@ function confSpecChanged(): boolean {
 .adv-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--c-text); }
 .adv-row { margin-bottom: 8px; }
 .adv-row select { width: 100%; margin-top: 4px; }
-.adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: var(--fs-12); line-height: 1.55; margin-top: 4px; }
+.adv-text { width: 100%; min-height: 74px; resize: vertical; font-size: var(--fs-14); line-height: 1.55; margin-top: 4px; }
 .adv-warn { margin: 6px 0 8px; }
 .adv-note { margin: 8px 0 0; }
 /* 021：IP 黑名单在白名单非空时禁用 + 视觉降权 */

@@ -131,6 +131,8 @@ function onNavClick(it: NavItem, e: MouseEvent) {
         >
           <Icon :name="it.icon" :size="19" class="ico" />
           <span class="label">{{ it.label }}</span>
+          <!-- 禁用原因必须可见：此前只有 title，触屏无 hover 时用户只看到灰项。 -->
+          <span v-if="it.off" class="off-why">{{ it.off }}</span>
         </RouterLink>
       </template>
     </nav>
@@ -179,7 +181,7 @@ function onNavClick(it: NavItem, e: MouseEvent) {
 .grp-sep {
   display: flex; align-items: center; gap: 6px;
   margin: 10px 0 2px; padding: 0 11px;
-  color: var(--c-text-mute); font-size: var(--fs-12); font-weight: 600;
+  color: var(--c-text-mute); font-size: var(--fs-13); font-weight: 600;
   letter-spacing: .5px;
 }
 
@@ -191,6 +193,10 @@ function onNavClick(it: NavItem, e: MouseEvent) {
   transition: background .14s ease, color .14s ease;
 }
 .item:hover:not(.disabled) { background: var(--c-hover); color: var(--c-text); }
+/* 禁用项在标签下方补一行可见原因，展开态两行；折叠态无空间则只保留 tooltip。 */
+.item.disabled { flex-wrap: wrap; }
+.off-why { flex: 0 0 100%; font-size: var(--fs-12); line-height: 1.3; color: var(--c-text-mute); }
+.collapsed .off-why { display: none; }
 .item .ico { flex: none; }
 .collapsed .label { display: none; }
 /* 折叠态基础条目：图标居中（icon-per-route 直接点），无嵌套子项块包裹 */

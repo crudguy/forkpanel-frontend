@@ -746,7 +746,7 @@ onMounted(async () => {
 
 <style scoped>
 .sec-sub { color: var(--c-text-mute); font-size: var(--fs-12-5); margin: 4px 0 10px; }
-.sec-note { color: var(--c-text-mute); font-size: var(--fs-12); margin: 8px 0 0; }
+.sec-note { color: var(--c-text-mute); font-size: var(--fs-13); margin: 8px 0 0; }
 .myperms { margin: 12px 0 2px; display: flex; flex-direction: column; gap: 6px; }
 .restart-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 

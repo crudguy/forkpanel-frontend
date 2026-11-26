@@ -430,4 +430,10 @@ usePolling({ fn: () => { if (canSys.value) void checkUpgrade() }, ms: 12 * 60 * 
   .m-btn span { display: none; }
   .m-btn { padding: 0 9px; }
 }
+/* ≤480：版本文字也收起，只留图标；配合 MainLayout 的用户名收起给页面标题让位。 */
+@media (max-width: 480px) {
+  .maint { gap: 6px; }
+  .ver-chip { width: 34px; padding: 0; justify-content: center; }
+  .ver-chip > span:not(.up-dot) { display: none; }
+}
 </style>

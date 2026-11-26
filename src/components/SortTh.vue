@@ -37,5 +37,7 @@ const emit = defineEmits<{ (e: 'sort'): void }>()
 .sortable:hover { color: var(--c-text); }
 .sortable.active { color: var(--c-primary); }
 /* 三角与文字在同基线：用轻微左间距，不靠空格占位（空格在 scoped 里会跟变体一起被 strip） */
-.sort-ind { margin-left: 3px; font-size: 0.82em; opacity: 0.85; }
+/* 三角是表头的一部分，不再用 .82em 缩到 10.25px（低于全站 12px 下限），
+   也不再降透明度（浅色主题实测 2.68:1）。 */
+.sort-ind { margin-left: 3px; font-size: var(--fs-12); }
 </style>

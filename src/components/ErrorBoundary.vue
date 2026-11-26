@@ -113,7 +113,7 @@ async function copy() {
 }
 .eb-code { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); }
 .eb-code code { font-family: var(--mono); color: var(--c-danger); }
-.eb-hint { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.7; }
+.eb-hint { margin: 8px 0 0; font-size: var(--fs-13); color: var(--c-text-dim); line-height: 1.7; }
 .eb-path { margin: 8px 0 0; font-size: var(--fs-12); color: var(--c-text-dim); }
 .eb-actions { display: flex; gap: 8px; margin-top: 14px; }
 </style>

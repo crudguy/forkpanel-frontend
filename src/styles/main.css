@@ -25,7 +25,7 @@
   --c-border-strong: rgba(255, 255, 255, 0.16);
   --c-text: #e7e9ee;
   --c-text-dim: #9aa0ab;
-  --c-text-mute: #646a75;
+  --c-text-mute: #7d8491;
   --c-hover: rgba(255, 255, 255, 0.05);
   --c-active: rgba(255, 106, 61, 0.14);
   /* 弹窗/抽屉遮罩：两套主题同值（遮罩本身不吃主题色，只是把底层压暗）。
@@ -45,6 +45,10 @@
      「品牌底上的白」有名字——否则它以十几处裸 #fff 散落全站，棘轮也分不清
      它到底是主题色还是常量。 */
   --c-on-accent: #fff;
+  /* 亮底上的文字/危险实底：--c-on-accent 恒白用于开关滑块等非文字点；
+     文字压在亮橙渐变上必须改用深色墨，实测 #14171f 对渐变两端 5.77/7.67:1。 */
+  --c-on-accent-text: #14171f;
+  --c-danger-fill: #dc2626;
   --c-cyan: #38bdf8;
   --c-danger: #f87171;
   --c-danger-soft: rgba(248, 113, 113, 0.15);
@@ -192,7 +196,7 @@
   --c-border-strong: #d3d8e0;
   --c-text: #1a1e25;
   --c-text-dim: #5b616c;
-  --c-text-mute: #8a909b;
+  --c-text-mute: #6b7280;
   --c-hover: #f1f3f6;
   --c-active: rgba(255, 90, 54, 0.10);
   /* 页签条 / 分段控件底：暗色用的 --bg-inset 是半透明黑，浅色若沿用会在白底上
@@ -200,14 +204,18 @@
      这里只给 seg 家族换浅冷灰，不动其它 inset 表面（代码块、详情行等）。 */
   --seg-bg: #e9edf3;
 
-  --c-primary: #ff5a36;
+  /* 浅色主题的文字色取深色档：亮橙 #ff5a36 在白底上只有 3.1:1，
+     不能继续当链接/激活项文字色；品牌渐变本身仍保持原橙（见 --gradient）。 */
+  --c-primary: #c2410c;
   --c-primary-2: #ff7a4c;
   --c-on-accent: #fff;
-  --c-danger: #e23b3b;
+  --c-on-accent-text: #14171f;
+  --c-danger: #b91c1c;
+  --c-danger-fill: #b91c1c;
   --c-danger-soft: rgba(226, 59, 59, 0.10);
-  --c-warn: #c47d00;
+  --c-warn: #92400e;
   --c-warn-bg: #fef3c7;
-  --c-ok: #16a34a;
+  --c-ok: #166534;
   --c-ok-soft: rgba(22, 163, 74, 0.10);
   --c-info: #2563eb;
   --c-info-soft: rgba(37, 99, 235, 0.10);
@@ -281,7 +289,7 @@ button:hover:not(:disabled) { background: var(--c-hover); transform: translateY(
    白字 + 透明底＝按钮 hover 时"变空白"（实测所有实心主按钮都中招，非审计页独有）。
    这里把实心底还回去；提亮/上浮反馈仍由各自的 :hover filter/transform 提供。 */
 button.btn-primary:hover:not(:disabled) { background: var(--gradient); }
-button.btn-danger:hover:not(:disabled) { background: var(--c-danger); }
+button.btn-danger:hover:not(:disabled) { background: var(--c-danger-fill); }
 button:active:not(:disabled) { transform: translateY(0); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
@@ -301,6 +309,12 @@ input, textarea, select {
    个别视图（SitesView .row-inline / AppsView 内联）局部复位，这里统一兜底；
    .switch 自带的 width:0 规则在后方定义，特异性相同仍按其后续生效。 */
 input[type="checkbox"], input[type="radio"] { width: auto; }
+/* 文本类控件统一契约：高度 38px、字号 14px；原生勾选框 16px。
+   ⚠ 输入框的 1px --c-border-strong 边框由上方基础规则提供，守卫钉住不可淡化。
+   .switch input 在后方把宽高归零，不受这里影响。 */
+input:not([type='checkbox']):not([type='radio']), select { height: 38px; padding: 0 11px; font-size: var(--fs-14); }
+textarea { padding: 8px 11px; font-size: var(--fs-14); }
+input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; accent-color: var(--c-primary); }
 /* 占位符颜色统一（暗/亮主题对比一致）：浏览器默认 placeholder 在暗色下偏灰且
    各视图此前未显式控制，统一用次级文字色并强制 opacity:1（部分浏览器默认 0.54）。 */
 input::placeholder, textarea::placeholder, select::placeholder { color: var(--c-text-dim); opacity: 1; }
@@ -378,15 +392,18 @@ a[class*="btn-"]:active { transform: translateY(0); }
 /* 与 `a[class*="btn-"]` 同为 (0,1,1)，靠「后出现」取胜，把颜色还给各自的变体 */
 a.btn-primary { border-color: transparent; }
 a.btn-danger { border-color: var(--c-danger); }
-.btn-primary { background: var(--gradient); border-color: transparent; color: var(--c-on-accent); font-weight: 600; box-shadow: var(--glow); }
+.btn-primary { background: var(--gradient); border-color: transparent; color: var(--c-on-accent-text); font-weight: 600; box-shadow: var(--glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
-.btn-ghost { background: transparent; }
+.btn-ghost { background: transparent; border-color: var(--c-border); }
+/* 次级按钮补一条极浅描边：触屏没有 hover，纯透明底看起来像普通文字。
+   基础 button 规则仍保持透明（视觉守卫 B 阶段约束），只在变体层补边界。 */
+a.btn-ghost { border-color: var(--c-border); }
 /* 危险按钮**两级**，别再自造第三级（此前 Databases 有 `.danger-btn{background:#C73E1F}`、
    Certs 有 `btn-primary danger`、其余各自用 btn-danger —— 同一个"删除"三种长相）：
      .btn-danger        实心红，**弹窗里的危险主操作**（删除确认 / 覆盖恢复 / 关闭 MFA）
      .btn-ghost.danger  透明底 + 红字，**表格内联**的危险小按钮（避免整片表格红压压）
    判据：这个按钮是不是弹窗的底部主操作？是 →.btn-danger；否则 →.btn-ghost.danger。 */
-.btn-danger { background: var(--c-danger); border-color: var(--c-danger); color: var(--c-on-accent); font-weight: 600; }
+.btn-danger { background: var(--c-danger-fill); border-color: var(--c-danger-fill); color: var(--c-on-accent); font-weight: 600; }
 .btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .btn-sm { padding: 4px 10px; font-size: var(--fs-13); border-radius: var(--radius-xs); }
 /* 34×34 图标钮改正圆：只承载一个图标，正方形带 8px 圆角在顶栏一串按钮里
@@ -402,7 +419,10 @@ td button { vertical-align: middle; }
 .btn-ghost.danger:hover:not(:disabled) { color: var(--c-danger); border-color: color-mix(in srgb, var(--c-danger) 40%, transparent); background: transparent; }
 /* 行内操作组：列表项/卡片底部的一组小按钮横排 */
 .row-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.btn-primary.danger { background: var(--c-danger); box-shadow: none; }
+/* 这条死规则当前无调用方（危险主操作已统一到 .btn-danger），但保留它时必须
+   显式钉白字：它继承了 .btn-primary 的深色墨 --c-on-accent-text，压在深红
+   --c-danger-fill 上只有约 3.8:1，哪天有人回升复用就会踩对比度坑。 */
+.btn-primary.danger { background: var(--c-danger-fill); color: var(--c-on-accent); box-shadow: none; }
 .btn-primary.danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 
 /* ── 卡片 / 玻璃拟态 ── */
@@ -590,7 +610,7 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 /* ── 表单字段 ── */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .field > label { font-size: var(--fs-13); color: var(--c-text-dim); }
-.field .hint { font-size: var(--fs-12); color: var(--c-text-mute); }
+.field .hint { font-size: var(--fs-13); color: var(--c-text-mute); }
 
 /* ── 骨架屏 ── */
 .skeleton {
@@ -633,7 +653,7 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 /* T1 工具条等高：主操作已统一默认档 38px，工具条内 .filter 此前 31px 既矮于主 CTA，
    也矮于标准输入框(37-39px)。提到 38px 让工具条内部完全等高，并顺带对齐输入控件家族。
    仅改高度，其余（描边/圆角/底色）沿用原定义，避免引入新差异。 */
-.filter { width: 220px; max-width: 46vw; height: 38px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); background: var(--c-glass); color: var(--c-text); font-size: var(--fs-13); }
+.filter { width: 220px; max-width: 46vw; height: 38px; padding: 0 10px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-glass); color: var(--c-text); font-size: var(--fs-13); }
 .filter:focus { outline: none; border-color: var(--c-primary); }
 
 /* T1 工具条等高：工具条容器内的次级 btn-sm 同步到默认 38px（与主 CTA 等高），
@@ -659,11 +679,11 @@ td.col-actions .btn-sm { padding: 4px 7px; }
    悬停浅底；flex:none 防止被红条拉伸成满宽（此前裸 .err + .err-retry 无红条）。 */
 .err-bar .err-retry { flex: none; }
 .note { font-size: var(--fs-13); color: var(--c-primary); margin: 0 0 12px; }
-.tip { font-size: var(--fs-12); color: var(--c-text-dim); margin: 0; }
+.tip { font-size: var(--fs-13); color: var(--c-text-dim); margin: 0; }
 
 /* ── 表单行（新增/筛选区通用） ── */
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.row > label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-12); color: var(--c-text-dim); flex: 1; min-width: 140px; }
+.row > label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-13); color: var(--c-text-dim); flex: 1; min-width: 140px; }
 .row > label input, .row > label select { width: 100%; }
 /* 行内控件统一 38px 高：原生 select 的 line-height:normal 与 input 的固定行高
    会把同类控件撑成不同高度（备份计划实测 select 36/37px、input 39.2px）。

@@ -79,8 +79,12 @@ describe('顶栏去重：AI 助手只留侧边栏入口', () => {
   })
 
   it('侧栏仍保留 AI 助手入口（去重不能把功能一起删掉）', () => {
-    const texts = Array.from(document.querySelectorAll('.side a'))
-      .map((a) => a.textContent?.trim() ?? '')
-    expect(texts).toContain('AI 助手')
+    // 不能断言 textContent：禁用项的 .off-why 是 <a> 内的可见原因文本节点，
+    // 会把「AI 助手」变成「AI 助手权限不足」——那是可访问性改进，不是功能丢失。
+    // aria-label 恒等于 it.label（SideNav 模板 :aria-label="it.label"），
+    // 既不受原因文本影响，又顺带验证读屏名字仍在；删掉入口仍会红，严格度不降。
+    const labels = Array.from(document.querySelectorAll('.side a'))
+      .map((a) => a.getAttribute('aria-label'))
+    expect(labels).toContain('AI 助手')
   })
 })

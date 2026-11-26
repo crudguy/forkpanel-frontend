@@ -636,9 +636,9 @@ select.fw-action { width: 100%; flex: none; }
 
 /* 入站生效状态：只读观察值，与下方「可编辑规则表」视觉上明确分开 */
 .exposure-card .sec-head { margin-bottom: 8px; }
-.exposure-policy { margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--c-surface-2); font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
+.exposure-policy { margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--c-surface-2); font-size: var(--fs-13); color: var(--c-text-dim); line-height: 1.5; }
 .exposure-policy.is-open { background: var(--c-primary-soft); color: var(--c-primary); }
-.exposure-hint { margin: 0 0 8px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.exposure-hint { margin: 0 0 8px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .exposure-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .exposure-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); font-size: var(--fs-12); }
 .exposure-chip .mono { font-weight: 600; }
@@ -647,7 +647,7 @@ select.fw-action { width: 100%; flex: none; }
    basis 落到高度上，把输入框撑成 200px）。说明文字同排，窄屏自动折行。 */
 .migrate-row { margin-top: 12px; }
 .migrate-row > label { width: 200px; flex: none; }
-.migrate-tip { flex: 1; min-width: 220px; margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); line-height: 1.5; }
+.migrate-tip { flex: 1; min-width: 220px; margin: 0; font-size: var(--fs-13); color: var(--c-text-dim); line-height: 1.5; }
 
 /* ── fail2ban 入侵防御 ── */
 .f2b-list { display: flex; flex-direction: column; gap: 10px; }
@@ -657,7 +657,7 @@ select.fw-action { width: 100%; flex: none; }
 .f2b-stats { font-size: var(--fs-12); }
 .f2b-ips { margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .f2b-params { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--c-border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.f2b-params label { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12); color: var(--c-text-dim); }
+.f2b-params label { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-13); color: var(--c-text-dim); }
 .f2b-params input { width: 96px; }
 .f2b-params .tip { flex-basis: 100%; margin: 0; }
 .ip-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--c-border-strong); border-radius: 999px; background: var(--c-bg); font-size: var(--fs-12); }

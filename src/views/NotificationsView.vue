@@ -153,6 +153,7 @@ onMounted(() => { if (canView.value) load() })
           <!-- 级别文案走共享词表：后端返回英文枚举，直接渲染会中英混杂。
                此前 notifLevelLabel 已导入却从未使用，级别完全没有展示。 -->
           <span class="lvl">{{ notifLevelLabel(n.level) }}</span>
+          <span v-if="n.read" class="read-tag">已读</span>
           <span class="time">{{ fmtDateTime(n.ts) }}</span>
         </div>
         <p v-if="n.body" class="body">{{ notifBodyText(n.body) }}</p>
@@ -201,13 +202,16 @@ onMounted(() => { if (canView.value) load() })
 .title-link:hover { color: var(--c-primary); }
 .list-more { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; }
 .list-end { margin: 4px 0 0; }
-.item.read { opacity: .55; }
+/* 不用整块 opacity 表达已读：那会把标题/正文/时间一起降到 ~3.4:1。
+   改由左侧色条变浅 + 一枚「已读」小标记承担语义。 */
+.item.read { border-left-color: var(--c-border); }
+.read-tag { font-size: var(--fs-12); color: var(--c-text-mute); }
 /* 叫 .head 而不是 .row：main.css 里 `.row` 是**全局表单行**（align-items: flex-end）。
    虽然这里逐条覆盖了它声明的四个属性、当前没有可见差异，但那是「刚好没踩中」——
    `.warn` 就是这么踩中的（见上）。私有语义就用私有类名。 */
 .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.tag { font-size: var(--fs-12); opacity: .7; }
-.time { font-size: var(--fs-12); opacity: .6; margin-left: auto; }
-.body { margin: 6px 0; white-space: pre-wrap; font-size: var(--fs-13); opacity: .85;
+.tag { font-size: var(--fs-12); color: var(--c-text-dim); }
+.time { font-size: var(--fs-12); color: var(--c-text-dim); margin-left: auto; }
+.body { margin: 6px 0; white-space: pre-wrap; font-size: var(--fs-13);
   overflow-wrap: anywhere; word-break: break-word; }
 </style>
