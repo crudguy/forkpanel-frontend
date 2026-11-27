@@ -243,7 +243,7 @@ const tip = computed<{ time: string; lines: TipLine[] } | null>(() => {
       source-hint="最近 60 秒的末样本；与「专业快照」页顶端读数同源，同一时刻两页一致。" />
 
     <!-- 实时曲线：CPU / 内存 / 负载 / 磁盘 四系列 -->
-    <div class="sec-head">
+    <div class="sec-head block">
       <Icon name="chart" :size="16" /> 实时曲线
       <span class="legend">
         <i class="lg" :style="{ background: COLOR.cpu }" /> CPU {{ (last?.cpu ?? 0).toFixed(0) }}%
@@ -286,7 +286,7 @@ const tip = computed<{ time: string; lines: TipLine[] } | null>(() => {
     <EmptyState v-else title="暂无采样数据" hint="采集启动后会自动出现" />
 
     <!-- 网络吞吐：入/出双线（量纲为速率，与主曲线分开以免混淆） -->
-    <div class="sec-head">
+    <div class="sec-head block">
       <Icon name="network" :size="16" /> 网络吞吐
       <span class="legend">
         <i class="lg" :style="{ background: NET.in }" /> 入站 {{ mbps(last?.net_in_bps ?? 0) }} Mbps
@@ -320,7 +320,7 @@ const tip = computed<{ time: string; lines: TipLine[] } | null>(() => {
     <EmptyState v-else title="暂无采样数据" hint="采集启动后会自动出现" />
 
     <!-- 历史趋势：持久化长时趋势（nano 档位不落盘） -->
-    <div class="sec-head">
+    <div class="sec-head block">
       <Icon name="clock" :size="16" /> 历史趋势
       <span class="gran">
         <button class="chip" :class="{ on: gran === '1m' }" @click="gran = '1m'; loadHistory()">1m</button>
