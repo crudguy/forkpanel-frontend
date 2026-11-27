@@ -16,6 +16,7 @@ import {
   defaultSchema,
   hasSchemaLayer,
   isSchemaBlocked,
+  resolveInitialDb,
   tableOptionLabel,
   type DbLevelInput,
   type DbSchemaNode,
@@ -76,6 +77,34 @@ describe('defaultSchema：选库后自动选中哪个', () => {
 
   it('清单里 previewable 缺省视为可预览（老后端没这个字段时不至于全不可选）', () => {
     expect(defaultSchema([{ name: 'app_schema' }])).toBe('app_schema')
+  })
+})
+
+describe('resolveInitialDb：连接默认库与浏览清单的对齐', () => {
+  it('远端引擎：default_db 命中清单 → 预选它', () => {
+    expect(resolveInitialDb(false, 'appdb', ['mysql', 'appdb', 'sys'])).toBe('appdb')
+  })
+
+  it('未命中 / 空默认库 → 空串，绝不静默挑另一个库', () => {
+    expect(resolveInitialDb(false, 'gone', ['appdb', 'sys'])).toBe('')
+    expect(resolveInitialDb(false, null, ['appdb'])).toBe('')
+    expect(resolveInitialDb(false, '', ['appdb'])).toBe('')
+    // 大小写不同不是"命中"：模糊匹配可能把人带到另一个库
+    expect(resolveInitialDb(false, 'AppDb', ['appdb'])).toBe('')
+  })
+
+  it('本机文件型：default_db 是文件路径 → 映射到清单里的 main', () => {
+    expect(resolveInitialDb(true, '/var/lib/forkpanel/app.db', ['main'])).toBe('main')
+    expect(resolveInitialDb(true, '/var/lib/forkpanel/app.db', ['main', 'aux'])).toBe('main')
+  })
+
+  it('本机文件型但清单里没有 main → 空串（不凭空造一个 catalog 名）', () => {
+    expect(resolveInitialDb(true, '/var/lib/forkpanel/app.db', [])).toBe('')
+    expect(resolveInitialDb(true, '/var/lib/forkpanel/app.db', ['aux'])).toBe('')
+  })
+
+  it('远端引擎不蹭 main 兜底：只有文件型才做引擎特有的映射', () => {
+    expect(resolveInitialDb(false, '/var/lib/forkpanel/app.db', ['main'])).toBe('')
   })
 })
 

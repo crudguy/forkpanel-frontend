@@ -177,6 +177,9 @@ describe('数据库页：连接管理与数据浏览分签', () => {
     expect(panes(m.host)).toHaveLength(2)
     expect(pane.textContent).toContain('尚未打开数据浏览')
     expect(pane.textContent).toContain('连接管理')
+    // 零连接：引导去新增；不能出现一个没有任何选项的连接选择器
+    expect(pane.textContent).toContain('去新增连接')
+    expect(pane.querySelector('select[aria-label="选择要浏览的连接"]')).toBeNull()
   })
 })
 

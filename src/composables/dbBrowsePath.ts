@@ -106,6 +106,28 @@ export function defaultSchema(schemas: DbSchemaNode[]): string {
   return first ? first.name : ''
 }
 
+/**
+ * 连接默认库 ↔ 浏览库清单的对齐结果。
+ *
+ * `default_db` 与 `GET /{conn}/databases` 返回的清单**不是同一种东西**：
+ * - 远端引擎：`default_db` 就是库名，必须在清单里命中才能预选；
+ * - 本机文件型引擎（`EngineSpec.external === false`，当前只有 SQLite）：
+ *   `default_db` 是文件路径，清单来自 `PRAGMA database_list`（`main`）。
+ *   把路径直接塞进下拉会选不中，所以按后端元数据映射到 `main`。
+ *
+ * 不命中一律返回 ''：静默挑另一个库比让人手选更糟（会看到错误的数据却无从察觉）。
+ */
+export function resolveInitialDb(
+  localFileEngine: boolean,
+  defaultDb: string | null | undefined,
+  dbs: string[],
+): string {
+  if (!defaultDb) return ''
+  if (dbs.includes(defaultDb)) return defaultDb
+  if (localFileEngine && dbs.includes('main')) return 'main'
+  return ''
+}
+
 /** 当前停在哪一层。**这道判定是本次修复的核心**，测试逐条覆盖。 */
 export function dbLevel(i: DbLevelInput): DbLevel {
   if (!i.db) return 'state'

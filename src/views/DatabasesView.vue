@@ -41,7 +41,7 @@ import SortTh from '@/components/SortTh.vue'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { matchFields } from '@/composables/listSearch'
 import {
-  dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, tableOptionLabel,
+  dbCrumbs, dbHint, dbLevel, defaultSchema, hasSchemaLayer, resolveInitialDb, tableOptionLabel,
   type DbLevelInput, type DbSchemaNode,
 } from '@/composables/dbBrowsePath'
 
@@ -127,6 +127,10 @@ const busy = ref(false)
 const helpOpen = ref(false)
 /** 打开 SQL 控制台的连接（null = 关闭） */
 const sqlConn = ref<Conn | null>(null)
+/** 数据浏览空态里选的连接 id。用字符串承接 <select> 的 value，避免 .number 把空串转成 NaN。 */
+const browsePickId = ref('')
+const browsePick = computed(() => conns.value.find(c => String(c.id) === browsePickId.value))
+const canBrowsePick = computed(() => !!browsePick.value?.client_ready)
 
 // 页签：连接管理（登记/列表/备份/恢复）为默认签；库→表→行浏览与只读 SQL 控制台
 // 内容深、操作多级，独立成签。用 v-show 承载，切回时下钻层级与查询结果不丢。
@@ -156,6 +160,10 @@ async function load() {
       ])
       conns.value = list
       engines.value = meta.engines
+      // 空态选择器默认落在第一个客户端就绪的连接；刷新后仍有效的选择不覆盖。
+      if (!list.some(c => String(c.id) === browsePickId.value)) {
+        browsePickId.value = String(list.find(c => c.client_ready)?.id ?? '')
+      }
     },
     (e) => { conns.value = []; engines.value = []; error.value = errorText(e) },
   )
@@ -355,7 +363,18 @@ async function openBrowse(c: Conn) {
     const dbs = await api.get<string[]>(API.db.databases(c.id))
     if (seq !== browseSeq || !browse.value) return
     browse.value.dbs = dbs ?? []
+    // 「当前库」就是连接的 default_db（SQL 控制台走的也是它）。命中清单才自动下钻，
+    // 否则保留「选择库…」让人手选——不猜一个库，猜错了看到的是别的库的数据。
+    const initial = resolveInitialDb(isLocalEngine(c.engine), c.default_db, browse.value.dbs)
+    if (initial) await pickDb(initial)
   } catch (e) { if (seq === browseSeq) error.value = errorText(e) }
+}
+
+/** 从空态的连接选择器进入浏览（与列表行的「浏览」共用同一入口） */
+function startBrowseFromPicker() {
+  const c = browsePick.value
+  if (!c?.client_ready || busy.value) return
+  void openBrowse(c)
 }
 
 /** 选库：清空所有下游状态，再按该库**重新**查下一级与表清单 */
@@ -716,7 +735,28 @@ async function exportCsv() {
         <!-- 选了表但没取到行：单独说，不占用"这一层没有对象"那句话 -->
         <p v-else-if="browse.table" class="dim">正在读取「{{ browse.table }}」的数据…</p>
       </section>
-      <EmptyState v-else title="尚未打开数据浏览" hint="在「连接管理」里点连接的「浏览」，逐层查看库、表与数据。" />
+      <EmptyState v-else title="尚未打开数据浏览"
+        :hint="conns.length
+          ? '选一个已登记的连接，直接查看它的库、表与数据。'
+          : '在「连接管理」里新增连接，再回来打开数据浏览。'">
+        <!-- EmptyState 只渲染具名插槽 cta：内容必须显式 <template #cta>，
+             直接当默认插槽写会整块消失（vue-tsc/build 全绿，真机什么都没有）。 -->
+        <template #cta>
+          <template v-if="conns.length">
+            <!-- 只列已登记的连接；client_ready=false 的禁用，避免点开必失败的假按钮 -->
+            <select v-model="browsePickId" class="browse-pick" aria-label="选择要浏览的连接">
+              <option value="" disabled>选择连接…</option>
+              <option v-for="c in conns" :key="c.id" :value="String(c.id)" :disabled="!c.client_ready">
+                {{ c.name }} · {{ engineLabel(c.engine) }}{{ c.client_ready ? '' : '（缺客户端）' }}
+                · {{ c.default_db ?? '—' }}
+              </option>
+            </select>
+            <button class="btn-primary btn-sm" type="button" :disabled="!canBrowsePick || busy"
+              @click="startBrowseFromPicker">打开浏览</button>
+          </template>
+          <button v-else class="btn-primary btn-sm" type="button" @click="setTab('conns')">去新增连接</button>
+        </template>
+      </EmptyState>
       </div><!-- /数据浏览签 -->
     </template>
 
@@ -830,6 +870,9 @@ async function exportCsv() {
 /* 浏览路径的三层选择：整个 path-bar 是一行弹性容器（窄屏换行）。
    每一段里标签与控件**同行**（导航语义，不是表单）。
    公共 `.row > label` 是竖排表单口径，三层叠起来白占三行高度。 */
+/* 空态的连接选择器在 EmptyState 的 flex .cta 里：必须先压掉全局 select{width:100%}，
+   否则它会吃满整行并把「打开浏览」挤出去（flex 条控宽纪律）。 */
+.browse-pick { width: auto; flex: 0 1 320px; max-width: 320px; }
 .path-bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
 .path-row { display: flex; align-items: center; }
 .path-row > label {
