@@ -522,7 +522,8 @@ onMounted(() => { load(); loadFail2ban() })
       <p v-if="f2bError" class="err" role="alert">{{ f2bError }}</p>
 
       <template v-if="f2b && f2b.available">
-        <p v-if="!f2b.jails.length" class="tip">尚未启用任何 jail。安装 fail2ban 后通常需在 <code>jail.local</code> 中启用具体服务（如 sshd）才会开始监控。</p>
+        <EmptyState v-if="!f2b.jails.length" title="尚未启用任何 jail"
+          hint="安装 fail2ban 后通常需在 jail.local 中启用具体服务（如 sshd）才会开始监控。" />
         <div v-else class="f2b-list">
           <div class="f2b-jail" v-for="j in f2b.jails" :key="j.name">
             <div class="f2b-jail-head">

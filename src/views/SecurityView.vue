@@ -21,6 +21,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import SortTh from '@/components/SortTh.vue'
 import TablePager from '@/components/TablePager.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { type MetricItem } from '@/components/MetricHeader.vue'
 import { toast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
@@ -414,7 +415,7 @@ async function doDisable() {
             {{ t.label }}<span class="tab-count">{{ t.count }}</span>
           </button>
         </div>
-        <ul class="checks">
+        <ul v-if="visibleBaseline.length" class="checks">
           <li v-for="c in visibleBaseline" :key="c.key" class="bl-item" :title="c.advice">
             <div class="bl-info">
               <div class="bl-title-row">
@@ -434,10 +435,12 @@ async function doDisable() {
               <span v-else class="muted small">{{ baselineOpNote(c) }}</span>
             </div>
           </li>
-          <li v-if="!visibleBaseline.length" class="bl-empty">
-            <span class="dot" :class="blFilter" /> {{ blEmptyText }}
-          </li>
         </ul>
+        <EmptyState v-else :title="blEmptyText">
+          <template v-if="blFilter !== 'all'" #cta>
+            <button class="btn-ghost" type="button" @click="blFilter = 'all'">查看全部</button>
+          </template>
+        </EmptyState>
       </section>
 
       <!-- ③ SSH 端口：当前端口 / 修改入口 / 风险提示 / 关键操作分区呈现 -->
@@ -536,7 +539,11 @@ async function doDisable() {
             </tbody>
           </table>
         </div>
-        <p v-else class="muted">暂无 SSH 登录记录{{ sshLogSource === 'unavailable' ? '（日志源不可用）' : '' }}</p>
+        <EmptyState v-else-if="!sshLogLoading" title="暂无 SSH 登录记录"
+          :hint="sshLogSource === 'unavailable'
+            ? '日志源不可用：可能是认证日志不存在，或当前账号无读取权限。'
+            : '登录成功与失败的尝试都会记录在这里；从未有登录尝试时为空。'" />
+        <div v-else class="skeleton box" />
         <p class="muted small log-total">
           共 {{ sshLogTotal }} 条{{ sshLogTruncated ? '（已达读取上限，仅展示最近 2000 条）' : '' }}
         </p>
@@ -581,7 +588,7 @@ async function doDisable() {
             </div>
             <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
               @update:page="gotoPage" @update:size="changeSize" />
-            <p v-if="!total" class="muted">暂无活跃会话信息</p>
+            <EmptyState v-if="!total" title="暂无活跃会话" hint="登录成功后会话会出现在这里，可随时吊销。" />
           </section>
 
           <section class="card">
@@ -760,7 +767,6 @@ async function doDisable() {
 .arr { margin: 0 5px; color: var(--c-text-dim); }
 .bl-op { flex: none; min-width: 100px; display: flex; justify-content: flex-end; align-items: flex-start; }
 .badge.na { background: color-mix(in srgb, var(--c-text-dim) 14%, transparent); color: var(--c-text-dim); }
-.bl-empty { display: flex; align-items: center; gap: 8px; padding: 14px 0; color: var(--c-text-mute); }
 .c-name { font-weight: 500; }
 .summary { font-size: var(--fs-12-5); }
 /* 语义色一律只用 token，不给 var() 写第二参数兜底：这些 token 在 main.css 里

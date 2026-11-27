@@ -436,7 +436,7 @@ watch(() => props.site?.id ?? null, (id) => {
             <div v-if="versOpen" class="vers-panel">
               <p v-if="versLoading" class="dim tiny">加载中…</p>
               <p v-else-if="versErr" :key="'ve' + errSeq" class="err-bar conf-msg" role="alert">{{ versErr }}</p>
-              <p v-else-if="!versList.length" class="dim tiny">暂无历史版本：每次「保存并应用」、重新生成、手动保存与回滚都会在此留档（每站保留最近 20 版）。</p>
+              <p v-else-if="!versList.length" class="empty-inline">暂无历史版本：每次「保存并应用」、重新生成、手动保存与回滚都会在此留档（每站保留最近 20 版）。</p>
               <template v-else>
                 <div v-for="v in versList" :key="v.id" class="vers-row">
                   <div class="vers-meta">

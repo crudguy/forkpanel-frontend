@@ -720,7 +720,7 @@ async function deleteTemplate() {
               <button type="button" class="btn-ghost btn-sm danger-ghost" @click="tplDel = t">删除</button>
             </div>
           </div>
-          <p v-else class="tip">还没有模板。填下表建第一个即可。</p>
+          <p v-else class="empty-inline">还没有模板。填下表建第一个即可。</p>
 
           <div class="tpl-form">
             <div class="sec-head">{{ tplEditing == null ? '新建模板' : '编辑模板' }}</div>

@@ -406,7 +406,13 @@ async function batchDelete() {
           <!-- 过滤无结果 ≠ 没有站点：单列一行说明，避免落到「暂无站点」空态造成误判 -->
           <tr v-if="!visibleSites.length">
             <!-- colspan 必须按**实际渲染列数**算：用户收起列之后写死 11 会错位 -->
-            <td :colspan="colCount" class="dim">没有匹配「{{ q }}」的站点</td>
+            <td :colspan="colCount">
+              <EmptyState :title="`没有匹配「${q}」的站点`" hint="换个关键词，或清空搜索查看全部站点。">
+                <template #cta>
+                  <button class="btn-ghost" type="button" @click="q = ''">清空搜索</button>
+                </template>
+              </EmptyState>
+            </td>
           </tr>
           <!-- 用 <template v-for> 包住「主行 + 展开行」：展开行是同一站点的兄弟 <tr>，
                塞进 <tr v-for> 内部不合法（tr 里不能套 tr）。 -->

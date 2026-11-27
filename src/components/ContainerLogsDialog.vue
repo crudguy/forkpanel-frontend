@@ -122,7 +122,7 @@ usePolling({ fn: refresh, ms: 3000, enabled: () => auto.value && props.open })
 
       <div class="logs-wrap">
         <p v-if="error" class="err">{{ error }}</p>
-        <p v-else-if="empty" class="dim pad">该容器暂无日志输出。</p>
+        <p v-else-if="empty" class="empty-inline pad">该容器暂无日志输出。</p>
         <pre v-else class="logs" :class="{ busy: loading }">{{ text || ' ' }}</pre>
       </div>
     </div>
@@ -160,6 +160,5 @@ label > span { color: var(--c-text); font-weight: 500; }
 }
 .logs.busy { opacity: 0.6; }
 .pad { padding: 14px; }
-.dim { color: var(--c-text-dim); }
 .code, code { font-family: var(--mono); font-size: var(--fs-12); background: var(--c-hover); padding: 1px 5px; border-radius: var(--radius-chip); }
 </style>

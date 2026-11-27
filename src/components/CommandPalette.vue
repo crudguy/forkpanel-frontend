@@ -162,7 +162,7 @@ function onInputKeydown(e: KeyboardEvent) {
             <code class="cp-path">{{ it.path }}</code>
             <span v-if="it.disabled" class="cp-why">{{ it.disabled }}</span>
           </button>
-          <p v-if="!results.length" class="cp-empty">没有匹配的页面</p>
+          <p v-if="!results.length" class="empty-inline cp-empty">没有匹配的页面</p>
         </div>
       </div>
     </div>
@@ -202,5 +202,5 @@ function onInputKeydown(e: KeyboardEvent) {
 .cp-title { font-size: var(--fs-13); }
 .cp-path { margin-left: auto; font-family: var(--mono); font-size: var(--fs-12); color: var(--c-text-dim); }
 .cp-why { font-size: var(--fs-12); color: var(--c-warn); }
-.cp-empty { padding: 18px; text-align: center; color: var(--c-text-dim); font-size: var(--fs-13); }
+.cp-empty { padding: 18px; text-align: center; }
 </style>

@@ -107,7 +107,7 @@ const llmStatusText: Record<LlmStatus, string> = {
       </div>
 
       <!-- 空态 -->
-      <p v-if="turns.length === 0 && !busy" class="empty-hint">
+      <p v-if="turns.length === 0 && !busy" class="empty-inline">
         输入问题或点上面的快捷提问。诊断采集：指标 · 进程 · 服务状态 · 系统日志 · 安全基线 · 备份记录。
       </p>
 
@@ -194,8 +194,6 @@ const llmStatusText: Record<LlmStatus, string> = {
   border-radius: var(--radius-sm); padding: 9px 12px; color: var(--c-text); font-size: var(--fs-13-5);
 }
 .inp:focus { outline: none; border-color: var(--c-primary); }
-.empty-hint { color: var(--c-text-mute); font-size: var(--fs-13); }
-
 .turn { margin: 14px 0; }
 .q { color: var(--c-text-dim); font-size: var(--fs-13); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
 

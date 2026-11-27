@@ -43,7 +43,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
           <Icon name="chevron" :size="14" class="quick-go" />
         </RouterLink>
       </div>
-      <p v-if="!quick.length" class="dim empty-tip">
+      <p v-if="!quick.length" class="empty-inline empty-tip">
         当前账号没有可直接进入的常用模块，请从左侧菜单进入有权限的页面。
       </p>
     </section>
@@ -145,7 +145,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
 .mod-desc { font-size: var(--fs-12-5); color: var(--c-text-dim); line-height: 1.5; }
 
 .lead { margin: -6px 0 14px; font-size: var(--fs-12-5); line-height: 1.6; }
-.empty-tip { margin: 10px 0 0; font-size: var(--fs-13); }
+.empty-tip { margin: 10px 0 0; }
 
 /* 终端命令：全局参数 → 分组 → 单条命令（用途 + 场景/参数/前置/注意） */
 .cli-globals {

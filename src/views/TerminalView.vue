@@ -559,7 +559,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="qc-scroll">
-            <div v-if="quickLoading" class="qb-empty">加载中…</div>
+            <div v-if="quickLoading" class="empty-inline qb-empty">加载中…</div>
             <template v-else>
               <div class="qc-group">
                 <span class="qb-label">常用</span>
@@ -591,7 +591,7 @@ onUnmounted(() => {
                         @click="pendingDelete = c"><Icon name="trash" :size="14" /></button>
                     </div>
                   </template>
-                  <span v-else class="qb-empty">暂无自定义命令</span>
+                  <span v-else class="empty-inline qb-empty">暂无自定义命令</span>
                 </div>
               </div>
             </template>
@@ -738,6 +738,6 @@ onUnmounted(() => {
 }
 .qb-act:hover:not(:disabled) { background: var(--c-hover); color: var(--c-primary); transform: none; }
 .qb-act.danger:hover:not(:disabled) { color: var(--c-danger); }
-.qb-empty { padding: 6px 0; font-size: var(--fs-12-5); color: var(--c-text-mute); }
+.qb-empty { padding: 6px 0; }
 .qc-foot { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--c-border); }
 </style>

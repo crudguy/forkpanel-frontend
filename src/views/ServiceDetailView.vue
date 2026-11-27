@@ -526,7 +526,7 @@ onUnmounted(() => { closeFollow(); if (logScrollTimer) clearTimeout(logScrollTim
             <p v-if="jError" class="err">{{ jError }}</p>
             <pre v-if="jLoading" class="skeleton" style="height:220px" />
             <pre v-else-if="journal.length" ref="logEl" class="out">{{ journal.join('\n') }}</pre>
-            <p v-else class="tip dim" style="margin:0">暂无日志输出</p>
+            <p v-else class="empty-inline" style="margin:0">暂无日志输出</p>
           </div>
 
           <!-- 配置 -->

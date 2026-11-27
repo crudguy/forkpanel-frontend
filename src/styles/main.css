@@ -680,6 +680,9 @@ td.col-actions .btn-sm { padding: 4px 7px; }
 .err-bar .err-retry { flex: none; }
 .note { font-size: var(--fs-13); color: var(--c-primary); margin: 0 0 12px; }
 .tip { font-size: var(--fs-13); color: var(--c-text-dim); margin: 0; }
+/* 轻量空态：日志面板 / 折叠区 / 浮层等不适合虚线框的场景，统一字号与次色。
+   页面级、整表级空态仍必须用 EmptyState（虚线框 + 说明 + 可选 CTA）。 */
+.empty-inline { font-size: var(--fs-13); color: var(--c-text-dim); margin: 0; }
 
 /* ── 表单行（新增/筛选区通用） ── */
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }

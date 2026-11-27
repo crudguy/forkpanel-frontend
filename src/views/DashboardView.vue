@@ -20,6 +20,7 @@ import { systemLabel } from '@/composables/systemLabel'
 import Icon from '@/components/Icon.vue'
 import InlineRemark from '@/components/InlineRemark.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { useModal } from '@/composables/useModal'
 import { toast, toastError } from '@/composables/useToast'
 
@@ -600,7 +601,7 @@ onUnmounted(() => { es?.close() })
           <InlineRemark v-if="adding" model-value="" :editable="true"
             :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
         </div>
-        <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+        <EmptyState v-else-if="noteLoaded && !noteErr" title="暂无便签" hint="这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。" />
         <p v-else-if="!noteLoaded" class="muted">加载中…</p>
       </section>
     </template>
@@ -723,7 +724,7 @@ onUnmounted(() => { es?.close() })
             <InlineRemark v-if="adding" model-value="" :editable="true"
               :saver="saveNew" placeholder="写点什么：运维禁忌、网络变更、待办…" />
           </div>
-          <p v-else-if="noteLoaded && !noteErr" class="muted">暂无便签。这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。</p>
+          <EmptyState v-else-if="noteLoaded && !noteErr" title="暂无便签" hint="这台机器是干嘛的、跑着什么、有什么禁忌，写第一条吧。" />
           <p v-else-if="!noteLoaded" class="muted">加载中…</p>
         </section>
       </div>

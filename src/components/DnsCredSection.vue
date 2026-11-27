@@ -156,8 +156,8 @@ defineExpose({ reload: load })
 
       <div v-if="loading" class="dim dc-empty">读取中…</div>
       <!-- 空态：说清"为什么需要它"而不是只写"暂无数据" -->
-      <div v-else-if="!creds.length && !editing" class="dc-empty">
-        <span class="dim">
+      <div v-else-if="!creds.length && !editing" class="dc-empty empty-inline">
+        <span>
           尚未配置任何 DNS 凭据。使用 <b>dns-01</b> 签发证书（不要求本机 80 端口可达）需要先在这里添加
           DNS 提供商的 API Token。
         </span>
@@ -243,7 +243,7 @@ defineExpose({ reload: load })
 .dc-chev { transition: transform 0.15s; color: var(--c-text-dim); }
 .dc-chev.on { transform: rotate(90deg); }
 .dc-body { padding: 0 13px 13px; }
-.dc-empty { padding: 12px 0; font-size: var(--fs-13); line-height: 1.6; }
+.dc-empty { padding: 12px 0; line-height: 1.6; }
 .dc-table { width: 100%; margin: 8px 0 10px; }
 .dc-mask code { font-size: var(--fs-12); color: var(--c-text-dim); }
 .dc-form { margin-top: 10px; padding: 12px; border: 1px solid var(--c-border); border-radius: var(--radius-xs); }

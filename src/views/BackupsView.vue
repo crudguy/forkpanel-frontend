@@ -776,7 +776,7 @@ const selName = ref('')
             </tr>
           </tbody>
         </table>
-        <p v-else class="dim">该计划暂无产物（点「执行」生成）</p>
+        <EmptyState v-else title="暂无产物" hint="点「执行」生成第一份备份产物。" />
         <!-- 分页脚放弹窗（卡片）内表格下方；可见性由 TablePager 自判，不写 v-if -->
         <TablePager :total="artTotal" :page="artPage" :size="artSize" :page-count="artPageCount"
           @update:page="artGotoPage" @update:size="artChangeSize" />
@@ -790,7 +790,7 @@ const selName = ref('')
             <button class="btn-ghost btn-sm" @click="invalidateRemote(); remoteItems = null">收起</button>
           </div>
           <p v-if="remoteError" class="err" role="alert">{{ remoteError }}</p>
-          <p v-else-if="!remoteTotal" class="dim">远端没有本计划的产物</p>
+          <EmptyState v-else-if="!remoteTotal" title="远端暂无产物" hint="本地与远端各自独立；远端为空不影响本地副本。" />
           <table v-else class="fixed">
             <colgroup><col class="w-afile" /><col class="w-aact" /></colgroup>
             <thead><tr>

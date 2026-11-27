@@ -33,6 +33,7 @@ import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 import { fetchAppVersion, waitForRecovery } from '@/composables/serviceResume'
 import { llmTestBlockReason } from '@/utils/llmTestGate'
+import EmptyState from '@/components/EmptyState.vue'
 import PermMatrix from '@/components/PermMatrix.vue'
 import { loadRoleCatalog, missingFromGranted, type RoleRow } from '@/composables/roleCatalog'
 
@@ -163,6 +164,7 @@ async function testConn() {
 // **绝不自己发明权限名**——前端多一个后端不认的名字，只会得到一次 400。
 // RoleRow 类型唯一源在 composables/roleCatalog.ts（用户弹窗与本页共用）。
 const roles = ref<RoleRow[]>([])
+const rolesLoaded = ref(false)
 const knownPerms = ref<string[]>([])
 const roleName = ref('')
 const rolePerms = ref<string[]>([])
@@ -229,6 +231,7 @@ async function loadRoles() {
     roles.value = cat.roles
     knownPerms.value = cat.knownPermissions
   } catch (e) { roleErr.value = errorText(e) }
+  finally { rolesLoaded.value = true }
 }
 
 async function createRole() {
@@ -690,6 +693,9 @@ onMounted(async () => {
         <TablePager :total="total" :page="page" :size="size" :page-count="pageCount"
           @update:page="gotoPage" @update:size="changeSize" />
       </div>
+
+      <EmptyState v-else-if="rolesLoaded && !roleErr" title="暂无角色"
+        hint="内置角色由后端初始化；列表为空时先确认后端版本与迁移是否正常。" />
 
       <!-- 编辑自定义角色权限（后端 PATCH /roles/{name}） -->
       <div v-if="editRole" class="form edit-role">
