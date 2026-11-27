@@ -56,39 +56,49 @@ const title = computed(() => {
 // 不在此列，保留在各自视图的工具行/卡片顶栏，避免顶栏出现过长/动态文案。
 // 覆盖所有带顶栏的路由（login 无顶栏，不参与）。新加路由必须同步补一条，
 // 否则该页顶栏副标题静默为空——守卫 scripts/check-subtitles.mjs 会拦。
+/* 文案口径（2026-11-27 全量收敛，守卫 check-subtitles.mjs [4][5] 钉死）：
+     ① **只说这一页能干什么**，一句到底，≤ 28 字（1280px 下必须单行不折行）；
+     ② **不写权限点与角色名**（`x.manage` / 只读 / 操作员 / owner / admin）：
+        能不能点由按钮自身表达——门控按钮已带 `:title="'无 x.manage 权限'"`，
+        能力位不支持由 EmptyState.reason 说明。顶栏再挂一遍是同一信息说三次，
+        且把内部权限模型暴露给了所有访问者；
+     ③ **不写内部机制**（刷新频率 / 同源 / 下发流程 / 后端校验 / 排序实现）：
+        用户据以操作的信息才留（例：终端会话 15 分钟回收、日志上限 2000 行）；
+     ④ 旧文案平均 43 字、16/30 条含权限点，1280px 下每条都折成两行（29px）
+        压在 27px 的页名下方——说明比标题还高，顶栏被灰字填满。 */
 const SUBTITLES: Record<string, string> = {
-  dashboard: '主机状态总览 · 指标卡排序/显隐为面板级共享配置，具 settings.manage 权限者可拖拽调整（其他账号只读应用新顺序）',
+  dashboard: '主机状态总览 · 卡片可拖拽排序',
   system: '实时资源趋势与历史走向',
-  'system-pro': '每核 CPU / 负载 / 内存 / 磁盘 / 网卡 完整快照',
-  'system-procs': '服务器全部进程 · 表头可按 CPU / 内存 / 用户排序 · 重载 / 结束 / 立即终止需 system.manage 与信号能力（只读角色仅可查看）',
-  dirs: '面板装到了哪 · 数据 / 日志 / Web 服务器 / 前端各在哪（与运行时实际落点一致）',
-  'system-expose': '默认只监听回环 · 需 system.manage 方可用向导配置域名反代 + 来源白名单（HTTPS 可选）',
-  'services-software': '白名单软件的安装 / 卸载 / 升级 · 写操作需 package.manage（操作员 / 只读不可用）',
-  'services-units': '服务列表与状态概览 · 点行进详情页启停 / 看日志 / 改配置',
-  'service-detail': '单服务启停 / 日志 / 配置 · 启停与配置需 service.manage，日志只需只读权限',
+  'system-pro': '每核 CPU / 磁盘 / 网卡快照',
+  'system-procs': '全部进程 · 表头可按 CPU / 内存排序',
+  dirs: '数据 / 日志 / Web / 前端的实际落点',
+  'system-expose': '默认只监听回环 · 配域名反代与白名单',
+  'services-software': '白名单软件的安装 / 卸载 / 升级',
+  'services-units': '服务状态概览 · 点行进详情',
+  'service-detail': '单服务启停 / 日志 / 配置',
   'not-found': '地址不存在 · 可从左侧菜单继续',
-  sites: '虚拟主机站点管理 · 写操作需 site.manage / ssl.manage（只读角色仅可查看）',
-  apps: 'systemd 托管进程 · 自动反代站点 · 构建请自行完成（增删改需 service.manage，建反代另需 site.manage）',
-  databases: '连接管理 · 只读浏览 / SQL · 备份 / 恢复 · 写操作需 db.manage（操作员 / 只读不可用）',
-  files: '目录浏览 / 上传 / 整理 · 面包屑分段可点直达（写操作需 file.write，只读角色仅可查看）',
-  logs: '字面量过滤 · 上限 2000 行 · 支持实时跟随',
-  'logs-audit': '全量关键操作审计（可筛选 / 导出 / 校验完整性，所有内置角色可见）',
-  firewall: '端口放行规则（改动需应用后下发）与 fail2ban 入侵防御 · 仅 owner/admin 可进入',
-  'firewall-baseline': '安全基线检查与修复 · SSH 端口 · 活跃会话与两步验证 · 仅 owner/admin 可进入',
-  cron: '平台原生调度，表达式语义由后端校验',
-  'cron-tasks': '后台任务与执行进度（运行中每 2 秒自动刷新）',
+  sites: '虚拟主机 · 反代 / 静态托管',
+  apps: 'systemd 托管进程 · 自动反代站点',
+  databases: '连接管理 · SQL 浏览 · 备份 / 恢复',
+  files: '目录浏览 / 上传 / 整理',
+  logs: '字面量过滤 · 上限 2000 行 · 实时跟随',
+  'logs-audit': '关键操作审计 · 可筛选 / 导出 / 校验',
+  firewall: '端口规则与 fail2ban 入侵防御',
+  'firewall-baseline': '安全基线 · SSH 端口 · 会话与两步验证',
+  cron: '平台原生调度',
+  'cron-tasks': '后台任务与执行进度',
   users: '面板账号与权限',
-  settings: '面板与功能模块的配置与开关中心',
-  notifications: '面板内消息（全局共享）· 未读计数 · 需 notification.manage 方可一键全部已读（只读角色无此按钮）',
-  terminal: '内置 Web 终端（宿主级 shell，需 system.manage）· 关闭标签即断开会话，空闲 15 分钟自动回收',
-  assistant: '内置规则诊断 · 基于真实系统数据 · 只建议不自动执行',
-  backups: '备份计划（含可选远端副本）· 手动执行 · 产物列表 · 从产物恢复（高危需确认词，面板库须停服后用 CLI）',
+  settings: '面板与模块配置',
+  notifications: '面板内消息 · 全局共享',
+  terminal: '宿主级 shell · 关闭即断开，空闲 15 分钟回收',
+  assistant: '规则诊断 · 只给建议，不自动执行',
+  backups: '备份计划 · 产物 · 恢复',
   // ⚠ 曾经写「只读列举 + 启停/重启/删除（不提供创建容器）」——创建容器早已开放，
   // 且现在还支持 Compose 项目的 up/stop/restart/down，那句是过时的事实错误。
-  containers: 'Docker · 列举（只读角色可看）/ 创建 / 启停 / 删除 · Compose up/stop/restart/down（写操作需 container.manage）',
-  waf: '各站点防护档位与 IP 访问控制 · CC 限速仅 nginx（caddy 不支持）· 随站点配置一同下发',
-  certs: '各站点证书总览 · 申请 / 续期需 ssl.manage · 信任根证书 site.view 即可',
-  help: '常用操作指引 · 模块说明 · panel 终端命令 · 常见问题',
+  containers: 'Docker 与 Compose 项目管理',
+  waf: '站点防护档位与 IP 访问控制',
+  certs: '证书总览 · 申请 / 续期',
+  help: '操作指引 · panel 命令 · 常见问题',
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 

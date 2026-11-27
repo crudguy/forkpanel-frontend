@@ -515,7 +515,9 @@ onMounted(async () => {
               <Icon name="bolt" :size="15" /> {{ testing ? '测试中…' : '测试连接' }}
             </button>
           </div>
-          <p class="sec-note">「测试连接」只请求<strong>已保存的接口地址</strong>：填了模型会发一次最简对话验证，没填则读取模型列表。改动地址后请先保存。密钥框<strong>留空即用已保存的密钥</strong>测试；填入新密钥则优先测试新值（先测后存）。</p>
+          <!-- 只留「先后顺序」这一条用户会踩错的规则。测试连接的具体行为
+               （只请求已保存地址、留空沿用旧密钥）改由按钮 title 承担，不再两处讲。 -->
+          <p class="sec-note">改动地址、模型或密钥后，先「保存」再「测试连接」。</p>
         </template>
         <p v-else-if="formError" class="err">{{ formError }}</p>
       </section>

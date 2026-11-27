@@ -94,8 +94,11 @@ describe('防火墙禁用端口入口（真挂载）', () => {
     expect(card, '必须展示入站生效状态区').not.toBeNull()
     expect(card!.textContent).toContain('放行（accept）')
     expect(card!.textContent).toContain('未列出的端口默认可访问')
-    expect(card!.textContent, '必须声明这些不是可删规则').toContain('只读观察值')
-    expect(card!.textContent, '必须说明封禁优先，否则用户会按列表顺序误判').toContain('优先生效')
+    // 文案 2026-11-27 精简：只说「只读、不对应规则」，不再解释 127.0.0.1/::1 的排除细节；
+    // 封禁语义由「封禁优先于放行」承担（原「新封禁插到规则链首」是实现细节，已删）。
+    expect(card!.textContent, '必须声明这些不是可删规则').toContain('只读')
+    expect(card!.textContent, '必须声明这些不是可删规则').toContain('不对应规则')
+    expect(card!.textContent, '必须说明封禁优先，否则用户会按列表顺序误判').toContain('封禁优先于放行')
     const chips = [...card!.querySelectorAll('.exposure-chip')].map(x => x.textContent?.trim() ?? '')
     expect(chips.some(t => t.startsWith('22') && t.includes('默认放行')), '22 应显示为默认放行').toBe(true)
     m.fake.assertClean(); m.cleanup()

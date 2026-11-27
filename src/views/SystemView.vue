@@ -240,7 +240,7 @@ const tip = computed<{ time: string; lines: TipLine[] } | null>(() => {
 
     <!-- 顶部读数：与「专业快照」页取同一采样序列的末样本，同一时刻两页读数一致 -->
     <MetricHeader :items="hdrItems" :sampled-at="last?.ts ?? null"
-      source-hint="最近 60 秒的末样本；与「专业快照」页顶端读数同源，同一时刻两页一致。" />
+      source-hint="最近 60 秒的末样本。" />
 
     <!-- 实时曲线：CPU / 内存 / 负载 / 磁盘 四系列 -->
     <div class="sec-head block">

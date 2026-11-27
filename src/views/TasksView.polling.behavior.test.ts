@@ -92,7 +92,14 @@ describe('F-06 接线守卫（轮询与副标题不得各写一份）', () => {
     expect(body).toContain('@click="load"')
   })
 
-  it('MainLayout 的副标题仍是「每 2 秒自动刷新」——文案与实现同口径', () => {
-    expect(LAYOUT).toContain("后台任务与执行进度（运行中每 2 秒自动刷新）")
+  // 原断言要求副标题逐字写「运行中每 2 秒自动刷新」。2026-11-27 顶栏文案收敛后
+  // 定为**不再承诺刷新频率**——频率属于内部机制，只在 usePolling 的 `ms: 2000`
+  // （上一条已钉住）单一维护；顶栏再写一遍就是两处维护、改一处漏一处。
+  // 守卫反转后仍非恒绿：谁把频率写回顶栏，这条立刻变红。
+  it('顶栏副标题不承诺刷新频率——频率只在 usePolling 里单一维护', () => {
+    const block = LAYOUT.slice(LAYOUT.indexOf('const SUBTITLES'), LAYOUT.indexOf('const subtitle ='))
+    expect(block.length, '源码读取异常——扫描前提不成立').toBeGreaterThan(500)
+    expect(block, '顶栏副标题不得写刷新周期').not.toMatch(/每\s*\d+\s*秒/)
+    expect(block, '顶栏副标题不得写刷新周期').not.toMatch(/\d+\s*秒(自动)?刷新/)
   })
 })

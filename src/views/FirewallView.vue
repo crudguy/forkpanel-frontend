@@ -428,9 +428,9 @@ onMounted(() => { load(); loadFail2ban() })
           <template v-else-if="defaultPolicy === 'drop' || defaultPolicy === 'reject'">入站默认策略：<b>拒绝（{{ defaultPolicy }}）</b>——只有下方显式放行的端口可访问。</template>
           <template v-else>入站默认策略：<b>读不到</b>——无法判断未列端口状态，请以服务器实际配置为准。</template>
         </p>
-        <p class="exposure-hint">封禁规则（deny/reject）优先生效：新封禁会插到规则链首，与下方列表的排序无关；要放行已被封禁的端口，需先删除对应封禁规则。</p>
+        <p class="exposure-hint">封禁优先于放行：要放行已封禁的端口，需先删除对应封禁规则。</p>
         <template v-if="listeningRows.length">
-          <p class="exposure-hint">本机对外监听的 TCP 端口（不含仅本机可访问的 127.0.0.1/::1；只读观察值，不对应可删除的规则）：</p>
+          <p class="exposure-hint">本机对外监听的端口（只读，不对应规则）：</p>
           <div class="exposure-chips">
             <span v-for="row in listeningRows" :key="row.port" class="exposure-chip">
               <b class="mono">{{ row.port }}</b>

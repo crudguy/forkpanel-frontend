@@ -55,7 +55,8 @@ describe('设置页重构守卫：可编辑与可操作锚点保持', () => {
     expect(mine).toBeGreaterThan(role)
   })
   it('顶栏副标题反映新定位（配置与开关中心）', () => {
-    expect(ML.includes("settings: '面板与功能模块的配置与开关中心'")).toBe(true)
+    // 2026-11-27 顶栏文案统一收敛：≤28 字、不写长定语（原「面板与功能模块的配置与开关中心」）
+    expect(ML.includes("settings: '面板与模块配置'")).toBe(true)
     expect(ML.includes('运行环境与能力矩阵排查')).toBe(false)
   })
 })

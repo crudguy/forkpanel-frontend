@@ -161,6 +161,14 @@ function toggleDr() {
   saveDrExpanded(drExpanded.value)
 }
 
+/** 灾备清单里的命令块默认收起：三步合计 213px，全展开时灾备卡占掉 72% 视口，
+ *  把「新建备份计划」挤出首屏。要点（标题 + 一句后果）始终可见，命令按需展开，
+ *  「复制命令」不受折叠影响——要执行的人一步复制，不执行的人不必滚过两屏命令。 */
+const cmdOpen = ref<Record<string, boolean>>({})
+function toggleCmds(id: string) {
+  cmdOpen.value = { ...cmdOpen.value, [id]: !cmdOpen.value[id] }
+}
+
 /**
  * 灾备清单：只复制命令文本，面板不下发密钥本体。
  * 复制失败必须说出来——静默失败会让人以为密钥副本已经存好了。
@@ -556,8 +564,18 @@ const selName = ref('')
                 <b>{{ s.title }}<span v-if="s.conditional" class="dr-cond">（条件项）</span></b>
                 <span>{{ s.desc }}</span>
                 <div v-if="s.commands.length" class="dr-cmds">
-                  <code v-for="c in s.commands" :key="c">{{ c }}</code>
-                  <button class="btn-ghost btn-sm" type="button" @click="copyStep(s.id)">复制命令</button>
+                  <div class="dr-cmds-bar">
+                    <button class="dr-cmds-toggle" type="button" :aria-expanded="!!cmdOpen[s.id]"
+                      :title="cmdOpen[s.id] ? '收起命令' : `展开 ${s.commands.length} 条命令`"
+                      @click="toggleCmds(s.id)">
+                      <Icon name="chevron" :size="12" class="dr-caret" :class="{ rot: cmdOpen[s.id] }" />
+                      {{ cmdOpen[s.id] ? '收起命令' : `命令（${s.commands.length}）` }}
+                    </button>
+                    <button class="btn-ghost btn-sm" type="button" title="复制本步全部命令" @click="copyStep(s.id)">复制命令</button>
+                  </div>
+                  <template v-if="cmdOpen[s.id]">
+                    <code v-for="c in s.commands" :key="c">{{ c }}</code>
+                  </template>
                 </div>
               </div>
             </li>
@@ -605,11 +623,10 @@ const selName = ref('')
              读两遍反而都记不住；而没开加密的机器看到"主密钥丢了解不开"只会困惑。 -->
         <RiskBanner v-if="form.encrypt" level="danger" title="这个计划会加密产物，主密钥必须单独存"
           text="主密钥不存入数据库。丢失后，本计划的备份将永远无法解密——请按页首第 ② 步导出并验证异地副本。" />
+        <!-- 新建卡只留「会导致提交被拒」的硬约束。远端凭据与「部分成功」的语义、
+             数据库按引擎导出的差异都在「备份说明」抽屉里（同一句不在两处说）。 -->
         <p class="tip">
-          <b>{{ createScheduleText }}</b>。产物保存在面板备份目录下。可选<b>远端副本</b>（兼容 WebDAV / S3）：凭据加密存储且不再显示；远端上传失败不会让本地备份判为失败，但计划会标记「部分成功」并推送通知。<b>开启远端副本时必须同时开启静态加密</b>，明文备份不得落到第三方存储，否则后端会拒绝。
-        </p>
-        <p class="tip">
-          数据库连接按引擎导出：SQLite 复制库文件，MySQL / PostgreSQL 用命令行工具导出为 SQL 文件。恢复前会自动为当前库留一份快照；SQL 文件只校验是否为空，不做内容校验。
+          <b>{{ createScheduleText }}</b>。产物保存在面板备份目录下；<b>开启远端副本时必须同时开启静态加密</b>，否则后端会拒绝。
         </p>
       </section>
 
@@ -901,6 +918,9 @@ const selName = ref('')
       <p>备份<b>默认加密</b>，即使文件被拷走也不会直接泄露内容。<b>主密钥不存入数据库——一旦丢失，备份将永远无法解密</b>，请务必导出并保存到异地（用 <code>panel key export</code> 导出、<code>panel key check</code> 验证）。确实需要明文产物时，在新建计划里取消勾选即可。</p>
       <h4>远端副本</h4>
       <p>凭据加密存储且<b>不再显示</b>。远端上传失败<b>不会</b>让本地备份判为失败，但计划会标记「部分成功」并推送通知，方便你及时发现。</p>
+      <p><b>必须同时开启静态加密</b>：明文产物不得落到第三方存储，勾了远端却没勾加密，后端会直接拒绝创建。</p>
+      <h4>数据库连接</h4>
+      <p>按引擎导出：SQLite 复制库文件，MySQL / PostgreSQL 用命令行工具导出为 SQL 文件。恢复前会自动为当前库留一份快照；SQL 文件只校验是否为空，不做内容校验。</p>
       <h4>恢复</h4>
       <p>从备份恢复是<b>高危操作</b>，需手输确认词，确认前请看清将覆盖的目标。</p>
     </HelpDrawer>
@@ -941,6 +961,16 @@ const selName = ref('')
    而那正是"确认副本真能开锁"的关键一步。复制按钮单独占行尾，不参与命令排列。 */
 .dr-cmds { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 2px; }
 .dr-cmds .btn-ghost { align-self: flex-start; }
+/* 命令开关与「复制命令」同一行：复制在折叠态也可用（不需要先展开再复制）。 */
+.dr-cmds-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.dr-cmds-toggle {
+  display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 8px;
+  border: 0; border-radius: var(--radius-xs); background: transparent;
+  font-size: var(--fs-12); color: var(--c-text-dim); cursor: pointer;
+}
+.dr-cmds-toggle:hover { background: var(--c-hover); color: var(--c-text); }
+.dr-cmds-toggle .dr-caret { transition: transform .15s ease; }
+.dr-cmds-toggle .dr-caret.rot { transform: rotate(90deg); }
 .dr-cmds code { display: block; max-width: 100%; font-size: var(--fs-12); padding: 4px 8px;
   border-radius: var(--radius-sm); background: var(--c-surface-2); color: var(--c-text);
   word-break: break-all; }

@@ -133,9 +133,11 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
           <Icon name="close" :size="16" />
         </button>
       </div>
+      <!-- 顶部只留「创建后不会自动启动」这一条会改变用户后续动作的信息。
+           「等同在宿主机执行代码 / 须手输确认词」由确认词字段自身的 hint 承担，
+           两处都说等于让用户在同一个弹窗里读两遍同一句安全提示。 -->
       <p class="modal-lead">
-        等价于 <code>docker create</code>：<b>创建后不会自动启动</b>，请在列表中对它执行「启动」。
-        创建容器等同在宿主机执行代码，须手输确认词方可提交。
+        等价于 <code>docker create</code>：<b>创建后不会自动启动</b>，需在列表中点「启动」。
       </p>
 
       <div class="fields">

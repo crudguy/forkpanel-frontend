@@ -28,7 +28,7 @@ import { useModal } from '@/composables/useModal'
 import { toast, toastError } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
-import { allFieldHints } from '@/composables/appsFieldGuide'
+import { allFieldHints, FIELD_LABELS } from '@/composables/appsFieldGuide'
 import { matchFields } from '@/composables/listSearch'
 // dirnameOf 此前是本文件私有的第三份父目录实现（尾斜杠输入下会取到自身而非上级），
 // 统一走 composables/filePath 的 parentPath。
@@ -129,6 +129,12 @@ const curRuntime = computed(() => runtimes.value.find(r => r.key === form.value.
 /** 每个输入框填什么：运行时相关三项 + 与运行时无关三项（见 composables/appsFieldGuide.ts）。
  *  后端只下发「用途 / 什么时候选」，没下发「这五个框各填什么」——那段靠这里补。 */
 const fieldHints = computed(() => allFieldHints(form.value.runtime))
+/** 字段名 → 该框填什么。指引就地挂在各输入框下方，不再集中成一块教程：
+ *  集中块把「工作目录怎么填」写在「基础」分区里，用户滚到那个框时早看不着了；
+ *  且其中「运行用户」「启动命令」两条与字段自身 hint 逐字重复。 */
+const fieldHintMap = computed<Record<string, string>>(
+  () => Object.fromEntries(fieldHints.value.map(h => [h.field, h.what])),
+)
 
 function clearFieldErr(k: string) {
   if (!fieldErrs.value[k]) return
@@ -606,6 +612,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 名称
                 <input v-model="form.name" :disabled="!!editing" placeholder="my-blog"
                   :aria-invalid="!!fieldErrs.name" @input="clearFieldErr('name')" />
+                <span v-if="fieldHintMap[FIELD_LABELS.name]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.name] }}</span>
                 <span v-if="fieldErrs.name" class="field-err">{{ fieldErrs.name }}</span>
               </label>
 
@@ -636,23 +643,11 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 </span>
               </div>
 
-              <!-- 各输入框填什么：后端只下发「这运行时是什么 / 何时选」，缺「这几个框各填什么」。
-                   用户选完运行时对着五个输入框仍在猜，尤其「工作目录须已存在」与「启动命令写
-                   程序名还是绝对路径」——后端的字段错误要提交后才出现，事前没有提示。 -->
-              <div v-if="fieldHints.length" class="hint-note fg-note">
-                <Icon name="edit" :size="14" class="ic" />
-                <span>
-                  <b>照这个填</b>（共 {{ fieldHints.length }} 项）
-                  <span v-for="(h, i) in fieldHints" :key="h.field" class="fg-item">
-                    <span v-if="i > 0" class="fg-sep">·</span><b class="fg-f">{{ h.field }}</b>{{ '：' }}{{ h.what }}
-                  </span>
-                </span>
-              </div>
-
               <label class="blk" :class="{ 'has-err': fieldErrs.port }" data-f="port">
                 监听端口
                 <input v-model.number="form.port" type="number" min="1" max="65535" placeholder="3000"
                   :aria-invalid="!!fieldErrs.port" @input="clearFieldErr('port')" />
+                <span v-if="fieldHintMap[FIELD_LABELS.port]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.port] }}</span>
                 <span v-if="fieldErrs.port" class="field-err">{{ fieldErrs.port }}</span>
               </label>
             </section>
@@ -670,6 +665,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                     <Icon name="folder" :size="13" /> 浏览…
                   </button>
                 </div>
+                <span v-if="fieldHintMap[FIELD_LABELS.workdir]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.workdir] }}</span>
                 <span v-if="fieldErrs.workdir" class="field-err">{{ fieldErrs.workdir }}</span>
               </label>
 
@@ -684,6 +680,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 </div>
                 <span class="hint-inline">支持「程序名」（如 <code>node</code>）或绝对路径（如 <code>/opt/blog/app</code>）；
                   带参数时写 <code>node server.js --port 3000</code>，浏览只选程序本体。</span>
+                <span v-if="fieldHintMap[FIELD_LABELS.execStart]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.execStart] }}</span>
                 <span v-if="fieldErrs.exec_start" class="field-err">{{ fieldErrs.exec_start }}</span>
               </label>
 
@@ -715,6 +712,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 域名（逗号分隔，面板据此自动建反代站点）
                 <input v-model="form.domains" placeholder="blog.example.com, www.blog.example.com"
                   :aria-invalid="!!fieldErrs.domains" @input="clearFieldErr('domains')" />
+                <span v-if="fieldHintMap[FIELD_LABELS.domains]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.domains] }}</span>
                 <span v-if="fieldErrs.domains" class="field-err">{{ fieldErrs.domains }}</span>
               </label>
 
@@ -789,14 +787,10 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
    层级靠颜色而非字号——这一块要在表单里常驻，字号一变大就成了页面主体。 */
 .rt-note .rt-purpose { color: var(--c-text); font-weight: 600; }
 .rt-note .rt-dim { color: var(--c-text-dim); }
-/* 字段指引：字段名用正文色加粗，说明段保持常规色。
-   刻意**不**每项一行：六项硬换行实测占 248px，而 508px 高的弹窗里它要吃掉一半、
-   把端口/域名框挤进滚动区。改成行内连续排版（靠 .fg-item 自然折行）后实测 184px，
-   省下 26%——数字是真机 `getBoundingClientRect` 量的，不是估的。 */
-.fg-note { line-height: 1.8; }
-.fg-note .fg-item { display: inline; }
-.fg-note .fg-f { color: var(--c-text); font-weight: 600; }
-.fg-note .fg-sep { color: var(--c-text-dim); margin: 0 4px 0 2px; }
+/* 字段指引不再集中成一块：原「照这个填（共 6 项）」块在 508px 高的弹窗里吃掉 184px
+   （行内排版前是 248px），且「运行用户 / 启动命令」两条与该字段自身 hint 逐字重复。
+   现已按字段就地挂在输入框下方（.fg-hint），内容仍由 composables/appsFieldGuide.ts
+   单一维护。 */
 /* 应用表列宽：名称唯一弹性列（吸收剩余），其余按实测控件/取值定宽——与 Sites/Certs
    同款「实测 px + 弹性列」范式。此前用百分比（14%/8%/…），按 SitesView 注释会
    在窄屏把名称列压到 29px、把弹性列挤成 0，故统一改 px。 */
@@ -892,6 +886,8 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 /* main.css 的 `.modal .blk { margin: 12px 0 }` 是简写：只覆盖 bottom 会让 top
    与 row-gap 叠加成 26px（设计值 14），故整条 margin 归零。 */
 .app-modal .modal-body .sector > .blk { margin: 0; }
+/* 字段级填写指引：12px 次色，紧贴输入框（.blk 是 block，无需额外间距） */
+.fg-hint { display: block; margin-top: 5px; font-size: var(--fs-12); line-height: 1.5; color: var(--c-text-mute); }
 .app-modal .modal-body .sector > .blk.full,
 .app-modal .modal-body .sector > .row-inline,
 .app-modal .modal-body .sector > .hint-note,

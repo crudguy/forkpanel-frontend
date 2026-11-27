@@ -139,7 +139,7 @@ onMounted(tick)
       <!-- 顶部读数（A2）：与「实时趋势」页共用 MetricHeader + 同一采样序列；
            进程数移入采样注脚（来源仍为下方快照明细） -->
       <MetricHeader :items="hdrItems" :sampled-at="hdr?.ts ?? null"
-        source-hint="顶端读数取自面板统一的采样序列（每 2 秒一次），与「实时趋势」页同源，同一时刻两页一致；下方每核 / 磁盘 / 网络 / 温度明细为打开瞬间的即时快照。">
+        source-hint="顶端为面板采样序列的最新读数；下方每核 / 磁盘 / 网络 / 温度为打开瞬间的快照。">
         <template #extra>· 进程 {{ procCount }} 个</template>
       </MetricHeader>
 

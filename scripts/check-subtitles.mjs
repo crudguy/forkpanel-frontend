@@ -67,6 +67,38 @@ if (stale.length) {
   pass('3', '副标题表无失效键')
 }
 
+// ── [4][5] 文案密度与口径（2026-11-27 复盘后新增）────────────────────────
+// 为什么需要：副标题是**全局最贵的一行位置**（顶栏，每页必现），此前 30 条平均
+// 43 字、最长 87 字，1280px 下每条都折成两行（29px）压在 27px 的页名下面——
+// 说明比标题还高，顶栏被灰字填满；16/30 条还在末尾挂权限点与角色名。
+// 这两条断言把「≤28 字、不写权限/角色」变成机器可判，而不是靠下次 review 记得。
+const LIMIT = 28
+const PERM_RE = /[a-z]+\.(manage|view|write)\b/
+const ROLE_RE = /只读|操作员|管理员|owner|admin/i
+
+const bodies = [...block.matchAll(/^\s*'?([a-z0-9-]+)'?:\s*'([^']*)'/gm)].map((m) => [m[1], m[2]])
+if (!bodies.length) {
+  fail('4', '一条副标题正文都没解析出来——正则失效会让 [4][5] 恒绿')
+} else {
+  const tooLong = bodies.filter(([, v]) => v.length > LIMIT)
+  if (tooLong.length) {
+    fail('4', `${tooLong.length} 条副标题超 ${LIMIT} 字（1280px 下会折行）：`
+      + tooLong.map(([k, v]) => `${k}(${v.length}字)`).join('、'))
+  } else {
+    const max = Math.max(...bodies.map(([, v]) => v.length))
+    pass('4', `${bodies.length} 条副标题均 ≤ ${LIMIT} 字（最长 ${max}）`)
+  }
+}
+
+const leaked = bodies.filter(([, v]) => PERM_RE.test(v) || ROLE_RE.test(v))
+if (leaked.length) {
+  fail('5', `${leaked.length} 条副标题含权限点/角色名：`
+    + leaked.map(([k]) => k).join('、')
+    + '（能不能点由按钮 :title 与 EmptyState.reason 表达，顶栏不重复）')
+} else {
+  pass('5', '无副标题泄漏权限点或角色名')
+}
+
 if (failures.length) {
   console.log(`\nFAIL：副标题覆盖有 ${failures.length} 条问题（${failures.join(', ')}）`)
   process.exit(1)
