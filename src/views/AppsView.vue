@@ -136,6 +136,14 @@ const fieldHintMap = computed<Record<string, string>>(
   () => Object.fromEntries(fieldHints.value.map(h => [h.field, h.what])),
 )
 
+/** 运行时系统包缺失。只在能探测（有 package.manage）时给结论：
+ *  没装 nodejs 时选了 Node 也起不来，这条必须醒目且紧贴运行时选择。 */
+const runtimePkgMissing = computed(() => {
+  const r = curRuntime.value
+  if (!r?.runtime_pkg || !pkgDetectable.value) return false
+  return !installedPkgs.value.has(r.runtime_pkg)
+})
+
 function clearFieldErr(k: string) {
   if (!fieldErrs.value[k]) return
   const next = { ...fieldErrs.value }
@@ -622,26 +630,16 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                   <option value="" disabled>请选择…</option>
                   <option v-for="r in runtimes" :key="r.key" :value="r.key">{{ r.label }}</option>
                 </select>
+                <!-- 选运行时真正要读的只有两句：它是什么、什么时候该选它。
+                     `typical` 与 choose_when 举的是同一批框架（Node 两边都写 Next/Nest），不再重复；
+                     `default_exec` 在切换运行时时已自动填进「启动命令」输入框，也不在这里再写一遍；
+                     `build_hint` 下移到启动命令字段——那里才是它该出现的位置。 -->
+                <span v-if="curRuntime" class="fg-hint">{{ curRuntime.purpose }}<br>{{ curRuntime.choose_when }}</span>
+                <span v-if="runtimePkgMissing" class="fg-hint is-warn">
+                  系统包 {{ curRuntime?.runtime_pkg }} 未装，可到「软件」页安装
+                </span>
                 <span v-if="fieldErrs.runtime" class="field-err">{{ fieldErrs.runtime }}</span>
               </label>
-
-              <!-- 运行时说明：先讲「它是干什么的 / 什么时候该选它」（用户选运行时真正
-                   需要的决策信息），再讲「启动命令 / 构建步骤 / 系统包状态」这些操作细节。
-                   顺序刻意如此：原先这些内容挤在一行里，用户要先跳过一堆命令才能读到
-                   「典型框架」，等于把最有用的信息埋了。 -->
-              <div v-if="curRuntime" class="hint-note rt-note">
-                <Icon name="info" :size="14" class="ic" />
-                <span>
-                  <b class="rt-purpose">{{ curRuntime.purpose }}</b>
-                  <br />什么时候选它：{{ curRuntime.choose_when }}
-                  <br /><span class="rt-dim">典型框架 {{ curRuntime.typical }}；</span>启动命令 <b>{{ curRuntime.default_exec || '（需自行填写）' }}</b>。
-                  <template v-if="curRuntime.runtime_pkg && pkgDetectable">系统包
-                    <b :class="{ 'is-warn': !installedPkgs.has(curRuntime.runtime_pkg) }">
-                      {{ curRuntime.runtime_pkg }}{{ installedPkgs.has(curRuntime.runtime_pkg) ? ' 已装' : ' 未装，可到「软件」页装' }}
-                    </b>。</template>
-                  <br /><span class="rt-dim">构建步骤：{{ curRuntime.build_hint }}</span>
-                </span>
-              </div>
 
               <label class="blk" :class="{ 'has-err': fieldErrs.port }" data-f="port">
                 监听端口
@@ -681,6 +679,7 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
                 <span class="hint-inline">支持「程序名」（如 <code>node</code>）或绝对路径（如 <code>/opt/blog/app</code>）；
                   带参数时写 <code>node server.js --port 3000</code>，浏览只选程序本体。</span>
                 <span v-if="fieldHintMap[FIELD_LABELS.execStart]" class="fg-hint">{{ fieldHintMap[FIELD_LABELS.execStart] }}</span>
+                <span v-if="curRuntime?.build_hint" class="fg-hint">构建：{{ curRuntime.build_hint }}</span>
                 <span v-if="fieldErrs.exec_start" class="field-err">{{ fieldErrs.exec_start }}</span>
               </label>
 
@@ -783,10 +782,9 @@ onMounted(() => { void load(); void loadCatalog(); void loadSystemUsers() })
 </template>
 
 <style scoped>
-/* 运行时说明块：首行（用途 / 什么时候选它）用正文色强调，命令与构建步骤降为次级色。
-   层级靠颜色而非字号——这一块要在表单里常驻，字号一变大就成了页面主体。 */
-.rt-note .rt-purpose { color: var(--c-text); font-weight: 600; }
-.rt-note .rt-dim { color: var(--c-text-dim); }
+/* 字段级指引的警示变体：系统包未装这类「不改就起不来」的结论用警告色，
+   普通填法提示保持次级色。 */
+.fg-hint.is-warn { color: var(--c-warn); }
 /* 字段指引不再集中成一块：原「照这个填（共 6 项）」块在 508px 高的弹窗里吃掉 184px
    （行内排版前是 248px），且「运行用户 / 启动命令」两条与该字段自身 hint 逐字重复。
    现已按字段就地挂在输入框下方（.fg-hint），内容仍由 composables/appsFieldGuide.ts
