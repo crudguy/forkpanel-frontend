@@ -4,16 +4,17 @@
  *
  * 定位：常驻的「查阅处」，不占首屏、不打断工作流（取代原概览页首启上手清单）。
  * 内容全部来自 `helpContent.ts`：模块说明与导航项同源，常用操作只指向真实页面，
- * 权限不足/环境不支持的入口在渲染前被过滤，不摆点不动的按钮。
+ * 终端命令按运维流程分组，权限不足/环境不支持的入口在渲染前被过滤。
  *
  * 页内不写标题（顶栏标题取自 route.meta.title，见 check-page-head.mjs），
- * 也不再硬编码菜单标签/图标——那两样在 navItems.ts 里是单一事实源。
+ * 也不再硬编码菜单标签/图标/命令文案——那几样各有单一事实源，
+ * 在 .vue 里另写一份会静默漂移（构建与单测都不报错）。
  */
 import { computed } from 'vue'
 import PageLayout from '@/components/PageLayout.vue'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
-import { FAQS, MODULE_DOCS, pickQuickTasks } from '@/composables/helpContent'
+import { CLI_GLOBALS, CLI_GROUPS, FAQS, MODULE_DOCS, pickQuickTasks } from '@/composables/helpContent'
 import { whyDisabledForPath } from '@/composables/navPolicy'
 
 const auth = useAuthStore()
@@ -25,13 +26,13 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
 <template>
   <PageLayout>
     <p class="intro dim">
-      这里汇总常用操作、模块说明与常见问题，可随时从侧边栏「帮助」回到本页。
+      这里汇总常用操作、模块说明、panel 终端命令与常见问题，可随时从侧边栏「帮助」回到本页。
     </p>
 
-    <!-- 常用操作：新手最常问的「这件事在哪做」，直达对应页面 -->
+    <!-- 常用操作：新手最常问的「这件事到底在哪做」，直达对应页面 -->
     <section class="card">
       <div class="sec-head"><Icon name="bolt" :size="16" /> 常用操作</div>
-      <p class="lead dim">只列出当前账号可以进入的入口。</p>
+      <p class="lead dim">只列出当前账号可以进入的入口，点开即可操作。</p>
       <div class="quick-grid">
         <RouterLink v-for="t in quick" :key="t.to" :to="t.to" class="quick">
           <Icon :name="t.icon" :size="18" class="quick-ico" />
@@ -47,10 +48,10 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
       </p>
     </section>
 
-    <!-- 模块速览：标签/图标/顺序直接取自导航项，这里只补一句说明 -->
+    <!-- 模块速览：标签/图标/顺序直接取自导航项，这里只补说明 -->
     <section class="card">
       <div class="sec-head"><Icon name="list" :size="16" /> 模块速览</div>
-      <p class="lead dim">把鼠标悬停在灰色菜单上，可查看不可用原因。</p>
+      <p class="lead dim">每项说明「能做什么、什么时候用、要注意什么」；灰色菜单可悬停查看不可用原因。</p>
       <div class="mod-grid">
         <div v-for="m in MODULE_DOCS" :key="m.to" class="mod">
           <Icon :name="m.icon" :size="18" class="mod-ico" />
@@ -62,38 +63,40 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
       </div>
     </section>
 
-    <!-- 账户与安全 -->
+    <!-- 终端命令：覆盖面板自身的安装、配置、备份、安全与公网运维 -->
     <section class="card">
-      <div class="sec-head"><Icon name="shield" :size="16" /> 账户与安全</div>
-      <ul class="faq-list">
-        <li>面板按角色分配权限，不同角色看到的菜单和可做的操作不同。</li>
-        <li>点击右上角头像，在用户菜单中选「修改密码」；建议每位管理员使用独立账号。</li>
-        <li>请妥善保管账号，操作记录可供管理员查看。</li>
-      </ul>
+      <div class="sec-head"><Icon name="terminal" :size="16" /> panel 终端命令</div>
+      <p class="lead dim">
+        以下命令在服务器终端执行；面板内置终端页与 SSH 权限等价。标 ⚠ 的操作会影响数据、
+        密钥或整台服务器，先读完「注意」再执行。每条都写明用途、适用场景、关键参数、前置条件与异常提示。
+      </p>
+      <div class="cli-globals">
+        <div v-for="g in CLI_GLOBALS" :key="g" class="cli-global">{{ g }}</div>
+      </div>
+
+      <div v-for="grp in CLI_GROUPS" :key="grp.title" class="cli-group">
+        <div class="cli-group-title">{{ grp.title }}</div>
+        <p class="cli-group-lead dim">{{ grp.lead }}</p>
+        <div v-for="c in grp.commands" :key="c.cmd" class="cli-item" :class="{ risk: c.risk }">
+          <div class="cli-cmd">
+            <Icon v-if="c.risk" name="alert" :size="13" class="cli-risk-ico" />
+            <code>{{ c.cmd }}</code>
+          </div>
+          <p class="cli-purpose">{{ c.purpose }}</p>
+          <dl class="cli-meta">
+            <div class="cli-row"><dt>场景</dt><dd>{{ c.when }}</dd></div>
+            <div v-if="c.params.length" class="cli-row">
+              <dt>参数</dt>
+              <dd><span v-for="p in c.params" :key="p" class="cli-param">{{ p }}</span></dd>
+            </div>
+            <div class="cli-row"><dt>前置</dt><dd>{{ c.requires }}</dd></div>
+            <div class="cli-row"><dt>注意</dt><dd>{{ c.caution }}</dd></div>
+          </dl>
+        </div>
+      </div>
     </section>
 
-    <!-- 备份与恢复 -->
-    <section class="card">
-      <div class="sec-head"><Icon name="archive" :size="16" /> 备份与恢复</div>
-      <ul class="faq-list">
-        <li>建议<strong>定期建立备份计划</strong>，不要等出问题再补救。</li>
-        <li>修改站点、防火墙等重要配置前，可先手动备份以便回滚。</li>
-        <li>恢复备份会覆盖现有数据，需输入确认词；面板自身的数据需在服务器上恢复。</li>
-      </ul>
-    </section>
-
-    <!-- 安全提示：与风险横幅同级的高危提醒，常驻可见 -->
-    <section class="card risk">
-      <div class="sec-head"><Icon name="alert" :size="16" /> 安全提示</div>
-      <ul class="faq-list">
-        <li><strong>终端可直接执行系统命令</strong>，误操作可能影响整台服务器，请优先使用对应功能页面。</li>
-        <li>开放公网访问前，请确认访问白名单与 HTTPS 已配置，避免暴露管理端口。</li>
-        <li>修改防火墙规则要谨慎，避免阻断自己的连接。</li>
-        <li>按需授予管理权限，日常巡检使用只读账号即可。</li>
-      </ul>
-    </section>
-
-    <!-- 常见问题 -->
+    <!-- 常见问题：现象层问答，与上面的命令表分工 -->
     <section class="card">
       <div class="sec-head"><Icon name="help" :size="16" /> 常见问题</div>
       <div v-for="f in FAQS" :key="f.q" class="faq">
@@ -144,14 +147,48 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
 .lead { margin: -6px 0 14px; font-size: var(--fs-12-5); line-height: 1.6; }
 .empty-tip { margin: 10px 0 0; font-size: var(--fs-13); }
 
-.faq-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 9px; }
-.faq-list li { font-size: var(--fs-13); line-height: 1.65; color: var(--c-text); }
-.faq-list strong { color: var(--c-text); font-weight: 600; }
+/* 终端命令：全局参数 → 分组 → 单条命令（用途 + 场景/参数/前置/注意） */
+.cli-globals {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; margin-bottom: 18px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-sm);
+  background: var(--c-surface-2);
+}
+.cli-global { font-size: var(--fs-12-5); line-height: 1.6; color: var(--c-text-dim); }
 
-/* 安全提示卡片：用危险色描边与图标提亮，与常驻风险横幅同级提醒强度 */
-.risk { border-color: color-mix(in srgb, var(--c-danger) 35%, var(--c-border)); }
-.risk .sec-head { color: var(--c-danger); }
-.risk .sec-head .icon { color: var(--c-danger); }
+.cli-group { margin-top: 18px; }
+.cli-group:first-of-type { margin-top: 0; }
+.cli-group-title {
+  font-weight: 600; font-size: var(--fs-13-5); color: var(--c-text);
+  padding-bottom: 6px; border-bottom: 1px solid var(--c-border);
+}
+.cli-group-lead { margin: 6px 0 10px; font-size: var(--fs-12-5); line-height: 1.6; }
+
+.cli-item {
+  padding: 11px 12px; margin-bottom: 9px;
+  border: 1px solid var(--c-border); border-left: 3px solid var(--c-border);
+  border-radius: var(--radius-sm); background: var(--c-surface-2);
+}
+.cli-item.risk { border-left-color: var(--c-danger); }
+.cli-cmd { display: flex; align-items: flex-start; gap: 6px; }
+.cli-risk-ico { color: var(--c-danger); margin-top: 2px; flex: none; }
+.cli-cmd code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: var(--fs-12-5); color: var(--c-text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.cli-purpose { margin: 6px 0 8px; font-size: var(--fs-12-5); line-height: 1.65; color: var(--c-text); }
+.cli-meta { margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.cli-row { display: flex; align-items: flex-start; gap: 8px; }
+.cli-row dt {
+  flex: 0 0 30px; margin: 0; font-size: var(--fs-12); color: var(--c-text-mute);
+}
+.cli-row dd {
+  flex: 1; min-width: 0; margin: 0;
+  font-size: var(--fs-12-5); line-height: 1.6; color: var(--c-text-dim);
+}
+.cli-param { display: block; }
+.cli-row:last-child dd { color: var(--c-text); }
 
 .faq { padding: 12px 0; border-top: 1px solid var(--c-border); }
 .faq:first-of-type { border-top: none; padding-top: 2px; }

@@ -88,7 +88,7 @@ const SUBTITLES: Record<string, string> = {
   containers: 'Docker · 列举（只读角色可看）/ 创建 / 启停 / 删除 · Compose up/stop/restart/down（写操作需 container.manage）',
   waf: '各站点防护档位与 IP 访问控制 · CC 限速仅 nginx（caddy 不支持）· 随站点配置一同下发',
   certs: '各站点证书总览 · 申请 / 续期需 ssl.manage · 信任根证书 site.view 即可',
-  help: '常用操作指引 · 模块说明 · 安全提示与排障',
+  help: '常用操作指引 · 模块说明 · panel 终端命令 · 常见问题',
 }
 const subtitle = computed(() => SUBTITLES[String(route.name)] ?? '')
 
