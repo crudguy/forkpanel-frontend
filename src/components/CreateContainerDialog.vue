@@ -14,7 +14,7 @@
  * 复用 InstallPackageDialog 的弹窗骨架（.mask > .modal.stack）与 useModal 可访问性
  * （Esc 关闭 / Tab 焦点陷阱 / 打开聚焦 / 离场动画 + 焦点返还），保持全站弹窗一致。
  */
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useModal } from '@/composables/useModal'
 import Icon from '@/components/Icon.vue'
 
@@ -65,11 +65,20 @@ function lines(v: string): string[] | undefined {
 const confirmOk = ref(false)
 watch(confirmToken, (v) => { confirmOk.value = v === CONFIRM_WORD })
 
-// 表单是否可提交：必填项齐全 + 确认词精确匹配。后端仍会再校验一次（前端校验不可作数）。
+// CPU 配额：留空 = 不限；填了就必须是正数，否则阻止提交并提示——
+// 此前填 abc/-1 被静默当"不限"创建，用户以为限了核数，实际没有。
+const cpuInvalid = computed(() => {
+  const v = cpuQuota.value.trim()
+  if (!v) return false
+  const n = Number(v)
+  return !Number.isFinite(n) || n <= 0
+})
+
+// 表单是否可提交：必填项齐全 + 确认词精确匹配 + CPU 配额合法。后端仍会再校验一次。
 const canSubmit = ref(false)
 watch(
-  () => [name.value, image.value, confirmToken.value],
-  () => { canSubmit.value = !!name.value.trim() && !!image.value.trim() && confirmToken.value === CONFIRM_WORD },
+  () => [name.value, image.value, confirmToken.value, cpuQuota.value],
+  () => { canSubmit.value = !!name.value.trim() && !!image.value.trim() && confirmToken.value === CONFIRM_WORD && !cpuInvalid.value },
   { immediate: true },
 )
 
@@ -85,7 +94,7 @@ watch(() => props.open, (v) => {
 })
 
 function confirm() {
-  if (!canSubmit.value || props.busy) return
+  if (!canSubmit.value || cpuInvalid.value || props.busy) return
   const payload: CreateContainerPayload = {
     name: name.value.trim(),
     image: image.value.trim(),
@@ -183,7 +192,8 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
           <div class="row2">
             <label>
               <span>CPU 配额</span>
-              <input v-model="cpuQuota" type="number" min="0" step="0.1" placeholder="如 1.5" />
+              <input v-model="cpuQuota" type="number" min="0" step="0.1" placeholder="如 1.5" :class="{ invalid: cpuInvalid }" />
+              <p v-if="cpuInvalid" class="hint err-tip">CPU 配额须大于 0，留空则不限。</p>
             </label>
             <label>
               <span>内存上限</span>
@@ -227,6 +237,7 @@ const { close: modalClose } = useModal(() => props.open, box, cancel)
 .code, code { font-family: var(--mono); font-size: var(--fs-12); }
 .hint { margin: 0; font-size: var(--fs-12); color: var(--c-text-dim); }
 .err-tip { color: var(--c-danger); }
+input.invalid { border-color: var(--c-danger); }
 .hint-note { margin: 2px 0 0; }
 /* 在弹窗里说明性引用 code 用静音色底，避免与输入框混淆 */
 

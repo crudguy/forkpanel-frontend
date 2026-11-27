@@ -19,7 +19,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useLineGutter } from '@/composables/useLineGutter'
-import { detectLanguage, tokenize, type SyntaxLang } from '@/composables/syntaxHighlight'
+import { detectLanguage, tokenize, type Seg, type SyntaxLang } from '@/composables/syntaxHighlight'
 
 defineOptions({ inheritAttrs: false })
 
@@ -78,6 +78,24 @@ const lang = computed<SyntaxLang>(() => props.language ?? (props.filename
   : sniffed))
 const highlighted = computed(() => lang.value !== 'plain')
 const segs = computed(() => highlighted.value ? tokenize(model.value ?? '', lang.value) : [])
+/**
+ * 着色层按行切片：整段 tokenize 保留跨行 token（多行字符串 / 块注释）的正确性，
+ * 但 DOM 只渲染窗口内的行。key 用行号，滚动时不会把上万个 span 重建一遍。
+ */
+const lineSegs = computed<Seg[][]>(() => {
+  const out: Seg[][] = []
+  if (!highlighted.value) return out
+  out[0] = []
+  let n = 0
+  for (const s of segs.value) {
+    const parts = s.t.split('\n')
+    for (let i = 0; i < parts.length; i += 1) {
+      if (i > 0) out[++n] = []
+      if (parts[i]) out[n].push({ t: parts[i], c: s.c })
+    }
+  }
+  return out
+})
 const taStyle = computed(() => props.padRight ? { paddingRight: props.padRight + 'px' } : undefined)
 
 function onScroll() {
@@ -106,7 +124,7 @@ defineExpose({ focus: () => ta.value?.focus() })
       </div>
     </div>
     <div class="lined-body">
-      <pre v-if="highlighted" ref="pre" class="lined-pre" :class="{ mono }" aria-hidden="true"><code><span v-for="(s, i) in segs" :key="i" :class="s.c">{{ s.t }}</span></code></pre>
+      <pre v-if="highlighted" ref="pre" class="lined-pre" :class="{ mono }" aria-hidden="true"><code><span class="hl-spacer" :style="{ height: `calc(var(--editor-line-h) * ${lineCount + 1}em)` }"><span v-for="n in lnWindow.numbers" :key="n" class="hl-line" :style="{ top: `calc(var(--editor-line-h) * ${n - 1}em)` }"><span v-for="(s, i) in (lineSegs[n - 1] || [])" :key="i" :class="s.c">{{ s.t }}</span></span></span></code></pre>
       <textarea
         ref="ta"
         v-bind="$attrs"
@@ -221,6 +239,12 @@ defineExpose({ focus: () => ta.value?.focus() })
   scrollbar-gutter: stable;
 }
 .lined-pre.mono { font-family: var(--mono); }
+/* 着色窗口与行号共用 lnWindow。撑满全文高度的空壳让 pre.scrollTop 不被 clamp
+   （仍与 textarea 同步），只把窗口内的行按绝对行号摆进去，DOM 不随行数增长。 */
+.lined-pre code { display: block; }
+.hl-spacer { display: block; position: relative; }
+.hl-line { position: absolute; left: 0; right: 0; display: block; height: calc(var(--editor-line-h) * 1em);
+  line-height: var(--editor-line-h); white-space: pre; }
 .lined-ta.has-hl {
   position: relative;
   z-index: 1;

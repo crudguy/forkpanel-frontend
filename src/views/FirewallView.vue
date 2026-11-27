@@ -283,14 +283,19 @@ async function loadFail2ban() {
 
 // 启停某 jail：读取复选框当前值（:checked + @change，避免 v-model 竞态），失败时回滚
 async function toggleJail(j: Jail, e: Event) {
-  const want = (e.target as HTMLInputElement).checked
+  const cb = e.target as HTMLInputElement
+  const want = cb.checked
+  const prev = j.enabled
   jailBusy.value = j.name
   try {
     await api.post(API.firewall.fail2banJail(), { name: j.name, enabled: want })
     j.enabled = want
     toast(`已${want ? '启用' : '停用'} jail「${j.name}」`)
   } catch (err) {
-    j.enabled = !want // 回滚 UI
+    // :checked 单向绑定：j.enabled 仍是 prev，Vue 不重绘 DOM，须显式把勾选框拨回，
+    // 否则 UI 显示已开启但后端未改——安全开关尤其不能"撒谎"。
+    cb.checked = prev
+    j.enabled = prev
     f2bError.value = errorText(err)
   } finally { jailBusy.value = null }
 }
@@ -549,7 +554,7 @@ onMounted(() => { load(); loadFail2ban() })
               <span class="ip-chip" v-for="ip in j.banned_ips" :key="ip">
                 <span class="mono">{{ ip }}</span>
                 <button class="ip-x" type="button" :disabled="!canF2b || unbanBusy === `${j.name}|${ip}`"
-                  :title="`解封 ${ip}`" @click="unban(j.name, ip)">
+                  :aria-label="`解封 ${ip}`" :title="`解封 ${ip}`" @click="unban(j.name, ip)">
                   <Icon name="close" :size="12" />
                 </button>
               </span>
@@ -661,7 +666,9 @@ select.fw-action { width: 100%; flex: none; }
 .f2b-params input { width: 96px; }
 .f2b-params .tip { flex-basis: 100%; margin: 0; }
 .ip-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--c-border-strong); border-radius: 999px; background: var(--c-bg); font-size: var(--fs-12); }
-.ip-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; color: var(--c-text-dim); cursor: pointer; }
+.ip-x { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; color: var(--c-text-dim); cursor: pointer; }
+/* 命中区扩到 28×28（16 + 2×6），视觉圆圈仍是 16px；伪元素随按钮一起接收点击。 */
+.ip-x::after { content: ''; position: absolute; inset: -6px; }
 .ip-x:hover:not(:disabled) { background: var(--c-danger-soft); color: var(--c-danger); }
 .ip-x:disabled { opacity: .5; cursor: not-allowed; }
 

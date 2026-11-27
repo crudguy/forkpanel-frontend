@@ -380,10 +380,12 @@ async function runPlan(p: Plan) {
 
 /** 待删除计划（审计 U5：window.confirm → ConfirmDialog） */
 const delPlan = ref<Plan | null>(null)
+// 删除确认框自己的错误位：写页面级 error 会被遮罩挡在后面，弹窗看着像没反应
+const delErr = ref('')
 async function del(p: Plan) {
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; delErr.value = ''
   try { await api.del(API.backups.remove(p.id)); delPlan.value = null; await load() }
-  catch (e) { error.value = errorText(e) }
+  catch (e) { delErr.value = errorText(e) }
   finally { busy.value = false }
 }
 
@@ -404,18 +406,24 @@ const {
 })
 const remoteError = ref('')
 const remoteLoading = ref(false)
+// 切换计划 / 关闭产物卡片后，在途的远端清单响应必须失效，否则 A 的清单会写进 B
+let remoteSeq = 0
+function invalidateRemote() { ++remoteSeq; remoteLoading.value = false }
 async function loadRemote(plan: Plan) {
+  const seq = ++remoteSeq
   remoteLoading.value = true
   remoteError.value = ''
   try {
     const r = await api.get<{ items: string[] }>(API.backups.remoteArtifacts(plan.id))
+    if (seq !== remoteSeq) return
     remoteItems.value = r.items ?? []
   } catch (e) {
+    if (seq !== remoteSeq) return
     // 远端不可达要如实说：此时"看不到清单"不等于"远端没有备份"
     remoteError.value = errorText(e)
     remoteItems.value = []
   } finally {
-    remoteLoading.value = false
+    if (seq === remoteSeq) remoteLoading.value = false
   }
 }
 
@@ -495,6 +503,7 @@ async function showArtifacts(p: Plan) {
     if (seq !== artifactsSeq) return   // 已切到别的计划，丢弃本次产物清单
     curArtifacts.value = { plan: p, items: items ?? [] }
     // 换计划时远端清单必须归零：留着上一份清单会让人以为 B 计划在远端有产物
+    invalidateRemote()
     remoteItems.value = null
     remoteError.value = ''
   } catch (e) { if (seq === artifactsSeq) error.value = errorText(e) }
@@ -660,7 +669,7 @@ const selName = ref('')
                 <button class="btn-ghost btn-sm" :disabled="!canManage"
             :title="canManage ? '' : '无 backup.manage 权限'" @click="openEditPlan(p)"><Icon name="edit" :size="13" /> 编辑</button>
                 <button class="btn-ghost btn-sm danger" :disabled="!canManage"
-            :title="canManage ? '' : '无 backup.manage 权限'" @click="delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
+            :title="canManage ? '' : '无 backup.manage 权限'" @click="delErr = ''; delPlan = p"><Icon name="trash" :size="13" /> 删除</button>
               </td>
             </tr>
           </tbody>
@@ -729,7 +738,7 @@ const selName = ref('')
             @click="loadRemote(curArtifacts.plan)">
             <Icon name="globe" :size="13" /> {{ remoteLoading ? '读取中…' : '远端副本' }}
           </button>
-          <button class="btn-ghost btn-sm" @click="curArtifacts = null">关闭</button>
+          <button class="btn-ghost btn-sm" @click="invalidateRemote(); curArtifacts = null">关闭</button>
         </div>
         <table v-if="curArtifacts.items.length" class="fixed" v-table-nav>
           <colgroup>
@@ -761,7 +770,7 @@ const selName = ref('')
             <Icon name="globe" :size="14" /> 远端副本
             <span class="dim">（{{ remoteItems.length }}）</span>
             <span class="spacer" />
-            <button class="btn-ghost btn-sm" @click="remoteItems = null">收起</button>
+            <button class="btn-ghost btn-sm" @click="invalidateRemote(); remoteItems = null">收起</button>
           </div>
           <p v-if="remoteError" class="err" role="alert">{{ remoteError }}</p>
           <p v-else-if="!remoteTotal" class="dim">远端没有本计划的产物</p>
@@ -837,8 +846,10 @@ const selName = ref('')
     <ConfirmDialog
       :open="!!delPlan" danger title="删除备份计划"
       :detail="delPlan ? `确认删除备份计划 #${delPlan.id}（${delPlan.kind}/${delPlan.target}）？注意：不会删除已生成的产物文件。` : ''"
-      @confirm="delPlan && del(delPlan)" @cancel="delPlan = null"
-    />
+      @confirm="delPlan && del(delPlan)" @cancel="delErr = ''; delPlan = null"
+    >
+      <p v-if="delErr" class="err-bar form-msg" role="alert">{{ delErr }}</p>
+    </ConfirmDialog>
 
     <!-- 从产物恢复（审计 U5：window.prompt → ConfirmDialog 确认词模式） -->
     <ConfirmDialog

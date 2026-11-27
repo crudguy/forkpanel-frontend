@@ -549,7 +549,7 @@ async function askInstall(p: string) {
   } finally { dlgLoading.value = false }
 }
 
-function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = []; dlgInstalled.value = null }
+function closeInstallDlg() { dlgPkg.value = ''; dlgVersions.value = []; dlgInstalled.value = null; dlgLoading.value = false }
 
 // 弹窗确认后真正提交（version 为 undefined 表示未选具体版本，交后端按源当前版本装）。
 // 已装包选到跨主版本时，后端同样会 409 强制二次确认（install 语义上等于升级），
@@ -928,7 +928,7 @@ async function doConfirmed() {
       <h4>三步上手</h4>
       <ol>
         <li>在「软件」页选中组件并安装（可选版本）。标「需配源」的软件需先在服务器上配置软件源，否则会安装失败。</li>
-        <li>到「服务」页确认对应服务已运行，未运行则点「启动」。</li>
+        <li>到「服务」页确认对应服务已运行，未运行则进入详情页启停。</li>
         <li>要看日志或改配置，点服务名进入详情页；日志可实时跟随，配置支持单元文件和 drop-in。</li>
       </ol>
 

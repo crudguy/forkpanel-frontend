@@ -98,21 +98,28 @@ let installEs: EventSource | null = null
 function closeInstallEs() {
   if (installEs) { installEs.close(); installEs = null }
 }
+/** 单帧解析：坏帧直接丢弃，不阻断后续事件（与软件页 SSE 同口径）。 */
+function parseEv<T>(ev: MessageEvent): T | null {
+  try { return JSON.parse(ev.data) as T } catch { return null }
+}
 function startInstallTracking(taskId: number) {
   closeInstallEs()
   if (!canTrackTask.value) return
   const es = new EventSource(API.events.tasks())
   installEs = es
-  es.addEventListener('progress', (ev) => {
-    const d = JSON.parse((ev as MessageEvent).data) as { id: number; percent: number; message: string | null }
+  es.addEventListener('progress', (ev: MessageEvent) => {
+    const d = parseEv<{ id: number; percent: number; message: string | null }>(ev)
+    if (!d) return
     if (d.id === taskId) installProgProgress(d.percent, d.message ?? '')
   })
-  es.addEventListener('log', (ev) => {
-    const d = JSON.parse((ev as MessageEvent).data) as { id: number; line: string }
+  es.addEventListener('log', (ev: MessageEvent) => {
+    const d = parseEv<{ id: number; line: string }>(ev)
+    if (!d) return
     if (d.id === taskId) installProgLog(d.line)
   })
-  es.addEventListener('finished', (ev) => {
-    const d = JSON.parse((ev as MessageEvent).data) as { id: number; state: string }
+  es.addEventListener('finished', (ev: MessageEvent) => {
+    const d = parseEv<{ id: number; state: string }>(ev)
+    if (!d) return
     if (d.id === taskId) { installProgFinished(d.state); closeInstallEs() }
   })
   es.onerror = () => { /* EventSource 自带重连；终态另有轮询兜底 */ }
@@ -146,7 +153,7 @@ const canManage = computed(() => auth.enabled(CAP.CONTAINER_MANAGE, 'container.m
 const canViewLogs = computed(() => auth.can('container.view'))
 /** 不可用原因机器码（来自能力位 reason）。菜单常亮，进入后据此分流展示。 */
 const unavailableReason = computed(() => auth.capabilities[CAP.CONTAINER_MANAGE]?.reason ?? undefined)
-/** 修复动作需要的权限点（启动/重启服务用 system.manage，加组用 container.manage）。 */
+/** 修复动作需要的权限点（启动/重启服务用 service.manage，加组用 container.manage）。 */
 const canService = computed(() => auth.can('service.manage'))
 const canJoin = computed(() => auth.can('container.manage'))
 
@@ -270,7 +277,7 @@ watch(() => route.query.tab, (v) => {
           <Icon name="restart" :size="15" /> 重启面板
         </button>
         <span v-if="!canService && !canJoin" class="dim">
-          需要 system.manage 与 container.manage 权限才能执行修复操作。
+          需要服务管理（service.manage）与容器管理（container.manage）权限才能执行修复操作。
         </span>
         <p v-if="fixError" class="err">{{ fixError }}</p>
       </div>

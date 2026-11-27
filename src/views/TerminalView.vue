@@ -655,8 +655,10 @@ onUnmounted(() => {
 .tdot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-text-mute); flex: none; }
 .tdot.on { background: var(--c-ok); box-shadow: 0 0 6px var(--c-ok); }
 .tab.on .tdot.on { background: var(--seg-on-fg); box-shadow: none; }
-.tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+.tab-x { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: var(--radius-chip); cursor: pointer; padding: 0; }
+/* 透明伪元素把命中区扩到 28×28，视觉尺寸与 hover 底色不变 */
+.tab-x::after { content: ''; position: absolute; inset: -5px; }
 /* 关闭钮 hover 的浅色覆盖层：跟着标签自身的前景色走，激活态（白字）与非激活态
    （次要文字色）共用一条规则，不再为两种状态各写一份 rgba。 */
 .tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }

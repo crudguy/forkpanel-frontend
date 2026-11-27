@@ -53,21 +53,26 @@ const form = reactive<LimitsForm>({ cpuQuota: '', memLimit: '', restart: 'no' })
 const cur = ref<CurrentLimits | null>(null)
 const loading = ref(false)
 const loadErr = ref('')
+// 请求序号：取消 A 后立刻编辑 B，A 的慢响应晚到时不能覆盖 B 的表单
+const reqSeq = ref(0)
 
 async function load() {
   if (!props.containerId) return
+  const seq = ++reqSeq.value
   loading.value = true
   loadErr.value = ''
   try {
     const r = await api.get<CurrentLimits>(API.containers.limits(props.containerId))
+    if (seq !== reqSeq.value) return
     cur.value = r
     Object.assign(form, formFromCurrent(r))
   } catch (e) {
+    if (seq !== reqSeq.value) return
     // 现值读不到就**不允许提交**：不知道会改成什么的时候改生产容器，是最坏的一种
     cur.value = null
     loadErr.value = errorText(e)
   } finally {
-    loading.value = false
+    if (seq === reqSeq.value) loading.value = false
   }
 }
 
@@ -78,6 +83,10 @@ watch(() => props.open, (v) => {
     loadErr.value = ''
     Object.assign(form, { cpuQuota: '', memLimit: '', restart: 'no' })
     void load()
+  } else {
+    // 关闭即让在途响应失效，避免它在新上下文里写入旧值
+    ++reqSeq.value
+    loading.value = false
   }
 })
 
@@ -90,7 +99,7 @@ function confirm() {
   if (!canSubmit.value) return
   emit('confirm', buildPayload(form))
 }
-function cancel() { emit('cancel') }
+function cancel() { ++reqSeq.value; emit('cancel') }
 
 const box = ref<HTMLElement | null>(null)
 const { close: modalClose } = useModal(() => props.open, box, cancel)

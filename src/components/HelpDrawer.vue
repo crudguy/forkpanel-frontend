@@ -14,30 +14,63 @@
  * document 捕获阶段在事件下达给任何焦点元素之前就执行，焦点在哪都能收到。
  * （同款处置见 TerminalView 的 onQuickDocKeydown。）
  */
-import { onUnmounted, watch } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ open: boolean; title?: string }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
+const hd = ref<HTMLElement | null>(null)
+let opener: HTMLElement | null = null
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+/** 抽屉之外还有 modal 时让位：一次 Esc 只关最里面那一层。 */
+function hasInnerDialog() {
+  for (const el of document.querySelectorAll('[role="dialog"][aria-modal="true"]')) {
+    if (el !== hd.value) return true
+  }
+  return false
+}
+
+/** 与 useModal 同口径的 Tab 陷阱：焦点只在抽屉内循环，Shift+Tab 反向。 */
+function trapTab(e: KeyboardEvent) {
+  const root = hd.value
+  if (!root) return
+  const list = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE))
+    .filter(x => !x.hasAttribute('disabled'))
+  if (!list.length) return
+  const first = list[0]
+  const last = list[list.length - 1]
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+  else if (!e.shiftKey && (document.activeElement === last || document.activeElement === document.body)) {
+    e.preventDefault(); first.focus()
+  }
+}
+
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return
   if (!props.open) return
-  // 内层弹窗（ConfirmDialog 等）自己也要用 Esc：它们打开时先让给它们关，
-  // 否则一次 Esc 会把抽屉和里面的确认框一起收掉。
-  // 判据是「抽屉之外还有别的 modal dialog」，不是 target 落在哪里——
-  // target 常常是 body，靠它判断不出来。
-  const inner = document.querySelectorAll('[role="dialog"][aria-modal="true"]')
-  const own = document.querySelector('.hd')
-  for (const el of inner) if (el !== own) return
+  if (e.key === 'Tab') {
+    if (!hasInnerDialog()) trapTab(e)
+    return
+  }
+  if (e.key !== 'Escape') return
+  if (hasInnerDialog()) return
   emit('close')
 }
 
 // 只在打开期间挂监听，关闭即摘：抽屉收着还占一个全局 keydown 是无谓开销，
-// 且多个页面复用时不会互相抢。
+// 且多个页面复用时不会互相抢。焦点管理沿用 useModal 口径：打开搬进去、关闭还回去。
 watch(() => props.open, (open) => {
-  if (open) document.addEventListener('keydown', onDocKeydown, true)
-  else document.removeEventListener('keydown', onDocKeydown, true)
+  if (open) {
+    opener = document.activeElement as HTMLElement | null
+    document.addEventListener('keydown', onDocKeydown, true)
+    nextTick(() => { hd.value?.querySelector<HTMLElement>(FOCUSABLE)?.focus() })
+  } else {
+    document.removeEventListener('keydown', onDocKeydown, true)
+    const back = opener
+    opener = null
+    nextTick(() => { if (back?.isConnected) back.focus() })
+  }
 }, { immediate: true })
 onUnmounted(() => document.removeEventListener('keydown', onDocKeydown, true))
 </script>
@@ -45,7 +78,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown, true))
 <template>
   <Teleport to="body">
   <div v-if="open" class="mask" @click.self="emit('close')">
-    <aside class="hd" role="dialog" aria-modal="true" aria-label="说明">
+    <aside ref="hd" class="hd" role="dialog" aria-modal="true" aria-label="说明">
       <div class="hd-head">
         <Icon name="help" :size="18" />
         <span class="hd-title">{{ title ?? '说明' }}</span>

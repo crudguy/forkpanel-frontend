@@ -4,7 +4,7 @@
  *
  * 与 WAF 同构：单站 SSL 配置入口在「网站 → 编辑站点」弹窗里，本页把全部站点的
  * 证书收到一屏——可就地续期 / 删除 / 开关自动续期，并提供全局「申请证书」（选站点 + 方式）
- * 与「信任根证书」入口（全局动作，零站点也能进，修复此前根 CA 被埋进站点弹窗的短板）。
+ * 与「下载根证书」入口（全局动作，零站点也能进，修复此前根 CA 被埋进站点弹窗的短板）。
  *
  * 能力门控（与 SitesView 一致，请求前判定）：
  * - 菜单可见用 `site.view`（证书归属站点，恒可达）；页内动作按 `ssl.manage` 置灰。
@@ -162,6 +162,8 @@ const sslModal = ref<{
   dnsProvider: string
 } | null>(null)
 const sslBox = ref<HTMLElement | null>(null)
+/** 申请弹窗自己的错误位：写页面级 error 会被遮罩挡在后面（与 SiteSslDialog 同口径）。 */
+const sslErr = ref('')
 /**
  * 已配置的 DNS 凭据（dns-01 的前提）。
  *
@@ -186,6 +188,7 @@ const sslDnsGate = computed(() =>
   dns01Gate(dnsCreds.value, sslModal.value?.dnsProvider ?? ''),
 )
 function openApply() {
+  sslErr.value = ''
   const first = sites.value[0]
   sslModal.value = {
     siteId: first ? first.id : 0,
@@ -201,11 +204,11 @@ async function execSsl() {
   if (!site) return
   // ACME 必须有邮箱（http-01 与 dns-01 同一个账户）；缺了就明确报，不代填假地址
   const isAcme = m.method === 'http-01' || m.method === 'dns-01'
-  if (isAcme && !m.email.trim()) { error.value = 'ACME 签发需要账户邮箱'; return }
+  if (isAcme && !m.email.trim()) { sslErr.value = 'ACME 签发需要账户邮箱'; return }
   // dns-01 缺凭据时提交，后端只会回"未找到凭据"——用户据此不知该去哪配。
   // 所以在请求之前就把缺口说出来。
-  if (m.method === 'dns-01' && !sslDnsGate.value.ok) { error.value = sslDnsGate.value.reason; return }
-  busy.value = true; error.value = ''
+  if (m.method === 'dns-01' && !sslDnsGate.value.ok) { sslErr.value = sslDnsGate.value.reason; return }
+  busy.value = true; sslErr.value = ''; error.value = ''
   try {
     await api.post(API.sites.sslApply(site.id),
       {
@@ -223,7 +226,7 @@ async function execSsl() {
     await load(true)
   } catch (e) {
     if (isUnsupported(e)) toast('当前环境未接入证书签发能力（需 openssl 或 ACME）', 'warn')
-    else error.value = errorText(e)
+    else sslErr.value = errorText(e)
   } finally { busy.value = false }
 }
 
@@ -269,9 +272,9 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
           aria-label="搜索证书" />
         <button v-if="q" class="btn-ghost btn-sm" type="button" title="清空搜索" @click="q = ''">清空</button>
         <HelpBtn title="证书说明" aria-label="证书说明" :expanded="helpOpen" @click="helpOpen = true" />
-        <!-- 信任根证书：全局动作，始终可达（零站点也能进） -->
-        <button class="btn-ghost btn-sm" title="导入根证书后，全部本地 HTTPS 站点不再报「非私密连接」" @click="downloadCa">
-          <Icon name="shield" :size="15" /> 信任根证书
+        <!-- 下载根证书：全局动作，始终可达（零站点也能进）；下载后需自行导入才会消除告警 -->
+        <button class="btn-ghost btn-sm" title="下载后需自行导入系统/浏览器才会消除 HTTPS 告警" @click="downloadCa">
+          <Icon name="shield" :size="15" /> 下载根证书
         </button>
         <RefreshBtn :disabled="busy" sm @click="load()" />
         <button class="btn-primary" :disabled="!sslReady" :title="sslReady ? '为某站点申请证书' : sslHint" @click="openApply">
@@ -352,8 +355,8 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
     <!-- 完整说明收进帮助抽屉（A6）：页面流里不再铺长文；「?」在列表卡顶栏 -->
     <HelpDrawer :open="helpOpen" title="证书说明" @close="helpOpen = false">
       <p>证书按站点管理：单个站点的申请与查看在「网站 → 编辑站点」里完成；本页汇总<b>所有站点</b>的证书，便于统一查看到期时间和续期。</p>
-      <h4>信任根证书</h4>
-      <p>导入面板的根证书后，所有自签 HTTPS 站点不再提示「非私密连接」。<b>首次部署、还没建站时也建议先完成这步。</b></p>
+      <h4>下载根证书</h4>
+      <p>先下载面板根证书，再自行导入系统/浏览器，才会消除自签 HTTPS 站点的「非私密连接」告警。<b>首次部署、还没建站时也建议先完成这步。</b></p>
       <h4>自动续期</h4>
       <p>由正规机构签发的证书会在到期前 30 天自动续期；自签证书可手动点「续期」重新签发。</p>
     </HelpDrawer>
@@ -368,6 +371,9 @@ const { close: closeDelCert } = useModal(() => !!delCert.value, delBox, () => (d
             <Icon name="close" :size="16" />
           </button>
         </div>
+        <p v-if="sslErr" class="err-bar" role="alert">
+          <Icon name="alert" :size="15" class="ic" /><span>{{ sslErr }}</span>
+        </p>
         <label class="blk">站点
           <select v-model.number="sslModal.siteId" :disabled="!sites.length">
             <option v-for="s in sites" :key="s.id" :value="s.id">{{ s.name }}（{{ s.domains.join(', ') }}）</option>

@@ -66,6 +66,29 @@ describe('usePolling', () => {
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
+  it('隐藏→回可见时 enabled=false，之后 enabled 恢复仍能轮询（断链回归）', () => {
+    let on = true
+    const fn = vi.fn()
+    usePolling({ fn, ms: 1000, enabled: () => on })
+    // 隐藏前先跑一轮，确保链已建立
+    vi.advanceTimersByTime(1000)
+    expect(fn).toHaveBeenCalledTimes(1)
+    // 页面隐藏，且此时条件关闭
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    on = false
+    vi.advanceTimersByTime(5000)
+    expect(fn).toHaveBeenCalledTimes(1)
+    // 回可见时条件仍为 false——旧实现在此直接 return，链彻底断掉
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(fn).toHaveBeenCalledTimes(1) // 禁用态不应补拉
+    // 条件恢复：必须自动续上轮询
+    on = true
+    vi.advanceTimersByTime(3000)
+    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
   it('pauseWhenHidden=false 时隐藏也继续轮询', () => {
     const fn = vi.fn()
     usePolling({ fn, ms: 1000, pauseWhenHidden: false })

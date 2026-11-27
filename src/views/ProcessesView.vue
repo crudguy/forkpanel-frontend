@@ -168,7 +168,7 @@ const killTitle = computed(() => ({
 /** 确认弹窗正文：说清"会发生什么"与"何时该用/不该用"，
  *  并给出退路（"若无响应可改用立即终止"），避免用户因不确定而不敢操作。 */
 const ACTION_DETAIL: Record<ProcAction, (p: Proc) => string> = {
-  reload: (p) => `将向 ${p.name}（PID ${p.pid}）发送 SIGHUP，让它重新读取配置而**不退出**。`
+  reload: (p) => `将向 ${p.name}（PID ${p.pid}）发送 SIGHUP，让它重新读取配置而不会退出。`
     + `适用于 nginx 这类守护进程的热重载——服务不中断。`
     + `注意：并非所有进程都实现了重载语义，普通的应用程序收到后可能什么都不做。`,
   term: (p) => `将向 ${p.name}（PID ${p.pid}）发送 SIGTERM，允许它保存数据、关闭连接后自行退出。`

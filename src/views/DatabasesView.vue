@@ -200,6 +200,11 @@ const editSaving = ref(false)
 const editError = ref('')
 const delTarget = ref<Conn | null>(null)
 
+// 编辑连接弹窗统一行为：Esc + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还。
+// 与恢复弹窗各有独立栈身份，互不抢 Esc；恢复弹窗仍走原有 closeRestore。
+const editBox = ref<HTMLElement | null>(null)
+const { close: closeEdit } = useModal(() => !!editTarget.value, editBox, () => { editTarget.value = null })
+
 function openEdit(c: Conn) {
   editTarget.value = c
   editError.value = ''
@@ -227,7 +232,7 @@ async function saveEdit() {
       user: ext && editForm.value.user ? editForm.value.user : undefined,
       password: ext && editForm.value.password ? editForm.value.password : undefined,
     })
-    editTarget.value = null
+    closeEdit()
     toast('连接已更新')
     load()
   } catch (e) { editError.value = errorText(e) }
@@ -759,11 +764,11 @@ async function exportCsv() {
 
     <!-- 编辑连接弹窗：username/password 不回显 → 留空=不修改 -->
     <Teleport to="body">
-    <div v-if="editTarget" class="mask" @click.self="editTarget = null">
-      <div class="modal" role="dialog" aria-modal="true">
+    <div v-if="editTarget" class="mask" @click.self="closeEdit">
+      <div ref="editBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
           <h3 class="modal-title">编辑连接「{{ editTarget.name }}」</h3>
-          <button class="modal-close" type="button" aria-label="关闭" @click="editTarget = null">
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeEdit">
             <Icon name="close" :size="16" />
           </button>
         </div>
@@ -792,7 +797,7 @@ async function exportCsv() {
         <p class="dim tiny">用户名 / 口令留空表示不修改（为安全起见不回显当前值）。</p>
         <div class="modal-foot">
           <div class="modal-actions">
-            <button class="btn-ghost" @click="editTarget = null" :disabled="editSaving">取消</button>
+            <button class="btn-ghost" @click="closeEdit" :disabled="editSaving">取消</button>
             <button class="btn-primary" :disabled="editSaving || !editForm.name.trim()" @click="saveEdit">
               {{ editSaving ? '保存中…' : '保存' }}
             </button>

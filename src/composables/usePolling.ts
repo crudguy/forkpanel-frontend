@@ -115,9 +115,11 @@ export function usePolling(opts: PollingOptions): PollingHandle {
       if (pauseWhenHidden) clearTimer()
       return
     }
-    if (stopped || !getEnabled()) return
-    // 回可见：立即补一次（不等整周期），再续链
-    safeRun()
+    if (stopped) return
+    // 回可见：enabled 时立即补一次（不等整周期）；禁用时只续空转链。
+    // ⚠ 不能因 !enabled 就 return——隐藏期已 clearTimer，回可见若不续链，
+    // 之后 enabled 恢复 true 也再无 tick 触发，轮询永久停止（与 tick() 语义一致）。
+    if (getEnabled()) safeRun()
     schedule()
   }
 

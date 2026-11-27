@@ -178,7 +178,7 @@ onMounted(load)
   <div class="expose-view">
     <EmptyState v-if="!auth.supported(CAP.EXPOSE_MANAGE) && !status?.supported"
       title="当前环境不支持公网暴露向导"
-      hint="此功能需要相应的 Web 服务器、脚本和 root 权限。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口见「设置 → 部署配置」。"
+      hint="此功能需要相应的 Web 服务器、脚本和 root 权限。在此之前可用 SSH 端口转发访问：ssh -L <面板端口>:127.0.0.1:<面板端口> <user>@<server>，再打开 http://127.0.0.1:<面板端口>。面板端口即你当前访问本面板所用地址中的端口。"
       :reason="capReason ?? status?.unsupported_reason ?? undefined" />
     <!-- ⚠️ 整页置灰由 `capabilitySync.test.ts` 钉住（后端 apply/remove 双侧已接
          ensure_supported），故此处**不**降级成"进了页面再说"——但必须给出替代

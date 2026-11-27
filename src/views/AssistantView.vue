@@ -6,7 +6,7 @@
  * 快捷提问 / 页面解释走 diagnose（规则体检 + 可选 LLM 人话解读）。
  * 意图由入口决定，关键词只在 diagnose 模式内选诊断域，不参与意图判定。
  * LLM 未配置 / 停用 / 失败时展示明确状态，不把降级报告伪装成成功。
- * 护栏：助手只读——「去处理」仅导航到对应视图，处置由用户人工确认。
+ * 护栏：助手只读——「查看相关页面」仅导航到对应视图，处置由用户人工确认。
  */
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -166,7 +166,7 @@ const llmStatusText: Record<LlmStatus, string> = {
                 </ul>
                 <p class="sug">{{ f.suggestion }}</p>
                 <button v-if="f.action?.kind === 'navigate'" class="btn-ghost go" @click="router.push(f.action.view)">
-                  去处理 <Icon name="chevron" :size="13" />
+                  查看相关页面 <Icon name="chevron" :size="13" />
                 </button>
               </article>
             </template>

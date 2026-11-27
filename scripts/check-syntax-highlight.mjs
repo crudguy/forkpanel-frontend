@@ -94,6 +94,24 @@ for (const f of vueFiles) {
 }
 pass('配色：6 个 token class 只在 main.css 定义一份')
 
+// ---- E. 着色层窗口坐标必须是像素长度（真实踩坑）----------------------------
+// --editor-line-h 是无单位倍数（line-height: 1.55 合法），但赋给 height/top 时
+// calc(1.55 * 6) 在 CSS 里是非法长度 ⇒ 算成 0 / 回退静态位置，所有着色行堆在顶部、
+// 高亮与正文完全错位，而 tsc/build/单测全绿。三处必须乘 em 变成像素长度。
+const linSrc = read('src/components/LinedTextarea.vue')
+for (const [name, re] of [
+  ['spacer 高度', /height:\s*`calc\(var\(--editor-line-h\)\s*\*\s*\$\{[^}]+\}em\)`/],
+  ['行 top', /top:\s*`calc\(var\(--editor-line-h\)\s*\*\s*\$\{[^}]+\}em\)`/],
+  ['行 height', /height:\s*calc\(var\(--editor-line-h\)\s*\*\s*1em\)/],
+]) {
+  if (!re.test(linSrc)) fail(`LinedTextarea.vue：${name} 未乘 em 单位（calc 结果非法→高亮错位）`)
+}
+// 反向哨兵：窗口坐标不得出现「无单位 × 无单位」的裸写法
+if (/calc\(var\(--editor-line-h\)\s*\*\s*\$\{[^}]+\}\s*\)/.test(linSrc)) {
+  fail('LinedTextarea.vue：窗口坐标出现无单位 calc（会算成 0px）')
+}
+pass('着色层窗口坐标：三处均乘 em，避免无单位 calc 算成 0px')
+
 // ---- D. 接线活性自检 -------------------------------------------------------
 const runner = read('scripts/run-ui-guards.mjs')
 if (!/'check-syntax-highlight\.mjs'/.test(runner)) {

@@ -133,6 +133,12 @@ function onRowClick(n: Node) {
   }
 }
 
+/** 行键盘激活：Enter/Space 走与点击同一入口；展开按钮自身的按键不重复触发行。 */
+function onRowKeydown(n: Node, e: KeyboardEvent) {
+  if (e.target !== e.currentTarget) return
+  onRowClick(n)
+}
+
 function toggle(path: string) {
   const n = nodes[path]
   if (!n || n.kind !== 'dir') return
@@ -212,14 +218,17 @@ watch(() => props.open, (v) => { if (v) ensureRoot() })
         </button>
       </div>
 
-      <div class="tree" ref="treeEl">
+      <div class="tree" ref="treeEl" role="tree">
         <div v-if="!visibleRows.length" class="dim empty">读取中…</div>
         <template v-for="row in visibleRows" :key="row.node.path">
-          <div class="row" :class="{ sel: selected === row.node.path }"
+          <div class="row" :class="{ sel: selected === row.node.path }" role="treeitem" tabindex="0"
+            :aria-expanded="row.node.kind === 'dir' ? row.node.expanded : undefined"
             :style="{ paddingLeft: 8 + row.depth * 16 + 'px' }"
-            @click="onRowClick(row.node)">
+            @click="onRowClick(row.node)"
+            @keydown.enter="onRowKeydown(row.node, $event)"
+            @keydown.space.prevent="onRowKeydown(row.node, $event)">
             <button v-if="row.node.kind === 'dir'" class="tw" :class="{ open: row.node.expanded }"
-              @click.stop="toggle(row.node.path)" :aria-label="row.node.expanded ? '折叠' : '展开'">
+              @click.stop="toggle(row.node.path)" :aria-label="`${row.node.expanded ? '折叠' : '展开'} ${row.node.name}`">
               <Icon name="chevron" :size="13" />
             </button>
             <span v-else class="tw ph" />

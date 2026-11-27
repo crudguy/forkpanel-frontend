@@ -16,8 +16,9 @@
  *  - 调用方必须把它放在 template 链尾、与其它浮层同级，**不得**嵌在某个 v-if 块内部
  *    （父块不渲染时本组件整块消失，设了 open 也弹不出来，且编译/类型全绿）。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
+import { useModal } from '@/composables/useModal'
 import PkgIcon from '@/components/PkgIcon.vue'
 import type { PackageCatalogEntry } from '@/api/types'
 
@@ -47,13 +48,17 @@ const rows = computed(() => {
   return ROWS.map(r => ({ label: r.label, text: (i[r.key] ?? '').trim() }))
     .filter(r => r.text)
 })
+
+// 统一弹窗行为：Esc + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还。
+// X / 遮罩 / 底部关闭三条路径都走 close，离场动画与焦点返还才一致。
+const box = ref<HTMLElement | null>(null)
+const { close } = useModal(() => props.open && !!props.info, box, () => emit('close'))
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open && info" class="mask" @click.self="emit('close')"
-         @keydown.esc.window="emit('close')">
-      <div class="dlg" role="dialog" aria-modal="true"
+    <div v-if="open && info" class="mask" @click.self="close">
+      <div ref="box" class="dlg" role="dialog" aria-modal="true"
            :aria-label="`${info.label} 说明`">
         <div class="dlg-head">
           <PkgIcon :name="info.name" :label="info.label" :size="22" />
@@ -64,7 +69,7 @@ const rows = computed(() => {
           <span v-if="info.external" class="badge badge-warn nowrap"
                 title="系统软件源通常不含此包，需先配置第三方软件源，否则安装会失败">需配源</span>
           <span class="spacer" />
-          <button class="hd-x" type="button" aria-label="关闭" @click="emit('close')">
+          <button class="hd-x" type="button" aria-label="关闭" @click="close">
             <Icon name="close" :size="16" />
           </button>
         </div>
@@ -82,7 +87,7 @@ const rows = computed(() => {
         </div>
 
         <div class="dlg-foot">
-          <button class="btn-ghost" type="button" @click="emit('close')">关闭</button>
+          <button class="btn-ghost" type="button" @click="close">关闭</button>
         </div>
       </div>
     </div>

@@ -25,6 +25,9 @@ const open = ref(false)
 const query = ref('')
 const active = ref(0)
 const inputEl = ref<HTMLInputElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
+let opener: HTMLElement | null = null
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -36,7 +39,14 @@ const results = computed(() =>
 )
 
 watch(open, async (v) => {
-  if (!v) return
+  if (!v) {
+    const back = opener
+    opener = null
+    await nextTick()
+    if (back?.isConnected) back.focus()
+    return
+  }
+  opener = document.activeElement as HTMLElement | null
   query.value = ''
   active.value = 0
   await nextTick()
@@ -56,12 +66,39 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('keydown', onDocKeydown, true)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('keydown', onDocKeydown, true)
+})
 
 function close() {
+  if (!open.value) return
   open.value = false
   emit('close')
+}
+
+/** 捕获阶段的 Esc / Tab 陷阱：焦点落空到 body 也能关，Tab 只在面板内循环。
+ *  其它 modal 打开时让位，一次 Esc 只关最上面一层。 */
+function onDocKeydown(e: KeyboardEvent) {
+  if (!open.value) return
+  for (const el of document.querySelectorAll('[role="dialog"][aria-modal="true"]')) {
+    if (el !== panel.value) return
+  }
+  if (e.key === 'Escape') { close(); return }
+  if (e.key !== 'Tab' || !panel.value) return
+  const list = Array.from(panel.value.querySelectorAll<HTMLElement>(FOCUSABLE))
+    .filter(x => !x.hasAttribute('disabled'))
+  if (!list.length) return
+  const first = list[0]
+  const last = list[list.length - 1]
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+  else if (!e.shiftKey && (document.activeElement === last || document.activeElement === document.body)) {
+    e.preventDefault(); first.focus()
+  }
 }
 
 function go(it?: (typeof results.value)[number]) {
@@ -96,7 +133,7 @@ function onInputKeydown(e: KeyboardEvent) {
 <template>
   <Teleport to="body">
     <div v-if="open" class="cp-mask" @click.self="close">
-      <div class="cp-panel" role="dialog" aria-modal="true" aria-label="全局搜索">
+      <div ref="panel" class="cp-panel" role="dialog" aria-modal="true" aria-label="全局搜索">
         <div class="cp-search">
           <Icon name="search" :size="16" />
           <input

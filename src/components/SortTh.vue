@@ -13,19 +13,24 @@
  * ⚠ 非数据列（操作列、状态图标列等）**不要**用本组件——它们不参与排序，
  * 套上 `.sortable` 反而暗示可点，是误导。
  */
+import { computed } from 'vue'
 import type { SortDir } from '@/composables/useTableControls'
 
-defineProps<{
+const props = defineProps<{
   label: string
   /** 当前是否按这一列排序 */
   active?: boolean
   dir?: SortDir
 }>()
 const emit = defineEmits<{ (e: 'sort'): void }>()
+
+// 读屏靠 aria-sort 报方向；<th> 原生已是 columnheader，显式声明只作强调、语义不变。
+const ariaSort = computed(() => props.active ? (props.dir === 'desc' ? 'descending' : 'ascending') : 'none')
 </script>
 
 <template>
-  <th class="sortable" :class="{ active }" @click="emit('sort')">
+  <th class="sortable" :class="{ active }" role="columnheader" tabindex="0" :aria-sort="ariaSort"
+    @click="emit('sort')" @keydown.enter="emit('sort')" @keydown.space.prevent="emit('sort')">
     {{ label }}<span v-if="active" class="sort-ind">{{ dir === 'asc' ? '▲' : '▼' }}</span>
   </th>
 </template>

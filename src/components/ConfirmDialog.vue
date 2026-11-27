@@ -5,7 +5,7 @@
  * 刻意的设计：需要用户**输入确认词**才能提交（用于删站、封端口、恢复数据这类
  * 不可逆操作）。单纯点"确定"挡不住误触——人在批量清理时手速远快于思考。
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useModal } from '@/composables/useModal'
 import Icon from '@/components/Icon.vue'
 
@@ -32,10 +32,28 @@ const ok = computed(() =>
   props.confirmWord ? typed.value.trim() === props.confirmWord : true
 )
 
+// 提交去抖（危险操作防双击）：无确认词时 ok 恒 true，父级若不传 busy，连点两次
+// 会下发两次请求（启停防火墙/删任务/删计划等）。这里在组件内自锁，不依赖 29 个
+// 调用方各自传 busy——首次确认后禁用确认按钮，直到父级关闭弹窗（open→false）才解锁，
+// 覆盖成功关闭 / 失败关闭 / 取消三条路径。
+const submitting = ref(false)
+let unlockTimer: ReturnType<typeof setTimeout> | undefined
+function unlock() {
+  submitting.value = false
+  if (unlockTimer !== undefined) { clearTimeout(unlockTimer); unlockTimer = undefined }
+}
+watch(() => props.open, (v) => { if (!v) unlock() })
+onUnmounted(unlock)
+
 function confirm() {
-  if (!ok.value) return
+  if (!ok.value || submitting.value) return
+  submitting.value = true
   emit('confirm')
   typed.value = ''
+  // 兜底：若调用方确认后既不关窗也不重试（异常留窗），2s 后解锁，避免永久锁死。
+  // 正常路径是父级关窗触发上面的 watch 立即解锁；这里只是防御性兜底。
+  if (unlockTimer !== undefined) clearTimeout(unlockTimer)
+  unlockTimer = setTimeout(unlock, 2000)
 }
 function cancel() { typed.value = ''; emit('cancel') }
 
@@ -70,8 +88,8 @@ const { close } = useModal(() => props.open, box, cancel)
         <button class="btn-ghost" @click="close">取消</button>
         <!-- 危险操作一律实心红 .btn-danger（此前这里手写 .primary 复刻红色，
              与 Certs 的 btn-primary danger、Databases 的 .danger-btn 三足鼎立） -->
-        <button :class="danger ? 'btn-danger' : 'btn-primary'" :disabled="!ok" @click="confirm">
-          {{ danger ? '确认执行' : '确定' }}
+        <button :class="danger ? 'btn-danger' : 'btn-primary'" :disabled="!ok || submitting" @click="confirm">
+          {{ submitting ? '处理中…' : danger ? '确认执行' : '确定' }}
         </button>
       </div>
     </div>

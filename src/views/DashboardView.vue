@@ -294,7 +294,7 @@ function cardDetail(id?: string): { rows: { k: string; v: string }[]; status: st
   }
 }
 
-function showTip(card: MetricItem, e: MouseEvent) {
+function showTip(card: MetricItem, e: Event) {
   // 拖拽中或布局弹窗打开时不弹浮层（避免与拖拽排序 / 弹窗焦点冲突）
   if (dragId.value || layoutOpen.value) return
   const detail = cardDetail(card.id)
@@ -513,18 +513,36 @@ function onDragStart(id: string, e: DragEvent) {
   dragId.value = id
   if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id) }
 }
-function onDropOn(id: string) {
-  const from = dragId.value
-  dragId.value = null
-  if (!canLayout.value || !from || from === id) return
+/** 卡片排序唯一出口：拖拽落下与键盘 Alt+←/→ 共用，避免两套逻辑漂移。 */
+function reorderCard(from: string, to: string) {
+  if (!canLayout.value || from === to) return
   const arr = ensureLayout().slice()
   const fi = arr.findIndex(c => c.id === from)
-  const ti = arr.findIndex(c => c.id === id)
+  const ti = arr.findIndex(c => c.id === to)
   if (fi < 0 || ti < 0) return
   const [moved] = arr.splice(fi, 1)
   arr.splice(ti, 0, moved)
   layout.value = arr
   void saveLayout(arr)
+}
+function onDropOn(id: string) {
+  const from = dragId.value
+  dragId.value = null
+  if (!from) return
+  reorderCard(from, id)
+}
+/** 键盘替代拖拽：卡片获得焦点后 Alt+←/→ 与相邻卡片换位（keyed v-for 移动节点，焦点自然跟随）。 */
+function onCardKeydown(id: string, e: KeyboardEvent) {
+  if (!canLayout.value || !e.altKey) return
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  const visible = shownCards.value
+  const i = visible.findIndex(c => c.id === id)
+  if (i < 0) return
+  const j = e.key === 'ArrowLeft' ? i - 1 : i + 1
+  if (j < 0 || j >= visible.length) return
+  e.preventDefault()
+  hideTip()
+  reorderCard(id, visible[j].id as string)
 }
 
 onMounted(async () => {
@@ -538,6 +556,9 @@ onMounted(async () => {
     // 轮询由上面的 usePolling 负责（链在 setup 时已建，此处无需再启动）
   } else {
     es = new EventSource(API.events.metrics())
+    // 断线必须在页面上可见；重连成功即清掉提示，避免面板长期停在旧读数却毫无迹象
+    es.onerror = () => { ovError.value = '实时指标连接中断，正在重连…' }
+    es.onopen = () => { ovError.value = '' }
     es.addEventListener('metrics', (ev) => {
       try { apply(JSON.parse((ev as MessageEvent).data)) } catch { /* 忽略坏帧 */ }
     })
@@ -594,6 +615,8 @@ onUnmounted(() => { es?.close() })
       <!-- 指标卡（A1 个性化）：顺序/显隐按后端布局渲染；管理员可拖拽排序 -->
       <div v-else class="grid" :class="`cols-${Math.max(1, shownCards.length)}`">
         <MetricCard v-for="c in shownCards" :key="c.id" v-bind="c"
+          tabindex="0"
+          :aria-keyshortcuts="canLayout ? 'Alt+ArrowLeft Alt+ArrowRight' : undefined"
           :draggable="canLayout"
           :class="[{ 'card-drag': canLayout }, { dragging: dragId === c.id }]"
           @dragstart="onDragStart(c.id as string, $event); hideTip()"
@@ -601,7 +624,10 @@ onUnmounted(() => { es?.close() })
           @drop.prevent="onDropOn(c.id as string)"
           @dragend="dragId = null"
           @mouseenter="showTip(c, $event)"
-          @mouseleave="hideTip" />
+          @mouseleave="hideTip"
+          @focus="showTip(c, $event)"
+          @blur="hideTip"
+          @keydown="onCardKeydown(c.id as string, $event)" />
       </div>
 
       <!-- 高负载时的救火捷径：只在异常时出现，避免常态占视觉位 -->

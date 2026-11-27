@@ -18,7 +18,7 @@
  * - `err` 非空 ⇒ 「加载失败」+ `warn`（**优先于一切**：陈旧的成功数据也要让位，
  *   否则重试失败时磁贴还显示上次的旧计数，用户以为数据是新的）。
  * - `!ok && !err` ⇒ 尚未抓完（首屏加载中）⇒「—」+ `muted`。
- * - `ok` ⇒ 按各自计数给文案与 tone（与修复前逐字一致，避免顺手改语义）。
+ * - `ok` ⇒ 按各自计数给文案与 tone；0 对象与备份磁贴同口径给 warn，不显示绿色正常。
  */
 
 /** 磁贴呈现：文案 + 状态点颜色类名（scoped CSS：.st-dot.ok/.warn/.danger/.muted） */
@@ -52,14 +52,14 @@ export function ctTile(s: CtState, err: string, unavailable: string): TileView {
     return { text: '不可用', tone: 'muted' }
   }
   const text = `运行中 ${s.running} / 共 ${s.total}`
-  return { text, tone: s.total > 0 && s.running === 0 ? 'warn' : 'ok' }
+  return { text, tone: s.total === 0 || s.running === 0 ? 'warn' : 'ok' }
 }
 
 /** 网站磁贴：失败 > 加载中 > 正常 */
 export function siteTile(s: SiteState, err: string): TileView {
   if (err) return { text: '加载失败', tone: 'warn' }
   if (!s.ok) return { text: '—', tone: 'muted' }
-  return { text: `共 ${s.total} 个 · 启用 ${s.enabled}`, tone: 'ok' }
+  return { text: `共 ${s.total} 个 · 启用 ${s.enabled}`, tone: s.total === 0 ? 'warn' : 'ok' }
 }
 
 /** 备份磁贴：失败 > 加载中 > 有计划失败(danger) > 未配置计划(warn) > 全部正常(ok) */

@@ -67,7 +67,7 @@ const quick = computed(() => pickQuickTasks(auth.whyDisabled, (to) => whyDisable
       <div class="sec-head"><Icon name="shield" :size="16" /> 账户与安全</div>
       <ul class="faq-list">
         <li>面板按角色分配权限，不同角色看到的菜单和可做的操作不同。</li>
-        <li>在「设置」页修改登录密码；建议每位管理员使用独立账号。</li>
+        <li>点击右上角头像，在用户菜单中选「修改密码」；建议每位管理员使用独立账号。</li>
         <li>请妥善保管账号，操作记录可供管理员查看。</li>
       </ul>
     </section>

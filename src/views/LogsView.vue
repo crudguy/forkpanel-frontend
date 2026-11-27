@@ -21,6 +21,10 @@ import RefreshBtn from '@/components/RefreshBtn.vue'
 
 interface Src { id: string; label: string; kind: string }
 interface Line { ts: number | null; level: string | null; text: string }
+/** 入站时分配的稳定 id：超过 2000 行从头 splice 后，下标会前移而 id 不会 */
+interface LogLine extends Line { uid: number }
+let lineSeq = 0
+function withUid(l: Line): LogLine { return { ...l, uid: ++lineSeq } }
 
 const MAX_KEEP = 2000
 
@@ -47,7 +51,7 @@ const FILE_KINDS = ['site-access', 'site-error', 'custom-file'] as const
 const auth = useAuthStore()
 const sources = ref<Src[]>([])
 const cur = ref('')
-const lines = ref<Line[]>([])
+const lines = ref<LogLine[]>([])
 const grep = ref('')
 // 初值与下拉选项对齐（审计 F22）：此前 200 不在 100/500/2000 选项内，
 // 首屏下拉无匹配项，显示行数与实际请求行数不符
@@ -119,7 +123,7 @@ async function load() {
       },
     })
     if (seq !== loadSeq) return   // 已有更新的请求在途，丢弃本次结果
-    lines.value = r.lines ?? []; capped.value = r.capped
+    lines.value = (r.lines ?? []).map(withUid); capped.value = r.capped
   } catch (e) {
     if (seq !== loadSeq) return
     error.value = errorText(e); lines.value = []
@@ -221,14 +225,14 @@ function toggleStats() {
  * - repeat>1 且未展开：只渲染首行 + 「×N 展开」徽标。
  * - repeat>1 且已展开（点击徽标）：把该段逐行铺开。
  * 纯前端、零契约变更；折叠发生在「已按 level/since/grep 过滤后的 lines」之上，
- * 与统计口径天然一致。live 跟随模式下 expandedGroups 以首行下标为键，
- * 仅追加不插队，键在追加过程中稳定，仅在 openStream/load 时整体清空。
+ * 与统计口径天然一致。expandedGroups 以首行的稳定 uid 为键：跟随超过上限从头
+ * splice 时下标会前移，但 uid 不变，用户展开的分组不会被错位收起或清空。
  */
-interface DispRow { line: Line; repeat: number; start: number; collapsed: boolean }
+interface DispRow { line: LogLine; repeat: number; uid: number; collapsed: boolean }
 const display = computed<DispRow[]>(() => {
   const ls = lines.value
   if (!foldRepeats.value) {
-    return ls.map((l, i) => ({ line: l, repeat: 1, start: i, collapsed: false }))
+    return ls.map(l => ({ line: l, repeat: 1, uid: l.uid, collapsed: false }))
   }
   const out: DispRow[] = []
   let i = 0
@@ -236,18 +240,18 @@ const display = computed<DispRow[]>(() => {
     let j = i + 1
     while (j < ls.length && ls[j].text === ls[i].text) j++
     const repeat = j - i
-    const collapsed = repeat > 1 && !expandedGroups.value.has(i)
-    out.push({ line: ls[i], repeat, start: i, collapsed })
+    const collapsed = repeat > 1 && !expandedGroups.value.has(ls[i].uid)
+    out.push({ line: ls[i], repeat, uid: ls[i].uid, collapsed })
     if (!collapsed && repeat > 1) {
-      for (let k = i + 1; k < j; k++) out.push({ line: ls[k], repeat: 1, start: k, collapsed: false })
+      for (let k = i + 1; k < j; k++) out.push({ line: ls[k], repeat: 1, uid: ls[k].uid, collapsed: false })
     }
     i = j
   }
   return out
 })
-function toggleGroup(start: number) {
+function toggleGroup(uid: number) {
   const s = new Set(expandedGroups.value)
-  if (s.has(start)) s.delete(start); else s.add(start)
+  if (s.has(uid)) s.delete(uid); else s.add(uid)
   expandedGroups.value = s
 }
 
@@ -272,10 +276,9 @@ function openStream() {
   es.onopen = () => { esRetries.value = 0 }
   es.addEventListener('log', (ev: MessageEvent) => {
     try {
-      lines.value.push(JSON.parse(ev.data) as Line)
+      lines.value.push(withUid(JSON.parse(ev.data) as Line))
       if (lines.value.length > MAX_KEEP) {
         lines.value.splice(0, lines.value.length - MAX_KEEP)
-        expandedGroups.value = new Set()
       }
       scrollBottom()
     } catch { /* 忽略坏帧 */ }
@@ -413,8 +416,8 @@ const canView = computed(() => auth.enabled(CAP.LOGS_READ, 'log.view'))
         </template>
       </section>
 
-      <pre ref="viewEl" class="view" :class="{ wrap: wrapLines }"><code v-for="d in display" :key="d.start" :class="d.line.level?.toLowerCase()">
-<span class="ts">{{ fmtClock(d.line.ts) }}</span> {{ d.line.text }}<button v-if="d.repeat > 1 && d.collapsed" class="fold-badge" type="button" @click="toggleGroup(d.start)" :title="`展开重复的 ${d.repeat} 行`">×{{ d.repeat }} 展开</button></code></pre>
+      <pre ref="viewEl" class="view" :class="{ wrap: wrapLines }"><code v-for="d in display" :key="d.uid" :class="d.line.level?.toLowerCase()">
+<span class="ts">{{ fmtClock(d.line.ts) }}</span> {{ d.line.text }}<button v-if="d.repeat > 1 && d.collapsed" class="fold-badge" type="button" @click="toggleGroup(d.uid)" :title="`展开重复的 ${d.repeat} 行`">×{{ d.repeat }} 展开</button></code></pre>
       <EmptyState v-if="!lines.length && !error" :title="follow ? '等待新日志…' : '无匹配日志'" />
     </template>
   </div>

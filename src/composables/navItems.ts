@@ -72,7 +72,7 @@ export const NAV_ITEMS: NavDef[] = [
   // 防火墙：页面同时承载「规则」与「安全基线」两个 Tab，两张 Tab 的门控不同
   // （规则 firewall.view / 基线 security.manage）。顶层菜单只声明**任一即可**
   // 的那一项，Tab 级细判仍由 navPolicy 的 EXTRA_GATES 逐路径给出。
-  { to: '/firewall', label: '安全', icon: 'shield', cap: CAP.FIREWALL_MANAGE,
+  { to: '/firewall', label: '防火墙', icon: 'shield', cap: CAP.FIREWALL_MANAGE,
     perm: ['firewall.view', 'security.manage'], group: '安全' },
   // 公网访问原埋在「系统」组底部；它与防火墙同质（对外暴露 / 边界防御），2026-10-29 上移至此。
   // 路由同时从 /system/expose 提为顶层 /expose（不再挂在主机监控 Tab 下）；旧链接由路由重定向兜住。
@@ -84,7 +84,7 @@ export const NAV_ITEMS: NavDef[] = [
   // 看不到，而 LogsView 自己的门控（enabled(LOGS_READ,'log.view')）明确是放行的。
   { to: '/logs', label: '日志', icon: 'list', cap: CAP.LOGS_READ,
     perm: ['log.view', 'audit.view'], group: '运维' },
-  { to: '/cron', label: '任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
+  { to: '/cron', label: '计划任务', icon: 'clock', cap: CAP.SCHEDULER_MANAGE, perm: 'cron.view', group: '运维' },
   { to: '/terminal', label: '终端', icon: 'terminal', cap: CAP.TERMINAL_MANAGE, perm: 'system.manage', group: '运维' },
   // —— 系统：低频管理区（AI 助手唯一入口；顶栏重复胶囊已移除，
   //    「解释上一页」改由路由守卫自动带 ctx，不依赖入口形态）——

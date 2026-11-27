@@ -246,7 +246,7 @@ function switchTab(id: string) {
   if (id === activeId.value) return
   activeId.value = id
   // 切标签时收起可能指向旧目录的浮层，避免保存/删除落到错目录
-  editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
+  cancelOpen(); editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
 }
 function closeTab(id: string) {
   if (tabs.value.length <= 1) return // 至少保留一个标签
@@ -256,7 +256,7 @@ function closeTab(id: string) {
   tabs.value.splice(idx, 1)
   if (wasActive) {
     activeId.value = tabs.value[Math.max(0, idx - 1)].id
-    editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
+    cancelOpen(); editing.value = null; ask.value = null; confirmDel.value = null; confirmBatchDel.value = false
   }
 }
 
@@ -295,18 +295,23 @@ function enter(e: Entry) {
   load(p)
 }
 
+// 打开是异步的：先点 A 再点 B，A 的慢响应不能把编辑器写成 A 的内容（保存会写错文件）
+let openSeq = 0
+function cancelOpen() { ++openSeq }
 async function open(e: Entry) {
   if (e.sensitive) { error.value = '该文件受保护，不可通过面板读取'; return }
+  const seq = ++openSeq
   try {
     const r = await api.get<{ content: string | null; binary: boolean; size: number; has_more: boolean }>(
       API.files.read(), {
         params: { path: joinPath(path.value, e.name) },
       })
+    if (seq !== openSeq) return
     if (r.binary) { error.value = '二进制文件不支持在线编辑'; return }
     // has_more 为真说明后端按 2MB 上限截断了：完整文件比这大，编辑框里只有前半截。
     // 若允许写回，会用截断版覆盖原文件——这是唯一会造成不可逆数据丢失的口子，必须拦死。
     editing.value = { dir: path.value, name: e.name, content: r.content ?? '', mtime: e.modified, hasMore: r.has_more }
-  } catch (err) { error.value = errorText(err) }
+  } catch (err) { if (seq === openSeq) error.value = errorText(err) }
 }
 
 async function save() {
@@ -503,17 +508,21 @@ function download(e: Entry) {
 }
 
 // ── 通用输入弹窗（审计 F3/U5）：替代 window.prompt——原生弹窗脱离设计系统
-//    且无校验；此处统一收集输入，确认后关闭并回调，错误走页面既有通道
+//    且无校验；此处统一收集输入，确认后关闭并回调。校验错误必须留在弹窗本层，
+//    写页面级 error 会被遮罩挡住，用户只看到点「确定」没反应。
 const ask = ref<{
   title: string; label: string; value: string; placeholder?: string; okText?: string;
   validate?: (v: string) => string | null;
   onOk: (v: string) => void;
 } | null>(null)
+const askErr = ref('')
+watch(ask, () => { askErr.value = '' })
 function askOk() {
   const a = ask.value; if (!a) return
+  askErr.value = ''
   if (a.validate) {
     const err = a.validate(a.value)
-    if (err) { error.value = err; return }
+    if (err) { askErr.value = err; return }
   }
   const cb = a.onOk
   ask.value = null
@@ -861,7 +870,7 @@ function full(p: string) {
         <Icon name="file" :size="16" />
         <strong>{{ editing.name }}</strong>
         <span class="spacer" />
-        <button class="btn-ghost" @click="editing = null">取消</button>
+        <button class="btn-ghost" @click="cancelOpen(); editing = null">取消</button>
         <button v-if="canWrite" class="btn-primary" :disabled="editing.hasMore" @click="save">保存</button>
       </header>
       <p v-if="editing.hasMore" class="warn" role="alert">
@@ -900,6 +909,7 @@ function full(p: string) {
             <Icon name="close" :size="16" />
           </button>
         </div>
+        <p v-if="askErr" class="err-bar form-msg" role="alert">{{ askErr }}</p>
         <label class="blk">{{ ask.label }}
           <input v-model="ask.value" :placeholder="ask.placeholder" @keyup.enter="askOk" />
         </label>
@@ -1041,8 +1051,10 @@ function full(p: string) {
 .tab:hover { background: var(--c-hover); color: var(--c-text); }
 .tab.on { background: var(--seg-on-bg); color: var(--seg-on-fg); border-color: transparent; font-weight: 600; }
 .tab .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tab-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+.tab-x { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   margin-left: 2px; border: none; background: none; color: inherit; border-radius: var(--radius-chip); cursor: pointer; padding: 0; }
+/* 透明伪元素把命中区扩到 28×28，视觉尺寸与 hover 底色不变 */
+.tab-x::after { content: ''; position: absolute; inset: -5px; }
 /* 关闭钮 hover 的浅色覆盖层跟着标签前景色走（与 TerminalView 同源）。 */
 .tab-x:hover { background: color-mix(in srgb, currentColor 28%, transparent); }
 .tab.add { color: var(--c-text-dim); }

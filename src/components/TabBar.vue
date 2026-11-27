@@ -14,19 +14,36 @@
  *
  * 「哪些 Tab 可见」由父级按权限点决定并传给 `tabs`，不与路由表漂移。
  */
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 
-defineProps<{
+const props = defineProps<{
   tabs: { to?: string; value?: string; label: string; icon?: string }[]
   modelValue?: string
 }>()
 const emit = defineEmits<{ (e: 'change', value: string): void }>()
 const route = useRoute()
+const router = useRouter()
+
+/** tablist 左右方向键：焦点与激活态一起移动（ARIA tab 模式），到两端循环。 */
+function onTablistKeydown(e: KeyboardEvent) {
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+  if (!(e.currentTarget instanceof HTMLElement)) return
+  const list = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]'))
+  const i = list.indexOf(document.activeElement as HTMLElement)
+  if (i < 0 || !list.length) return
+  e.preventDefault()
+  const next = e.key === 'ArrowRight' ? (i + 1) % list.length : (i - 1 + list.length) % list.length
+  const tab = props.tabs[next]
+  if (!tab) return
+  list[next].focus()
+  if (tab.to) void router.push(tab.to)
+  else if (tab.value !== undefined) emit('change', tab.value)
+}
 </script>
 
 <template>
-  <div class="tabs" role="tablist">
+  <div class="tabs" role="tablist" @keydown="onTablistKeydown">
     <template v-for="t in tabs" :key="t.to ?? t.value">
       <RouterLink v-if="t.to" :to="t.to" class="tab"
         :class="{ on: route.path === t.to }" role="tab" :aria-selected="route.path === t.to">

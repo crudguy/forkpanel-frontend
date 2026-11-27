@@ -794,7 +794,7 @@ function confSpecChanged(): boolean {
         <p class="field-err" v-if="fieldErrs.routes">{{ fieldErrs.routes }}</p>
         <p class="hint-note routes-note">
           <Icon name="info" :size="14" class="ic" />
-          <span>典型用法：<b>/</b> 静态（SPA）+ <b>/api</b> 反代到后端；静态路由可**单独指定根目录**
+          <span>典型用法：<b>/</b> 静态（SPA）+ <b>/api</b> 反代到后端；静态路由可「单独指定根目录」
             （如 <code>/</code> 前端产物 + <code>/blog</code> 另一套静态站，各自独立目录）。
             PHP 路由需填 <b>入口脚本</b>（如 <code>/public/index.php</code>）——多路由下不用
             <code>.php</code> 后缀匹配，而是把整个前缀交给该入口，由框架自己路由。</span>

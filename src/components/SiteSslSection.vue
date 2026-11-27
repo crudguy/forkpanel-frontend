@@ -142,13 +142,20 @@ async function renewCert(c: Cert) {
     else sslErrTo(errorText(e))
   } finally { emit('update:busy', false); emit('reload'); if (ok) toast(ok) }
 }
-async function setAutoRenew(c: Cert, val: boolean) {
+async function setAutoRenew(c: Cert, ev: Event) {
+  const cb = ev.target as HTMLInputElement
+  const val = cb.checked
+  const prev = c.auto_renew
   emit('update:busy', true)
   try {
     await api.patch(API.certs.autoRenew(c.id), { enabled: val })
     c.auto_renew = val
     toast(`${c.domain} 自动续期已${val ? '开启' : '关闭'}`)
   } catch (e) {
+    // 失败必须复位：:checked 是单向绑定，c.auto_renew 仍是 prev，Vue 不会重绘 DOM，
+    // 而浏览器已把勾选框拨到 val——须显式拨回，否则 UI 显示已开启但后端未改。
+    cb.checked = prev
+    c.auto_renew = prev
     if (isUnsupported(e)) sslErrTo('当前环境未接入 ACME，无法自动续期')
     else sslErrTo(errorText(e))
   } finally { emit('update:busy', false) }
@@ -195,7 +202,7 @@ defineExpose({ applySsl })
         </div>
         <div class="ssl-ops">
           <span v-if="c.source === 'acme'" class="switch" :title="sslSupported ? '到期前 30 天内自动续期' : '需 ACME 支持'">
-            <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy" @change="setAutoRenew(c, ($event.target as HTMLInputElement).checked)" /><i />
+            <input type="checkbox" :checked="c.auto_renew" :disabled="!sslSupported || busy" @change="setAutoRenew(c, $event)" /><i />
           </span>
           <button class="btn-ghost btn-sm" :disabled="!sslReady" :title="sslReady ? '续期这张证书' : sslHint" @click="renewCert(c)"><Icon name="refresh" :size="13" /> 续期</button>
           <button class="btn-ghost btn-sm danger" :disabled="!canSsl"

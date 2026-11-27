@@ -44,6 +44,7 @@ import TablePager from '@/components/TablePager.vue'
 import TabBar from '@/components/TabBar.vue'
 import { toast } from '@/composables/useToast'
 import { useAsync } from '@/composables/useAsync'
+import { useModal } from '@/composables/useModal'
 import { useTableControls, type SortColumn } from '@/composables/useTableControls'
 // WAF 段 / apply 体 / 草稿比对的纯逻辑在 .ts 里（SFC 内 vitest 收不到）
 import {
@@ -297,6 +298,11 @@ const tplError = ref('')
 /** 模板名校验错误：显示在名称输入框下方；tplError 只留给服务端错误。 */
 const tplNameErr = ref('')
 
+// 模板弹窗统一行为：Esc + Tab 焦点陷阱 + 打开聚焦 + 关闭后焦点返还。
+// X / 遮罩 / 取消 / 保存成功都走同一个出口，离场动画与焦点返还才一致。
+const tplBox = ref<HTMLElement | null>(null)
+const { close: closeTpl } = useModal(() => tplModalOpen.value, tplBox, () => { tplModalOpen.value = false })
+
 function openCreateTpl() {
   editingTplId.value = null
   tplForm.value = { name: '', profile: 'basic', rate: 0, burst: 0, conn: 0, ipAllow: '', ipDeny: '' }
@@ -330,7 +336,7 @@ async function saveTpl() {
   try {
     if (editingTplId.value == null) await api.post(API.waf.templates.create(), body)
     else await api.patch(API.waf.templates.update(editingTplId.value), body)
-    tplModalOpen.value = false
+    closeTpl()
     await load()
     toast(editingTplId.value == null ? '已新建模板' : '已保存模板')
   } catch (e) {
@@ -354,6 +360,10 @@ async function doDelTpl() {
 const applyTpl = ref<WafTemplate | null>(null)
 const applyPicks = ref<Set<number>>(new Set())
 const applyBusy = ref(false)
+
+// 套用模板弹窗同样接入统一弹窗行为（X / 遮罩 / 取消 / 套用成功共用出口）。
+const applyBox = ref<HTMLElement | null>(null)
+const { close: closeApply } = useModal(() => !!applyTpl.value, applyBox, () => { applyTpl.value = null })
 /** 勾选中含已停用站点 → 配置只入库、不下发，如实提示 */
 const applyHasDisabled = computed(() =>
   sites.value.some(s => applyPicks.value.has(s.id) && !s.enabled))
@@ -380,7 +390,7 @@ async function doApplyTpl() {
       try { await api.post(API.sites.apply(), applyTemplateBody(s, t)); ok++ }
       catch (e) { failMsg = `${s.name}：${errorText(e)}`; break }  // 一个失败即停
     }
-    if (ok) { toast(`已将「${t.name}」套用到 ${ok} 个站点`); applyTpl.value = null; await load() }
+    if (ok) { toast(`已将「${t.name}」套用到 ${ok} 个站点`); closeApply(); await load() }
     if (failMsg) error.value = `套用失败于 ${failMsg}`
   } finally { applyBusy.value = false }
 }
@@ -798,11 +808,11 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 
     <!-- 模板 新建 / 编辑 -->
     <Teleport to="body">
-    <div v-if="tplModalOpen" class="mask" @click.self="tplModalOpen = false">
-      <div class="modal" role="dialog" aria-modal="true">
+    <div v-if="tplModalOpen" class="mask" @click.self="closeTpl">
+      <div ref="tplBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
           <h3 class="modal-title">{{ editingTplId == null ? '新建策略模板' : `编辑模板 ${tplForm.name}` }}</h3>
-          <button class="modal-close" type="button" aria-label="关闭" @click="tplModalOpen = false">
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeTpl">
             <Icon name="close" :size="16" />
           </button>
         </div>
@@ -847,7 +857,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         </p>
         <div class="modal-foot">
           <div class="modal-actions">
-            <button class="btn-ghost" @click="tplModalOpen = false" :disabled="tplSaving">取消</button>
+            <button class="btn-ghost" @click="closeTpl" :disabled="tplSaving">取消</button>
             <button class="btn-primary" :disabled="tplSaving || !tplForm.name.trim()" @click="saveTpl">
               {{ tplSaving ? '保存中…' : '保存' }}
             </button>
@@ -859,11 +869,11 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
 
     <!-- 模板套用到站点 -->
     <Teleport to="body">
-    <div v-if="applyTpl" class="mask" @click.self="applyTpl = null">
-      <div class="modal" role="dialog" aria-modal="true">
+    <div v-if="applyTpl" class="mask" @click.self="closeApply">
+      <div ref="applyBox" class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
           <h3 class="modal-title">套用模板「{{ applyTpl.name }}」</h3>
-          <button class="modal-close" type="button" aria-label="关闭" @click="applyTpl = null">
+          <button class="modal-close" type="button" aria-label="关闭" @click="closeApply">
             <Icon name="close" :size="16" />
           </button>
         </div>
@@ -884,7 +894,7 @@ onMounted(() => { void load(); void loadEvents(); void loadAlert() })
         <p v-if="applyHasDisabled" class="warn">勾选中含已停用站点：配置会保存，启用站点后才下发。</p>
         <div class="modal-foot">
           <div class="modal-actions">
-            <button class="btn-ghost" @click="applyTpl = null" :disabled="applyBusy">取消</button>
+            <button class="btn-ghost" @click="closeApply" :disabled="applyBusy">取消</button>
             <button class="btn-primary" :disabled="!canApply || applyBusy || !applyPicks.size" @click="doApplyTpl">
               {{ applyBusy ? '套用中…' : `套用到 ${applyPicks.size} 个站点` }}
             </button>
