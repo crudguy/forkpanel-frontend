@@ -211,7 +211,7 @@ defineExpose({ reload: load })
         </label>
         <label class="blk">
           默认 zone（可选）
-          <input v-model="formZone" type="text" placeholder="留空 = 按域名自动探测所属 zone" />
+          <input v-model="formZone" type="text" placeholder="留空 = 按域名自动探测；填了 = 固定用该 zone" />
         </label>
         <div class="modal-actions">
           <button class="btn-ghost" :disabled="!!busyProv" @click="cancelEdit">取消</button>
