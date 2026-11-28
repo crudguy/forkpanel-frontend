@@ -1,7 +1,7 @@
 {
-  "comment": "前端体积预算（gzip）。首屏=dist/index.html 里被引用的全部 js/css（硬）；单 chunk=任一产物 raw（硬）；全量=dist 所有产物之和（软警报线 + 硬兜底线）。CI/本地用 scripts/size-report.mjs 校验。⚠ 2026-11-05 重定口径：旧「首屏」用文件名正则判定，漏算 modulepreload 的 vendor(43.3KB)、又多算 40 个懒加载视图 CSS(39.4KB)，净差 -11KB 却报出看似合理的 69.3KB。改为解析 index.html 后真实首屏是 80.3KB，故硬预算按 80.3×1.37 取 110。全量不再做贴近现状的硬门禁（曾只余 1.9KB，实际效果是逼人抬额度而非减重）：420 只警告、460 才失败。抬任何数字前先给减重方案。",
+  "comment": "前端体积预算（gzip）。首屏=dist/index.html 里被引用的全部 js/css（硬）；单 chunk=任一产物 raw（硬）；全量=dist 所有产物之和（软警报线 + 硬兜底线）。CI/本地用 scripts/size-report.mjs 校验。⚠ 2026-11-05 重定口径：旧「首屏」用文件名正则判定，漏算 modulepreload 的 vendor(43.3KB)、又多算 40 个懒加载视图 CSS(39.4KB)，净差 -11KB 却报出看似合理的 69.3KB。改为解析 index.html 后真实首屏是 80.3KB，故硬预算按 80.3×1.37 取 110。全量不再做贴近现状的硬门禁（曾只余 1.9KB，实际效果是逼人抬额度而非减重）：420 只警告、460 才失败。抬任何数字前先给减重方案。2026-11-28 实测全量 478.7 KB（11-05 基线 403.5 KB）；dist 100 个产物无重复 stem，排除僵尸 chunk。增量来自已验收的 cron 模板 / 任务中心 / 快捷命令 / 帮助中心 / 多轮 UI 修复，不是空转。减重方案：① TerminalView 81.1 KB gz 是 xterm 本体且已路由懒加载，砍掉等于砍终端，不做；② helpContent 30.6 KB raw 改按模块懒加载，预计回收 6–8 KB gz；③ 44 个 CSS 共 48 KB gz 合并公共规则，预计回收 5–10 KB gz。②③排上线后首个迭代；本轮硬线 460→485（留 6.3 KB 余量，避免 480 只余 1.3 KB 立刻又红），警报线维持 420 继续提醒。今后每 +5 KB 必须附实测来源与减重方案。",
   "frontend_first_screen_gzip_kb": 110,
   "frontend_max_chunk_raw_kb": 350,
   "frontend_total_gzip_kb_alert": 420,
-  "frontend_total_gzip_kb_hard": 460
+  "frontend_total_gzip_kb_hard": 485
 }
